@@ -2,6 +2,7 @@ let calendar;
 let currentDetailEventId = null;
 let allProjects = [];
 let fpInstance = null;
+let _fpSavedDates = ['', ''];  // 달력 열기 전 날짜 백업
 
 // ── FullCalendar 초기화 ─────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -25,13 +26,62 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('event-form').addEventListener('submit', saveEvent);
 });
 
+// ── flatpickr 날짜 아이콘 클릭 핸들러 ─────────────────────
+function openStartDatePicker() {
+  _fpSavedDates = [
+    document.getElementById('f-start-date').value,
+    document.getElementById('f-end-date').value,
+  ];
+  fpInstance.open();
+  if (_fpSavedDates[0]) fpInstance.jumpToDate(_fpSavedDates[0]);
+}
+
+function openEndDatePicker() {
+  _fpSavedDates = [
+    document.getElementById('f-start-date').value,
+    document.getElementById('f-end-date').value,
+  ];
+  document.getElementById('f-end-date').focus();
+  fpInstance.open();
+  if (_fpSavedDates[1])      fpInstance.jumpToDate(_fpSavedDates[1]);
+  else if (_fpSavedDates[0]) fpInstance.jumpToDate(_fpSavedDates[0]);
+}
+
 // ── flatpickr 범위 선택 ───────────────────────────────────
 function initDatePicker() {
   fpInstance = flatpickr('#f-start-date', {
     dateFormat: 'Y-m-d',
     locale: 'ko',
     allowInput: true,
+    appendTo: document.body,
     plugins: [new rangePlugin({ input: '#f-end-date' })],
+    onReady(_, __, fp) {
+      fp.calendarContainer.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        fp.changeMonth(e.deltaY > 0 ? 1 : -1);
+      }, { passive: false });
+    },
+    onClose() {
+      // onClose는 blur보다 먼저 실행됨
+      // blur → rangePlugin이 selectedDates.length===1 감지 → endInput 클리어 순서로 진행되므로
+      // blur가 끝난 뒤에 체크해야 정확히 복원할 수 있음
+      const saved = [..._fpSavedDates];
+      _fpSavedDates = ['', ''];
+      if (!saved[0]) return;
+
+      setTimeout(() => {
+        const startInput = document.getElementById('f-start-date');
+        const endInput   = document.getElementById('f-end-date');
+        if (!startInput.value || !endInput.value) {
+          fpInstance.setDate(
+            saved[1] ? [saved[0], saved[1]] : [saved[0]],
+            false
+          );
+          startInput.value = saved[0];
+          endInput.value   = saved[1] || saved[0];
+        }
+      }, 0);
+    },
   });
 }
 
@@ -71,11 +121,11 @@ function openModal(dateStr = '', eventData = null) {
   document.getElementById('event-id').value       = '';
   document.getElementById('f-title').value        = '';
   document.getElementById('f-project').value      = '';
-  fpInstance.setDate([today, today], false);
+  fpInstance.setDate([today, today], true);
   document.getElementById('f-start-date').value   = today;
   document.getElementById('f-end-date').value     = today;
-  document.getElementById('f-start-time').value   = '';
-  document.getElementById('f-end-time').value     = '';
+  document.getElementById('f-start-time').value   = '09:00';
+  document.getElementById('f-end-time').value     = '18:00';
   document.getElementById('f-allday').checked     = false;
   document.getElementById('f-location').value     = '';
   document.getElementById('f-assignee').value     = '';
@@ -99,7 +149,7 @@ function openModal(dateStr = '', eventData = null) {
     const [startDate, startTime] = splitDatetime(eventData.start_datetime);
     const [endDate,   endTime]   = splitDatetime(eventData.end_datetime);
 
-    fpInstance.setDate([startDate, endDate || startDate], false);
+    fpInstance.setDate([startDate, endDate || startDate], true);
     document.getElementById('f-start-date').value = startDate;
     document.getElementById('f-end-date').value   = endDate || startDate;
     document.getElementById('f-start-time').value = allDay ? '' : startTime;
@@ -137,6 +187,19 @@ async function saveEvent(e) {
   const endDate   = document.getElementById('f-end-date').value;
   const startTime = document.getElementById('f-start-time').value || '00:00';
   const endTime   = document.getElementById('f-end-time').value   || '00:00';
+
+  if (!startDate) {
+    alert('시작 날짜를 선택해주세요.');
+    return;
+  }
+  if (endDate && endDate < startDate) {
+    alert('종료 날짜는 시작 날짜보다 이전일 수 없습니다.');
+    return;
+  }
+  if (!allDay && endDate === startDate && endTime < startTime) {
+    alert('종료 시간은 시작 시간보다 이전일 수 없습니다.');
+    return;
+  }
 
   const payload = {
     title:          document.getElementById('f-title').value,
