@@ -121,12 +121,14 @@ function openModal(dateStr = '', eventData = null) {
   document.getElementById('event-id').value       = '';
   document.getElementById('f-title').value        = '';
   document.getElementById('f-project').value      = '';
+  const [defStart, defEnd] = getDefaultTimes();
   fpInstance.setDate([today, today], true);
   document.getElementById('f-start-date').value   = today;
   document.getElementById('f-end-date').value     = today;
-  document.getElementById('f-start-time').value   = '09:00';
-  document.getElementById('f-end-time').value     = '18:00';
+  document.getElementById('f-start-time').value   = defStart;
+  document.getElementById('f-end-time').value     = defEnd;
   document.getElementById('f-allday').checked     = false;
+  document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
   document.getElementById('f-location').value     = '';
   document.getElementById('f-assignee').value     = '';
   document.getElementById('f-description').value  = '';
@@ -279,6 +281,31 @@ async function editFromDetail() {
   const data = await res.json();
   document.getElementById('detail-overlay').classList.add('hidden');
   openModal('', data);
+}
+
+// ── 시간 프리셋 ────────────────────────────────────────
+function getDefaultTimes() {
+  const now = new Date();
+  const startHour = (now.getHours() + 1) % 24;
+  const endHour   = (now.getHours() + 2) % 24;
+  const fmt = h => `${String(h).padStart(2, '0')}:00`;
+  return [fmt(startHour), fmt(endHour)];
+}
+
+function setTimePreset(preset) {
+  const presets = {
+    am:      ['08:00', '12:00'],
+    pm:      ['13:00', '17:00'],
+    evening: ['18:00', '22:00'],
+  };
+  const [start, end] = presets[preset];
+  document.getElementById('f-start-time').value = start;
+  document.getElementById('f-end-time').value   = end;
+  document.getElementById('f-allday').checked   = false;
+  toggleAllDay();
+
+  document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
+  document.querySelector(`.btn-preset[onclick="setTimePreset('${preset}')"]`).classList.add('active');
 }
 
 // ── 유틸 ───────────────────────────────────────────────

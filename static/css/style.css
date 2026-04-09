@@ -304,5 +304,10 @@ span.flatpickr-weekday { background: #6c5ce7 !important; color: white !important
 }
 .ac-dropdown li:hover { background: #f0eeff; color: #6c5ce7; }
 
+/* ── 시간 프리셋 버튼 ── */
+.time-presets { display: flex; gap: 6px; }
+.btn-preset.active { background: #6c5ce7; color: white; }
+.btn-preset.active:hover { background: #5a4bd1; }
+
 /* ── Utility ── */
 .hidden { display: none !important; }
