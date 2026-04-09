@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — AI 일정 파싱{% endblock %}
+
+{% block content %}
+<div class="ai-wrap">
+  <div class="ai-card">
+    <h2>🤖 AI 일정 자동 등록</h2>
+    <p class="ai-desc">회의록, 공지, 메모 등 자연어 텍스트를 붙여넣으면 일정을 자동으로 추출합니다.</p>
+
+    <label class="field-label">텍스트 입력</label>
+    <textarea id="input-text" rows="8" placeholder="예) 다음 주 화요일 오후 2시에 3층 회의실에서 팀 미팅이 있습니다. 담당자는 김철수."></textarea>
+
+    <div class="ai-actions">
+      <select id="model-select">
+        <option value="gemma4:e2b">gemma4:e2b</option>
+        <option value="gemma4:e4b">gemma4:e4b</option>
+      </select>
+      <button class="btn btn-primary" onclick="parseText()">파싱하기</button>
+    </div>
+
+    <div id="loading" class="loading hidden">⏳ AI가 분석 중입니다...</div>
+    <div id="error-msg" class="error-msg hidden"></div>
+
+    <div id="result-section" class="hidden">
+      <div class="result-header-row">
+        <h3>파싱 결과 <span id="result-count" class="count-badge"></span></h3>
+        <div>
+          <button class="btn" onclick="resetAll()">다시 입력</button>
+          <button class="btn btn-primary" onclick="confirmAll()">모두 등록</button>
+        </div>
+      </div>
+      <div id="result-list"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let parsedEvents = [];
+
+async function loadProjects() {
+  const res = await fetch('/api/projects');
+  const projects = await res.json();
+  let datalist = document.getElementById('project-list');
+  if (!datalist) {
+    datalist = document.createElement('datalist');
+    datalist.id = 'project-list';
+    document.body.appendChild(datalist);
+  }
+  datalist.innerHTML = projects.map(p => `<option value="${p}">`).join('');
+}
+
+async function parseText() {
+  const text = document.getElementById('input-text').value.trim();
+  if (!text) { alert('텍스트를 입력하세요.'); return; }
+
+  const model = document.getElementById('model-select').value;
+  setLoading(true);
+  hideError();
+  document.getElementById('result-section').classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/ai/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, model }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '파싱 실패');
+    if (!data.events.length) {
+      showError('일정 정보를 찾지 못했습니다. 더 구체적인 텍스트를 입력해보세요.');
+      return;
+    }
+    parsedEvents = data.events.map(e => ({...e}));
+    renderResults();
+    loadProjects();
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function renderResults() {
+  document.getElementById('result-count').textContent = `${parsedEvents.filter(Boolean).length}건`;
+  const list = document.getElementById('result-list');
+  list.innerHTML = parsedEvents.map((e, i) => e === null ? '' : `
+    <div class="result-item" id="item-${i}">
+      <div class="item-header">
+        <span class="item-num">#${i + 1}</span>
+        <button class="btn btn-sm btn-danger" onclick="removeItem(${i})">제거</button>
+      </div>
+
+      <div class="field-group">
+        <span class="field-icon">📌</span>
+        <div class="field-col">
+          <label>제목 *</label>
+          <input type="text" value="${esc(e.title || '')}" onchange="parsedEvents[${i}].title = this.value" placeholder="제목" />
+        </div>
+      </div>
+
+      <div class="field-group">
+        <span class="field-icon">📁</span>
+        <div class="field-col">
+          <label>프로젝트</label>
+          <input type="text" value="${esc(e.project || '')}" onchange="parsedEvents[${i}].project = this.value || null" placeholder="프로젝트 (선택)" list="project-list" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="field-group">
+        <span class="field-icon">🕐</span>
+        <div class="field-col">
+          <label class="toggle-row" style="margin-bottom:8px">
+            <input type="checkbox" ${e.all_day ? 'checked' : ''} onchange="parsedEvents[${i}].all_day = this.checked; renderResults()" />
+            <span>종일</span>
+          </label>
+          <div class="date-time-row">
+            <div class="dt-col">
+              <span class="small-label">시작</span>
+              <div class="dt-inputs">
+                <input type="date" value="${esc(e.date || '')}" onchange="parsedEvents[${i}].date = this.value" />
+                ${!e.all_day ? `<input type="time" value="${esc(e.start_time || '')}" onchange="parsedEvents[${i}].start_time = this.value" />` : ''}
+              </div>
+            </div>
+            <span class="dt-arrow">→</span>
+            <div class="dt-col">
+              <span class="small-label">종료</span>
+              <div class="dt-inputs">
+                <input type="date" value="${esc(e.end_date || e.date || '')}" onchange="parsedEvents[${i}].end_date = this.value" />
+                ${!e.all_day ? `<input type="time" value="${esc(e.end_time || '')}" onchange="parsedEvents[${i}].end_time = this.value" />` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <span class="field-icon">📍</span>
+        <div class="field-col">
+          <label>장소</label>
+          <input type="text" value="${esc(e.location || '')}" onchange="parsedEvents[${i}].location = this.value || null" placeholder="장소" />
+        </div>
+      </div>
+
+      <div class="field-group">
+        <span class="field-icon">👤</span>
+        <div class="field-col">
+          <label>담당자</label>
+          <input type="text" value="${esc(e.assignee || '')}" onchange="parsedEvents[${i}].assignee = this.value || null" placeholder="담당자" />
+        </div>
+      </div>
+
+      <div class="field-group">
+        <span class="field-icon">📝</span>
+        <div class="field-col">
+          <label>내용</label>
+          <input type="text" value="${esc(e.description || '')}" onchange="parsedEvents[${i}].description = this.value || null" placeholder="내용" />
+        </div>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('result-section').classList.remove('hidden');
+}
+
+function removeItem(i) {
+  parsedEvents[i] = null;
+  document.getElementById(`item-${i}`).remove();
+  const remaining = parsedEvents.filter(Boolean);
+  document.getElementById('result-count').textContent = `${remaining.length}건`;
+  if (!remaining.length) resetAll();
+}
+
+async function confirmAll() {
+  const toSave = parsedEvents.filter(Boolean);
+  if (!toSave.length) return;
+  const res = await fetch('/api/ai/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ events: toSave }),
+  });
+  const data = await res.json();
+  alert(`${data.saved}개 일정이 등록되었습니다.`);
+  window.location.href = '/';
+}
+
+function resetAll() {
+  parsedEvents = [];
+  document.getElementById('input-text').value = '';
+  document.getElementById('result-section').classList.add('hidden');
+}
+
+function setLoading(on) { document.getElementById('loading').classList.toggle('hidden', !on); }
+function showError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+function hideError() { document.getElementById('error-msg').classList.add('hidden'); }
+function esc(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+</script>
+
+<style>
+.ai-wrap { display: flex; justify-content: center; padding: 20px 0; }
+.ai-card {
+  background: white;
+  border-radius: 12px;
+  padding: 28px;
+  width: 620px;
+  max-width: 95vw;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.ai-card h2 { margin-bottom: 8px; color: #6c5ce7; }
+.ai-desc { color: #636e72; font-size: 0.9rem; margin-bottom: 20px; }
+.field-label { display: block; font-size: 0.82rem; font-weight: 600; color: #636e72; margin-bottom: 6px; }
+#input-text {
+  width: 100%; border: 1px solid #dfe6e9; border-radius: 8px;
+  padding: 12px; font-size: 0.93rem; resize: vertical; outline: none;
+  font-family: inherit;
+}
+#input-text:focus { border-color: #6c5ce7; }
+.ai-actions { display: flex; gap: 10px; margin-top: 12px; align-items: center; justify-content: flex-end; }
+select { padding: 8px 10px; border: 1px solid #dfe6e9; border-radius: 6px; font-size: 0.9rem; outline: none; }
+.loading { margin-top: 14px; color: #6c5ce7; font-size: 0.95rem; }
+.error-msg { margin-top: 14px; color: #d63031; font-size: 0.93rem; }
+
+.result-header-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin: 20px 0 12px;
+}
+.result-header-row h3 { font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+.result-header-row > div { display: flex; gap: 8px; }
+.count-badge {
+  background: #ede9ff; color: #6c5ce7;
+  font-size: 0.8rem; font-weight: 700;
+  padding: 2px 8px; border-radius: 20px;
+}
+
+.result-item {
+  border: 1px solid #ede9ff;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 14px;
+  background: #fafafa;
+}
+.item-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.item-num { font-weight: 700; color: #6c5ce7; font-size: 0.9rem; }
+.btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+
+/* 폼 필드 (캘린더와 동일 스타일) */
+.field-group {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 6px 0; border-bottom: 1px solid #f5f5f5;
+}
+.field-group:last-child { border-bottom: none; }
+.field-icon { font-size: 0.95rem; width: 22px; flex-shrink: 0; margin-top: 6px; text-align: center; }
+.field-col { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.field-col label { font-size: 0.75rem; font-weight: 600; color: #636e72; }
+.field-col input[type="text"] {
+  border: none; border-bottom: 1px solid #e0e0e0;
+  outline: none; font-size: 0.92rem; padding: 4px 0;
+  background: transparent; width: 100%;
+}
+.field-col input[type="text"]:focus { border-bottom-color: #6c5ce7; }
+
+.toggle-row {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.85rem; color: #636e72; cursor: pointer;
+}
+.toggle-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: #6c5ce7; }
+.date-time-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dt-col { display: flex; flex-direction: column; gap: 3px; }
+.small-label { font-size: 0.75rem; color: #636e72; font-weight: 600; }
+.dt-inputs { display: flex; gap: 4px; align-items: center; }
+.dt-arrow { color: #b2bec3; font-size: 1rem; margin-top: 14px; }
+input[type="date"], input[type="time"] {
+  border: 1px solid #dfe6e9; border-radius: 6px;
+  padding: 4px 7px; font-size: 0.85rem; outline: none;
+  color: #2d3436; background: white; cursor: pointer;
+}
+input[type="date"]:focus, input[type="time"]:focus { border-color: #6c5ce7; }
+</style>
+{% endblock %}

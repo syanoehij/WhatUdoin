@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — 캘린더{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+  <button class="btn btn-primary" onclick="openModal()">+ 일정 추가</button>
+</div>
+
+<div id="calendar"></div>
+
+<!-- ── 등록/수정 모달 ── -->
+<div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">일정 추가</h2>
+      <button class="icon-btn" onclick="closeModal()">✕</button>
+    </div>
+
+    <form id="event-form" autocomplete="off">
+      <input type="hidden" id="event-id" />
+
+      <div class="form-row">
+        <label>제목 *</label>
+        <input type="text" id="f-title" required placeholder="제목을 입력하세요" />
+      </div>
+
+      <div class="form-row">
+        <label>프로젝트</label>
+        <div class="autocomplete-wrap">
+          <input type="text" id="f-project" placeholder="프로젝트 (선택)" autocomplete="off"
+                 oninput="filterProjects(this.value)" onblur="hideDropdown()" onfocus="filterProjects(this.value)" />
+          <ul id="project-dropdown" class="ac-dropdown hidden"></ul>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>날짜</label>
+        <div class="date-range-display">
+          <div class="date-btn">
+            <span class="date-btn-label">시작</span>
+            <div class="fp-wrap">
+              <input type="text" id="f-start-date" placeholder="YYYY-MM-DD" autocomplete="off" />
+              <button type="button" class="fp-icon" onclick="fpInstance.open()">&#128197;</button>
+            </div>
+          </div>
+          <span class="range-sep">→</span>
+          <div class="date-btn">
+            <span class="date-btn-label">종료</span>
+            <div class="fp-wrap">
+              <input type="text" id="f-end-date" placeholder="YYYY-MM-DD" autocomplete="off" />
+              <button type="button" class="fp-icon" onclick="fpInstance.open()">&#128197;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>종일</label>
+        <label class="switch">
+          <input type="checkbox" id="f-allday" onchange="toggleAllDay()" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="form-row time-row">
+        <label>시간</label>
+        <div class="date-range-display">
+          <div class="date-btn" style="cursor:default;">
+            <span class="date-btn-label">시작</span>
+            <input type="time" id="f-start-time" />
+          </div>
+          <span class="range-sep">→</span>
+          <div class="date-btn" style="cursor:default;">
+            <span class="date-btn-label">종료</span>
+            <input type="time" id="f-end-time" />
+          </div>
+        </div>
+      </div>
+
+
+      <div class="form-row">
+        <label>장소</label>
+        <input type="text" id="f-location" placeholder="장소" />
+      </div>
+
+      <div class="form-row">
+        <label>담당자</label>
+        <input type="text" id="f-assignee" placeholder="담당자" />
+      </div>
+
+      <div class="form-row form-row-top">
+        <label>내용</label>
+        <textarea id="f-description" rows="3" placeholder="내용"></textarea>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-danger hidden" id="btn-delete" onclick="deleteEvent()">삭제</button>
+        <div>
+          <button type="button" class="btn" onclick="closeModal()">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── 상세 모달 ── -->
+<div id="detail-overlay" class="modal-overlay hidden" onclick="closeDetail(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="detail-title"></h2>
+      <button class="icon-btn" onclick="closeDetail()">✕</button>
+    </div>
+    <div id="detail-body" class="detail-body"></div>
+    <div class="modal-actions">
+      <div></div>
+      <div>
+        <button class="btn" onclick="closeDetail()">닫기</button>
+        <button class="btn btn-primary" onclick="editFromDetail()">수정</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/calendar.js"></script>
+{% endblock %}
