@@ -174,9 +174,16 @@ document.addEventListener('DOMContentLoaded', () => {
     headerToolbar: {
       left: 'prev,next today',
       center: 'title',
-      right: 'dayGridMonth,timeGridWeek,timeGridDay',
+      right: 'dayGridMonth,timeGridTwoWeek,timeGridWeek,timeGridDay',
     },
     buttonText: { today: '오늘', month: '월', week: '주', day: '일' },
+    views: {
+      timeGridTwoWeek: {
+        type: 'timeGrid',
+        duration: { weeks: 2 },
+        buttonText: '2주',
+      },
+    },
     eventSources: [
       { url: '/api/events' },
       { url: '/api/meetings/calendar', color: '#00b894', textColor: 'white' },
@@ -205,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sections = document.querySelectorAll('tr.fc-scrollgrid-section');
     if (sections.length < 2) return;
 
-    if (view === 'timeGridWeek' || view === 'timeGridDay') {
+    if (view === 'timeGridWeek' || view === 'timeGridDay' || view === 'timeGridTwoWeek') {
       const headerH = sections[0].getBoundingClientRect().height;
       const alldayH = sections[1].getBoundingClientRect().height;
 
@@ -245,7 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('calendar').addEventListener('wheel', (e) => {
     const view = calendar.view.type;
 
-    if (view === 'timeGridWeek' || view === 'timeGridDay') {
+    if (view === 'timeGridWeek' || view === 'timeGridDay' || view === 'timeGridTwoWeek') {
       // .fc-timegrid-body 안에서 휠 → 자연 스크롤에 맡김 (preventDefault 안 함)
       if (e.target.closest('.fc-timegrid-body')) return;
     }
