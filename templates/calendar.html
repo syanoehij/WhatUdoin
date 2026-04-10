@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}WhatUDoin — 캘린더{% endblock %}
 
+{% block extra_head %}
+<style>
+  main { max-width: none; padding: 20px 28px; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="toolbar">
   {% if user and user.role in ('editor', 'admin') %}
