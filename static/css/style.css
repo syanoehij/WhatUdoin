@@ -145,6 +145,88 @@ main { padding: 20px 24px; max-width: 1200px; margin: 0 auto; width: 100%; flex:
   box-shadow: 0 8px 32px rgba(0,0,0,0.18);
 }
 .modal-sm { width: 400px; }
+.modal-wide { width: 820px; }
+
+/* ── 모달 2열 레이아웃 ── */
+.modal-body-cols {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 24px;
+  margin-bottom: 4px;
+}
+.modal-col-left {
+  border-right: 1px solid #f0f0f0;
+  padding-right: 20px;
+}
+.modal-col-right { min-width: 0; }
+.col-section-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #b2bec3;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.left-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}
+.left-row .col-section-label { margin-bottom: 0; }
+
+/* ── 왼쪽 날짜 세로 스택 ── */
+.date-stack { display: flex; flex-direction: column; gap: 6px; }
+.date-stack-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.date-stack-row .date-btn-label {
+  font-size: 0.78rem;
+  color: #636e72;
+  width: 28px;
+  flex-shrink: 0;
+}
+.date-stack-row .fp-wrap { flex: 1; }
+
+/* ── 날짜 기존 일정 패널 ── */
+.date-events-panel { margin-top: 4px; }
+.date-events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.date-events-empty {
+  font-size: 0.82rem;
+  color: #b2bec3;
+}
+.date-event-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: #2d3436;
+}
+.date-event-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #6c5ce7;
+  flex-shrink: 0;
+}
+.date-event-time {
+  color: #636e72;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.date-event-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .modal-header {
   display: flex;
@@ -267,10 +349,12 @@ main { padding: 20px 24px; max-width: 1200px; margin: 0 auto; width: 100%; flex:
 .modal-actions {
   margin-top: 20px;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
+  gap: 8px;
 }
 .modal-actions > div { display: flex; gap: 8px; }
+.modal-actions #btn-delete { margin-right: auto; }
 .btn-group { display: flex; gap: 6px; align-items: center; }
 
 /* ── 상세 보기 ── */
