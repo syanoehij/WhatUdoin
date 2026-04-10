@@ -173,8 +173,17 @@ document.addEventListener('DOMContentLoaded', () => {
       right: 'dayGridMonth,timeGridWeek,timeGridDay',
     },
     buttonText: { today: '오늘', month: '월', week: '주', day: '일' },
-    events: '/api/events',
-    eventClick(info) { showDetail(info.event); },
+    eventSources: [
+      { url: '/api/events' },
+      { url: '/api/meetings/calendar', color: '#00b894', textColor: 'white' },
+    ],
+    eventClick(info) {
+      if (info.event.extendedProps.type === 'meeting') {
+        location.href = `/meetings/${info.event.extendedProps.meeting_id}?from=calendar`;
+        return;
+      }
+      showDetail(info.event);
+    },
     dateClick(info) {
       if (CURRENT_USER) openModal(info.dateStr);
     },

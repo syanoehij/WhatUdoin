@@ -391,9 +391,10 @@ async def create_meeting(request: Request):
     data = await request.json()
     title = data.get("title", "").strip()
     content = data.get("content", "").strip()
+    meeting_date = data.get("meeting_date") or None
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
-    meeting_id = db.create_meeting(title, content, user.get("team_id"), user["id"])
+    meeting_id = db.create_meeting(title, content, user.get("team_id"), user["id"], meeting_date)
     return {"id": meeting_id}
 
 
@@ -406,10 +407,27 @@ async def update_meeting(meeting_id: int, request: Request):
     data = await request.json()
     title = data.get("title", "").strip()
     content = data.get("content", "").strip()
+    meeting_date = data.get("meeting_date") or None
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
-    db.update_meeting(meeting_id, title, content, user["id"])
+    db.update_meeting(meeting_id, title, content, user["id"], meeting_date)
     return {"ok": True}
+
+
+@app.get("/api/meetings/calendar")
+def meetings_calendar():
+    meetings = db.get_all_meetings()
+    result = []
+    for m in meetings:
+        date = m.get("meeting_date") or m["created_at"][:10]
+        result.append({
+            "id": f"meeting-{m['id']}",
+            "title": f"📋 {m['title']}",
+            "start": date,
+            "allDay": True,
+            "extendedProps": {"type": "meeting", "meeting_id": m["id"]},
+        })
+    return result
 
 
 @app.delete("/api/meetings/{meeting_id}")

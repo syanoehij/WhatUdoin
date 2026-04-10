@@ -11,7 +11,17 @@
 <div class="editor-wrap">
   <!-- ── 헤더 ── -->
   <div class="editor-header">
-    <a href="/meetings" class="btn btn-sm">← 목록</a>
+    <a id="btn-back" href="/meetings" class="btn btn-sm">← 목록</a>
+    <div class="meeting-date-wrap">
+      {% if user and user.role in ('editor', 'admin') %}
+      <input type="date" id="meeting-date"
+             value="{{ meeting.meeting_date or meeting.created_at[:10] if meeting else '' }}" />
+      {% else %}
+      <span class="meeting-date-label">
+        {{ (meeting.meeting_date or meeting.created_at[:10]) if meeting else '' }}
+      </span>
+      {% endif %}
+    </div>
     {% if meeting %}
     <div class="btn-group">
       <a href="/meetings/{{ meeting.id }}/history" class="btn btn-sm">수정 이력</a>
@@ -100,6 +110,16 @@ let parsedEvents = [];
 let easyMDE = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+  const from = new URLSearchParams(location.search).get('from');
+  const btnBack = document.getElementById('btn-back');
+  if (from === 'calendar') {
+    btnBack.href = '/';
+    btnBack.textContent = '← 캘린더';
+  } else {
+    btnBack.href = '/meetings';
+    btnBack.textContent = '← 목록';
+  }
+
   if (IS_EDITOR) {
     easyMDE = new EasyMDE({
       element: document.getElementById('meeting-content'),
@@ -152,10 +172,11 @@ async function saveMeeting() {
 
   const method = MEETING_ID ? 'PUT' : 'POST';
   const url    = MEETING_ID ? `/api/meetings/${MEETING_ID}` : '/api/meetings';
+  const meetingDate = document.getElementById('meeting-date')?.value || null;
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, content }),
+    body: JSON.stringify({ title, content, meeting_date: meetingDate }),
   });
 
   if (res.ok) {

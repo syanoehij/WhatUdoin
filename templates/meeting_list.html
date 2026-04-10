@@ -12,7 +12,7 @@
 {% if meetings %}
 <div class="meeting-list">
   {% for m in meetings %}
-  <a href="/meetings/{{ m.id }}" class="meeting-card">
+  <a href="/meetings/{{ m.id }}?from=meetings" class="meeting-card">
     <div class="meeting-card-header">
       <span class="meeting-title">{{ m.title }}</span>
       {% if m.event_count %}

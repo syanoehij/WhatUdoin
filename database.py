@@ -117,6 +117,9 @@ def init_db():
         _migrate(conn, "sessions", [
             ("expires_at", "TEXT"),
         ])
+        _migrate(conn, "meetings", [
+            ("meeting_date", "TEXT"),
+        ])
 
         # ── 시드 데이터 ──
         if not conn.execute("SELECT 1 FROM teams LIMIT 1").fetchone():
@@ -458,16 +461,16 @@ def get_meeting(meeting_id: int):
     return dict(row) if row else None
 
 
-def create_meeting(title: str, content: str, team_id, created_by: int) -> int:
+def create_meeting(title: str, content: str, team_id, created_by: int, meeting_date: str = None) -> int:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO meetings (title, content, team_id, created_by) VALUES (?, ?, ?, ?)",
-            (title, content, team_id, created_by)
+            "INSERT INTO meetings (title, content, team_id, created_by, meeting_date) VALUES (?, ?, ?, ?, ?)",
+            (title, content, team_id, created_by, meeting_date)
         )
     return cur.lastrowid
 
 
-def update_meeting(meeting_id: int, title: str, content: str, edited_by: int):
+def update_meeting(meeting_id: int, title: str, content: str, edited_by: int, meeting_date: str = None):
     with get_conn() as conn:
         current = conn.execute(
             "SELECT content FROM meetings WHERE id = ?", (meeting_id,)
@@ -478,8 +481,8 @@ def update_meeting(meeting_id: int, title: str, content: str, edited_by: int):
                 (meeting_id, current["content"], edited_by)
             )
         conn.execute(
-            "UPDATE meetings SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (title, content, meeting_id)
+            "UPDATE meetings SET title = ?, content = ?, meeting_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (title, content, meeting_date, meeting_id)
         )
 
 

@@ -563,7 +563,21 @@ span.flatpickr-weekday { background: #6c5ce7 !important; color: white !important
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
+.meeting-date-wrap { flex: 1; display: flex; justify-content: center; }
+.meeting-date-wrap input[type="date"] {
+  border: none;
+  border-bottom: 1px solid #dfe6e9;
+  font-size: 0.9rem;
+  color: #636e72;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.meeting-date-wrap input[type="date"]:focus { border-bottom-color: #6c5ce7; color: #2d3436; }
+.meeting-date-label { font-size: 0.9rem; color: #636e72; }
 .meeting-title-input {
   width: 100%;
   border: none;
