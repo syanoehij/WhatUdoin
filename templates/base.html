@@ -27,6 +27,7 @@
     <nav>
       <a href="/" class="nav-link {% if request.url.path == '/' %}nav-active{% endif %}">📅 캘린더</a>
       <a href="/meetings" class="nav-link {% if request.url.path.startswith('/meetings') %}nav-active{% endif %}">📋 회의록</a>
+      <a href="/kanban" class="nav-link {% if request.url.path.startswith('/kanban') %}nav-active{% endif %}">📌 칸반</a>
     </nav>
     <div class="header-right">
       {% if user %}

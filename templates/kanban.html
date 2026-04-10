@@ -1,0 +1,491 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — 칸반{% endblock %}
+
+{% block extra_head %}
+<style>
+  main { max-width: none; padding: 20px 28px; }
+
+  /* ── 칸반 툴바 ── */
+  .kanban-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .kanban-toolbar select {
+    border: 1px solid #dfe6e9;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.88rem;
+    font-family: inherit;
+    background: #fff;
+    outline: none;
+  }
+  .kanban-toolbar label {
+    font-size: 0.88rem;
+    color: #636e72;
+    font-weight: 500;
+  }
+
+  /* ── 칸반 보드 ── */
+  .kanban-board {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    overflow-x: auto;
+    padding-bottom: 16px;
+    min-height: calc(100vh - 200px);
+  }
+
+  .kanban-col {
+    flex: 0 0 220px;
+    background: #f4f6f8;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 200px);
+  }
+  .kanban-col.blocked { background: #fff0f0; }
+
+  .kanban-col-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px 8px;
+    border-bottom: 2px solid transparent;
+    border-radius: 10px 10px 0 0;
+    position: sticky;
+    top: 0;
+    background: inherit;
+    z-index: 1;
+  }
+  .kanban-col[data-status="backlog"]     .kanban-col-header { border-color: #b2bec3; }
+  .kanban-col[data-status="todo"]        .kanban-col-header { border-color: #74b9ff; }
+  .kanban-col[data-status="in_progress"] .kanban-col-header { border-color: #fdcb6e; }
+  .kanban-col[data-status="peer_review"] .kanban-col-header { border-color: #a29bfe; }
+  .kanban-col[data-status="done"]        .kanban-col-header { border-color: #55efc4; }
+  .kanban-col[data-status="blocked"]     .kanban-col-header { border-color: #ff7675; }
+
+  .col-title {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #2d3436;
+  }
+  .col-count {
+    background: #dfe6e9;
+    color: #636e72;
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+  .kanban-col[data-status="blocked"] .col-count { background: #ffcccc; color: #c0392b; }
+
+  .kanban-col-body {
+    padding: 8px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 60px;
+  }
+  .kanban-col-body.drag-over {
+    background: rgba(99, 110, 114, 0.08);
+    border-radius: 0 0 10px 10px;
+  }
+
+  /* ── 칸반 카드 ── */
+  .kanban-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 10px 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    cursor: pointer;
+    transition: box-shadow 0.15s, transform 0.1s;
+    border-left: 3px solid #dfe6e9;
+    user-select: none;
+  }
+  .kanban-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.12); transform: translateY(-1px); }
+  .kanban-card.dragging { opacity: 0.5; transform: rotate(1deg); }
+
+  /* 우선순위 좌측 테두리 색 */
+  .kanban-card[data-priority="urgent"] { border-left-color: #d63031; }
+  .kanban-card[data-priority="high"]   { border-left-color: #e17055; }
+  .kanban-card[data-priority="normal"] { border-left-color: #74b9ff; }
+  .kanban-card[data-priority="low"]    { border-left-color: #b2bec3; }
+
+  .card-project-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 4px;
+    margin-bottom: 5px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .card-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #2d3436;
+    line-height: 1.3;
+    margin-bottom: 6px;
+    word-break: break-word;
+  }
+  .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    font-size: 0.72rem;
+    color: #636e72;
+  }
+  .card-date { color: #b2bec3; }
+  .card-assignee {
+    background: #f0f0f0;
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: #636e72;
+  }
+  .priority-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .priority-dot.urgent { background: #d63031; }
+  .priority-dot.high   { background: #e17055; }
+  .priority-dot.normal { background: #74b9ff; }
+  .priority-dot.low    { background: #b2bec3; }
+
+  /* 빈 컬럼 placeholder */
+  .kanban-empty {
+    color: #b2bec3;
+    font-size: 0.8rem;
+    text-align: center;
+    padding: 16px 0;
+  }
+
+  /* ── 카드 상세/수정 모달 (base.html 스타일 재활용) ── */
+  .kanban-detail-status {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .status-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #dfe6e9;
+    background: #f4f6f8;
+    font-size: 0.78rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.1s;
+  }
+  .status-btn:hover { background: #dfe6e9; }
+  .status-btn.active { background: #0984e3; color: #fff; border-color: #0984e3; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="kanban-toolbar">
+  <label>팀 필터</label>
+  <select id="team-filter" onchange="loadKanban()">
+    <option value="">전체</option>
+    {% for team in teams %}
+    <option value="{{ team.id }}">{{ team.name }}</option>
+    {% endfor %}
+  </select>
+  <span id="kanban-total" style="font-size:0.85rem;color:#636e72;margin-left:4px;"></span>
+</div>
+
+<div class="kanban-board" id="kanban-board">
+  {% set cols = [
+    ('backlog',     'Backlog'),
+    ('todo',        'Todo'),
+    ('in_progress', 'In Progress'),
+    ('peer_review', 'Peer Review'),
+    ('done',        'Done'),
+    ('blocked',     'Blocked'),
+  ] %}
+  {% for status, label in cols %}
+  <div class="kanban-col {% if status == 'blocked' %}blocked{% endif %}" data-status="{{ status }}">
+    <div class="kanban-col-header">
+      <span class="col-title">{{ label }}</span>
+      <span class="col-count" id="count-{{ status }}">0</span>
+    </div>
+    <div class="kanban-col-body"
+         id="col-{{ status }}"
+         ondragover="onDragOver(event)"
+         ondragleave="onDragLeave(event)"
+         ondrop="onDrop(event, '{{ status }}')">
+      <div class="kanban-empty">불러오는 중...</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ── 카드 상세 모달 ── -->
+<div id="kdetail-overlay" class="modal-overlay hidden" onclick="closeKDetail(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="kdetail-title"></h2>
+      <button class="icon-btn" onclick="closeKDetail()">✕</button>
+    </div>
+    <div id="kdetail-body" class="detail-body"></div>
+    <div class="form-row" style="margin:12px 16px 0;">
+      <label style="font-size:0.82rem;color:#636e72;min-width:64px;">칸반 상태</label>
+      <div class="kanban-detail-status" id="kdetail-status-btns"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger hidden" id="kbtn-remove" onclick="removeFromKanban()">칸반에서 제거</button>
+      <div>
+        <button class="btn" onclick="closeKDetail()">닫기</button>
+        <button class="btn btn-primary" id="kbtn-edit" onclick="editKanbanEvent()">수정</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id} | tojson if user else 'null' }};
+
+const COLUMNS = [
+  { status: 'backlog',     label: 'Backlog' },
+  { status: 'todo',        label: 'Todo' },
+  { status: 'in_progress', label: 'In Progress' },
+  { status: 'peer_review', label: 'Peer Review' },
+  { status: 'done',        label: 'Done' },
+  { status: 'blocked',     label: 'Blocked' },
+];
+
+const PROJECT_COLORS = [
+  '#0984e3','#00b894','#e17055','#a29bfe','#fd79a8','#fdcb6e',
+  '#6c5ce7','#00cec9','#e84393','#2d3436','#74b9ff','#55efc4',
+  '#fab1a0','#ffeaa7','#81ecec','#dfe6e9','#636e72','#b2bec3',
+  '#d63031','#27ae60',
+];
+
+function projectColor(name) {
+  if (!name) return '#b2bec3';
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
+  return PROJECT_COLORS[Math.abs(h) % PROJECT_COLORS.length];
+}
+
+function badgeTextColor(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  // 지각 휘도 기준: 0.5 초과면 어두운 글자
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55 ? '#333' : '#fff';
+}
+
+function fmtDate(str) {
+  if (!str) return '';
+  return str.slice(0, 10);
+}
+
+let allEvents = [];
+let currentKDetailId = null;
+let dragSrcId = null;
+
+async function loadKanban() {
+  const teamId = document.getElementById('team-filter').value;
+  const url = teamId ? `/api/kanban?team_id=${teamId}` : '/api/kanban';
+  const res = await fetch(url);
+  allEvents = await res.json();
+  renderBoard();
+}
+
+function renderBoard() {
+  const grouped = {};
+  COLUMNS.forEach(c => grouped[c.status] = []);
+  allEvents.forEach(e => {
+    if (grouped[e.kanban_status] !== undefined) grouped[e.kanban_status].push(e);
+  });
+
+  let total = allEvents.length;
+  document.getElementById('kanban-total').textContent = `총 ${total}개`;
+
+  COLUMNS.forEach(({ status }) => {
+    const cards = grouped[status];
+    document.getElementById(`count-${status}`).textContent = cards.length;
+    const body = document.getElementById(`col-${status}`);
+    if (!cards.length) {
+      body.innerHTML = '<div class="kanban-empty">없음</div>';
+      return;
+    }
+    body.innerHTML = cards.map(e => cardHTML(e)).join('');
+    // 드래그 이벤트 등록
+    body.querySelectorAll('.kanban-card').forEach(card => {
+      card.addEventListener('dragstart', e => onDragStart(e, card.dataset.id));
+      card.addEventListener('dragend',   e => card.classList.remove('dragging'));
+      card.addEventListener('click',     () => openKDetail(parseInt(card.dataset.id)));
+    });
+  });
+}
+
+function cardHTML(e) {
+  const color = projectColor(e.project);
+  const tColor = badgeTextColor(color);
+  const projectBadge = e.project
+    ? `<div class="card-project-badge" style="background:${color};color:${tColor}">${esc(e.project)}</div>`
+    : '';
+  const assignees = (e.assignee || '').split(',').map(s => s.trim()).filter(Boolean);
+  const assigneeBadges = assignees.map(a => `<span class="card-assignee">${esc(a)}</span>`).join('');
+  const priority = e.priority || 'normal';
+  const priorityLabels = { urgent:'긴급', high:'높음', normal:'보통', low:'낮음' };
+  const dateStr = fmtDate(e.start_datetime);
+
+  return `
+    <div class="kanban-card" data-id="${e.id}" data-priority="${priority}" draggable="true">
+      ${projectBadge}
+      <div class="card-title">${esc(e.title)}</div>
+      <div class="card-meta">
+        <span class="priority-dot ${priority}"></span>
+        <span class="card-date">${dateStr}</span>
+        ${assigneeBadges}
+      </div>
+    </div>`;
+}
+
+// ── 드래그 앤 드롭 ───────────────────────────────────────
+function onDragStart(e, id) {
+  dragSrcId = id;
+  e.target.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+}
+
+function onDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+async function onDrop(e, newStatus) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (!dragSrcId) return;
+  if (!CURRENT_USER) { alert('로그인이 필요합니다.'); return; }
+
+  const id = parseInt(dragSrcId);
+  dragSrcId = null;
+
+  // Optimistic UI update
+  const ev = allEvents.find(e => e.id === id);
+  if (!ev || ev.kanban_status === newStatus) return;
+  ev.kanban_status = newStatus;
+  renderBoard();
+
+  // API 호출
+  const res = await fetch(`/api/events/${id}/kanban`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kanban_status: newStatus }),
+  });
+  if (!res.ok) {
+    alert('상태 변경 실패');
+    loadKanban();
+  }
+}
+
+// ── 카드 상세 모달 ───────────────────────────────────────
+function openKDetail(id) {
+  const e = allEvents.find(ev => ev.id === id);
+  if (!e) return;
+  currentKDetailId = id;
+
+  document.getElementById('kdetail-title').textContent = e.title;
+
+  const priorityLabels = { urgent:'🔴 긴급', high:'🟠 높음', normal:'🔵 보통', low:'⚪ 낮음' };
+  const rows = [
+    ['프로젝트', e.project   || '-'],
+    ['기간',     fmtDate(e.start_datetime) + (e.end_datetime ? ' ~ ' + fmtDate(e.end_datetime) : '')],
+    ['담당자',   e.assignee  || '-'],
+    ['장소',     e.location  || '-'],
+    ['우선순위', priorityLabels[e.priority] || '🔵 보통'],
+    ['내용',     e.description || '-'],
+  ];
+  document.getElementById('kdetail-body').innerHTML = rows.map(([label, val]) => `
+    <div class="detail-row">
+      <span class="detail-label">${label}</span>
+      <span class="detail-val">${esc(val)}</span>
+    </div>`).join('');
+
+  // 상태 변경 버튼
+  const statusContainer = document.getElementById('kdetail-status-btns');
+  statusContainer.innerHTML = COLUMNS.map(({ status, label }) =>
+    `<button class="status-btn ${e.kanban_status === status ? 'active' : ''}"
+       onclick="changeStatus('${status}')">${label}</button>`
+  ).join('');
+
+  // 에디터 이상만 제거/수정 가능
+  const canEdit = CURRENT_USER && (CURRENT_USER.role === 'admin' ||
+    CURRENT_USER.role === 'editor');
+  document.getElementById('kbtn-remove').classList.toggle('hidden', !canEdit);
+  document.getElementById('kbtn-edit').style.display = canEdit ? '' : 'none';
+
+  document.getElementById('kdetail-overlay').classList.remove('hidden');
+}
+
+function closeKDetail(ev) {
+  if (ev && ev.target !== document.getElementById('kdetail-overlay')) return;
+  document.getElementById('kdetail-overlay').classList.add('hidden');
+  currentKDetailId = null;
+}
+
+async function changeStatus(newStatus) {
+  if (!currentKDetailId) return;
+  const ev = allEvents.find(e => e.id === currentKDetailId);
+  if (!ev || ev.kanban_status === newStatus) return;
+
+  ev.kanban_status = newStatus;
+  // 버튼 active 상태 업데이트
+  document.querySelectorAll('#kdetail-status-btns .status-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent === COLUMNS.find(c => c.status === newStatus)?.label);
+  });
+  renderBoard();
+
+  await fetch(`/api/events/${currentKDetailId}/kanban`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kanban_status: newStatus }),
+  });
+}
+
+async function removeFromKanban() {
+  if (!currentKDetailId || !confirm('이 일정을 칸반에서 제거할까요?\n(일정은 삭제되지 않습니다)')) return;
+  await fetch(`/api/events/${currentKDetailId}/kanban`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kanban_status: null }),
+  });
+  document.getElementById('kdetail-overlay').classList.add('hidden');
+  currentKDetailId = null;
+  loadKanban();
+}
+
+function editKanbanEvent() {
+  if (!currentKDetailId) return;
+  location.href = `/?edit=${currentKDetailId}`;
+}
+
+function esc(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// 초기 로드
+loadKanban();
+</script>
+{% endblock %}

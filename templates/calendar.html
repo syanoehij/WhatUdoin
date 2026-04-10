@@ -121,7 +121,23 @@
           </div>
           <div class="form-row form-row-top">
             <label>내용</label>
-            <textarea id="f-description" rows="10" placeholder="내용"></textarea>
+            <textarea id="f-description" rows="7" placeholder="내용"></textarea>
+          </div>
+          <div class="form-row">
+            <label>우선순위</label>
+            <select id="f-priority" style="flex:1;border:1px solid #dfe6e9;border-radius:6px;padding:6px 10px;font-size:0.88rem;outline:none;font-family:inherit;background:#fff;">
+              <option value="urgent">🔴 긴급</option>
+              <option value="high">🟠 높음</option>
+              <option value="normal" selected>🔵 보통</option>
+              <option value="low">⚪ 낮음</option>
+            </select>
+          </div>
+          <div class="left-row" style="margin-top:8px;">
+            <div class="col-section-label">칸반 등록</div>
+            <label class="switch">
+              <input type="checkbox" id="f-kanban" checked />
+              <span class="slider"></span>
+            </label>
           </div>
         </div>
       </div>
@@ -164,6 +180,7 @@ const CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id} | tojson if
 let calendar;
 let currentDetailEventId = null;
 let currentDetailEventTeamId = null;
+let currentEditKanbanStatus = null;
 let allProjects = [];
 let allMembers = [];
 let assigneeTags = [];
@@ -211,6 +228,15 @@ document.addEventListener('DOMContentLoaded', () => {
   applyStickyAllDay();
   initDatePicker();
   document.getElementById('event-form').addEventListener('submit', saveEvent);
+
+  // 칸반에서 수정 링크로 접근한 경우 자동으로 모달 열기
+  const editId = new URLSearchParams(location.search).get('edit');
+  if (editId && CURRENT_USER) {
+    fetch(`/api/events/${editId}`)
+      .then(r => r.json())
+      .then(data => openModal('', data))
+      .catch(() => {});
+  }
 
   // ── 주/일 뷰 all-day 행 sticky 고정 ───────────────────
   function applyStickyAllDay() {
@@ -478,6 +504,9 @@ function openModal(dateStr = '', eventData = null) {
   document.getElementById('f-description').value  = '';
   document.getElementById('btn-delete').classList.add('hidden');
   document.getElementById('modal-title').textContent = '일정 추가';
+  document.getElementById('f-priority').value = 'normal';
+  document.getElementById('f-kanban').checked = true;
+  currentEditKanbanStatus = null;
   toggleAllDay();
 
   if (eventData) {
@@ -502,6 +531,9 @@ function openModal(dateStr = '', eventData = null) {
     document.getElementById('f-end-time').value   = allDay ? '' : endTime;
 
     toggleAllDay();
+    document.getElementById('f-priority').value = eventData.priority || 'normal';
+    currentEditKanbanStatus = eventData.kanban_status || null;
+    document.getElementById('f-kanban').checked = !!eventData.kanban_status;
     document.getElementById('btn-delete').classList.remove('hidden');
   }
 
@@ -547,6 +579,14 @@ async function saveEvent(e) {
     alert('종료 시간은 시작 시간보다 이전일 수 없습니다.'); return;
   }
 
+  const kanbanChecked = document.getElementById('f-kanban').checked;
+  let kanban_status;
+  if (!id) {
+    kanban_status = kanbanChecked ? 'backlog' : null;
+  } else {
+    kanban_status = kanbanChecked ? (currentEditKanbanStatus || 'backlog') : null;
+  }
+
   const payload = {
     title:          document.getElementById('f-title').value,
     project:        document.getElementById('f-project').value || null,
@@ -557,6 +597,8 @@ async function saveEvent(e) {
     assignee:       getAssigneeValue(),
     description:    document.getElementById('f-description').value || null,
     source:         'manual',
+    kanban_status,
+    priority:       document.getElementById('f-priority').value,
   };
 
   const method = id ? 'PUT' : 'POST';

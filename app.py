@@ -66,6 +66,12 @@ def admin_page(request: Request):
     ))
 
 
+@app.get("/kanban", response_class=HTMLResponse)
+def kanban_page(request: Request):
+    teams = db.get_all_teams()
+    return templates.TemplateResponse(request, "kanban.html", _ctx(request, teams=teams))
+
+
 @app.get("/meetings", response_class=HTMLResponse)
 def meetings_page(request: Request):
     meetings = db.get_all_meetings()
@@ -294,14 +300,16 @@ def list_events():
             "end": e["end_datetime"] or e["start_datetime"],
             "allDay": bool(e["all_day"]),
             "extendedProps": {
-                "project":     e["project"],
-                "description": e["description"],
-                "location":    e["location"],
-                "assignee":    e["assignee"],
-                "all_day":     bool(e["all_day"]),
-                "source":      e["source"],
-                "team_id":     e["team_id"],
-                "meeting_id":  e["meeting_id"],
+                "project":       e["project"],
+                "description":   e["description"],
+                "location":      e["location"],
+                "assignee":      e["assignee"],
+                "all_day":       bool(e["all_day"]),
+                "source":        e["source"],
+                "team_id":       e["team_id"],
+                "meeting_id":    e["meeting_id"],
+                "kanban_status": e.get("kanban_status"),
+                "priority":      e.get("priority", "normal"),
             },
         }
         for e in events
@@ -328,6 +336,8 @@ async def create_event(request: Request):
     data.setdefault("end_datetime", None)
     data.setdefault("source", "manual")
     data.setdefault("meeting_id", None)
+    data.setdefault("kanban_status", None)
+    data.setdefault("priority", "normal")
     data["created_by"] = str(user["id"])
     data["team_id"] = user.get("team_id")
     event_id = db.create_event(data)
@@ -343,6 +353,8 @@ async def update_event(event_id: int, request: Request):
     if not auth.can_edit_event(user, event):
         raise HTTPException(status_code=403, detail="다른 팀의 일정은 수정할 수 없습니다.")
     data = await request.json()
+    data.setdefault("kanban_status", event.get("kanban_status"))
+    data.setdefault("priority", event.get("priority", "normal"))
     db.update_event(event_id, data)
     return {"ok": True}
 
@@ -356,6 +368,24 @@ def delete_event(event_id: int, request: Request):
     if not auth.can_edit_event(user, event):
         raise HTTPException(status_code=403, detail="다른 팀의 일정은 삭제할 수 없습니다.")
     db.delete_event(event_id)
+    return {"ok": True}
+
+
+@app.get("/api/kanban")
+def get_kanban_events(team_id: int = None):
+    return db.get_kanban_events(team_id)
+
+
+@app.patch("/api/events/{event_id}/kanban")
+async def update_event_kanban(event_id: int, request: Request):
+    _require_editor(request)
+    event = db.get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    data = await request.json()
+    kanban_status = data.get("kanban_status")
+    priority = data.get("priority")
+    db.update_kanban_status(event_id, kanban_status, priority)
     return {"ok": True}
 
 

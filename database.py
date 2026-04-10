@@ -102,11 +102,13 @@ def init_db():
 
         # ── 기존 테이블 마이그레이션 ──
         _migrate(conn, "events", [
-            ("project",    "TEXT"),
-            ("assignee",   "TEXT"),
-            ("all_day",    "INTEGER DEFAULT 0"),
-            ("team_id",    "INTEGER"),
-            ("meeting_id", "INTEGER"),
+            ("project",       "TEXT"),
+            ("assignee",      "TEXT"),
+            ("all_day",       "INTEGER DEFAULT 0"),
+            ("team_id",       "INTEGER"),
+            ("meeting_id",    "INTEGER"),
+            ("kanban_status", "TEXT"),
+            ("priority",      "TEXT DEFAULT 'normal'"),
         ])
         _migrate(conn, "users", [
             ("password",   "TEXT NOT NULL DEFAULT ''"),
@@ -167,14 +169,18 @@ def get_event(event_id: int):
 def create_event(data: dict) -> int:
     data.setdefault("team_id", None)
     data.setdefault("meeting_id", None)
+    data.setdefault("kanban_status", None)
+    data.setdefault("priority", "normal")
     with get_conn() as conn:
         cur = conn.execute(
             """INSERT INTO events
                (title, team_id, project, description, location, assignee, all_day,
-                start_datetime, end_datetime, created_by, source, meeting_id)
+                start_datetime, end_datetime, created_by, source, meeting_id,
+                kanban_status, priority)
                VALUES
                (:title, :team_id, :project, :description, :location, :assignee, :all_day,
-                :start_datetime, :end_datetime, :created_by, :source, :meeting_id)""",
+                :start_datetime, :end_datetime, :created_by, :source, :meeting_id,
+                :kanban_status, :priority)""",
             data,
         )
     return cur.lastrowid
@@ -193,6 +199,8 @@ def update_event(event_id: int, data: dict):
                 all_day        = :all_day,
                 start_datetime = :start_datetime,
                 end_datetime   = :end_datetime,
+                kanban_status  = :kanban_status,
+                priority       = :priority,
                 updated_at     = CURRENT_TIMESTAMP
                WHERE id = :id""",
             data,
@@ -202,6 +210,34 @@ def update_event(event_id: int, data: dict):
 def delete_event(event_id: int):
     with get_conn() as conn:
         conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+
+
+def get_kanban_events(team_id: int = None) -> list[dict]:
+    with get_conn() as conn:
+        if team_id:
+            rows = conn.execute(
+                "SELECT * FROM events WHERE kanban_status IS NOT NULL AND team_id = ? ORDER BY start_datetime",
+                (team_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM events WHERE kanban_status IS NOT NULL ORDER BY start_datetime"
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_kanban_status(event_id: int, kanban_status, priority: str = None):
+    with get_conn() as conn:
+        if priority is not None:
+            conn.execute(
+                "UPDATE events SET kanban_status = ?, priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (kanban_status, priority, event_id)
+            )
+        else:
+            conn.execute(
+                "UPDATE events SET kanban_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (kanban_status, event_id)
+            )
 
 
 def get_projects() -> list[str]:
