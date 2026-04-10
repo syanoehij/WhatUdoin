@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — 수정 이력{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/meetings/{{ meeting.id }}" class="btn btn-sm">← 회의록으로</a>
+  <h2 class="page-title" style="margin:0">{{ meeting.title }} — 수정 이력</h2>
+</div>
+
+{% if histories %}
+<div class="history-list">
+  {% for h in histories %}
+  <div class="history-card">
+    <div class="history-card-meta">
+      <span class="history-editor">{{ h.editor_name or '알 수 없음' }}</span>
+      <span class="text-muted">{{ h.edited_at[:16].replace('T', ' ') }}</span>
+    </div>
+    <pre class="history-content">{{ h.content }}</pre>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <p>수정 이력이 없습니다.</p>
+</div>
+{% endif %}
+{% endblock %}

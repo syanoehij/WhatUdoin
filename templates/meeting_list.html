@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — 회의록{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2 class="page-title">📋 회의록</h2>
+  {% if user and user.role in ('editor', 'admin') %}
+  <a href="/meetings/new" class="btn btn-primary">+ 새 회의록</a>
+  {% endif %}
+</div>
+
+{% if meetings %}
+<div class="meeting-list">
+  {% for m in meetings %}
+  <a href="/meetings/{{ m.id }}" class="meeting-card">
+    <div class="meeting-card-header">
+      <span class="meeting-title">{{ m.title }}</span>
+      {% if m.event_count %}
+      <span class="event-count-badge">📅 {{ m.event_count }}개 일정</span>
+      {% endif %}
+    </div>
+    <div class="meeting-card-meta">
+      <span>{{ m.author_name or '-' }}</span>
+      {% if m.team_name %}<span class="badge-team">{{ m.team_name }}</span>{% endif %}
+      <span class="text-muted">{{ m.updated_at[:10] }}</span>
+    </div>
+    {% if m.content %}
+    <p class="meeting-preview">{{ m.content[:120] }}{% if m.content|length > 120 %}…{% endif %}</p>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <p>등록된 회의록이 없습니다.</p>
+  {% if user and user.role in ('editor', 'admin') %}
+  <a href="/meetings/new" class="btn btn-primary" style="margin-top:12px">첫 회의록 작성하기</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — 관리자{% endblock %}
+
+{% block content %}
+<div class="admin-wrap">
+  <div class="admin-header">
+    <h2>🔧 관리자 페이지</h2>
+  </div>
+
+  <!-- 탭 -->
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('pending', this)">가입 신청 <span class="badge">{{ pending|length }}</span></button>
+    <button class="tab-btn" onclick="switchTab('members', this)">멤버 목록</button>
+    <button class="tab-btn" onclick="switchTab('teams', this)">팀 관리</button>
+  </div>
+
+  <!-- ── 가입 신청 탭 ── -->
+  <div id="tab-pending" class="tab-panel">
+    {% if pending %}
+      {% for p in pending %}
+      <div class="admin-card" id="pending-{{ p.id }}">
+        <div class="admin-card-header">
+          <div>
+            <strong>{{ p.name }}</strong>
+            <span class="text-muted ml-8">{{ p.created_at[:10] }}</span>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-sm btn-danger" onclick="rejectPending({{ p.id }})">거절</button>
+            <button class="btn btn-sm btn-primary" onclick="openApprove({{ p.id }}, '{{ p.name }}')">승인</button>
+          </div>
+        </div>
+        {% if p.memo %}
+        <p class="admin-card-memo">{{ p.memo }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="empty-msg">대기 중인 신청이 없습니다.</p>
+    {% endif %}
+  </div>
+
+  <!-- ── 멤버 탭 ── -->
+  <div id="tab-members" class="tab-panel hidden">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>이름</th>
+          <th>역할</th>
+          <th>팀</th>
+          <th>활성</th>
+          <th>관리</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in members %}
+        <tr id="member-{{ m.id }}">
+          <td>{{ m.name }}</td>
+          <td><span class="role-badge role-{{ m.role }}">{{ '관리자' if m.role == 'admin' else '에디터' }}</span></td>
+          <td>{{ m.team_name or '-' }}</td>
+          <td>
+            <label class="switch switch-sm">
+              <input type="checkbox" {{ 'checked' if m.is_active else '' }}
+                     onchange="toggleActive({{ m.id }}, {{ m.team_id or 'null' }}, this.checked)" />
+              <span class="slider"></span>
+            </label>
+          </td>
+          <td class="btn-group">
+            <button class="btn btn-sm" onclick="openIPs({{ m.id }}, '{{ m.name }}')">IP</button>
+            <button class="btn btn-sm" onclick="openResetPw({{ m.id }}, '{{ m.name }}')">비밀번호 초기화</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 팀 탭 ── -->
+  <div id="tab-teams" class="tab-panel hidden">
+    <div class="team-add-row">
+      <input type="text" id="new-team-name" placeholder="새 팀 이름" />
+      <button class="btn btn-primary" onclick="createTeam()">팀 추가</button>
+    </div>
+    <table class="admin-table" id="team-table">
+      <thead><tr><th>팀 이름</th><th>관리</th></tr></thead>
+      <tbody>
+        {% for t in teams %}
+        <tr id="team-row-{{ t.id }}">
+          <td>
+            <span class="team-name-display" id="team-name-{{ t.id }}">{{ t.name }}</span>
+            <input type="text" class="hidden team-name-input" id="team-input-{{ t.id }}" value="{{ t.name }}" />
+          </td>
+          <td class="btn-group">
+            <button class="btn btn-sm" id="team-edit-btn-{{ t.id }}" onclick="startEditTeam({{ t.id }})">수정</button>
+            <button class="btn btn-sm btn-primary hidden" id="team-save-btn-{{ t.id }}" onclick="saveTeam({{ t.id }})">저장</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteTeam({{ t.id }})">삭제</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── 승인 모달 ── -->
+<div id="approve-modal" class="modal-overlay hidden" onclick="closeApproveModal(event)">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2>승인: <span id="approve-name"></span></h2>
+      <button class="icon-btn" onclick="closeApproveModal()">✕</button>
+    </div>
+    <div class="form-row">
+      <label>팀 배정</label>
+      <select id="approve-team">
+        {% for t in teams %}
+        <option value="{{ t.id }}">{{ t.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="modal-actions">
+      <div></div>
+      <div>
+        <button class="btn" onclick="closeApproveModal()">취소</button>
+        <button class="btn btn-primary" onclick="confirmApprove()">승인</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── IP 모달 ── -->
+<div id="ip-modal" class="modal-overlay hidden" onclick="closeIpModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2><span id="ip-modal-name"></span> — IP 관리</h2>
+      <button class="icon-btn" onclick="closeIpModal()">✕</button>
+    </div>
+    <div id="ip-list"></div>
+    <div class="modal-actions">
+      <div></div>
+      <button class="btn" onclick="closeIpModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 비밀번호 초기화 모달 ── -->
+<div id="pw-modal" class="modal-overlay hidden" onclick="closePwModal(event)">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2>비밀번호 초기화: <span id="pw-modal-name"></span></h2>
+      <button class="icon-btn" onclick="closePwModal()">✕</button>
+    </div>
+    <div class="form-row">
+      <label>새 비밀번호</label>
+      <input type="text" id="new-pw-input" placeholder="새 비밀번호" />
+    </div>
+    <div class="modal-actions">
+      <div></div>
+      <div>
+        <button class="btn" onclick="closePwModal()">취소</button>
+        <button class="btn btn-primary" onclick="confirmResetPw()">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _approvePendingId = null;
+let _resetPwUserId = null;
+
+// ── 탭 ──────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.remove('hidden');
+  btn.classList.add('active');
+}
+
+// ── 가입 신청 ────────────────────────────────────────────
+function openApprove(id, name) {
+  _approvePendingId = id;
+  document.getElementById('approve-name').textContent = name;
+  document.getElementById('approve-modal').classList.remove('hidden');
+}
+function closeApproveModal(e) {
+  if (!e || e.target === document.getElementById('approve-modal'))
+    document.getElementById('approve-modal').classList.add('hidden');
+}
+async function confirmApprove() {
+  const teamId = document.getElementById('approve-team').value;
+  const res = await fetch(`/api/admin/pending/${_approvePendingId}/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ team_id: parseInt(teamId) }),
+  });
+  if (res.ok) {
+    document.getElementById(`pending-${_approvePendingId}`).remove();
+    closeApproveModal();
+    alert('승인 완료');
+  } else {
+    const err = await res.json();
+    alert(err.detail || '오류');
+  }
+}
+async function rejectPending(id) {
+  if (!confirm('거절하시겠습니까?')) return;
+  await fetch(`/api/admin/pending/${id}/reject`, { method: 'POST' });
+  document.getElementById(`pending-${id}`).remove();
+}
+
+// ── 멤버 관리 ────────────────────────────────────────────
+async function toggleActive(userId, teamId, isActive) {
+  await fetch(`/api/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ team_id: teamId, is_active: isActive ? 1 : 0 }),
+  });
+}
+
+// ── IP 관리 ──────────────────────────────────────────────
+async function openIPs(userId, name) {
+  document.getElementById('ip-modal-name').textContent = name;
+  const res = await fetch(`/api/admin/users/${userId}/ips`);
+  const ips = await res.json();
+  const list = document.getElementById('ip-list');
+  if (!ips.length) {
+    list.innerHTML = '<p class="empty-msg">접속 기록이 없습니다.</p>';
+  } else {
+    list.innerHTML = ips.map(ip => `
+      <div class="ip-row">
+        <div>
+          <code>${ip.ip_address}</code>
+          <span class="text-muted ml-8">${ip.last_seen?.slice(0, 16) || ''}</span>
+        </div>
+        <label class="switch switch-sm">
+          <input type="checkbox" ${ip.type === 'whitelist' ? 'checked' : ''}
+                 onchange="toggleWhitelist(${ip.id}, this.checked)" />
+          <span class="slider"></span>
+        </label>
+      </div>
+    `).join('');
+  }
+  document.getElementById('ip-modal').classList.remove('hidden');
+}
+function closeIpModal(e) {
+  if (!e || e.target === document.getElementById('ip-modal'))
+    document.getElementById('ip-modal').classList.add('hidden');
+}
+async function toggleWhitelist(ipId, enable) {
+  await fetch(`/api/admin/ips/${ipId}/whitelist`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enable }),
+  });
+}
+
+// ── 비밀번호 초기화 ──────────────────────────────────────
+function openResetPw(userId, name) {
+  _resetPwUserId = userId;
+  document.getElementById('pw-modal-name').textContent = name;
+  document.getElementById('new-pw-input').value = '';
+  document.getElementById('pw-modal').classList.remove('hidden');
+}
+function closePwModal(e) {
+  if (!e || e.target === document.getElementById('pw-modal'))
+    document.getElementById('pw-modal').classList.add('hidden');
+}
+async function confirmResetPw() {
+  const pw = document.getElementById('new-pw-input').value.trim();
+  if (!pw) { alert('비밀번호를 입력하세요.'); return; }
+  const res = await fetch(`/api/admin/users/${_resetPwUserId}/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pw }),
+  });
+  if (res.ok) { closePwModal(); alert('초기화 완료'); }
+}
+
+// ── 팀 관리 ──────────────────────────────────────────────
+async function createTeam() {
+  const name = document.getElementById('new-team-name').value.trim();
+  if (!name) { alert('팀 이름을 입력하세요.'); return; }
+  const res = await fetch('/api/admin/teams', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (res.ok) {
+    const t = await res.json();
+    document.getElementById('new-team-name').value = '';
+    const tbody = document.querySelector('#team-table tbody');
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr id="team-row-${t.id}">
+        <td>
+          <span class="team-name-display" id="team-name-${t.id}">${esc(t.name)}</span>
+          <input type="text" class="hidden team-name-input" id="team-input-${t.id}" value="${esc(t.name)}" />
+        </td>
+        <td class="btn-group">
+          <button class="btn btn-sm" id="team-edit-btn-${t.id}" onclick="startEditTeam(${t.id})">수정</button>
+          <button class="btn btn-sm btn-primary hidden" id="team-save-btn-${t.id}" onclick="saveTeam(${t.id})">저장</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteTeam(${t.id})">삭제</button>
+        </td>
+      </tr>
+    `);
+  } else {
+    const err = await res.json();
+    alert(err.detail || '오류');
+  }
+}
+
+function startEditTeam(id) {
+  document.getElementById(`team-name-${id}`).classList.add('hidden');
+  document.getElementById(`team-input-${id}`).classList.remove('hidden');
+  document.getElementById(`team-edit-btn-${id}`).classList.add('hidden');
+  document.getElementById(`team-save-btn-${id}`).classList.remove('hidden');
+  document.getElementById(`team-input-${id}`).focus();
+}
+
+async function saveTeam(id) {
+  const name = document.getElementById(`team-input-${id}`).value.trim();
+  if (!name) { alert('팀 이름을 입력하세요.'); return; }
+  const res = await fetch(`/api/admin/teams/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (res.ok) {
+    document.getElementById(`team-name-${id}`).textContent = name;
+    document.getElementById(`team-name-${id}`).classList.remove('hidden');
+    document.getElementById(`team-input-${id}`).classList.add('hidden');
+    document.getElementById(`team-edit-btn-${id}`).classList.remove('hidden');
+    document.getElementById(`team-save-btn-${id}`).classList.add('hidden');
+  }
+}
+
+async function deleteTeam(id) {
+  if (!confirm('이 팀을 삭제하시겠습니까?')) return;
+  const res = await fetch(`/api/admin/teams/${id}`, { method: 'DELETE' });
+  if (res.ok) document.getElementById(`team-row-${id}`).remove();
+  else { const e = await res.json(); alert(e.detail || '오류'); }
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+{% endblock %}

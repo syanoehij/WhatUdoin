@@ -3,7 +3,11 @@
 
 {% block content %}
 <div class="toolbar">
+  {% if user and user.role in ('editor', 'admin') %}
   <button class="btn btn-primary" onclick="openModal()">+ 일정 추가</button>
+  {% else %}
+  <button class="btn btn-outline" onclick="openLoginModal()">로그인하여 일정 추가</button>
+  {% endif %}
 </div>
 
 <div id="calendar"></div>
@@ -86,15 +90,25 @@
         </div>
       </div>
 
-
       <div class="form-row">
         <label>장소</label>
         <input type="text" id="f-location" placeholder="장소" />
       </div>
 
-      <div class="form-row">
+      <div class="form-row form-row-top">
         <label>담당자</label>
-        <input type="text" id="f-assignee" placeholder="담당자" />
+        <div class="tag-input-wrap" id="assignee-wrap" onclick="document.getElementById('assignee-input').focus()">
+          <div id="assignee-tags"></div>
+          <div class="assignee-input-row">
+            <input type="text" id="assignee-input" placeholder="이름 입력 후 Enter"
+                   autocomplete="off"
+                   oninput="filterAssignees(this.value)"
+                   onkeydown="handleAssigneeKey(event)"
+                   onfocus="filterAssignees(this.value)"
+                   onblur="hideAssigneeDropdown()" />
+          </div>
+          <ul id="assignee-dropdown" class="ac-dropdown hidden"></ul>
+        </div>
       </div>
 
       <div class="form-row form-row-top">
@@ -125,7 +139,7 @@
       <div></div>
       <div>
         <button class="btn" onclick="closeDetail()">닫기</button>
-        <button class="btn btn-primary" onclick="editFromDetail()">수정</button>
+        <button class="btn btn-primary" id="btn-edit-from-detail" onclick="editFromDetail()">수정</button>
       </div>
     </div>
   </div>
@@ -133,5 +147,436 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/calendar.js"></script>
+<script>
+// 서버에서 전달된 현재 사용자 정보
+const CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id} | tojson if user else 'null' }};
+
+let calendar;
+let currentDetailEventId = null;
+let currentDetailEventTeamId = null;
+let allProjects = [];
+let allMembers = [];
+let assigneeTags = [];
+let fpInstance = null;
+let _fpSavedDates = ['', ''];
+
+// ── FullCalendar 초기화 ─────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const el = document.getElementById('calendar');
+  calendar = new FullCalendar.Calendar(el, {
+    initialView: 'dayGridMonth',
+    locale: 'ko',
+    height: 'auto',
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: 'dayGridMonth,timeGridWeek,timeGridDay',
+    },
+    buttonText: { today: '오늘', month: '월', week: '주', day: '일' },
+    events: '/api/events',
+    eventClick(info) { showDetail(info.event); },
+    dateClick(info) {
+      if (CURRENT_USER) openModal(info.dateStr);
+    },
+  });
+  calendar.render();
+  initDatePicker();
+  document.getElementById('event-form').addEventListener('submit', saveEvent);
+
+  // ── 마우스 휠로 날짜 이동 ──────────────────────────────
+  let wheelTimer = null;
+  document.getElementById('calendar').addEventListener('wheel', (e) => {
+    e.preventDefault();
+    if (wheelTimer) return;
+    wheelTimer = setTimeout(() => { wheelTimer = null; }, 300);
+    const view = calendar.view.type;
+    if (e.deltaY > 0) {
+      calendar.next();
+    } else {
+      calendar.prev();
+    }
+  }, { passive: false });
+});
+
+// ── flatpickr ─────────────────────────────────────────────
+function openStartDatePicker() {
+  _fpSavedDates = [
+    document.getElementById('f-start-date').value,
+    document.getElementById('f-end-date').value,
+  ];
+  fpInstance.open();
+  if (_fpSavedDates[0]) fpInstance.jumpToDate(_fpSavedDates[0]);
+}
+
+function openEndDatePicker() {
+  _fpSavedDates = [
+    document.getElementById('f-start-date').value,
+    document.getElementById('f-end-date').value,
+  ];
+  document.getElementById('f-end-date').focus();
+  fpInstance.open();
+  if (_fpSavedDates[1])      fpInstance.jumpToDate(_fpSavedDates[1]);
+  else if (_fpSavedDates[0]) fpInstance.jumpToDate(_fpSavedDates[0]);
+}
+
+function initDatePicker() {
+  fpInstance = flatpickr('#f-start-date', {
+    dateFormat: 'Y-m-d',
+    locale: 'ko',
+    allowInput: true,
+    appendTo: document.body,
+    plugins: [new rangePlugin({ input: '#f-end-date' })],
+    onReady(_, __, fp) {
+      fp.calendarContainer.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        fp.changeMonth(e.deltaY > 0 ? 1 : -1);
+      }, { passive: false });
+    },
+    onClose() {
+      const saved = [..._fpSavedDates];
+      _fpSavedDates = ['', ''];
+      if (!saved[0]) return;
+      setTimeout(() => {
+        const startInput = document.getElementById('f-start-date');
+        const endInput   = document.getElementById('f-end-date');
+        if (!startInput.value || !endInput.value) {
+          fpInstance.setDate(
+            saved[1] ? [saved[0], saved[1]] : [saved[0]], false
+          );
+          startInput.value = saved[0];
+          endInput.value   = saved[1] || saved[0];
+        }
+      }, 0);
+    },
+  });
+}
+
+// ── 프로젝트 자동완성 ─────────────────────────────────────
+async function loadProjects() {
+  const res = await fetch('/api/projects');
+  allProjects = await res.json();
+}
+
+// ── 담당자 태그 입력 ─────────────────────────────────────
+async function loadMembers() {
+  const res = await fetch('/api/members');
+  allMembers = await res.json();
+}
+
+function renderAssigneeTags() {
+  const container = document.getElementById('assignee-tags');
+  container.innerHTML = assigneeTags.map((name, i) => `
+    <span class="assignee-tag">
+      ${name}
+      <button type="button" onclick="removeAssigneeTag(${i})">×</button>
+    </span>
+  `).join('');
+}
+
+function addAssigneeTag(name) {
+  name = name.trim();
+  if (!name || assigneeTags.includes(name)) return;
+  assigneeTags.push(name);
+  renderAssigneeTags();
+  document.getElementById('assignee-input').value = '';
+  document.getElementById('assignee-dropdown').classList.add('hidden');
+}
+
+function removeAssigneeTag(i) {
+  assigneeTags.splice(i, 1);
+  renderAssigneeTags();
+}
+
+function handleAssigneeKey(e) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const val = document.getElementById('assignee-input').value.trim().replace(/,$/, '');
+    if (val) addAssigneeTag(val);
+  } else if (e.key === 'Backspace' && !document.getElementById('assignee-input').value && assigneeTags.length) {
+    removeAssigneeTag(assigneeTags.length - 1);
+  }
+}
+
+function filterAssignees(val) {
+  const dropdown = document.getElementById('assignee-dropdown');
+  const filtered = allMembers.filter(m =>
+    !assigneeTags.includes(m) && (!val || m.toLowerCase().includes(val.toLowerCase()))
+  );
+  if (!filtered.length) { dropdown.classList.add('hidden'); return; }
+  dropdown.innerHTML = filtered.map(m =>
+    `<li onmousedown="addAssigneeTag('${m.replace(/'/g, "\\'")}')">${m}</li>`
+  ).join('');
+  dropdown.classList.remove('hidden');
+}
+
+function hideAssigneeDropdown() {
+  setTimeout(() => document.getElementById('assignee-dropdown').classList.add('hidden'), 150);
+}
+
+function setAssigneeTags(val) {
+  assigneeTags = val ? val.split(',').map(s => s.trim()).filter(Boolean) : [];
+  renderAssigneeTags();
+  document.getElementById('assignee-input').value = '';
+}
+
+function getAssigneeValue() {
+  return assigneeTags.join(', ') || null;
+}
+
+function filterProjects(val) {
+  const dropdown = document.getElementById('project-dropdown');
+  const filtered = val
+    ? allProjects.filter(p => p.toLowerCase().includes(val.toLowerCase()))
+    : allProjects;
+  if (!filtered.length) { dropdown.classList.add('hidden'); return; }
+  dropdown.innerHTML = filtered.map(p =>
+    `<li onmousedown="selectProject('${p.replace(/'/g, "\\'")}')">${p}</li>`
+  ).join('');
+  dropdown.classList.remove('hidden');
+}
+
+function selectProject(val) {
+  document.getElementById('f-project').value = val;
+  document.getElementById('project-dropdown').classList.add('hidden');
+}
+
+function hideDropdown() {
+  setTimeout(() => document.getElementById('project-dropdown').classList.add('hidden'), 150);
+}
+
+// ── 모달 열기 ──────────────────────────────────────────
+function openModal(dateStr = '', eventData = null) {
+  if (!CURRENT_USER) { openLoginModal(); return; }
+
+  const overlay = document.getElementById('modal-overlay');
+  const today = dateStr || getToday();
+
+  document.getElementById('event-id').value       = '';
+  document.getElementById('f-title').value        = '';
+  document.getElementById('f-project').value      = '';
+  const [defStart, defEnd] = getDefaultTimes();
+  fpInstance.setDate([today, today], true);
+  document.getElementById('f-start-date').value   = today;
+  document.getElementById('f-end-date').value     = today;
+  document.getElementById('f-start-time').value   = defStart;
+  document.getElementById('f-end-time').value     = defEnd;
+  document.getElementById('f-allday').checked     = false;
+  document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
+  document.getElementById('f-location').value     = '';
+  setAssigneeTags('');
+  document.getElementById('f-description').value  = '';
+  document.getElementById('btn-delete').classList.add('hidden');
+  document.getElementById('modal-title').textContent = '일정 추가';
+  toggleAllDay();
+
+  if (eventData) {
+    document.getElementById('modal-title').textContent = '일정 수정';
+    document.getElementById('event-id').value      = eventData.id;
+    document.getElementById('f-title').value       = eventData.title || '';
+    document.getElementById('f-project').value     = eventData.project || '';
+    document.getElementById('f-location').value    = eventData.location || '';
+    setAssigneeTags(eventData.assignee || '');
+    document.getElementById('f-description').value = eventData.description || '';
+
+    const allDay = !!eventData.all_day;
+    document.getElementById('f-allday').checked = allDay;
+
+    const [startDate, startTime] = splitDatetime(eventData.start_datetime);
+    const [endDate,   endTime]   = splitDatetime(eventData.end_datetime);
+
+    fpInstance.setDate([startDate, endDate || startDate], true);
+    document.getElementById('f-start-date').value = startDate;
+    document.getElementById('f-end-date').value   = endDate || startDate;
+    document.getElementById('f-start-time').value = allDay ? '' : startTime;
+    document.getElementById('f-end-time').value   = allDay ? '' : endTime;
+
+    toggleAllDay();
+    document.getElementById('btn-delete').classList.remove('hidden');
+  }
+
+  loadProjects();
+  loadMembers();
+  overlay.classList.remove('hidden');
+  setTimeout(() => document.getElementById('f-title').focus(), 50);
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.add('hidden');
+}
+
+// ── 종일 토글 ──────────────────────────────────────────
+function toggleAllDay() {
+  const allDay = document.getElementById('f-allday').checked;
+  document.querySelectorAll('.time-row').forEach(el => {
+    el.style.display = allDay ? 'none' : '';
+  });
+}
+
+// ── 저장 ───────────────────────────────────────────────
+async function saveEvent(e) {
+  e.preventDefault();
+  const id     = document.getElementById('event-id').value;
+  const allDay = document.getElementById('f-allday').checked;
+
+  const startDate = document.getElementById('f-start-date').value;
+  const endDate   = document.getElementById('f-end-date').value;
+  const startTime = document.getElementById('f-start-time').value || '00:00';
+  const endTime   = document.getElementById('f-end-time').value   || '00:00';
+
+  if (!startDate) { alert('시작 날짜를 선택해주세요.'); return; }
+  if (endDate && endDate < startDate) {
+    alert('종료 날짜는 시작 날짜보다 이전일 수 없습니다.'); return;
+  }
+  if (!allDay && endDate === startDate && endTime < startTime) {
+    alert('종료 시간은 시작 시간보다 이전일 수 없습니다.'); return;
+  }
+
+  const payload = {
+    title:          document.getElementById('f-title').value,
+    project:        document.getElementById('f-project').value || null,
+    start_datetime: `${startDate}T${allDay ? '00:00' : startTime}`,
+    end_datetime:   endDate ? `${endDate}T${allDay ? '00:00' : endTime}` : null,
+    all_day:        allDay ? 1 : 0,
+    location:       document.getElementById('f-location').value || null,
+    assignee:       getAssigneeValue(),
+    description:    document.getElementById('f-description').value || null,
+    source:         'manual',
+  };
+
+  const method = id ? 'PUT' : 'POST';
+  const url    = id ? `/api/events/${id}` : '/api/events';
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    alert(err.detail || '저장 실패');
+    return;
+  }
+
+  document.getElementById('modal-overlay').classList.add('hidden');
+  calendar.refetchEvents();
+}
+
+// ── 삭제 ───────────────────────────────────────────────
+async function deleteEvent() {
+  const id = document.getElementById('event-id').value;
+  if (!id || !confirm('이 일정을 삭제할까요?')) return;
+  const res = await fetch(`/api/events/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json();
+    alert(err.detail || '삭제 실패');
+    return;
+  }
+  document.getElementById('modal-overlay').classList.add('hidden');
+  calendar.refetchEvents();
+}
+
+// ── 상세 보기 ──────────────────────────────────────────
+function showDetail(fcEvent) {
+  currentDetailEventId = fcEvent.id;
+  const p = fcEvent.extendedProps;
+  currentDetailEventTeamId = p.team_id;
+
+  document.getElementById('detail-title').textContent = fcEvent.title;
+
+  const rows = [
+    ['시작',    formatDatetime(fcEvent.startStr, p.all_day)],
+    ['종료',    fcEvent.endStr ? formatDatetime(fcEvent.endStr, p.all_day) : '-'],
+    ['프로젝트', p.project    || '-'],
+    ['장소',    p.location    || '-'],
+    ['담당자',  p.assignee    || '-'],
+    ['내용',    p.description || '-'],
+  ];
+
+  if (p.source === 'ai_parsed' && p.meeting_id) {
+    rows.push(['회의록', `<a href="/meetings/${p.meeting_id}" class="link">원본 회의록 보기</a>`]);
+  }
+
+  document.getElementById('detail-body').innerHTML = rows.map(([label, val]) => `
+    <div class="detail-row">
+      <span class="detail-label">${label}</span>
+      <span class="detail-val">${label === '회의록' ? val : esc(val)}</span>
+    </div>
+  `).join('');
+
+  // 수정 버튼: 에디터/관리자이고 자기 팀 일정일 때만 표시
+  const editBtn = document.getElementById('btn-edit-from-detail');
+  const canEdit = CURRENT_USER && (
+    CURRENT_USER.role === 'admin' ||
+    (CURRENT_USER.role === 'editor' && (p.team_id === null || p.team_id === CURRENT_USER.team_id))
+  );
+  editBtn.style.display = canEdit ? '' : 'none';
+
+  document.getElementById('detail-overlay').classList.remove('hidden');
+}
+
+function closeDetail(e) {
+  if (e && e.target !== document.getElementById('detail-overlay')) return;
+  document.getElementById('detail-overlay').classList.add('hidden');
+  currentDetailEventId = null;
+}
+
+async function editFromDetail() {
+  if (!currentDetailEventId) return;
+  const res = await fetch(`/api/events/${currentDetailEventId}`);
+  const data = await res.json();
+  document.getElementById('detail-overlay').classList.add('hidden');
+  openModal('', data);
+}
+
+// ── 시간 프리셋 ────────────────────────────────────────
+function getDefaultTimes() {
+  const now = new Date();
+  const startHour = (now.getHours() + 1) % 24;
+  const endHour   = (now.getHours() + 2) % 24;
+  const fmt = h => `${String(h).padStart(2, '0')}:00`;
+  return [fmt(startHour), fmt(endHour)];
+}
+
+function setTimePreset(preset) {
+  const presets = {
+    am:      ['08:00', '12:00'],
+    pm:      ['13:00', '17:00'],
+    evening: ['18:00', '22:00'],
+  };
+  const [start, end] = presets[preset];
+  document.getElementById('f-start-time').value = start;
+  document.getElementById('f-end-time').value   = end;
+  document.getElementById('f-allday').checked   = false;
+  toggleAllDay();
+  document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
+  document.querySelector(`.btn-preset[onclick="setTimePreset('${preset}')"]`).classList.add('active');
+}
+
+// ── 유틸 ───────────────────────────────────────────────
+function getToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function splitDatetime(str) {
+  if (!str) return ['', ''];
+  const [d, t] = str.split('T');
+  return [d || '', (t || '').slice(0, 5)];
+}
+
+function formatDatetime(str, allDay) {
+  if (!str) return '-';
+  const d = new Date(str);
+  if (allDay) return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+  return d.toLocaleString('ko-KR', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+function esc(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
 {% endblock %}

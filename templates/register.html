@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — 가입 신청{% endblock %}
+
+{% block content %}
+<div class="center-wrap">
+  <div class="card card-sm">
+    <h2 class="card-title">가입 신청</h2>
+    <p class="card-desc">관리자 승인 후 사용 가능합니다.</p>
+
+    <div id="reg-success" class="success-box hidden">
+      <p>✅ 가입 신청이 완료되었습니다.</p>
+      <p>관리자 승인 후 사용 가능합니다. 승인이 나는 동안 대기해 주세요.</p>
+      <p class="mt-8"><strong>⚠️ 해당 비밀번호는 아이디 역할을 하니, 다른 사람에게 노출하거나 잊어버리지 마세요.</strong></p>
+      <div class="mt-16">
+        <a href="/" class="btn btn-primary">캘린더로 이동</a>
+      </div>
+    </div>
+
+    <form id="reg-form" autocomplete="off">
+      <div id="reg-error" class="form-error hidden"></div>
+
+      <div class="form-row">
+        <label>이름 *</label>
+        <input type="text" id="reg-name" required placeholder="이름을 입력하세요" />
+      </div>
+
+      <div class="form-row">
+        <label>비밀번호 *</label>
+        <input type="password" id="reg-pw" required placeholder="로그인 시 사용할 비밀번호" />
+      </div>
+
+      <div class="form-row form-row-top">
+        <label>메모</label>
+        <textarea id="reg-memo" rows="3" placeholder="소속, 신청 이유 등 (선택)"></textarea>
+      </div>
+
+      <div class="modal-actions" style="margin-top:20px">
+        <div></div>
+        <button type="submit" class="btn btn-primary">신청하기</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('reg-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name   = document.getElementById('reg-name').value.trim();
+  const pw     = document.getElementById('reg-pw').value.trim();
+  const memo   = document.getElementById('reg-memo').value.trim();
+  const errEl  = document.getElementById('reg-error');
+  errEl.classList.add('hidden');
+
+  const res = await fetch('/api/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, password: pw, memo }),
+  });
+
+  if (res.ok) {
+    document.getElementById('reg-form').classList.add('hidden');
+    document.getElementById('reg-success').classList.remove('hidden');
+  } else {
+    const err = await res.json();
+    errEl.textContent = err.detail || '신청 실패';
+    errEl.classList.remove('hidden');
+  }
+});
+</script>
+{% endblock %}

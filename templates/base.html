@@ -15,25 +15,175 @@
   <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ko.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/rangePlugin.js"></script>
 
-
   <link rel="stylesheet" href="/static/css/style.css" />
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
   <header>
     <div class="header-left">
-      <h1>📅 WhatUDoin</h1>
+      <a href="/" class="site-title-link"><h1>📅 WhatUDoin</h1></a>
       <span class="subtitle">너 뭐하니?</span>
     </div>
     <nav>
-      <a href="/" class="nav-link">캘린더</a>
-      <a href="/ai-import" class="nav-link">🤖 AI 등록</a>
+      <a href="/" class="nav-link {% if request.url.path == '/' %}nav-active{% endif %}">캘린더</a>
+      <a href="/meetings" class="nav-link {% if request.url.path.startswith('/meetings') %}nav-active{% endif %}">📋 회의록</a>
     </nav>
+    <div class="header-right">
+      {% if user %}
+        {% if user.role == 'admin' %}
+          <a href="/admin" class="user-badge user-badge-link">{{ user.name }} <span class="user-role">(관리자)</span></a>
+        {% else %}
+          <button class="user-badge user-badge-link" onclick="openChangePwModal()">{{ user.name }} <span class="user-role">(에디터)</span></button>
+        {% endif %}
+        <button class="btn btn-sm" onclick="doLogout()">로그아웃</button>
+      {% else %}
+        <button class="btn btn-sm btn-outline" onclick="openLoginModal()">로그인</button>
+      {% endif %}
+    </div>
   </header>
 
   <main>
     {% block content %}{% endblock %}
   </main>
 
+  <footer class="site-footer">
+    <span class="footer-copy">WhatUDoin</span>
+  </footer>
+
+  <!-- ── 로그인 모달 ── -->
+  <div id="login-modal-overlay" class="modal-overlay hidden" onclick="closeLoginModalOuter(event)">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>로그인</h2>
+        <button class="icon-btn" onclick="closeLoginModal()">✕</button>
+      </div>
+      <p class="login-desc">비밀번호를 입력하세요.<br><small>비밀번호가 아이디 역할을 합니다.</small></p>
+      <div id="login-error" class="form-error hidden"></div>
+      <div class="form-row-inline">
+        <label>비밀번호</label>
+        <input type="password" id="login-pw" placeholder="비밀번호 입력"
+               onkeydown="if(event.key==='Enter') doLogin()" />
+        <button class="btn btn-primary" onclick="doLogin()">로그인</button>
+      </div>
+      <div class="login-links">
+        <a href="/admin" class="login-link">관리자 로그인</a>
+        <span class="login-link-sep">·</span>
+        <a href="/register" class="login-link">가입 신청</a>
+        <span class="login-link-sep">·</span>
+        <button class="login-link-btn" onclick="closeLoginModal()">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 비밀번호 변경 모달 ── -->
+  <div id="change-pw-overlay" class="modal-overlay hidden" onclick="closeChangePwModalOuter(event)">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>비밀번호 변경</h2>
+        <button class="icon-btn" onclick="closeChangePwModal()">✕</button>
+      </div>
+      <div id="change-pw-error" class="form-error hidden"></div>
+      <div id="change-pw-success" class="form-success hidden"></div>
+      <div class="form-row">
+        <label>현재 비밀번호</label>
+        <input type="password" id="change-pw-current" placeholder="현재 비밀번호 입력" />
+      </div>
+      <div class="form-row">
+        <label>새 비밀번호</label>
+        <input type="password" id="change-pw-new" placeholder="새 비밀번호 입력"
+               onkeydown="if(event.key==='Enter') doChangePw()" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="doChangePw()">변경</button>
+        <button class="btn btn-ghost" onclick="closeChangePwModal()">취소</button>
+      </div>
+      <div class="login-links">
+        <a href="/admin" class="login-link">관리자 로그인</a>
+      </div>
+    </div>
+  </div>
+
   {% block scripts %}{% endblock %}
+
+  <script>
+    function openLoginModal() {
+      document.getElementById('login-modal-overlay').classList.remove('hidden');
+      setTimeout(() => document.getElementById('login-pw').focus(), 50);
+    }
+
+    function closeLoginModal() {
+      document.getElementById('login-modal-overlay').classList.add('hidden');
+      document.getElementById('login-pw').value = '';
+      document.getElementById('login-error').classList.add('hidden');
+    }
+
+    function closeLoginModalOuter(e) {
+      if (e.target === document.getElementById('login-modal-overlay')) closeLoginModal();
+    }
+
+    async function doLogin() {
+      const pw = document.getElementById('login-pw').value.trim();
+      if (!pw) return;
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      });
+      if (res.ok) {
+        location.reload();
+      } else {
+        const err = await res.json();
+        const el = document.getElementById('login-error');
+        el.textContent = err.detail || '로그인 실패';
+        el.classList.remove('hidden');
+      }
+    }
+
+    async function doLogout() {
+      await fetch('/api/logout', { method: 'POST' });
+      location.href = '/';
+    }
+
+    function openChangePwModal() {
+      document.getElementById('change-pw-overlay').classList.remove('hidden');
+      setTimeout(() => document.getElementById('change-pw-current').focus(), 50);
+    }
+
+    function closeChangePwModal() {
+      document.getElementById('change-pw-overlay').classList.add('hidden');
+      document.getElementById('change-pw-current').value = '';
+      document.getElementById('change-pw-new').value = '';
+      document.getElementById('change-pw-error').classList.add('hidden');
+      document.getElementById('change-pw-success').classList.add('hidden');
+    }
+
+    function closeChangePwModalOuter(e) {
+      if (e.target === document.getElementById('change-pw-overlay')) closeChangePwModal();
+    }
+
+    async function doChangePw() {
+      const current = document.getElementById('change-pw-current').value.trim();
+      const newPw   = document.getElementById('change-pw-new').value.trim();
+      const errEl   = document.getElementById('change-pw-error');
+      const okEl    = document.getElementById('change-pw-success');
+      errEl.classList.add('hidden');
+      okEl.classList.add('hidden');
+      if (!current || !newPw) { errEl.textContent = '모두 입력하세요.'; errEl.classList.remove('hidden'); return; }
+      const res = await fetch('/api/me/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password: current, new_password: newPw }),
+      });
+      if (res.ok) {
+        okEl.textContent = '비밀번호가 변경되었습니다.';
+        okEl.classList.remove('hidden');
+        setTimeout(closeChangePwModal, 1500);
+      } else {
+        const err = await res.json();
+        errEl.textContent = err.detail || '변경 실패';
+        errEl.classList.remove('hidden');
+      }
+    }
+  </script>
 </body>
 </html>

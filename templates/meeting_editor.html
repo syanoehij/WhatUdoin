@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — {% if meeting %}{{ meeting.title }}{% else %}새 회의록{% endif %}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="editor-wrap">
+  <!-- ── 헤더 ── -->
+  <div class="editor-header">
+    <a href="/meetings" class="btn btn-sm">← 목록</a>
+    {% if meeting %}
+    <div class="btn-group">
+      <a href="/meetings/{{ meeting.id }}/history" class="btn btn-sm">수정 이력</a>
+      {% if user and user.role in ('editor', 'admin') %}
+      <button class="btn btn-sm btn-danger" onclick="deleteMeeting()">삭제</button>
+      <button class="btn btn-sm btn-primary" onclick="saveMeeting()">저장</button>
+      {% endif %}
+    </div>
+    {% else %}
+    <button class="btn btn-sm btn-primary" onclick="saveMeeting()">저장</button>
+    {% endif %}
+  </div>
+
+  <!-- ── 본문 (제목 포함) ── -->
+  {% if user and user.role in ('editor', 'admin') %}
+  <textarea id="meeting-content">{% if meeting %}# {{ meeting.title }}
+
+{{ meeting.content }}{% endif %}</textarea>
+  {% else %}
+  <div id="meeting-content-view" class="meeting-content-view markdown-body"></div>
+  <script>
+    document.getElementById('meeting-content-view').innerHTML =
+      marked.parse('# ' + {{ meeting.title | tojson }} + '\n\n' + {{ (meeting.content if meeting else '') | tojson }});
+  </script>
+  {% endif %}
+
+  <!-- ── AI 파싱 버튼 (에디터만) ── -->
+  {% if user and user.role in ('editor', 'admin') %}
+  <div class="ai-parse-section">
+    <div class="ai-parse-header">
+      <div>
+        <h3>🤖 AI 일정 추출</h3>
+        <p class="ai-parse-desc">저장된 회의록을 분석해서 일정을 자동으로 추출합니다.</p>
+      </div>
+      <div class="btn-group">
+        <select id="ai-model-select">
+          <option value="gemma4:e2b">gemma4:e2b (빠름)</option>
+          <option value="gemma4:e4b">gemma4:e4b (정확)</option>
+        </select>
+        <button class="btn btn-primary" onclick="runAiParse()">추출하기</button>
+      </div>
+    </div>
+
+    <div id="ai-loading" class="loading hidden">⏳ AI가 분석 중입니다...</div>
+    <div id="ai-error" class="form-error hidden"></div>
+
+    <div id="ai-result-section" class="hidden">
+      <div class="result-header-row">
+        <h4>파싱 결과 <span id="ai-result-count" class="count-badge"></span></h4>
+        <div>
+          <button class="btn btn-sm" onclick="resetAiResult()">초기화</button>
+          <button class="btn btn-sm btn-primary" onclick="confirmAiEvents()">모두 등록</button>
+        </div>
+      </div>
+      <div id="ai-result-list"></div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── 연결된 일정 ── -->
+  {% if meeting and meeting_events %}
+  <div class="linked-events-section">
+    <h3>📅 연결된 일정 ({{ meeting_events|length }}개)</h3>
+    <div class="linked-events-list">
+      {% for e in meeting_events %}
+      <div class="linked-event-item">
+        <span class="linked-event-dot"></span>
+        <div>
+          <strong>{{ e.title }}</strong>
+          <span class="text-muted ml-8">{{ e.start_datetime[:16].replace('T', ' ') }}</span>
+          {% if e.location %}<span class="text-muted">· {{ e.location }}</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MEETING_ID = {{ meeting.id if meeting else 'null' }};
+const IS_EDITOR = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
+let parsedEvents = [];
+let easyMDE = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (IS_EDITOR) {
+    easyMDE = new EasyMDE({
+      element: document.getElementById('meeting-content'),
+      placeholder: '# 제목\n\n내용을 자유롭게 작성하세요...',
+      spellChecker: false,
+      autosave: { enabled: false },
+      toolbar: [
+        'bold', 'italic', 'strikethrough', '|',
+        'heading-2', 'heading-3', '|',
+        'unordered-list', 'ordered-list', '|',
+        'table', 'horizontal-rule', '|',
+        {
+          name: 'clear-formatting',
+          action: (editor) => {
+            const cm = editor.codemirror;
+            const sel = cm.getSelection();
+            if (!sel) return;
+            const plain = sel
+              .replace(/^#{1,6}\s+/gm, '')
+              .replace(/(\*\*|__)(.*?)\1/g, '$2')
+              .replace(/(\*|_)(.*?)\1/g, '$2')
+              .replace(/~~(.*?)~~/g, '$1')
+              .replace(/`(.*?)`/g, '$1')
+              .replace(/^>\s+/gm, '')
+              .replace(/^[-*+]\s+/gm, '')
+              .replace(/^\d+\.\s+/gm, '');
+            cm.replaceSelection(plain);
+          },
+          className: 'fa fa-eraser',
+          title: '서식 지우기',
+        },
+        '|',
+        'preview', 'side-by-side', 'fullscreen',
+      ],
+      minHeight: '400px',
+    });
+  }
+});
+
+function getMeetingContent() {
+  return IS_EDITOR ? easyMDE.value().trim() : '';
+}
+
+async function saveMeeting() {
+  const raw = getMeetingContent();
+  const lines = raw.split('\n');
+  const title = lines[0].replace(/^#+\s*/, '').trim();
+  const content = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd();
+  if (!title) { alert('첫 줄에 제목을 입력하세요.'); return; }
+
+  const method = MEETING_ID ? 'PUT' : 'POST';
+  const url    = MEETING_ID ? `/api/meetings/${MEETING_ID}` : '/api/meetings';
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, content }),
+  });
+
+  if (res.ok) {
+    const data = await res.json();
+    if (!MEETING_ID) {
+      location.href = `/meetings/${data.id}`;
+    } else {
+      alert('저장되었습니다.');
+    }
+  } else {
+    const err = await res.json();
+    alert(err.detail || '저장 실패');
+  }
+}
+
+async function deleteMeeting() {
+  if (!confirm('이 회의록을 삭제하시겠습니까?')) return;
+  const res = await fetch(`/api/meetings/${MEETING_ID}`, { method: 'DELETE' });
+  if (res.ok) location.href = '/meetings';
+}
+
+// ── AI 파싱 ──────────────────────────────────────────────
+async function runAiParse() {
+  const content = getMeetingContent();
+  if (!content) { alert('회의록 내용을 먼저 입력하세요.'); return; }
+
+  const model = document.getElementById('ai-model-select').value;
+  document.getElementById('ai-loading').classList.remove('hidden');
+  document.getElementById('ai-error').classList.add('hidden');
+  document.getElementById('ai-result-section').classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/ai/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: content, model }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '파싱 실패');
+    if (!data.events.length) {
+      showAiError('일정 정보를 찾지 못했습니다. 더 구체적인 내용을 작성해보세요.');
+      return;
+    }
+    parsedEvents = data.events.map(e => ({...e}));
+    renderAiResults();
+  } catch (e) {
+    showAiError(e.message);
+  } finally {
+    document.getElementById('ai-loading').classList.add('hidden');
+  }
+}
+
+function renderAiResults() {
+  const cnt = parsedEvents.filter(Boolean).length;
+  document.getElementById('ai-result-count').textContent = `${cnt}건`;
+  const list = document.getElementById('ai-result-list');
+  list.innerHTML = parsedEvents.map((e, i) => e === null ? '' : `
+    <div class="result-item" id="ai-item-${i}">
+      <div class="item-header">
+        <span class="item-num">#${i + 1}</span>
+        <button class="btn btn-sm btn-danger" onclick="removeAiItem(${i})">제거</button>
+      </div>
+      <div class="field-group">
+        <span class="field-icon">📌</span>
+        <div class="field-col">
+          <label>제목</label>
+          <input type="text" value="${esc(e.title||'')}" onchange="parsedEvents[${i}].title=this.value" />
+        </div>
+      </div>
+      <div class="field-group">
+        <span class="field-icon">🕐</span>
+        <div class="field-col">
+          <div class="date-time-row">
+            <div class="dt-col">
+              <span class="small-label">날짜</span>
+              <input type="date" value="${esc(e.date||'')}" onchange="parsedEvents[${i}].date=this.value" />
+            </div>
+            ${!e.all_day ? `
+            <div class="dt-col">
+              <span class="small-label">시작</span>
+              <input type="time" value="${esc(e.start_time||'')}" onchange="parsedEvents[${i}].start_time=this.value" />
+            </div>
+            <div class="dt-col">
+              <span class="small-label">종료</span>
+              <input type="time" value="${esc(e.end_time||'')}" onchange="parsedEvents[${i}].end_time=this.value" />
+            </div>
+            ` : ''}
+            <div class="dt-col">
+              <span class="small-label">종일</span>
+              <input type="checkbox" ${e.all_day?'checked':''} onchange="parsedEvents[${i}].all_day=this.checked;renderAiResults()" style="margin-top:6px" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="field-group">
+        <span class="field-icon">📍</span>
+        <div class="field-col">
+          <label>장소</label>
+          <input type="text" value="${esc(e.location||'')}" onchange="parsedEvents[${i}].location=this.value||null" />
+        </div>
+      </div>
+      <div class="field-group">
+        <span class="field-icon">👤</span>
+        <div class="field-col">
+          <label>담당자</label>
+          <input type="text" value="${esc(e.assignee||'')}" onchange="parsedEvents[${i}].assignee=this.value||null" />
+        </div>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('ai-result-section').classList.remove('hidden');
+}
+
+function removeAiItem(i) {
+  parsedEvents[i] = null;
+  document.getElementById(`ai-item-${i}`).remove();
+  const remaining = parsedEvents.filter(Boolean);
+  document.getElementById('ai-result-count').textContent = `${remaining.length}건`;
+  if (!remaining.length) resetAiResult();
+}
+
+async function confirmAiEvents() {
+  if (!MEETING_ID) {
+    alert('회의록을 먼저 저장하세요.');
+    return;
+  }
+  const toSave = parsedEvents.filter(Boolean);
+  if (!toSave.length) return;
+  const res = await fetch('/api/ai/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ events: toSave, meeting_id: MEETING_ID }),
+  });
+  const data = await res.json();
+  alert(`${data.saved}개 일정이 등록되었습니다.`);
+  location.reload();
+}
+
+function resetAiResult() {
+  parsedEvents = [];
+  document.getElementById('ai-result-section').classList.add('hidden');
+}
+
+function showAiError(msg) {
+  const el = document.getElementById('ai-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+</script>
+{% endblock %}

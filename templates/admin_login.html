@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — 관리자 로그인{% endblock %}
+
+{% block content %}
+<div class="center-wrap">
+  <div class="card card-sm">
+    <h2 class="card-title">🔐 관리자 로그인</h2>
+    <p class="card-desc">관리자 아이디와 비밀번호를 입력하세요.</p>
+
+    <div id="admin-login-error" class="form-error hidden"></div>
+
+    <div class="form-row">
+      <label>아이디</label>
+      <input type="text" id="admin-name" placeholder="관리자 아이디"
+             onkeydown="if(event.key==='Enter') doAdminLogin()" />
+    </div>
+
+    <div class="form-row">
+      <label>비밀번호</label>
+      <input type="password" id="admin-pw" placeholder="비밀번호"
+             onkeydown="if(event.key==='Enter') doAdminLogin()" />
+    </div>
+
+    <div class="modal-actions" style="margin-top:20px">
+      <a href="/" class="btn">취소</a>
+      <button class="btn btn-primary" onclick="doAdminLogin()">로그인</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function doAdminLogin() {
+  const name = document.getElementById('admin-name').value.trim();
+  const pw   = document.getElementById('admin-pw').value.trim();
+  const errEl = document.getElementById('admin-login-error');
+  errEl.classList.add('hidden');
+
+  const res = await fetch('/api/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, password: pw }),
+  });
+
+  if (res.ok) {
+    location.href = '/admin';
+  } else {
+    const err = await res.json();
+    errEl.textContent = err.detail || '로그인 실패';
+    errEl.classList.remove('hidden');
+  }
+}
+</script>
+{% endblock %}
