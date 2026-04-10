@@ -9,8 +9,15 @@
   .kanban-toolbar {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 12px;
     margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .kanban-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     flex-wrap: wrap;
   }
   .kanban-toolbar select {
@@ -194,14 +201,21 @@
 
 {% block content %}
 <div class="kanban-toolbar">
-  <label>팀 필터</label>
-  <select id="team-filter" onchange="loadKanban()">
-    <option value="">전체</option>
-    {% for team in teams %}
-    <option value="{{ team.id }}">{{ team.name }}</option>
-    {% endfor %}
-  </select>
-  <span id="kanban-total" style="font-size:0.85rem;color:#636e72;margin-left:4px;"></span>
+  <div class="kanban-toolbar-left">
+    <label>팀 필터</label>
+    <select id="team-filter" onchange="loadKanban()">
+      <option value="">전체</option>
+      {% for team in teams %}
+      <option value="{{ team.id }}">{{ team.name }}</option>
+      {% endfor %}
+    </select>
+    <span id="kanban-total" style="font-size:0.85rem;color:#636e72;"></span>
+  </div>
+  {% if user and user.role in ('editor', 'admin') %}
+  <button class="btn btn-primary" onclick="openModal()">+ 일정 추가</button>
+  {% else %}
+  <button class="btn btn-outline" onclick="openLoginModal()">로그인하여 일정 추가</button>
+  {% endif %}
 </div>
 
 <div class="kanban-board" id="kanban-board">
@@ -255,8 +269,6 @@
 
 {% block scripts %}
 <script>
-const CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id} | tojson if user else 'null' }};
-
 const COLUMNS = [
   { status: 'backlog',     label: 'Backlog' },
   { status: 'todo',        label: 'Todo' },
@@ -476,14 +488,17 @@ async function removeFromKanban() {
   loadKanban();
 }
 
-function editKanbanEvent() {
+async function editKanbanEvent() {
   if (!currentKDetailId) return;
-  location.href = `/?edit=${currentKDetailId}`;
+  const id = currentKDetailId;   // closeKDetail()이 null로 초기화하기 전에 저장
+  closeKDetail();
+  const res = await fetch(`/api/events/${id}`);
+  const data = await res.json();
+  openModal('', data);
 }
 
-function esc(str) {
-  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
+// 칸반 페이지 콜백 설정
+window.onEventSaved = loadKanban;
 
 // 초기 로드
 loadKanban();

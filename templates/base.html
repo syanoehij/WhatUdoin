@@ -17,6 +17,9 @@
 
   <link rel="stylesheet" href="/static/css/style.css" />
   {% block extra_head %}{% endblock %}
+  <script>
+    const CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id} | tojson if user else 'null' }};
+  </script>
 </head>
 <body>
   <header>
@@ -104,6 +107,142 @@
     </div>
   </div>
 
+  <!-- ── 공유 일정 등록/수정 모달 ── -->
+  <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal(event)">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="modal-title">일정 추가</h2>
+        <button class="icon-btn" onclick="closeModal()">✕</button>
+      </div>
+
+      <form id="event-form" autocomplete="off">
+        <input type="hidden" id="event-id" />
+
+        <div class="modal-body-cols">
+          <!-- ── 왼쪽: 날짜/시간 + 기존 일정 ── -->
+          <div class="modal-col-left">
+            <div class="col-section-label">날짜</div>
+            <div class="date-stack">
+              <div class="date-stack-row">
+                <span class="date-btn-label">시작</span>
+                <div class="fp-wrap">
+                  <input type="text" id="f-start-date" placeholder="YYYY-MM-DD" autocomplete="off" />
+                  <button type="button" class="fp-icon" onclick="openStartDatePicker()">&#128197;</button>
+                </div>
+              </div>
+              <div class="date-stack-row">
+                <span class="date-btn-label">종료</span>
+                <div class="fp-wrap">
+                  <input type="text" id="f-end-date" placeholder="YYYY-MM-DD" autocomplete="off" />
+                  <button type="button" class="fp-icon" onclick="openEndDatePicker()">&#128197;</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="left-row">
+              <div class="col-section-label">종일</div>
+              <label class="switch">
+                <input type="checkbox" id="f-allday" onchange="toggleAllDay()" />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div id="time-section">
+              <div class="time-presets" style="margin:10px 0 6px;">
+                <button type="button" class="btn btn-preset" onclick="setTimePreset('am')">오전</button>
+                <button type="button" class="btn btn-preset" onclick="setTimePreset('pm')">오후</button>
+                <button type="button" class="btn btn-preset" onclick="setTimePreset('evening')">저녁</button>
+              </div>
+              <div class="col-section-label">시간</div>
+              <div class="date-stack">
+                <div class="date-stack-row time-row">
+                  <span class="date-btn-label">시작</span>
+                  <input type="time" id="f-start-time" style="flex:1;border:1px solid #dfe6e9;border-radius:6px;padding:6px 8px;font-size:0.88rem;outline:none;font-family:inherit;" />
+                </div>
+                <div class="date-stack-row time-row">
+                  <span class="date-btn-label">종료</span>
+                  <input type="time" id="f-end-time" style="flex:1;border:1px solid #dfe6e9;border-radius:6px;padding:6px 8px;font-size:0.88rem;outline:none;font-family:inherit;" />
+                </div>
+              </div>
+            </div>
+
+            <!-- 해당 날짜 기존 일정 (캘린더 페이지에서만 채워짐) -->
+            <div id="date-events-panel" class="date-events-panel">
+              <div class="col-section-label" style="margin-top:16px;">해당 기간 일정</div>
+              <div id="date-events-list" class="date-events-list">
+                <span class="date-events-empty">날짜를 선택하세요</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── 오른쪽: 일정 정보 ── -->
+          <div class="modal-col-right">
+            <div class="form-row">
+              <label>프로젝트</label>
+              <div class="autocomplete-wrap">
+                <input type="text" id="f-project" placeholder="프로젝트 (선택)" autocomplete="off"
+                       oninput="filterProjects(this.value)" onblur="hideDropdown()" onfocus="filterProjects(this.value)" />
+                <ul id="project-dropdown" class="ac-dropdown hidden"></ul>
+              </div>
+            </div>
+            <div class="form-row">
+              <label>제목 *</label>
+              <input type="text" id="f-title" required placeholder="제목을 입력하세요" />
+            </div>
+            <div class="form-row">
+              <label>장소</label>
+              <input type="text" id="f-location" placeholder="장소" />
+            </div>
+            <div class="form-row form-row-top">
+              <label>담당자</label>
+              <div class="tag-input-wrap" id="assignee-wrap" onclick="document.getElementById('assignee-input').focus()">
+                <div id="assignee-tags"></div>
+                <div class="assignee-input-row">
+                  <input type="text" id="assignee-input" placeholder="이름 입력 후 Enter"
+                         autocomplete="off"
+                         oninput="filterAssignees(this.value)"
+                         onkeydown="handleAssigneeKey(event)"
+                         onfocus="filterAssignees(this.value)"
+                         onblur="hideAssigneeDropdown()" />
+                </div>
+                <ul id="assignee-dropdown" class="ac-dropdown hidden"></ul>
+              </div>
+            </div>
+            <div class="form-row form-row-top">
+              <label>내용</label>
+              <textarea id="f-description" rows="7" placeholder="내용"></textarea>
+            </div>
+            <div class="form-row">
+              <label>우선순위</label>
+              <select id="f-priority" style="flex:1;border:1px solid #dfe6e9;border-radius:6px;padding:6px 10px;font-size:0.88rem;outline:none;font-family:inherit;background:#fff;">
+                <option value="urgent">🔴 긴급</option>
+                <option value="high">🟠 높음</option>
+                <option value="normal" selected>🔵 보통</option>
+                <option value="low">⚪ 낮음</option>
+              </select>
+            </div>
+            <div class="left-row" style="margin-top:8px;">
+              <div class="col-section-label">칸반 등록</div>
+              <label class="switch">
+                <input type="checkbox" id="f-kanban" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-danger hidden" id="btn-delete" onclick="deleteEvent()">삭제</button>
+          <div>
+            <button type="button" class="btn" onclick="closeModal()">취소</button>
+            <button type="submit" class="btn btn-primary">저장</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/js/event-modal.js"></script>
   {% block scripts %}{% endblock %}
 
   <script>
