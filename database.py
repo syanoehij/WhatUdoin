@@ -536,7 +536,7 @@ def reject_pending_user(pending_id: int):
 def get_all_meetings():
     with get_conn() as conn:
         rows = conn.execute(
-            """SELECT m.*, u.name as author_name, t.name as team_name,
+            """SELECT m.*, u.name as author_name, u.id as author_id, t.name as team_name,
                (SELECT COUNT(*) FROM events e WHERE e.meeting_id = m.id) as event_count
                FROM meetings m
                LEFT JOIN users u ON m.created_by = u.id
