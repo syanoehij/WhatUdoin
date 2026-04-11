@@ -61,6 +61,55 @@
 }
 .project-toolbar .spacer { flex: 1; }
 
+/* ── 줌 슬라이더 ─────────────────────────────────────── */
+.zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zoom-icon {
+  font-size: 0.75rem;
+  color: #b2bec3;
+  white-space: nowrap;
+}
+.zoom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 140px;
+  height: 4px;
+  background: #dfe6e9;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #2d3436;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #b2bec3;
+}
+.zoom-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #2d3436;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #b2bec3;
+}
+.zoom-value {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #2d3436;
+  min-width: 40px;
+  text-align: left;
+}
+
 /* ── 간트 레이아웃 ──────────────────────────────────── */
 .gantt-outer {
   display: flex;
@@ -96,10 +145,7 @@
   background: #f4f6f8;
   flex-shrink: 0;
 }
-.gantt-team-rows {
-  flex: 1;
-  overflow: hidden;
-}
+.gantt-team-rows { flex: 1; overflow: hidden; }
 .gantt-team-cell {
   display: flex;
   align-items: center;
@@ -139,10 +185,7 @@
   background: #f4f6f8;
   flex-shrink: 0;
 }
-.gantt-project-rows {
-  flex: 1;
-  overflow: hidden;
-}
+.gantt-project-rows { flex: 1; overflow: hidden; }
 .gantt-project-row {
   display: flex;
   align-items: center;
@@ -154,29 +197,12 @@
   box-sizing: border-box;
 }
 .gantt-project-row.team-divider { border-top: 2px solid #dfe6e9; }
-.project-row-color {
-  width: 4px;
-  align-self: stretch;
-  flex-shrink: 0;
-  margin-right: 8px;
-}
-.project-row-name {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  flex: 1;
-}
+.project-row-color { width: 4px; align-self: stretch; flex-shrink: 0; margin-right: 8px; }
+.project-row-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
 
 /* ── 타임라인 ──────────────────────────────────────── */
-.gantt-timeline {
-  flex: 1;
-  overflow: auto;
-  position: relative;
-}
-.gantt-timeline-inner {
-  position: relative;
-  min-width: 100%;
-}
+.gantt-timeline { flex: 1; overflow: auto; position: relative; }
+.gantt-timeline-inner { position: relative; min-width: 100%; }
 
 /* ── 헤더 ──────────────────────────────────────────── */
 .gantt-header {
@@ -193,36 +219,22 @@
 }
 .gantt-header-month {
   position: absolute;
-  top: 0;
-  height: 28px;
-  display: flex;
-  align-items: center;
+  top: 0; height: 28px;
+  display: flex; align-items: center;
   padding: 0 6px;
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: #2d3436;
+  font-size: 0.76rem; font-weight: 700; color: #2d3436;
   border-right: 1px solid #dfe6e9;
-  overflow: hidden;
-  white-space: nowrap;
+  overflow: hidden; white-space: nowrap;
   box-sizing: border-box;
 }
-.gantt-header-units {
-  position: relative;
-  height: 28px;
-}
+.gantt-header-units { position: relative; height: 28px; }
 .gantt-header-unit {
   position: absolute;
-  top: 0;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.7rem;
-  color: #636e72;
+  top: 0; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; color: #636e72;
   border-right: 1px solid #eee;
-  overflow: hidden;
-  box-sizing: border-box;
-  user-select: none;
+  overflow: hidden; box-sizing: border-box; user-select: none;
 }
 .gantt-header-unit.is-today   { background: #fff5f5; color: #d63031; font-weight: 700; }
 .gantt-header-unit.is-weekend { color: #b2bec3; }
@@ -238,58 +250,34 @@
 }
 .gantt-row:hover { background: #fafbfc; }
 .gantt-row.team-divider { border-top: 2px solid #dfe6e9; }
-
-/* 주말 배경 */
 .gantt-weekend-bg {
-  position: absolute;
-  top: 0; bottom: 0;
+  position: absolute; top: 0; bottom: 0;
   background: rgba(0,0,0,0.025);
-  pointer-events: none;
-  z-index: 0;
+  pointer-events: none; z-index: 0;
 }
-
-/* 오늘 선 */
 .gantt-today-line {
-  position: absolute;
-  top: 0;
-  width: 2px;
-  background: #d63031;
-  opacity: 0.5;
-  z-index: 6;
-  pointer-events: none;
+  position: absolute; top: 0; width: 2px;
+  background: #d63031; opacity: 0.5;
+  z-index: 6; pointer-events: none;
 }
-
-/* 이벤트 바 */
 .gantt-bar {
   position: absolute;
   height: 22px;
   border-radius: 4px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   text-align: center;
   padding: 0 4px;
-  font-size: 0.71rem;
-  font-weight: 600;
-  color: #fff;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  font-size: 0.71rem; font-weight: 600; color: #fff;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   box-shadow: 0 1px 3px rgba(0,0,0,0.18);
   transition: filter 0.12s;
-  z-index: 3;
-  box-sizing: border-box;
+  z-index: 3; box-sizing: border-box;
 }
 .gantt-bar:hover { filter: brightness(1.12); z-index: 4; }
-
-/* 빈 상태 */
 .gantt-empty {
-  padding: 80px 40px;
-  text-align: center;
-  color: #b2bec3;
-  font-size: 0.95rem;
-  line-height: 1.8;
+  padding: 80px 40px; text-align: center;
+  color: #b2bec3; font-size: 0.95rem; line-height: 1.8;
 }
 </style>
 {% endblock %}
@@ -304,9 +292,9 @@
     {% endfor %}
   </select>
   <div class="view-btns">
-    <button class="view-btn" data-view="month" onclick="setView('month')">월</button>
-    <button class="view-btn active" data-view="week" onclick="setView('week')">주</button>
-    <button class="view-btn" data-view="day" onclick="setView('day')">일</button>
+    <button class="view-btn" data-view="month" onclick="setViewPreset('month')">월</button>
+    <button class="view-btn active" data-view="week" onclick="setViewPreset('week')">주</button>
+    <button class="view-btn" data-view="day" onclick="setViewPreset('day')">일</button>
   </div>
   <div class="nav-btns">
     <button class="nav-btn" onclick="navPrev()">&#9664;</button>
@@ -315,27 +303,33 @@
     <button class="nav-btn" onclick="navToday()">오늘</button>
   </div>
   <div class="spacer"></div>
+  <!-- 줌 슬라이더 -->
+  <div class="zoom-control">
+    <span class="zoom-icon">축소</span>
+    <input type="range" id="zoom-slider" class="zoom-slider"
+           min="0" max="10" step="1" value="4"
+           oninput="onZoomSlider(+this.value)" />
+    <span class="zoom-icon">확대</span>
+    <span class="zoom-value" id="zoom-label">3개월</span>
+  </div>
 </div>
 
 <!-- ── 간트 영역 ──────────────────────────────────────── -->
 <div class="gantt-outer">
   <div class="gantt-scroll">
-    <!-- 팀 컬럼 (최좌측) -->
     <div class="gantt-team-col">
       <div class="gantt-team-header">팀</div>
       <div class="gantt-team-rows" id="team-rows"></div>
     </div>
-    <!-- 프로젝트 컬럼 -->
     <div class="gantt-project-col">
       <div class="gantt-project-header">프로젝트</div>
       <div class="gantt-project-rows" id="project-rows"></div>
     </div>
-    <!-- 타임라인 -->
     <div class="gantt-timeline" id="gantt-timeline">
       <div class="gantt-timeline-inner" id="gantt-inner">
         <div class="gantt-header">
           <div class="gantt-header-months" id="gantt-months"></div>
-          <div class="gantt-header-units" id="gantt-units"></div>
+          <div class="gantt-header-units"  id="gantt-units"></div>
         </div>
         <div class="gantt-rows" id="gantt-rows"></div>
       </div>
@@ -344,12 +338,16 @@
 </div>
 
 <script>
-// ── 설정 ─────────────────────────────────────────────────
-const VIEW_CFG = {
-  month: { minDayPx: 4,  daysShown: 365 },
-  week:  { minDayPx: 14, daysShown: 91  },
-  day:   { minDayPx: 40, daysShown: 28  },
-};
+// ── 줌 단계 (슬라이더 0=많은 날, 10=적은 날) ─────────────
+//   인덱스:  0    1    2    3    4   5   6   7   8   9  10
+const ZOOM_STEPS = [365, 270, 180, 120, 90, 60, 45, 30, 21, 14, 7];
+const PRESET_DAYS = { month: 180, week: 90, day: 21 };
+
+let daysShown = ZOOM_STEPS[4]; // 기본 90일
+let viewStart = null;
+let allTeams  = [];
+
+const LANE_H = 28, ROW_PAD = 6, BAR_H = 22;
 
 const PROJECT_COLORS = [
   '#6c5ce7','#00b894','#0984e3','#e17055','#fd79a8',
@@ -361,15 +359,6 @@ function projectColor(name) {
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
   return PROJECT_COLORS[h % PROJECT_COLORS.length];
 }
-
-// ── 상태 ─────────────────────────────────────────────────
-let currentView = 'week';
-let viewStart   = null;
-let allTeams    = []; // [{team_name, projects:[{name, events}]}]
-
-const LANE_H = 28;
-const ROW_PAD = 6;
-const BAR_H = 22;
 
 // ── 날짜 유틸 ─────────────────────────────────────────────
 function parseDate(s) {
@@ -395,32 +384,68 @@ function isoWeek(d) {
 }
 function today() { const d = new Date(); d.setHours(0,0,0,0); return d; }
 
-// ── 반응형 dayPx (창 너비에 맞게 늘어남) ─────────────────
+// ── dayPx: 항상 컨테이너 너비 / daysShown (반응형) ─────────
 function getDayPx() {
   const tl = document.getElementById('gantt-timeline');
-  const min = VIEW_CFG[currentView].minDayPx;
-  if (!tl) return min;
-  return Math.max(min, tl.clientWidth / VIEW_CFG[currentView].daysShown);
+  return tl ? (tl.clientWidth / daysShown) : 10;
+}
+
+// ── 줌 슬라이더 ──────────────────────────────────────────
+function onZoomSlider(idx) {
+  daysShown = ZOOM_STEPS[idx];
+  updateZoomLabel();
+  syncViewBtns();
+  render();
+}
+
+function updateZoomLabel() {
+  const d = daysShown;
+  let label;
+  if (d < 14)       label = d + '일';
+  else if (d < 60)  label = Math.round(d / 7) + '주';
+  else if (d < 400) label = Math.round(d / 30) + '개월';
+  else              label = Math.round(d / 365) + '년';
+  document.getElementById('zoom-label').textContent = label;
+}
+
+function syncSliderToCurrentDays() {
+  let bestIdx = 4;
+  let bestDiff = Infinity;
+  ZOOM_STEPS.forEach((s, i) => {
+    const diff = Math.abs(s - daysShown);
+    if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+  });
+  document.getElementById('zoom-slider').value = bestIdx;
+  updateZoomLabel();
+}
+
+function syncViewBtns() {
+  // 정확히 프리셋 값과 일치할 때만 버튼 활성
+  document.querySelectorAll('.view-btn').forEach(b =>
+    b.classList.toggle('active', PRESET_DAYS[b.dataset.view] === daysShown));
+}
+
+// ── 뷰 프리셋 (월/주/일 버튼) ────────────────────────────
+function setViewPreset(v) {
+  daysShown = PRESET_DAYS[v];
+  syncSliderToCurrentDays();
+  syncViewBtns();
+  render();
+  requestAnimationFrame(scrollToToday);
 }
 
 // ── 네비게이션 ───────────────────────────────────────────
 function navToday() {
-  viewStart = addDays(today(), -Math.floor(VIEW_CFG[currentView].daysShown / 3));
+  viewStart = addDays(today(), -Math.floor(daysShown / 3));
   render(); requestAnimationFrame(scrollToToday);
 }
 function navPrev() {
-  viewStart = addDays(viewStart, -Math.floor(VIEW_CFG[currentView].daysShown / 2));
+  viewStart = addDays(viewStart, -Math.floor(daysShown / 2));
   render();
 }
 function navNext() {
-  viewStart = addDays(viewStart, Math.floor(VIEW_CFG[currentView].daysShown / 2));
+  viewStart = addDays(viewStart, Math.floor(daysShown / 2));
   render();
-}
-function setView(v) {
-  currentView = v;
-  document.querySelectorAll('.view-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.view === v));
-  render(); requestAnimationFrame(scrollToToday);
 }
 
 // ── 데이터 로드 ──────────────────────────────────────────
@@ -448,30 +473,25 @@ function assignLanes(events) {
 
 // ── 렌더링 ──────────────────────────────────────────────
 function render() {
-  const dayPx = getDayPx();
-  const { daysShown } = VIEW_CFG[currentView];
-  const totalW  = daysShown * dayPx;
+  const dayPx  = getDayPx();
+  const totalW = daysShown * dayPx;
   const viewEnd = addDays(viewStart, daysShown);
   const tod     = today();
 
   // 네비 레이블
   const end = addDays(viewStart, daysShown - 1);
   document.getElementById('nav-label').textContent =
-    currentView === 'month'
-      ? (viewStart.getFullYear() === end.getFullYear()
-          ? `${viewStart.getFullYear()}년`
-          : `${viewStart.getFullYear()} ~ ${end.getFullYear()}`)
+    daysShown >= 300
+      ? `${viewStart.getFullYear()}년`
       : `${fmtDate(viewStart)} ~ ${fmtDate(end)}`;
 
-  // 내부 너비
   document.getElementById('gantt-inner').style.width = Math.ceil(totalW) + 'px';
 
-  // ── 헤더 ─────────────────────────────────────────────
+  // ── 헤더 월 레이블 ────────────────────────────────────
   const monthsEl = document.getElementById('gantt-months');
   const unitsEl  = document.getElementById('gantt-units');
   monthsEl.innerHTML = unitsEl.innerHTML = '';
 
-  // 월 레이블
   let prevMk = null, mStart = 0;
   const addMonthLabel = (endPx, startPx, startDay) => {
     const w = endPx - startPx;
@@ -492,9 +512,10 @@ function render() {
   }
   addMonthLabel(daysShown * dayPx, mStart, Math.round(mStart / dayPx));
 
-  // 단위 레이블
+  // ── 헤더 단위 레이블 (daysShown 기준으로 자동 선택) ────
   const DAY_KO = ['일','월','화','수','목','금','토'];
-  if (currentView === 'month') {
+  if (daysShown > 60) {
+    // 주 번호
     let prevWk = null, wStart = 0;
     const addWeekLabel = (endPx, startPx, startDay) => {
       const w = endPx - startPx;
@@ -515,6 +536,7 @@ function render() {
     }
     addWeekLabel(daysShown * dayPx, wStart, Math.round(wStart / dayPx));
   } else {
+    // 개별 일자
     for (let i = 0; i < daysShown; i++) {
       const d = addDays(viewStart, i);
       const isToday   = daysBetween(tod, d) === 0;
@@ -523,16 +545,16 @@ function render() {
       el.className = 'gantt-header-unit' +
         (isToday ? ' is-today' : isWeekend ? ' is-weekend' : '');
       el.style.cssText = `left:${i * dayPx}px;width:${dayPx}px`;
-      el.textContent = currentView === 'week'
-        ? String(d.getDate())
-        : `${d.getDate()}(${DAY_KO[d.getDay()]})`;
+      el.textContent = daysShown <= 30
+        ? `${d.getDate()}(${DAY_KO[d.getDay()]})`
+        : String(d.getDate());
       unitsEl.appendChild(el);
     }
   }
 
   // ── 행 ───────────────────────────────────────────────
-  const teamRowsEl = document.getElementById('team-rows');
-  const projRowsEl = document.getElementById('project-rows');
+  const teamRowsEl  = document.getElementById('team-rows');
+  const projRowsEl  = document.getElementById('project-rows');
   const ganttRowsEl = document.getElementById('gantt-rows');
   teamRowsEl.innerHTML = projRowsEl.innerHTML = ganttRowsEl.innerHTML = '';
 
@@ -552,7 +574,6 @@ function render() {
       const color = projectColor(proj.name);
       const isFirstProjInTeam = pidx === 0;
 
-      // 뷰 범위 내 이벤트 필터
       const visible = proj.events
         .filter(e => {
           const s = parseDate(e.start_datetime);
@@ -565,9 +586,10 @@ function render() {
       const rowH = laneCount * LANE_H + ROW_PAD * 2;
       teamTotalH += rowH;
 
-      // 프로젝트 사이드바 행
+      // 프로젝트 사이드바
       const pRow = document.createElement('div');
-      pRow.className = 'gantt-project-row' + (isDivider && isFirstProjInTeam ? ' team-divider' : '');
+      pRow.className = 'gantt-project-row' +
+        (isDivider && isFirstProjInTeam ? ' team-divider' : '');
       pRow.style.height = rowH + 'px';
       pRow.title = proj.name;
       const colorBar = document.createElement('div');
@@ -582,7 +604,8 @@ function render() {
 
       // 간트 행
       const gRow = document.createElement('div');
-      gRow.className = 'gantt-row' + (isDivider && isFirstProjInTeam ? ' team-divider' : '');
+      gRow.className = 'gantt-row' +
+        (isDivider && isFirstProjInTeam ? ' team-divider' : '');
       gRow.style.height = rowH + 'px';
       gRow.style.width  = Math.ceil(totalW) + 'px';
 
@@ -611,11 +634,13 @@ function render() {
 
         const bar = document.createElement('div');
         bar.className = 'gantt-bar';
-        bar.style.cssText = `left:${barL}px;width:${barW}px;top:${barT}px;height:${BAR_H}px;background:${color}`;
+        bar.style.cssText =
+          `left:${barL}px;width:${barW}px;top:${barT}px;height:${BAR_H}px;background:${color}`;
         bar.textContent = ev.title;
         bar.title = [
           ev.title,
-          (ev.start_datetime?.split('T')[0]) + (ev.end_datetime ? ' ~ ' + ev.end_datetime.split('T')[0] : ''),
+          (ev.start_datetime?.split('T')[0]) +
+            (ev.end_datetime ? ' ~ ' + ev.end_datetime.split('T')[0] : ''),
           ev.assignee ? '담당: ' + ev.assignee : '',
         ].filter(Boolean).join('\n');
         bar.onclick = () => openBarDetail(ev.id);
@@ -626,7 +651,7 @@ function render() {
       totalH += rowH;
     });
 
-    // 팀 셀 (프로젝트 전체 행 합산 높이로)
+    // 팀 셀
     const teamCell = document.createElement('div');
     teamCell.className = 'gantt-team-cell' + (isDivider ? ' team-divider' : '');
     teamCell.style.height = teamTotalH + 'px';
@@ -640,7 +665,8 @@ function render() {
   if (todayOff >= 0 && todayOff < daysShown) {
     const line = document.createElement('div');
     line.className = 'gantt-today-line';
-    line.style.cssText = `left:${todayOff * dayPx + Math.floor(dayPx / 2)}px;height:${totalH}px`;
+    line.style.cssText =
+      `left:${todayOff * dayPx + Math.floor(dayPx / 2)}px;height:${totalH}px`;
     ganttRowsEl.appendChild(line);
   }
 }
@@ -652,13 +678,13 @@ function scrollToToday() {
   tl.scrollLeft = Math.max(0, off - tl.clientWidth / 3);
 }
 
-// ── 스크롤 동기화 (y축) ──────────────────────────────────
+// ── 스크롤 동기화 ────────────────────────────────────────
 document.getElementById('gantt-timeline').addEventListener('scroll', function () {
   document.getElementById('project-rows').scrollTop = this.scrollTop;
   document.getElementById('team-rows').scrollTop    = this.scrollTop;
 });
 
-// ── 반응형: 창 너비 변경 시 재렌더링 ─────────────────────
+// ── 반응형 재렌더 ────────────────────────────────────────
 let _resizePending = false;
 new ResizeObserver(() => {
   if (_resizePending || !viewStart) return;
@@ -672,13 +698,13 @@ async function openBarDetail(eventId) {
   if (!res.ok) return;
   openModal('', await res.json());
 }
-
-// 저장/삭제 후 갱신
 window.onEventSaved = loadData;
 
 // ── 초기화 ───────────────────────────────────────────────
 (function init() {
-  viewStart = addDays(today(), -Math.floor(VIEW_CFG[currentView].daysShown / 3));
+  updateZoomLabel();
+  syncViewBtns();
+  viewStart = addDays(today(), -Math.floor(daysShown / 3));
   loadData();
 })();
 </script>
