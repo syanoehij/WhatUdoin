@@ -829,6 +829,7 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
   z-index: 1;
 }
 .meetings-content .meeting-table,
+.meetings-content .meeting-table thead,
 .meetings-content .meeting-table tbody {
   display: block;
   width: 100%;
