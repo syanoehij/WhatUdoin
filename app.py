@@ -388,9 +388,12 @@ async def update_event_kanban(event_id: int, request: Request):
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     data = await request.json()
-    kanban_status = data.get("kanban_status")
-    priority = data.get("priority")
-    db.update_kanban_status(event_id, kanban_status, priority)
+    kwargs = {}
+    if "kanban_status" in data:
+        kwargs["kanban_status"] = data["kanban_status"]
+    if "priority" in data:
+        kwargs["priority"] = data["priority"]
+    db.update_kanban_status(event_id, **kwargs)
     return {"ok": True}
 
 

@@ -171,6 +171,24 @@
   .priority-dot.normal { background: #74b9ff; }
   .priority-dot.low    { background: #b2bec3; }
 
+  /* ── 상태/우선순위 상단 컨트롤 박스 ── */
+  .kdetail-controls {
+    background: #f4f6f8;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .kdetail-ctrl-row {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 8px;
+    align-items: center;
+    font-size: 0.93rem;
+  }
+
   /* 빈 컬럼 placeholder */
   .kanban-empty {
     color: #b2bec3;
@@ -199,6 +217,29 @@
   }
   .status-btn:hover { background: #dfe6e9; }
   .status-btn.active { background: #0984e3; color: #fff; border-color: #0984e3; }
+
+  /* 우선순위 버튼 */
+  .kanban-detail-priority {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .priority-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #dfe6e9;
+    background: #f4f6f8;
+    font-size: 0.78rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .priority-btn:hover { background: #dfe6e9; }
+  .priority-btn.active[data-priority="urgent"] { background: #d63031; color: #fff; border-color: #d63031; }
+  .priority-btn.active[data-priority="high"]   { background: #e17055; color: #fff; border-color: #e17055; }
+  .priority-btn.active[data-priority="normal"] { background: #0984e3; color: #fff; border-color: #0984e3; }
+  .priority-btn.active[data-priority="low"]    { background: #b2bec3; color: #fff; border-color: #b2bec3; }
 </style>
 {% endblock %}
 
@@ -249,16 +290,24 @@
 
 <!-- ── 카드 상세 모달 ── -->
 <div id="kdetail-overlay" class="modal-overlay hidden" onclick="closeKDetail(event)">
-  <div class="modal">
+  <div class="modal" style="width:640px;">
     <div class="modal-header">
       <h2 id="kdetail-title"></h2>
       <button class="icon-btn" onclick="closeKDetail()">✕</button>
     </div>
-    <div id="kdetail-body" class="detail-body"></div>
-    <div class="form-row" style="margin:12px 16px 0;">
-      <label style="font-size:0.82rem;color:#636e72;min-width:64px;">칸반 상태</label>
-      <div class="kanban-detail-status" id="kdetail-status-btns"></div>
+    <!-- ── 상태 / 우선순위: 제목 바로 아래 고정 ── -->
+    <div class="kdetail-controls">
+      <div class="kdetail-ctrl-row">
+        <span class="detail-label">칸반 상태</span>
+        <div class="kanban-detail-status" id="kdetail-status-btns"></div>
+      </div>
+      <div class="kdetail-ctrl-row">
+        <span class="detail-label">우선순위</span>
+        <div class="kanban-detail-priority" id="kdetail-priority-btns"></div>
+      </div>
     </div>
+    <!-- ── 상세 정보 ── -->
+    <div id="kdetail-body" class="detail-body"></div>
     <div class="modal-actions">
       <button class="btn btn-danger hidden" id="kbtn-remove" onclick="removeFromKanban()">칸반에서 제거</button>
       <div>
@@ -330,8 +379,12 @@ function renderBoard() {
   let total = allEvents.length;
   document.getElementById('kanban-total').textContent = `총 ${total}개`;
 
+  const PRIORITY_ORDER = { urgent: 0, high: 1, normal: 2, low: 3 };
+
   COLUMNS.forEach(({ status }) => {
-    const cards = grouped[status];
+    const cards = grouped[status].sort((a, b) =>
+      (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2)
+    );
     document.getElementById(`count-${status}`).textContent = cards.length;
     const body = document.getElementById(`col-${status}`);
     if (!cards.length) {
@@ -429,7 +482,6 @@ function openKDetail(id) {
     ['기간',     fmtDate(e.start_datetime) + (e.end_datetime ? ' ~ ' + fmtDate(e.end_datetime) : '')],
     ['담당자',   e.assignee  || '-'],
     ['장소',     e.location  || '-'],
-    ['우선순위', priorityLabels[e.priority] || '🔵 보통'],
     ['내용',     e.description || '-'],
   ];
   document.getElementById('kdetail-body').innerHTML = rows.map(([label, val]) => `
@@ -443,6 +495,21 @@ function openKDetail(id) {
   statusContainer.innerHTML = COLUMNS.map(({ status, label }) =>
     `<button class="status-btn ${e.kanban_status === status ? 'active' : ''}"
        onclick="changeStatus('${status}')">${label}</button>`
+  ).join('');
+
+  // 우선순위 변경 버튼
+  const PRIORITIES = [
+    { value: 'urgent', label: '🔴 긴급' },
+    { value: 'high',   label: '🟠 높음' },
+    { value: 'normal', label: '🔵 보통' },
+    { value: 'low',    label: '⚪ 낮음' },
+  ];
+  const curPriority = e.priority || 'normal';
+  const prioContainer = document.getElementById('kdetail-priority-btns');
+  prioContainer.innerHTML = PRIORITIES.map(p =>
+    `<button class="priority-btn ${curPriority === p.value ? 'active' : ''}"
+       data-priority="${p.value}"
+       onclick="changePriority('${p.value}')">${p.label}</button>`
   ).join('');
 
   // 에디터 이상만 제거/수정 가능
@@ -476,6 +543,25 @@ async function changeStatus(newStatus) {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ kanban_status: newStatus }),
+  });
+}
+
+async function changePriority(newPriority) {
+  if (!currentKDetailId) return;
+  const ev = allEvents.find(e => e.id === currentKDetailId);
+  if (!ev || ev.priority === newPriority) return;
+
+  ev.priority = newPriority;
+  // 버튼 active 상태 업데이트
+  document.querySelectorAll('#kdetail-priority-btns .priority-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.priority === newPriority);
+  });
+  renderBoard();
+
+  await fetch(`/api/events/${currentKDetailId}/kanban`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ priority: newPriority }),
   });
 }
 

@@ -226,18 +226,25 @@ def get_kanban_events(team_id: int = None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def update_kanban_status(event_id: int, kanban_status, priority: str = None):
+_MISSING = object()
+
+def update_kanban_status(event_id: int, kanban_status=_MISSING, priority=_MISSING):
+    sets, params = [], []
+    if kanban_status is not _MISSING:
+        sets.append("kanban_status = ?")
+        params.append(kanban_status)
+    if priority is not _MISSING:
+        sets.append("priority = ?")
+        params.append(priority)
+    if not sets:
+        return
+    sets.append("updated_at = CURRENT_TIMESTAMP")
+    params.append(event_id)
     with get_conn() as conn:
-        if priority is not None:
-            conn.execute(
-                "UPDATE events SET kanban_status = ?, priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (kanban_status, priority, event_id)
-            )
-        else:
-            conn.execute(
-                "UPDATE events SET kanban_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (kanban_status, event_id)
-            )
+        conn.execute(
+            f"UPDATE events SET {', '.join(sets)} WHERE id = ?",
+            params
+        )
 
 
 def get_projects() -> list[str]:
