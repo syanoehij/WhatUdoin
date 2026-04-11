@@ -3,6 +3,8 @@
 
 {% block extra_head %}
 <style>
+main { padding: 0; }
+
 /* ── 툴바 ─────────────────────────────────────────────── */
 .project-toolbar {
   display: flex;
@@ -91,8 +93,30 @@
 }
 
 /* ── 간트 레이아웃 ──────────────────────────────────── */
-.gantt-outer { display: flex; flex-direction: column; height: calc(100vh - 108px); overflow: hidden; }
-.gantt-scroll { display: flex; flex: 1; overflow: hidden; }
+.gantt-outer { display: flex; flex-direction: column; }
+.gantt-scroll { display: flex; }
+
+/* ── 페이지 sticky 헤더 ─────────────────────────────── */
+.gantt-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-shrink: 0;
+  background: var(--surface-2);
+  border-bottom: 2px solid var(--border);
+}
+.gantt-col-header {
+  height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.78rem; color: var(--text-muted);
+  flex-shrink: 0;
+}
+.gantt-header-clip {
+  flex: 1;
+  overflow: hidden; /* scrollLeft controlled by JS, no visible scrollbar */
+  position: relative;
+}
 
 /* ── 팀 컬럼 ─────────────────────────────────────────── */
 .gantt-team-col {
@@ -100,13 +124,7 @@
   background: var(--surface); border-right: 1px solid var(--border);
   display: flex; flex-direction: column; z-index: 25;
 }
-.gantt-col-header {
-  height: 40px; border-bottom: 2px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 0.78rem; color: var(--text-muted);
-  background: var(--surface-2); flex-shrink: 0;
-}
-.gantt-team-rows { flex: 1; overflow: hidden; }
+.gantt-team-rows { flex: 1; }
 .gantt-team-cell {
   display: flex; align-items: center; justify-content: center;
   text-align: center; border-bottom: 1px solid var(--border);
@@ -122,7 +140,7 @@
   background: var(--surface); border-right: 2px solid var(--border);
   display: flex; flex-direction: column; z-index: 20;
 }
-.gantt-name-rows { flex: 1; overflow: hidden; }
+.gantt-name-rows { flex: 1; }
 
 /* 프로젝트 헤더 행 */
 .proj-header-row {
@@ -172,10 +190,9 @@
 .gantt-timeline { flex: 1; overflow: auto; position: relative; }
 .gantt-timeline-inner { position: relative; min-width: 100%; }
 
-/* ── 헤더 ──────────────────────────────────────────── */
+/* ── 헤더 (gantt-sticky-header 안에 있으므로 sticky 불필요) ── */
 .gantt-header {
-  position: sticky; top: 0; z-index: 10;
-  background: var(--surface-2); border-bottom: 2px solid var(--border);
+  background: var(--surface-2);
 }
 .gantt-header-months {
   position: relative; height: 20px; border-bottom: 1px solid var(--border);
@@ -275,24 +292,31 @@
 
 <!-- ── 간트 영역 ──────────────────────────────────────── -->
 <div class="gantt-outer">
+  <!-- 페이지 sticky 헤더 (팀/이름 사이드바 헤더 + 날짜 헤더) -->
+  <div class="gantt-sticky-header">
+    <div class="gantt-col-header" style="width:60px;min-width:60px;">팀</div>
+    <div class="gantt-col-header" style="width:220px;min-width:220px;justify-content:flex-start;padding:0 12px;">프로젝트 / 일정</div>
+    <div class="gantt-header-clip" id="gantt-header-clip">
+      <div class="gantt-header" id="gantt-header-inner">
+        <div class="gantt-header-months" id="gantt-months"></div>
+        <div class="gantt-header-units"  id="gantt-units"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 바디: 높이 제한 없이 자연스럽게 늘어남 -->
   <div class="gantt-scroll">
     <!-- 팀 컬럼 -->
     <div class="gantt-team-col">
-      <div class="gantt-col-header">팀</div>
       <div class="gantt-team-rows" id="team-rows"></div>
     </div>
-    <!-- 이름 컬럼 (프로젝트 헤더 + 이벤트 이름) -->
+    <!-- 이름 컬럼 -->
     <div class="gantt-name-col">
-      <div class="gantt-col-header" style="justify-content:flex-start;padding:0 12px;">프로젝트 / 일정</div>
       <div class="gantt-name-rows" id="name-rows"></div>
     </div>
-    <!-- 타임라인 -->
+    <!-- 타임라인 (가로 스크롤만) -->
     <div class="gantt-timeline" id="gantt-timeline">
       <div class="gantt-timeline-inner" id="gantt-inner">
-        <div class="gantt-header">
-          <div class="gantt-header-months" id="gantt-months"></div>
-          <div class="gantt-header-units"  id="gantt-units"></div>
-        </div>
         <div class="gantt-rows" id="gantt-rows"></div>
       </div>
     </div>
@@ -422,7 +446,9 @@ function render() {
       ? `${viewStart.getFullYear()}년`
       : `${fmtDate(viewStart)} ~ ${fmtDate(end)}`;
 
-  document.getElementById('gantt-inner').style.width = Math.ceil(totalW) + 'px';
+  const innerW = Math.ceil(totalW) + 'px';
+  document.getElementById('gantt-inner').style.width       = innerW;
+  document.getElementById('gantt-header-inner').style.width = innerW;
 
   // ── 헤더 ─────────────────────────────────────────────
   const monthsEl = document.getElementById('gantt-months');
@@ -666,10 +692,9 @@ function render() {
   }
 }
 
-// ── 스크롤 동기화 ────────────────────────────────────────
+// ── 스크롤 동기화 (가로만: 타임라인 ↔ 날짜 헤더) ────────
 document.getElementById('gantt-timeline').addEventListener('scroll', function () {
-  document.getElementById('name-rows').scrollTop = this.scrollTop;
-  document.getElementById('team-rows').scrollTop = this.scrollTop;
+  document.getElementById('gantt-header-clip').scrollLeft = this.scrollLeft;
 });
 
 // ── 반응형 재렌더 ─────────────────────────────────────────
