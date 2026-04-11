@@ -297,6 +297,12 @@
 {% block content %}
 <!-- ── 툴바 ─────────────────────────────────────────────── -->
 <div class="project-toolbar">
+  <select id="team-filter" onchange="loadData()">
+    <option value="">전체 팀</option>
+    {% for team in teams %}
+    <option value="{{ team.id }}">{{ team.name }}</option>
+    {% endfor %}
+  </select>
   <div class="view-btns">
     <button class="view-btn" data-view="month" onclick="setView('month')">월</button>
     <button class="view-btn active" data-view="week" onclick="setView('week')">주</button>
@@ -309,12 +315,6 @@
     <button class="nav-btn" onclick="navToday()">오늘</button>
   </div>
   <div class="spacer"></div>
-  <select id="team-filter" onchange="loadData()">
-    <option value="">전체 팀</option>
-    {% for team in teams %}
-    <option value="{{ team.id }}">{{ team.name }}</option>
-    {% endfor %}
-  </select>
 </div>
 
 <!-- ── 간트 영역 ──────────────────────────────────────── -->
