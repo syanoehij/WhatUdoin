@@ -1097,6 +1097,55 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--accent)
 .ai-card h2 { margin-bottom: 8px; color: var(--accent); }
 .ai-desc { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px; }
 
+/* ── FullCalendar 다크 테마 오버라이드 ── */
+[data-theme="dark"] .fc-theme-standard td,
+[data-theme="dark"] .fc-theme-standard th,
+[data-theme="dark"] .fc-scrollgrid,
+[data-theme="dark"] .fc-scrollgrid-sync-table td { border-color: var(--border) !important; }
+
+[data-theme="dark"] .fc-toolbar-title { color: var(--text); }
+
+[data-theme="dark"] .fc-button-primary {
+  background: var(--surface-3) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+[data-theme="dark"] .fc-button-primary:hover {
+  background: var(--border) !important;
+}
+[data-theme="dark"] .fc-button-primary:not(:disabled).fc-button-active,
+[data-theme="dark"] .fc-button-primary:not(:disabled):active {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: white !important;
+}
+
+[data-theme="dark"] .fc-col-header-cell-cushion { color: var(--text-muted); }
+[data-theme="dark"] .fc-daygrid-day-number       { color: var(--text-muted); }
+
+[data-theme="dark"] .fc-daygrid-day             { background: var(--surface); }
+[data-theme="dark"] .fc-daygrid-day.fc-day-today { background: var(--accent-light) !important; }
+[data-theme="dark"] .fc-daygrid-day.fc-day-other { background: var(--bg); opacity: 0.9; }
+
+[data-theme="dark"] .fc-timegrid-col             { background: var(--surface); }
+[data-theme="dark"] .fc-timegrid-col.fc-day-today { background: var(--accent-light) !important; }
+[data-theme="dark"] .fc-timegrid-slot-label-cushion { color: var(--text-muted); }
+
+[data-theme="dark"] .fc-non-business            { background: rgba(0,0,0,0.15); }
+[data-theme="dark"] .fc-highlight               { background: var(--accent-bg); }
+
+[data-theme="dark"] .fc-list-day-cushion        { background: var(--surface-2); color: var(--text); }
+[data-theme="dark"] .fc-list-event td           { color: var(--text); border-color: var(--border); }
+[data-theme="dark"] .fc-list-event:hover td     { background: var(--surface-2); }
+[data-theme="dark"] .fc-list-empty              { background: var(--surface); color: var(--text-muted); }
+
+[data-theme="dark"] .fc-popover {
+  background: var(--surface);
+  border-color: var(--border);
+}
+[data-theme="dark"] .fc-popover-header          { background: var(--surface-2); color: var(--text); }
+[data-theme="dark"] .fc-popover-body            { color: var(--text); }
+
 /* ── 모달 인라인 input 공통 ── */
 .time-input {
   flex: 1;
