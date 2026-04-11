@@ -4,9 +4,63 @@
 {% block content %}
 <div class="page-header">
   <h2 class="page-title">📋 회의록</h2>
-  {% if user and user.role in ('editor', 'admin') %}
-  <a href="/meetings/new" class="btn btn-primary">+ 새 회의록</a>
-  {% endif %}
+  <div style="display:flex;gap:8px;align-items:center;">
+    {% if user and user.role in ('editor', 'admin') %}
+    <button class="btn btn-outline" onclick="openWeeklyReportModal()">📊 주간 업무 보고</button>
+    <a href="/meetings/new" class="btn btn-primary">+ 새 회의록</a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── 주간 업무 보고 모달 ── -->
+<div id="weekly-overlay" class="modal-overlay hidden" onclick="closeWeeklyReport(event)">
+  <div class="modal" style="max-width:560px;width:95%;">
+    <div class="modal-header">
+      <h2>📊 주간 업무 보고서 생성</h2>
+      <button class="icon-btn" onclick="closeWeeklyReport()">✕</button>
+    </div>
+
+    <div id="weekly-form">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label class="form-label">기준 날짜</label>
+          <input type="date" id="weekly-date" class="form-input" />
+        </div>
+        <div>
+          <label class="form-label">팀</label>
+          <select id="weekly-team" class="form-input">
+            <option value="">전체 팀</option>
+            {% for t in teams %}
+            <option value="{{ t.id }}">{{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label class="form-label">AI 모델</label>
+        <select id="weekly-model" class="form-input">
+          <option value="{{ default_model }}">{{ default_model }} (기본)</option>
+        </select>
+      </div>
+      <p class="text-muted" style="font-size:12px;margin-bottom:16px;">
+        기준 날짜 이전 7일(지난 주)과 이후 6일(이번 주)의 일정을 바탕으로 보고서를 작성 후 회의록 편집기로 이동합니다.
+      </p>
+      <div class="modal-actions">
+        <div></div>
+        <div>
+          <button class="btn" onclick="closeWeeklyReport()">취소</button>
+          <button class="btn btn-primary" onclick="generateWeeklyReport()">AI 보고서 생성</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="weekly-loading" class="hidden" style="text-align:center;padding:48px 0;">
+      <div class="ai-spinner"></div>
+      <p style="margin-top:16px;color:var(--text-faint);">AI가 보고서를 작성 중입니다…<br><span style="font-size:12px;">잠시 기다려 주세요 (보통 10~30초)</span></p>
+    </div>
+
+    <div id="weekly-error" class="hidden" style="margin-top:16px;padding:12px;background:var(--danger-bg,#fee);border-radius:6px;color:var(--danger,#c00);"></div>
+  </div>
 </div>
 
 {% if meetings %}
@@ -38,4 +92,78 @@
   {% endif %}
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── 주간 업무 보고 모달 ─────────────────────────────────
+async function openWeeklyReportModal() {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('weekly-date').value = today;
+  document.getElementById('weekly-error').classList.add('hidden');
+  document.getElementById('weekly-loading').classList.add('hidden');
+  document.getElementById('weekly-form').style.display = '';
+
+  // 로그인 유저 팀을 기본 선택
+  if (CURRENT_USER && CURRENT_USER.team_id) {
+    document.getElementById('weekly-team').value = CURRENT_USER.team_id;
+  }
+
+  // 모델 목록 로드
+  try {
+    const res = await fetch('/api/ai/models');
+    const data = await res.json();
+    const sel = document.getElementById('weekly-model');
+    sel.innerHTML = '';
+    data.models.forEach((m, i) => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m + (i === 0 ? ' (기본)' : '');
+      sel.appendChild(opt);
+    });
+  } catch (_) { /* 기본값 유지 */ }
+
+  document.getElementById('weekly-overlay').classList.remove('hidden');
+}
+
+function closeWeeklyReport(e) {
+  if (e && e.target !== document.getElementById('weekly-overlay')) return;
+  document.getElementById('weekly-overlay').classList.add('hidden');
+}
+
+async function generateWeeklyReport() {
+  const baseDate = document.getElementById('weekly-date').value;
+  const teamId   = document.getElementById('weekly-team').value;
+  const model    = document.getElementById('weekly-model').value;
+  if (!baseDate) { alert('기준 날짜를 선택하세요.'); return; }
+
+  document.getElementById('weekly-form').style.display = 'none';
+  document.getElementById('weekly-loading').classList.remove('hidden');
+  document.getElementById('weekly-error').classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/ai/weekly-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        base_date: baseDate,
+        team_id:   teamId ? parseInt(teamId) : null,
+        model,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || '서버 오류');
+    }
+    const data = await res.json();
+    // 생성된 회의록 편집기로 이동
+    location.href = `/meetings/${data.meeting_id}?from=meetings`;
+  } catch (err) {
+    document.getElementById('weekly-loading').classList.add('hidden');
+    document.getElementById('weekly-form').style.display = '';
+    document.getElementById('weekly-error').textContent = '오류: ' + err.message;
+    document.getElementById('weekly-error').classList.remove('hidden');
+  }
+}
+</script>
 {% endblock %}

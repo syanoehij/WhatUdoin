@@ -592,3 +592,26 @@ def get_events_by_meeting(meeting_id: int):
             (meeting_id,)
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_events_by_date_range(start_date: str, end_date: str, team_id: int = None) -> list[dict]:
+    """날짜 범위로 이벤트 조회 (start_date ~ end_date 포함)"""
+    with get_conn() as conn:
+        if team_id:
+            rows = conn.execute(
+                """SELECT e.*, t.name as team_name
+                   FROM events e LEFT JOIN teams t ON e.team_id = t.id
+                   WHERE date(e.start_datetime) >= ? AND date(e.start_datetime) <= ?
+                   AND e.team_id = ?
+                   ORDER BY e.start_datetime""",
+                (start_date, end_date, team_id)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT e.*, t.name as team_name
+                   FROM events e LEFT JOIN teams t ON e.team_id = t.id
+                   WHERE date(e.start_datetime) >= ? AND date(e.start_datetime) <= ?
+                   ORDER BY e.start_datetime""",
+                (start_date, end_date)
+            ).fetchall()
+    return [dict(r) for r in rows]

@@ -86,7 +86,11 @@ def project_page(request: Request):
 @app.get("/meetings", response_class=HTMLResponse)
 def meetings_page(request: Request):
     meetings = db.get_all_meetings()
-    return templates.TemplateResponse(request, "meeting_list.html", _ctx(request, meetings=meetings))
+    teams    = db.get_all_teams()
+    return templates.TemplateResponse(request, "meeting_list.html", _ctx(
+        request, meetings=meetings, teams=teams,
+        default_model=llm_parser.DEFAULT_MODEL,
+    ))
 
 
 @app.get("/meetings/new", response_class=HTMLResponse)
@@ -531,6 +535,46 @@ async def ai_confirm(request: Request):
             db.create_event(payload)
             saved += 1
     return {"saved": saved}
+
+
+@app.get("/api/ai/models")
+def ai_models():
+    return {"models": llm_parser.get_available_models()}
+
+
+@app.post("/api/ai/weekly-report")
+async def ai_weekly_report(request: Request):
+    user = _require_editor(request)
+    from datetime import date as _date, datetime as _dt, timedelta as _td
+    body = await request.json()
+    base_date = (body.get("base_date") or _date.today().isoformat()).strip()
+    team_id   = body.get("team_id") or None
+    model     = body.get("model", llm_parser.DEFAULT_MODEL)
+
+    base_dt    = _dt.strptime(base_date, "%Y-%m-%d")
+    past_start = (base_dt - _td(days=7)).strftime("%Y-%m-%d")
+    past_end   = (base_dt - _td(days=1)).strftime("%Y-%m-%d")
+    future_end = (base_dt + _td(days=6)).strftime("%Y-%m-%d")
+
+    past_events   = db.get_events_by_date_range(past_start, past_end, team_id)
+    future_events = db.get_events_by_date_range(base_date,  future_end, team_id)
+
+    try:
+        report = llm_parser.generate_weekly_report(past_events, future_events, base_date, model)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")
+
+    title      = f"주간 업무 보고 ({base_date})"
+    meeting_id = db.create_meeting(title, report, user.get("team_id"), user["id"], base_date)
+
+    return {
+        "meeting_id":   meeting_id,
+        "past_count":   len(past_events),
+        "future_count": len(future_events),
+        "base_date":    base_date,
+        "past_start":   past_start,
+        "future_end":   future_end,
+    }
 
 
 if __name__ == "__main__":
