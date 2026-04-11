@@ -77,6 +77,12 @@ def kanban_page(request: Request):
     return templates.TemplateResponse(request, "kanban.html", _ctx(request, teams=teams))
 
 
+@app.get("/project", response_class=HTMLResponse)
+def project_page(request: Request):
+    teams = db.get_all_teams()
+    return templates.TemplateResponse(request, "project.html", _ctx(request, teams=teams))
+
+
 @app.get("/meetings", response_class=HTMLResponse)
 def meetings_page(request: Request):
     meetings = db.get_all_meetings()
@@ -408,6 +414,11 @@ def check_conflicts(start: str, end: str = None, team_id: int = None, exclude_id
 @app.get("/api/projects")
 def list_projects():
     return db.get_projects()
+
+
+@app.get("/api/project-timeline")
+def project_timeline(team_id: int = None):
+    return db.get_project_timeline(team_id)
 
 
 @app.get("/api/members")

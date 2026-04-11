@@ -1,0 +1,641 @@
+{% extends "base.html" %}
+{% block title %}프로젝트 관리 · WhatUDoin{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── 툴바 ─────────────────────────────────────────────── */
+.project-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  background: #fff;
+  border-bottom: 1px solid #dfe6e9;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.project-toolbar .view-btns {
+  display: flex;
+  border: 1px solid #dfe6e9;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.project-toolbar .view-btn {
+  padding: 5px 14px;
+  border: none;
+  border-right: 1px solid #dfe6e9;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.83rem;
+  font-family: inherit;
+  color: #636e72;
+}
+.project-toolbar .view-btn:last-child { border-right: none; }
+.project-toolbar .view-btn.active { background: #2d3436; color: #fff; }
+.project-toolbar .nav-btns { display: flex; gap: 4px; align-items: center; }
+.project-toolbar .nav-btn {
+  padding: 5px 10px;
+  border: 1px solid #dfe6e9;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.83rem;
+  font-family: inherit;
+}
+.project-toolbar .nav-btn:hover { background: #f4f6f8; }
+.project-toolbar .nav-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  min-width: 160px;
+  text-align: center;
+  color: #2d3436;
+}
+.project-toolbar select {
+  padding: 5px 10px;
+  border: 1px solid #dfe6e9;
+  border-radius: 6px;
+  font-size: 0.83rem;
+  font-family: inherit;
+  background: #fff;
+  outline: none;
+}
+.project-toolbar .spacer { flex: 1; }
+
+/* ── 간트 레이아웃 ───────────────────────────────────── */
+.gantt-outer {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 108px); /* header(58) + toolbar(50) */
+  overflow: hidden;
+}
+.gantt-scroll {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 사이드바 */
+.gantt-sidebar {
+  width: 180px;
+  min-width: 180px;
+  background: #fff;
+  border-right: 2px solid #dfe6e9;
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+}
+.gantt-sidebar-header {
+  height: 56px;
+  border-bottom: 2px solid #dfe6e9;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: #2d3436;
+  background: #f4f6f8;
+  flex-shrink: 0;
+}
+.gantt-sidebar-rows {
+  flex: 1;
+  overflow: hidden; /* synced via JS */
+}
+.gantt-sidebar-row {
+  display: flex;
+  align-items: center;
+  padding: 0 10px 0 0;
+  border-bottom: 1px solid #f0f3f5;
+  font-size: 0.8rem;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #2d3436;
+  box-sizing: border-box;
+}
+.sidebar-row-color {
+  width: 4px;
+  align-self: stretch;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+.sidebar-row-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* 타임라인 */
+.gantt-timeline {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+.gantt-timeline-inner {
+  position: relative;
+}
+
+/* 헤더 */
+.gantt-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #f4f6f8;
+  border-bottom: 2px solid #dfe6e9;
+}
+.gantt-header-months {
+  position: relative;
+  height: 28px;
+  border-bottom: 1px solid #dfe6e9;
+}
+.gantt-header-month {
+  position: absolute;
+  top: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #2d3436;
+  border-right: 1px solid #dfe6e9;
+  overflow: hidden;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.gantt-header-units {
+  position: relative;
+  height: 28px;
+}
+.gantt-header-unit {
+  position: absolute;
+  top: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: #636e72;
+  border-right: 1px solid #eee;
+  overflow: hidden;
+  box-sizing: border-box;
+  user-select: none;
+}
+.gantt-header-unit.is-today { background: #fff5f5; color: #d63031; font-weight: 700; }
+.gantt-header-unit.is-weekend { color: #b2bec3; }
+
+/* 행 */
+.gantt-rows { position: relative; }
+.gantt-row {
+  position: relative;
+  border-bottom: 1px solid #f0f3f5;
+  background: #fff;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.gantt-row:hover { background: #fafbfc; }
+
+/* 주말 배경 */
+.gantt-weekend-bg {
+  position: absolute;
+  top: 0; bottom: 0;
+  background: rgba(0,0,0,0.025);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 오늘 선 */
+.gantt-today-line {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  background: #d63031;
+  opacity: 0.5;
+  z-index: 6;
+  pointer-events: none;
+}
+
+/* 이벤트 바 */
+.gantt-bar {
+  position: absolute;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  font-size: 0.71rem;
+  font-weight: 600;
+  color: #fff;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+  transition: filter 0.12s;
+  z-index: 3;
+  box-sizing: border-box;
+}
+.gantt-bar:hover { filter: brightness(1.12); z-index: 4; }
+
+/* 빈 상태 */
+.gantt-empty {
+  padding: 80px 40px;
+  text-align: center;
+  color: #b2bec3;
+  font-size: 0.95rem;
+  line-height: 1.8;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- ── 툴바 ────────────────────────────────────────────── -->
+<div class="project-toolbar">
+  <div class="view-btns">
+    <button class="view-btn" data-view="month" onclick="setView('month')">월</button>
+    <button class="view-btn active" data-view="week" onclick="setView('week')">주</button>
+    <button class="view-btn" data-view="day" onclick="setView('day')">일</button>
+  </div>
+  <div class="nav-btns">
+    <button class="nav-btn" onclick="navPrev()">&#9664;</button>
+    <span class="nav-label" id="nav-label">-</span>
+    <button class="nav-btn" onclick="navNext()">&#9654;</button>
+    <button class="nav-btn" onclick="navToday()">오늘</button>
+  </div>
+  <div class="spacer"></div>
+  <select id="team-filter" onchange="loadData()">
+    <option value="">전체 팀</option>
+    {% for team in teams %}
+    <option value="{{ team.id }}">{{ team.name }}</option>
+    {% endfor %}
+  </select>
+</div>
+
+<!-- ── 간트 영역 ─────────────────────────────────────── -->
+<div class="gantt-outer">
+  <div class="gantt-scroll">
+    <!-- 사이드바 -->
+    <div class="gantt-sidebar">
+      <div class="gantt-sidebar-header">프로젝트</div>
+      <div class="gantt-sidebar-rows" id="sidebar-rows"></div>
+    </div>
+    <!-- 타임라인 -->
+    <div class="gantt-timeline" id="gantt-timeline">
+      <div class="gantt-timeline-inner" id="gantt-inner">
+        <div class="gantt-header" id="gantt-header">
+          <div class="gantt-header-months" id="gantt-months"></div>
+          <div class="gantt-header-units" id="gantt-units"></div>
+        </div>
+        <div class="gantt-rows" id="gantt-rows"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 설정 ─────────────────────────────────────────────────
+const VIEW_CFG = {
+  month: { dayPx: 4,  daysShown: 365 },
+  week:  { dayPx: 14, daysShown: 91  },
+  day:   { dayPx: 40, daysShown: 28  },
+};
+
+const PROJECT_COLORS = [
+  '#6c5ce7','#00b894','#0984e3','#e17055','#fd79a8',
+  '#00cec9','#fdcb6e','#a29bfe','#55efc4','#fab1a0',
+  '#74b9ff','#ff7675','#81ecec','#ffeaa7','#636e72',
+];
+
+function projectColor(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  return PROJECT_COLORS[h % PROJECT_COLORS.length];
+}
+
+// ── 상태 ─────────────────────────────────────────────────
+let currentView = 'week';
+let viewStart   = null;   // Date (로컬 자정)
+let allProjects = [];
+
+const LANE_H    = 28;   // 레인 높이(px)
+const ROW_PAD   = 6;    // 행 상하 패딩(px)
+const BAR_H     = 22;   // 바 높이(px)
+
+// ── 날짜 유틸 ─────────────────────────────────────────────
+function parseDate(s) {
+  if (!s) return null;
+  const [y, m, d] = s.split('T')[0].split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function addDays(date, n) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+function daysBetween(a, b) {
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+function fmtDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtMonth(d) {
+  return `${d.getFullYear()}년 ${d.getMonth()+1}월`;
+}
+function isoWeek(d) {
+  const tmp = new Date(d); tmp.setHours(0,0,0,0);
+  tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7));
+  const jan4 = new Date(tmp.getFullYear(), 0, 4);
+  return 1 + Math.round(((tmp - jan4) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+}
+function today() { const d = new Date(); d.setHours(0,0,0,0); return d; }
+
+// ── 네비게이션 ───────────────────────────────────────────
+function navToday() {
+  const cfg = VIEW_CFG[currentView];
+  viewStart = addDays(today(), -Math.floor(cfg.daysShown / 3));
+  render();
+  requestAnimationFrame(scrollToToday);
+}
+function navPrev() {
+  viewStart = addDays(viewStart, -Math.floor(VIEW_CFG[currentView].daysShown / 2));
+  render();
+}
+function navNext() {
+  viewStart = addDays(viewStart, Math.floor(VIEW_CFG[currentView].daysShown / 2));
+  render();
+}
+function setView(v) {
+  currentView = v;
+  document.querySelectorAll('.view-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === v));
+  render();
+  requestAnimationFrame(scrollToToday);
+}
+
+// ── 데이터 로드 ──────────────────────────────────────────
+async function loadData() {
+  const teamId = document.getElementById('team-filter').value;
+  const url = '/api/project-timeline' + (teamId ? `?team_id=${teamId}` : '');
+  const res = await fetch(url);
+  allProjects = await res.json();
+  render();
+  requestAnimationFrame(scrollToToday);
+}
+
+// ── 레인 배정 (겹치는 이벤트 처리) ─────────────────────────
+function assignLanes(events) {
+  const laneEnds = []; // 각 레인의 현재 종료 시각(ms)
+  const result = [];
+  for (const e of events) {
+    const start = parseDate(e.start_datetime);
+    const end   = e.end_datetime ? parseDate(e.end_datetime) : start;
+    if (!start) continue;
+    const startTs = start.getTime();
+    const endTs   = end.getTime();
+    let lane = laneEnds.findIndex(le => le <= startTs);
+    if (lane === -1) { lane = laneEnds.length; }
+    laneEnds[lane] = endTs;
+    result.push({ ev: e, lane });
+  }
+  return { items: result, laneCount: Math.max(1, laneEnds.length) };
+}
+
+// ── 렌더링 ──────────────────────────────────────────────
+function render() {
+  const { dayPx, daysShown } = VIEW_CFG[currentView];
+  const totalW = daysShown * dayPx;
+  const viewEnd = addDays(viewStart, daysShown);
+  const tod = today();
+
+  // 네비 레이블
+  const navLabel = document.getElementById('nav-label');
+  if (currentView === 'month') {
+    const endLabel = addDays(viewStart, daysShown - 1);
+    navLabel.textContent = viewStart.getFullYear() === endLabel.getFullYear()
+      ? `${viewStart.getFullYear()}년`
+      : `${viewStart.getFullYear()} ~ ${endLabel.getFullYear()}`;
+  } else {
+    navLabel.textContent = `${fmtDate(viewStart)} ~ ${fmtDate(addDays(viewStart, daysShown - 1))}`;
+  }
+
+  // 내부 너비 설정
+  document.getElementById('gantt-inner').style.width = totalW + 'px';
+
+  // ── 헤더 ─────────────────────────────────────────────
+  const monthsEl = document.getElementById('gantt-months');
+  const unitsEl  = document.getElementById('gantt-units');
+  monthsEl.innerHTML = '';
+  unitsEl.innerHTML  = '';
+
+  // 월 레이블
+  let prevMk = null, mStart = 0;
+  const addMonthLabel = (endPx, startPx, startDay) => {
+    const w = endPx - startPx;
+    if (w < 2) return;
+    const el = document.createElement('div');
+    el.className = 'gantt-header-month';
+    el.style.left  = startPx + 'px';
+    el.style.width = w + 'px';
+    el.textContent = fmtMonth(addDays(viewStart, startDay));
+    monthsEl.appendChild(el);
+  };
+  for (let i = 0; i <= daysShown; i++) {
+    const d = addDays(viewStart, i);
+    const mk = d.getFullYear() * 100 + d.getMonth();
+    if (mk !== prevMk) {
+      if (prevMk !== null) addMonthLabel(i * dayPx, mStart, Math.round(mStart / dayPx));
+      prevMk = mk; mStart = i * dayPx;
+    }
+  }
+  addMonthLabel(daysShown * dayPx, mStart, Math.round(mStart / dayPx));
+
+  // 단위 레이블 (월뷰: 주번호 / 주·일뷰: 일자)
+  const DAY_KO = ['일','월','화','수','목','금','토'];
+
+  if (currentView === 'month') {
+    // 주번호
+    let prevWk = null, wStart = 0;
+    const addWeekLabel = (endPx, startPx, startDay) => {
+      const w = endPx - startPx;
+      if (w < 2) return;
+      const el = document.createElement('div');
+      el.className = 'gantt-header-unit';
+      el.style.left  = startPx + 'px';
+      el.style.width = w + 'px';
+      el.textContent = 'W' + isoWeek(addDays(viewStart, startDay));
+      unitsEl.appendChild(el);
+    };
+    for (let i = 0; i <= daysShown; i++) {
+      const d = addDays(viewStart, i);
+      const wk = d.getFullYear() * 100 + isoWeek(d);
+      if (wk !== prevWk) {
+        if (prevWk !== null) addWeekLabel(i * dayPx, wStart, Math.round(wStart / dayPx));
+        prevWk = wk; wStart = i * dayPx;
+      }
+    }
+    addWeekLabel(daysShown * dayPx, wStart, Math.round(wStart / dayPx));
+  } else {
+    // 개별 일자
+    for (let i = 0; i < daysShown; i++) {
+      const d = addDays(viewStart, i);
+      const el = document.createElement('div');
+      el.className = 'gantt-header-unit';
+      const isToday   = daysBetween(tod, d) === 0;
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      if (isToday)   el.classList.add('is-today');
+      if (isWeekend && !isToday) el.classList.add('is-weekend');
+      el.style.left  = (i * dayPx) + 'px';
+      el.style.width = dayPx + 'px';
+      el.textContent = currentView === 'week'
+        ? String(d.getDate())
+        : `${d.getDate()}(${DAY_KO[d.getDay()]})`;
+      unitsEl.appendChild(el);
+    }
+  }
+
+  // ── 행 ───────────────────────────────────────────────
+  const sidebarEl = document.getElementById('sidebar-rows');
+  const rowsEl    = document.getElementById('gantt-rows');
+  sidebarEl.innerHTML = '';
+  rowsEl.innerHTML    = '';
+
+  if (allProjects.length === 0) {
+    rowsEl.innerHTML = `<div class="gantt-empty">프로젝트가 있는 일정이 없습니다.<br>일정 등록 시 프로젝트 이름을 입력하세요.</div>`;
+    return;
+  }
+
+  let totalH = 0;
+
+  allProjects.forEach(proj => {
+    const color = projectColor(proj.name);
+
+    // 현재 뷰 범위에 걸치는 이벤트만
+    const visible = proj.events.filter(e => {
+      const s = parseDate(e.start_datetime);
+      const en = e.end_datetime ? parseDate(e.end_datetime) : s;
+      return s && s < viewEnd && en >= viewStart;
+    }).sort((a, b) => a.start_datetime > b.start_datetime ? 1 : -1);
+
+    const { items, laneCount } = assignLanes(visible);
+    const rowH = laneCount * LANE_H + ROW_PAD * 2;
+
+    // 사이드바 행
+    const sRow = document.createElement('div');
+    sRow.className = 'gantt-sidebar-row';
+    sRow.style.height = rowH + 'px';
+    sRow.title = proj.name;
+    const colorBar = document.createElement('div');
+    colorBar.className = 'sidebar-row-color';
+    colorBar.style.background = color;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'sidebar-row-name';
+    nameSpan.textContent = proj.name;
+    sRow.appendChild(colorBar);
+    sRow.appendChild(nameSpan);
+    sidebarEl.appendChild(sRow);
+
+    // 간트 행
+    const gRow = document.createElement('div');
+    gRow.className = 'gantt-row';
+    gRow.style.height = rowH + 'px';
+    gRow.style.width  = totalW + 'px';
+
+    // 주말 배경
+    for (let i = 0; i < daysShown; i++) {
+      const d = addDays(viewStart, i);
+      if (d.getDay() === 0 || d.getDay() === 6) {
+        const bg = document.createElement('div');
+        bg.className = 'gantt-weekend-bg';
+        bg.style.left  = (i * dayPx) + 'px';
+        bg.style.width = dayPx + 'px';
+        gRow.appendChild(bg);
+      }
+    }
+
+    // 이벤트 바
+    items.forEach(({ ev, lane }) => {
+      const evStart = parseDate(ev.start_datetime);
+      const evEnd   = ev.end_datetime ? parseDate(ev.end_datetime) : evStart;
+      const s = Math.max(0, daysBetween(viewStart, evStart));
+      const e = Math.min(daysShown, daysBetween(viewStart, evEnd) + 1);
+      if (e <= s) return;
+
+      const barW = Math.max((e - s) * dayPx - 3, 8);
+      const barL = s * dayPx + 1;
+      const barT = ROW_PAD + lane * LANE_H + Math.floor((LANE_H - BAR_H) / 2);
+
+      const bar = document.createElement('div');
+      bar.className = 'gantt-bar';
+      bar.style.left       = barL + 'px';
+      bar.style.width      = barW + 'px';
+      bar.style.top        = barT + 'px';
+      bar.style.height     = BAR_H + 'px';
+      bar.style.background = color;
+      bar.textContent = ev.title;
+      bar.title = [
+        ev.title,
+        ev.start_datetime?.split('T')[0] + (ev.end_datetime ? ' ~ ' + ev.end_datetime.split('T')[0] : ''),
+        ev.assignee ? '담당: ' + ev.assignee : '',
+      ].filter(Boolean).join('\n');
+      bar.onclick = () => openBarDetail(ev.id);
+      gRow.appendChild(bar);
+    });
+
+    rowsEl.appendChild(gRow);
+    totalH += rowH;
+  });
+
+  // 오늘 선
+  const todayOff = daysBetween(viewStart, tod);
+  if (todayOff >= 0 && todayOff < daysShown) {
+    const line = document.createElement('div');
+    line.className = 'gantt-today-line';
+    line.style.left   = (todayOff * dayPx + Math.floor(dayPx / 2)) + 'px';
+    line.style.height = totalH + 'px';
+    rowsEl.appendChild(line);
+  }
+}
+
+// ── 오늘로 스크롤 ────────────────────────────────────────
+function scrollToToday() {
+  const { dayPx } = VIEW_CFG[currentView];
+  const tl  = document.getElementById('gantt-timeline');
+  const off = daysBetween(viewStart, today()) * dayPx;
+  tl.scrollLeft = Math.max(0, off - tl.clientWidth / 3);
+}
+
+// ── 스크롤 동기화 (y축) ─────────────────────────────────
+document.getElementById('gantt-timeline').addEventListener('scroll', function() {
+  document.getElementById('sidebar-rows').scrollTop = this.scrollTop;
+});
+
+// ── 바 클릭 → 이벤트 모달 열기 ──────────────────────────
+async function openBarDetail(eventId) {
+  const res = await fetch(`/api/events/${eventId}`);
+  if (!res.ok) return;
+  const ev = await res.json();
+  openModal('', ev); // DB 포맷 그대로 전달
+}
+
+// 저장/삭제 후 타임라인 갱신
+window.onEventSaved = loadData;
+
+// 모달 닫힐 때 데이터 재로드
+document.addEventListener('DOMContentLoaded', () => {
+  const overlay = document.getElementById('modal-overlay');
+  if (overlay) {
+    new MutationObserver(() => {
+      if (overlay.classList.contains('hidden')) loadData();
+    }).observe(overlay, { attributes: true, attributeFilter: ['class'] });
+  }
+});
+
+// ── 초기화 ───────────────────────────────────────────────
+(function init() {
+  const cfg = VIEW_CFG[currentView];
+  viewStart = addDays(today(), -Math.floor(cfg.daysShown / 3));
+  loadData();
+})();
+</script>
+{% endblock %}

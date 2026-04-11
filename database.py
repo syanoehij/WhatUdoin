@@ -247,6 +247,28 @@ def update_kanban_status(event_id: int, kanban_status=_MISSING, priority=_MISSIN
         )
 
 
+def get_project_timeline(team_id: int = None) -> list[dict]:
+    """프로젝트별 일정 반환 (project 필드가 있는 이벤트)"""
+    with get_conn() as conn:
+        if team_id:
+            rows = conn.execute(
+                "SELECT * FROM events WHERE project IS NOT NULL AND project != '' AND team_id = ? ORDER BY start_datetime",
+                (team_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM events WHERE project IS NOT NULL AND project != '' ORDER BY start_datetime"
+            ).fetchall()
+    projects: dict[str, list] = {}
+    for row in rows:
+        d = dict(row)
+        p = d["project"]
+        if p not in projects:
+            projects[p] = []
+        projects[p].append(d)
+    return [{"name": name, "events": evs} for name, evs in sorted(projects.items())]
+
+
 def get_projects() -> list[str]:
     with get_conn() as conn:
         rows = conn.execute(
