@@ -8,7 +8,7 @@ DEFAULT_MODEL = "gemma4:e2b"
 
 
 def get_available_models() -> list[str]:
-    """Ollama에서 사용 가능한 모델 목록 반환. 실패 시 기본 모델만 반환."""
+    """Ollama에서 사용 가능한 모델 목록 반환. DEFAULT_MODEL을 맨 앞에 배치. 실패 시 기본 모델만 반환."""
     try:
         response = requests.get(
             "http://localhost:11434/api/tags",
@@ -16,7 +16,13 @@ def get_available_models() -> list[str]:
         )
         response.raise_for_status()
         models = [m["name"] for m in response.json().get("models", [])]
-        return models if models else [DEFAULT_MODEL]
+        if not models:
+            return [DEFAULT_MODEL]
+        # DEFAULT_MODEL을 맨 앞으로, 나머지는 알파벳 순
+        rest = sorted(m for m in models if m != DEFAULT_MODEL)
+        if DEFAULT_MODEL in models:
+            return [DEFAULT_MODEL] + rest
+        return rest
     except Exception:
         return [DEFAULT_MODEL]
 
@@ -157,6 +163,81 @@ def generate_weekly_report(past_events: list[dict], future_events: list[dict], b
     )
     response.raise_for_status()
     return response.json().get("response", "보고서 생성에 실패했습니다.")
+
+
+def review_all_conflicts(candidates: list[dict], existing: list[dict], model: str = DEFAULT_MODEL) -> list[dict]:
+    """신규 일정 전체를 기존 일정과 비교해 중복 여부를 AI가 판단.
+
+    candidates: [{title, date, assignee}]   — 새로 만들 일정 목록
+    existing:   [{title, start_datetime, assignee}]  — DB 기존 일정
+    반환: [{"is_duplicate": bool, "reason": str, "existing_title": str|None}]  (candidates 순서)
+    """
+    if not candidates:
+        return []
+
+    today = date.today().isoformat()
+
+    if existing:
+        existing_text = "\n".join(
+            f'- "{e.get("title","")}" ({(e.get("start_datetime") or "")[:10]},'
+            f' 담당:{e.get("assignee") or "미지정"})'
+            for e in existing
+        )
+    else:
+        existing_text = "- (없음)"
+
+    candidates_text = "\n".join(
+        f'{i+1}. "{c.get("title","")}" ({c.get("date","")}, 담당:{c.get("assignee") or "미지정"})'
+        for i, c in enumerate(candidates)
+    )
+
+    prompt = f"""아래 신규 일정들이 기존 일정과 중복인지 판단하세요. JSON만 출력하세요.
+
+오늘: {today}
+
+[기존 일정]
+{existing_text}
+
+[신규 일정 — 번호는 1부터]
+{candidates_text}
+
+출력 형식:
+[{{"index":1,"is_duplicate":false,"reason":"기존에 없는 새 일정","existing_title":null}},{{"index":2,"is_duplicate":true,"reason":"'xxx'와 동일 날짜·동일 업무","existing_title":"xxx"}}]
+
+판단 기준:
+- 제목·날짜가 모두 같으면 중복
+- 제목이 유사해도 회차(1차/2차)·단계가 다르면 중복 아님
+- 기존 일정에 없으면 반드시 중복 아님
+- 애매하면 is_duplicate:false
+- JSON 배열만 출력, 신규 일정 개수({len(candidates)}개)만큼 항목 필수
+
+JSON:"""
+
+    response = requests.post(
+        OLLAMA_URL,
+        json={"model": model, "prompt": prompt, "stream": False},
+        timeout=90,
+    )
+    response.raise_for_status()
+    raw = response.json().get("response", "")
+
+    default = [{"is_duplicate": False, "reason": "", "existing_title": None}] * len(candidates)
+    try:
+        result_list = _extract_json(raw)
+        out = [{"is_duplicate": False, "reason": "", "existing_title": None} for _ in candidates]
+        for item in result_list:
+            if not isinstance(item, dict):
+                continue
+            idx = int(item.get("index", 0)) - 1  # 1-based → 0-based
+            if 0 <= idx < len(candidates):
+                out[idx] = {
+                    "is_duplicate": bool(item.get("is_duplicate")),
+                    "reason":        str(item.get("reason", "")),
+                    "existing_title": item.get("existing_title") or None,
+                }
+        return out
+    except Exception:
+        return default
 
 
 def to_event_payload(parsed: dict) -> dict:

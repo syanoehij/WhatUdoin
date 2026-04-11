@@ -56,10 +56,16 @@ def init_db():
                 content TEXT NOT NULL DEFAULT '',
                 team_id INTEGER,
                 created_by INTEGER NOT NULL,
+                is_team_doc INTEGER DEFAULT 1,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # 기존 DB에 is_team_doc 컬럼이 없는 경우 추가
+        try:
+            conn.execute("ALTER TABLE meetings ADD COLUMN is_team_doc INTEGER DEFAULT 1")
+        except Exception:
+            pass
         # ── meeting_histories ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS meeting_histories (
@@ -204,6 +210,19 @@ def update_event(event_id: int, data: dict):
                 updated_at     = CURRENT_TIMESTAMP
                WHERE id = :id""",
             data,
+        )
+
+
+def update_event_datetime(event_id: int, start_datetime: str, end_datetime: str | None, all_day: int):
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE events SET
+                start_datetime = ?,
+                end_datetime   = ?,
+                all_day        = ?,
+                updated_at     = CURRENT_TIMESTAMP
+               WHERE id = ?""",
+            (start_datetime, end_datetime, all_day, event_id),
         )
 
 
@@ -540,16 +559,16 @@ def get_meeting(meeting_id: int):
     return dict(row) if row else None
 
 
-def create_meeting(title: str, content: str, team_id, created_by: int, meeting_date: str = None) -> int:
+def create_meeting(title: str, content: str, team_id, created_by: int, meeting_date: str = None, is_team_doc: int = 1) -> int:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO meetings (title, content, team_id, created_by, meeting_date) VALUES (?, ?, ?, ?, ?)",
-            (title, content, team_id, created_by, meeting_date)
+            "INSERT INTO meetings (title, content, team_id, created_by, meeting_date, is_team_doc) VALUES (?, ?, ?, ?, ?, ?)",
+            (title, content, team_id, created_by, meeting_date, is_team_doc)
         )
     return cur.lastrowid
 
 
-def update_meeting(meeting_id: int, title: str, content: str, edited_by: int, meeting_date: str = None):
+def update_meeting(meeting_id: int, title: str, content: str, edited_by: int, meeting_date: str = None, is_team_doc: int = 1):
     with get_conn() as conn:
         current = conn.execute(
             "SELECT content FROM meetings WHERE id = ?", (meeting_id,)
@@ -560,8 +579,8 @@ def update_meeting(meeting_id: int, title: str, content: str, edited_by: int, me
                 (meeting_id, current["content"], edited_by)
             )
         conn.execute(
-            "UPDATE meetings SET title = ?, content = ?, meeting_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (title, content, meeting_date, meeting_id)
+            "UPDATE meetings SET title = ?, content = ?, meeting_date = ?, is_team_doc = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (title, content, meeting_date, is_team_doc, meeting_id)
         )
 
 
@@ -593,6 +612,18 @@ def get_events_by_meeting(meeting_id: int):
         ).fetchall()
     return [dict(r) for r in rows]
 
+
+def get_events_for_conflict_check() -> list[dict]:
+    """중복 감지용: 과거 3개월 ~ 미래 12개월 이벤트 title/date/assignee 반환"""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT id, title, start_datetime, assignee
+               FROM events
+               WHERE date(start_datetime) >= date('now', '-3 months')
+                 AND date(start_datetime) <= date('now', '+12 months')
+               ORDER BY start_datetime"""
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 def get_events_by_date_range(start_date: str, end_date: str, team_id: int = None) -> list[dict]:
     """날짜 범위로 이벤트 조회 (start_date ~ end_date 포함)"""

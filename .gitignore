@@ -3,6 +3,6 @@ __pycache__/
 events.db
 .claude/
 .playwright-mcp/
-*.png
-*.jpg
-*.jpeg
+/*.png
+/*.jpg
+/*.jpeg

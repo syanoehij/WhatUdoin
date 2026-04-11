@@ -49,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
   calendar = new FullCalendar.Calendar(el, {
     initialView: 'dayGridMonth',
     locale: 'ko',
+    firstDay: 1,
     height: 'auto',
     headerToolbar: {
       left: 'prev,next today',
@@ -56,6 +57,9 @@ document.addEventListener('DOMContentLoaded', () => {
       right: 'dayGridMonth,timeGridTwoWeek,timeGridWeek,timeGridDay',
     },
     buttonText: { today: '오늘', month: '월', week: '주', day: '일' },
+    slotMinTime: '06:00:00',
+    slotMaxTime: '30:00:00',
+    scrollTime: '06:00:00',
     views: {
       timeGridTwoWeek: {
         type: 'timeGrid',
@@ -65,8 +69,24 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     eventSources: [
       { url: '/api/events' },
-      { url: '/api/meetings/calendar', color: '#00b894', textColor: 'white' },
+      { url: '/api/meetings/calendar', color: '#00b894', textColor: 'white', editable: false },
     ],
+    editable: !!(CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor')),
+    eventAllow(dropInfo, draggedEvent) {
+      // 회의록 이벤트는 드래그 불가
+      if (draggedEvent.extendedProps.type === 'meeting') return false;
+      // 진짜 all-day 이벤트는 time grid로 끌어내리는 것 방지
+      if (draggedEvent.allDay && !dropInfo.allDay) return false;
+      return true;
+    },
+    async eventResize(info) {
+      const ok = await patchEventDatetime(info.event);
+      if (!ok) info.revert();
+    },
+    async eventDrop(info) {
+      const ok = await patchEventDatetime(info.event);
+      if (!ok) info.revert();
+    },
     datesSet() { applyStickyAllDay(); },
     eventDidMount() { applyStickyAllDay(); },
     eventClick(info) {
@@ -153,6 +173,44 @@ document.addEventListener('DOMContentLoaded', () => {
     e.deltaY > 0 ? calendar.next() : calendar.prev();
   }, { passive: false });
 });
+
+// ── 드래그로 일정 날짜 변경 ──────────────────────────────
+async function patchEventDatetime(fcEvent) {
+  const allDay = fcEvent.allDay ? 1 : 0;
+  let startStr = fcEvent.startStr;
+  let endStr   = fcEvent.endStr || null;
+
+  // all-day 이벤트의 경우 FullCalendar는 end를 exclusive로 반환 (하루 더 뒤)
+  // DB에는 실제 마지막 날을 저장하므로 하루 빼줌
+  if (allDay && endStr) {
+    const d = new Date(endStr);
+    d.setDate(d.getDate() - 1);
+    endStr = d.toISOString().slice(0, 10);
+  }
+
+  // ISO 문자열에서 시간 부분 제거 (all-day는 날짜만)
+  const startDatetime = allDay ? startStr.slice(0, 10) + 'T00:00' : startStr.slice(0, 16);
+  const endDatetime   = endStr
+    ? (allDay ? endStr.slice(0, 10) + 'T00:00' : endStr.slice(0, 16))
+    : null;
+
+  try {
+    const res = await fetch(`/api/events/${fcEvent.id}/datetime`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start_datetime: startDatetime, end_datetime: endDatetime, all_day: allDay }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.detail || '저장에 실패했습니다.');
+      return false;
+    }
+    return true;
+  } catch {
+    alert('서버 연결 오류');
+    return false;
+  }
+}
 
 // ── 해당 날짜 기존 일정 표시 ──────────────────────────────
 function updateDateEvents(start, end) {

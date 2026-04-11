@@ -1,25 +1,21 @@
 {% extends "base.html" %}
 {% block title %}WhatUDoin — 회의록{% endblock %}
 
-{% block content %}
-<div class="page-header">
-  <h2 class="page-title">📋 회의록</h2>
-  <div style="display:flex;gap:8px;align-items:center;">
-    {% if user and user.role in ('editor', 'admin') %}
-    <button class="btn btn-outline" onclick="openWeeklyReportModal()">📊 주간 업무 보고</button>
-    <a href="/meetings/new" class="btn btn-primary">+ 새 회의록</a>
-    {% endif %}
-  </div>
-</div>
+{% block extra_head %}
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  main { max-width: none; padding: 0; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+</style>
+{% endblock %}
 
-<!-- ── 주간 업무 보고 모달 ── -->
+{% block content %}
+<!-- 주간 업무 보고 모달 -->
 <div id="weekly-overlay" class="modal-overlay hidden" onclick="closeWeeklyReport(event)">
   <div class="modal" style="max-width:560px;width:95%;">
     <div class="modal-header">
       <h2>📊 주간 업무 보고서 생성</h2>
       <button class="icon-btn" onclick="closeWeeklyReport()">✕</button>
     </div>
-
     <div id="weekly-form">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
         <div>
@@ -53,49 +49,174 @@
         </div>
       </div>
     </div>
-
     <div id="weekly-loading" class="hidden" style="text-align:center;padding:48px 0;">
       <div class="ai-spinner"></div>
       <p style="margin-top:16px;color:var(--text-faint);">AI가 보고서를 작성 중입니다…<br><span style="font-size:12px;">잠시 기다려 주세요 (보통 10~30초)</span></p>
     </div>
-
     <div id="weekly-error" class="hidden" style="margin-top:16px;padding:12px;background:var(--danger-bg,#fee);border-radius:6px;color:var(--danger,#c00);"></div>
   </div>
 </div>
 
-{% if meetings %}
-<div class="meeting-list">
-  {% for m in meetings %}
-  <a href="/meetings/{{ m.id }}?from=meetings" class="meeting-card">
-    <div class="meeting-card-header">
-      <span class="meeting-title">{{ m.title }}</span>
-      {% if m.event_count %}
-      <span class="event-count-badge">📅 {{ m.event_count }}개 일정</span>
+<!-- 좌우 분할 레이아웃 -->
+<div class="meetings-layout">
+
+  <!-- ── 왼쪽: 월 네비게이터 ── -->
+  <aside class="month-nav">
+    <div class="month-nav-header">
+      <span class="page-title" style="font-size:1rem;font-weight:700;">📋 회의록</span>
+    </div>
+    <div class="month-nav-body" id="month-nav-body">
+      <!-- JS 렌더링 -->
+    </div>
+  </aside>
+
+  <!-- ── 오른쪽: 회의록 리스트 ── -->
+  <div class="meetings-content">
+    <div class="meetings-content-header" id="meetings-header">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span id="current-month-label" class="meetings-month-label"></span>
+        <span id="current-month-count" class="count-badge"></span>
+      </div>
+      {% if user and user.role in ('editor', 'admin') %}
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline btn-sm" onclick="openWeeklyReportModal()">📊 주간 업무 작성(AI)</button>
+        <a href="/meetings/new" class="btn btn-primary btn-sm">+ 새 회의록</a>
+      </div>
       {% endif %}
     </div>
-    <div class="meeting-card-meta">
-      <span>{{ m.author_name or '-' }}</span>
-      {% if m.team_name %}<span class="badge-team">{{ m.team_name }}</span>{% endif %}
-      <span class="text-muted">{{ m.updated_at[:10] }}</span>
+
+    <table class="meeting-table" id="meetings-table">
+      <thead>
+        <tr>
+          <th class="col-title">제목</th>
+          <th class="col-type">구분</th>
+          <th class="col-author">작성자</th>
+          <th class="col-team">팀</th>
+          <th class="col-events">일정</th>
+          <th class="col-date">날짜</th>
+        </tr>
+      </thead>
+      <tbody id="meetings-tbody"></tbody>
+    </table>
+
+    <div class="empty-state hidden" id="meetings-empty">
+      <p>해당 월에 등록된 회의록이 없습니다.</p>
     </div>
-    {% if m.content %}
-    <p class="meeting-preview">{{ m.content[:120] }}{% if m.content|length > 120 %}…{% endif %}</p>
-    {% endif %}
-  </a>
-  {% endfor %}
+  </div>
 </div>
-{% else %}
-<div class="empty-state">
-  <p>등록된 회의록이 없습니다.</p>
-  {% if user and user.role in ('editor', 'admin') %}
-  <a href="/meetings/new" class="btn btn-primary" style="margin-top:12px">첫 회의록 작성하기</a>
-  {% endif %}
-</div>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script>
+const ALL_MEETINGS = {{ meetings | tojson | safe }};
+
+// ── 월별 그룹핑 ─────────────────────────────────────────
+// key: "YYYY-MM", value: meeting[]
+const byMonth = {};
+ALL_MEETINGS.forEach(m => {
+  const ym = (m.meeting_date || m.updated_at || '').slice(0, 7);
+  if (!ym) return;
+  if (!byMonth[ym]) byMonth[ym] = [];
+  byMonth[ym].push(m);
+});
+
+// 연도별 그룹핑 (내림차순)
+const byYear = {};
+Object.keys(byMonth).sort().reverse().forEach(ym => {
+  const yr = ym.slice(0, 4);
+  if (!byYear[yr]) byYear[yr] = [];
+  byYear[yr].push(ym);
+});
+
+let selectedYM = null;
+
+// ── 왼쪽 네비게이터 렌더링 ───────────────────────────────
+function renderMonthNav() {
+  const body = document.getElementById('month-nav-body');
+  if (!Object.keys(byYear).length) {
+    body.innerHTML = '<p class="text-muted" style="padding:16px;font-size:0.82rem;">회의록이 없습니다.</p>';
+    return;
+  }
+
+  body.innerHTML = Object.keys(byYear).sort().reverse().map(yr => `
+    <div class="month-nav-year">
+      <div class="month-nav-year-label">${yr}년</div>
+      ${byYear[yr].map(ym => {
+        const mo = parseInt(ym.slice(5));
+        const cnt = byMonth[ym].length;
+        return `<div class="month-nav-item ${ym === selectedYM ? 'active' : ''}"
+                     data-ym="${ym}" onclick="selectMonth('${ym}')">
+          <span>${mo}월</span>
+          <span class="month-nav-count">${cnt}</span>
+        </div>`;
+      }).join('')}
+    </div>
+  `).join('');
+}
+
+// ── 오른쪽 리스트 렌더링 ─────────────────────────────────
+function renderMeetingList(ym) {
+  const meetings = byMonth[ym] || [];
+  const [yr, mo] = ym.split('-');
+  document.getElementById('current-month-label').textContent = `${yr}년 ${parseInt(mo)}월`;
+  document.getElementById('current-month-count').textContent = `${meetings.length}건`;
+
+  const tbody = document.getElementById('meetings-tbody');
+  const empty = document.getElementById('meetings-empty');
+
+  if (!meetings.length) {
+    tbody.innerHTML = '';
+    document.getElementById('meetings-table').style.display = 'none';
+    empty.classList.remove('hidden');
+    return;
+  }
+
+  document.getElementById('meetings-table').style.display = '';
+  empty.classList.add('hidden');
+
+  tbody.innerHTML = meetings.map(m => `
+    <tr class="meeting-row" onclick="location.href='/meetings/${m.id}?from=meetings'">
+      <td class="col-title">${escHtml(m.title)}</td>
+      <td class="col-type">
+        <span class="doc-badge ${m.is_team_doc ? 'doc-team' : 'doc-personal'}">${m.is_team_doc ? '팀' : '개인'}</span>
+      </td>
+      <td class="col-author">${escHtml(m.author_name || '-')}</td>
+      <td class="col-team">${escHtml(m.team_name || '-')}</td>
+      <td class="col-events">${m.event_count ? `<span class="event-count-badge">${m.event_count}</span>` : '-'}</td>
+      <td class="col-date text-muted">${(m.meeting_date || m.updated_at || '').slice(0, 10)}</td>
+    </tr>
+  `).join('');
+}
+
+function selectMonth(ym) {
+  selectedYM = ym;
+  renderMonthNav();
+  renderMeetingList(ym);
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── 초기화 ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // 가장 최근 월 기본 선택
+  const allYMs = Object.keys(byMonth).sort().reverse();
+  if (allYMs.length) {
+    selectMonth(allYMs[0]);
+  } else {
+    document.getElementById('meetings-header').style.display = 'none';
+    document.getElementById('meetings-table').style.display = 'none';
+    document.getElementById('meetings-empty').classList.remove('hidden');
+    document.getElementById('meetings-empty').innerHTML = `
+      <p>등록된 회의록이 없습니다.</p>
+      {% if user and user.role in ('editor', 'admin') %}
+      <a href="/meetings/new" class="btn btn-primary" style="margin-top:12px">첫 회의록 작성하기</a>
+      {% endif %}
+    `;
+  }
+});
+
 // ── 주간 업무 보고 모달 ─────────────────────────────────
 async function openWeeklyReportModal() {
   const today = new Date().toISOString().slice(0, 10);
@@ -103,26 +224,19 @@ async function openWeeklyReportModal() {
   document.getElementById('weekly-error').classList.add('hidden');
   document.getElementById('weekly-loading').classList.add('hidden');
   document.getElementById('weekly-form').style.display = '';
-
-  // 로그인 유저 팀을 기본 선택
-  if (CURRENT_USER && CURRENT_USER.team_id) {
+  if (CURRENT_USER && CURRENT_USER.team_id)
     document.getElementById('weekly-team').value = CURRENT_USER.team_id;
-  }
-
-  // 모델 목록 로드
   try {
-    const res = await fetch('/api/ai/models');
+    const res  = await fetch('/api/ai/models');
     const data = await res.json();
-    const sel = document.getElementById('weekly-model');
+    const sel  = document.getElementById('weekly-model');
     sel.innerHTML = '';
     data.models.forEach((m, i) => {
       const opt = document.createElement('option');
-      opt.value = m;
-      opt.textContent = m + (i === 0 ? ' (기본)' : '');
+      opt.value = m; opt.textContent = m + (i === 0 ? ' (기본)' : '');
       sel.appendChild(opt);
     });
-  } catch (_) { /* 기본값 유지 */ }
-
+  } catch (_) {}
   document.getElementById('weekly-overlay').classList.remove('hidden');
 }
 
@@ -136,27 +250,17 @@ async function generateWeeklyReport() {
   const teamId   = document.getElementById('weekly-team').value;
   const model    = document.getElementById('weekly-model').value;
   if (!baseDate) { alert('기준 날짜를 선택하세요.'); return; }
-
   document.getElementById('weekly-form').style.display = 'none';
   document.getElementById('weekly-loading').classList.remove('hidden');
   document.getElementById('weekly-error').classList.add('hidden');
-
   try {
     const res = await fetch('/api/ai/weekly-report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        base_date: baseDate,
-        team_id:   teamId ? parseInt(teamId) : null,
-        model,
-      }),
+      body: JSON.stringify({ base_date: baseDate, team_id: teamId ? parseInt(teamId) : null, model }),
     });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || '서버 오류');
-    }
+    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || '서버 오류'); }
     const data = await res.json();
-    // 생성된 회의록 편집기로 이동
     location.href = `/meetings/${data.meeting_id}?from=meetings`;
   } catch (err) {
     document.getElementById('weekly-loading').classList.add('hidden');

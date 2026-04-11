@@ -391,6 +391,91 @@ def get_kanban_events(team_id: int = None):
     return db.get_kanban_events(team_id)
 
 
+@app.patch("/api/events/{event_id}/datetime")
+async def update_event_datetime(event_id: int, request: Request):
+    user = _require_editor(request)
+    event = db.get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not auth.can_edit_event(user, event):
+        raise HTTPException(status_code=403, detail="다른 팀의 일정은 수정할 수 없습니다.")
+    data = await request.json()
+    db.update_event_datetime(
+        event_id,
+        start_datetime=data["start_datetime"],
+        end_datetime=data.get("end_datetime"),
+        all_day=data.get("all_day", event.get("all_day", 0)),
+    )
+    return {"ok": True}
+
+
+@app.post("/api/events/check-conflicts")
+async def check_event_conflicts(request: Request):
+    """AI 파싱 결과와 기존 일정의 중복 여부를 검사합니다."""
+    from datetime import datetime as _dt
+    _require_editor(request)
+    data = await request.json()
+    candidates = data.get("events", [])
+    existing = db.get_events_for_conflict_check()
+
+    results = []
+    for cand in candidates:
+        cand_title = (cand.get("title") or "").strip().lower()
+        cand_date  = (cand.get("date") or "")[:10]
+
+        conflict = None
+        for ex in existing:
+            ex_date  = (ex.get("start_datetime") or "")[:10]
+            ex_title = (ex.get("title") or "").strip().lower()
+
+            if not cand_date or not ex_date:
+                continue
+
+            # 날짜 차이 계산 (AI 파싱 오차 ±1일 허용)
+            try:
+                date_diff = abs((_dt.strptime(cand_date, "%Y-%m-%d") - _dt.strptime(ex_date, "%Y-%m-%d")).days)
+            except ValueError:
+                continue
+
+            # 제목 일치: ±1일 이내
+            if date_diff <= 1 and cand_title and ex_title == cand_title:
+                cand_assignee = (cand.get("assignee") or "").strip()
+                ex_assignee   = (ex.get("assignee") or "").strip()
+                # 담당자까지 같으면 exact, 다르면 similar (같은 이름 업무를 다른 사람이 담당)
+                same_assignee = (cand_assignee == ex_assignee)
+                conflict_type = "exact" if same_assignee else "similar"
+                conflict = {"type": conflict_type, "existing_id": ex["id"], "existing_title": ex["title"]}
+                break
+
+            # 부분 포함: 같은 날짜만
+            if date_diff == 0 and cand_title and ex_title and len(cand_title) >= 2 and (
+                cand_title in ex_title or ex_title in cand_title
+            ):
+                conflict = {"type": "similar", "existing_id": ex["id"], "existing_title": ex["title"]}
+                break
+
+        results.append({"conflict": conflict})
+
+    return {"results": results}
+
+
+@app.post("/api/events/ai-conflict-review")
+async def ai_conflict_review(request: Request):
+    """신규 일정 전체를 기존 일정과 비교해 AI가 중복 여부를 최종 판단합니다."""
+    _require_editor(request)
+    data = await request.json()
+    candidates = data.get("events", [])   # [{title, date, assignee}]
+    model      = data.get("model", llm_parser.DEFAULT_MODEL)
+    if not candidates:
+        return {"results": []}
+
+    # AI 검토용 기존 일정: 넓은 풀 사용 (날짜 오차 대응)
+    existing = db.get_events_for_conflict_check()
+
+    results = llm_parser.review_all_conflicts(candidates, existing, model)
+    return {"results": results}
+
+
 @app.patch("/api/events/{event_id}/kanban")
 async def update_event_kanban(event_id: int, request: Request):
     _require_editor(request)
@@ -445,9 +530,10 @@ async def create_meeting(request: Request):
     title = data.get("title", "").strip()
     content = data.get("content", "").strip()
     meeting_date = data.get("meeting_date") or None
+    is_team_doc  = 1 if data.get("is_team_doc", True) else 0
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
-    meeting_id = db.create_meeting(title, content, user.get("team_id"), user["id"], meeting_date)
+    meeting_id = db.create_meeting(title, content, user.get("team_id"), user["id"], meeting_date, is_team_doc)
     return {"id": meeting_id}
 
 
@@ -461,9 +547,10 @@ async def update_meeting(meeting_id: int, request: Request):
     title = data.get("title", "").strip()
     content = data.get("content", "").strip()
     meeting_date = data.get("meeting_date") or None
+    is_team_doc  = 1 if data.get("is_team_doc", True) else 0
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
-    db.update_meeting(meeting_id, title, content, user["id"], meeting_date)
+    db.update_meeting(meeting_id, title, content, user["id"], meeting_date, is_team_doc)
     return {"ok": True}
 
 
@@ -472,6 +559,8 @@ def meetings_calendar():
     meetings = db.get_all_meetings()
     result = []
     for m in meetings:
+        if not m.get("is_team_doc", 1):  # 개인 문서는 캘린더 미노출
+            continue
         date = m.get("meeting_date") or m["created_at"][:10]
         result.append({
             "id": f"meeting-{m['id']}",

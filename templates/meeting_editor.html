@@ -25,11 +25,20 @@
     </div>
 
     <div class="btn-group">
+      {% if user and user.role in ('editor', 'admin') %}
+      <label class="doc-type-toggle" title="팀 문서면 캘린더에 노출됩니다">
+        <input type="checkbox" id="chk-team-doc"
+               {% if meeting and meeting.is_team_doc %}checked{% endif %} />
+        <span class="doc-type-label" id="doc-type-label">
+          {% if meeting and meeting.is_team_doc %}팀 문서{% else %}개인 문서{% endif %}
+        </span>
+      </label>
+      {% endif %}
       {% if meeting %}
       <a href="/meetings/{{ meeting.id }}/history" class="btn btn-sm">수정 이력</a>
       {% endif %}
       {% if user and user.role in ('editor', 'admin') %}
-      <button id="btn-ai-toggle" class="btn btn-sm" onclick="toggleAiPanel()">🤖 AI</button>
+      <button id="btn-ai-toggle" class="btn btn-sm" onclick="toggleAiPanel()">{% if meeting_events %}일정 관리{% else %}일정 생성(AI){% endif %}</button>
       {% if meeting %}
       <button class="btn btn-sm btn-danger" onclick="deleteMeeting()">삭제</button>
       {% endif %}
@@ -72,7 +81,7 @@
           <button class="btn btn-primary" onclick="runAiParse()" id="btn-run-ai">일정 생성</button>
         </div>
         <p class="ai-panel-desc">회의록을 분석해서 일정을 자동으로 추출합니다.</p>
-        <div id="ai-loading" class="loading hidden">⏳ AI가 분석 중입니다...</div>
+        <div id="ai-loading" class="loading hidden"><span id="ai-loading-msg">⏳ AI가 분석 중입니다...</span></div>
         <div id="ai-error" class="form-error hidden"></div>
       </div>
 
@@ -98,6 +107,9 @@
     {% endif %}
 
   </div><!-- /editor-body -->
+<!-- 자동완성 공유 드롭다운 -->
+<ul id="editor-ac-dd" class="ac-dropdown hidden" style="position:fixed;z-index:9999;"></ul>
+
 </div><!-- /editor-page -->
 {% endblock %}
 
@@ -138,6 +150,22 @@ function initMeetingEditor() {
   }
 
   if (!IS_EDITOR) return;
+
+  // 팀/개인 문서 토글 레이블 동기화
+  const chkTeamDoc = document.getElementById('chk-team-doc');
+  const lblDocType = document.getElementById('doc-type-label');
+  if (chkTeamDoc && lblDocType) {
+    chkTeamDoc.addEventListener('change', () => {
+      lblDocType.textContent = chkTeamDoc.checked ? '팀 문서' : '개인 문서';
+    });
+  }
+
+  // 자동완성 데이터 로드
+  loadEditorAcData();
+
+  // AI 버튼 초기 레이블
+  updateAiBtnLabel();
+
 
   // Toast UI 에디터 초기화
   editor = new toastui.Editor({
@@ -239,11 +267,12 @@ async function saveMeeting() {
   const method = MEETING_ID ? 'PUT' : 'POST';
   const url    = MEETING_ID ? `/api/meetings/${MEETING_ID}` : '/api/meetings';
   const meetingDate = document.getElementById('meeting-date')?.value || null;
+  const isTeamDoc   = document.getElementById('chk-team-doc')?.checked ?? true;
 
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, content, meeting_date: meetingDate }),
+    body: JSON.stringify({ title, content, meeting_date: meetingDate, is_team_doc: isTeamDoc }),
   });
 
   if (res.ok) {
@@ -285,7 +314,13 @@ async function runAiParse() {
       showAiError('일정 정보를 찾지 못했습니다. 더 구체적인 내용을 작성해보세요.');
       return;
     }
-    parsedEvents = data.events.map(e => ({...e}));
+    parsedEvents = data.events.map(e => ({...e, _include: true, _conflict: null}));
+    setLoadingMsg('🔍 중복 일정 검사 중...');
+    // 1차: 빠른 서버 exact 매칭
+    await checkConflictsForParsed();
+    // 2차: AI가 전체 통합 검토 (1차 오탐 제거 + 미감지 추가)
+    setLoadingMsg('🤖 AI가 중복 여부를 최종 검토 중...');
+    await aiReviewConflicts(model);
     renderAiResults();
   } catch (e) {
     showAiError(e.message);
@@ -293,6 +328,103 @@ async function runAiParse() {
     document.getElementById('ai-loading').classList.add('hidden');
     document.getElementById('btn-run-ai').disabled = false;
   }
+}
+
+async function checkConflictsForParsed() {
+  try {
+    const res = await fetch('/api/events/check-conflicts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events: parsedEvents.map(e => ({ title: e.title, date: e.date, assignee: e.assignee })) }),
+    });
+    const data = await res.json();
+    data.results.forEach((r, i) => {
+      if (r.conflict) {
+        parsedEvents[i]._conflict = r.conflict;
+        parsedEvents[i]._include  = false;
+      }
+    });
+  } catch (_) {}
+}
+
+async function aiReviewConflicts(model) {
+  // 전체 파싱된 일정을 서버로 보내 AI가 기존 일정과 통합 비교
+  const events = parsedEvents
+    .filter(Boolean)
+    .map(e => ({ title: e.title, date: e.date, assignee: e.assignee }));
+
+  if (!events.length) return;
+
+  try {
+    const res = await fetch('/api/events/ai-conflict-review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events, model: model || document.getElementById('ai-model-select').value }),
+    });
+    const data = await res.json();
+
+    // parsedEvents 중 null 제외한 실제 순서와 results가 1:1 대응
+    let ri = 0;
+    parsedEvents.forEach((e, i) => {
+      if (!e) return;
+      const r = data.results[ri++];
+      if (!r) return;
+
+      const wasExactMatch = e._conflict && e._conflict.type === 'exact';
+
+      if (r.is_duplicate) {
+        // AI가 중복 확정 — exact 단순 매칭이 이미 있으면 ai_confirmed만 보강
+        if (wasExactMatch) {
+          parsedEvents[i]._conflict.ai_confirmed = true;
+          parsedEvents[i]._conflict.ai_reason    = r.reason;
+        } else {
+          parsedEvents[i]._conflict = {
+            type:           'ai',
+            existing_title: r.existing_title || (e._conflict?.existing_title) || '기존 일정',
+            ai_confirmed:   true,
+            ai_reason:      r.reason,
+          };
+          parsedEvents[i]._include = false;
+        }
+      } else {
+        // AI가 중복 아님 — exact 매칭은 AI가 덮어쓸 수 없음 (AI 오판 방지)
+        if (!wasExactMatch) {
+          parsedEvents[i]._conflict = null;
+          parsedEvents[i]._include  = true;
+        }
+        // wasExactMatch인 경우: 단순 매칭 결과를 그대로 유지
+      }
+    });
+  } catch (_) {} // 실패 시 단순 검사 결과 유지
+}
+
+function setLoadingMsg(msg) {
+  const el = document.getElementById('ai-loading-msg');
+  if (el) el.textContent = msg;
+}
+
+function updateAiConfirmCount() {
+  const total    = parsedEvents.filter(Boolean).length;
+  const selected = parsedEvents.filter((e, i) => {
+    if (!e) return false;
+    const chk = document.getElementById(`ai-include-${i}`);
+    return chk ? chk.checked : e._include !== false;
+  }).length;
+  document.getElementById('ai-result-count').textContent =
+    selected === total ? `${total}건` : `${selected}/${total}건 선택`;
+}
+
+function toggleAiInclude(i, checked) {
+  if (parsedEvents[i]) parsedEvents[i]._include = checked;
+  const label = document.querySelector(`#ai-item-${i} .ai-include-label`);
+  if (label) {
+    label.classList.toggle('is-included', checked);
+    label.classList.toggle('is-excluded', !checked);
+    label.title = checked ? '클릭하면 등록에서 제외됩니다' : '클릭하면 등록 대상에 포함됩니다';
+    label.querySelector('.include-icon').textContent = checked ? '✓' : '✗';
+    label.querySelector('.include-text').textContent = checked ? '등록' : '건너뜀';
+  }
+  updateAiConfirmCount();
 }
 
 function renderAiResults() {
@@ -304,7 +436,18 @@ function renderAiResults() {
       <div class="item-header" onclick="toggleResultItem('ai-item-${i}')">
         <span class="item-toggle">▶</span>
         <span class="item-title">${esc(e.title||'제목 없음')}</span>
+        ${e._conflict ? (() => {
+          const typeLabel = e._conflict.type === 'exact' ? '중복' : '유사';
+          const aiNote   = e._conflict.ai_confirmed ? ` (AI 확인: ${esc(e._conflict.ai_reason || '')})` : '';
+          const tooltip  = (e._conflict.ai_confirmed ? 'AI가 중복으로 확인했습니다' : '유사한 일정이 감지되었습니다') + (e._conflict.ai_reason ? ': ' + e._conflict.ai_reason : '');
+          return `<span class="conflict-warn${e._conflict.ai_confirmed ? ' ai-confirmed' : ''}" title="${esc(tooltip)}">⚠ ${typeLabel}: &quot;${esc(e._conflict.existing_title)}&quot;${e._conflict.ai_confirmed ? ' ✓AI' : ''}</span>`;
+        })() : ''}
         <div class="btn-group" onclick="event.stopPropagation()">
+          <label class="ai-include-label ${e._include !== false ? 'is-included' : 'is-excluded'}" title="${e._include !== false ? '클릭하면 등록에서 제외됩니다' : '클릭하면 등록 대상에 포함됩니다'}">
+            <input type="checkbox" id="ai-include-${i}" ${e._include !== false ? 'checked' : ''} onchange="toggleAiInclude(${i},this.checked)" />
+            <span class="include-icon">${e._include !== false ? '✓' : '✗'}</span>
+            <span class="include-text">${e._include !== false ? '등록' : '건너뜀'}</span>
+          </label>
           <button class="btn btn-sm btn-danger" onclick="removeAiItem(${i})">제거</button>
         </div>
       </div>
@@ -320,7 +463,10 @@ function renderAiResults() {
           <span class="field-icon">🗂️</span>
           <div class="field-col">
             <label>프로젝트</label>
-            <input type="text" value="${esc(e.project||'')}" onchange="parsedEvents[${i}].project=this.value||null" />
+            <input type="text" value="${esc(e.project||'')}"
+              oninput="parsedEvents[${i}].project=this.value||null;editorAcProject(this,'ai',${i})"
+              onfocus="editorAcProject(this,'ai',${i})"
+              onblur="hideEditorAc()" />
           </div>
         </div>
         <div class="field-group">
@@ -336,19 +482,20 @@ function renderAiResults() {
                 <input type="date" value="${esc(e.end_date||e.date||'')}" onchange="parsedEvents[${i}].end_date=this.value" />
               </div>
             </div>
-            ${!e.all_day ? `
-            <div class="date-time-row" style="margin-top:6px">
-              <div class="dt-col">
-                <span class="small-label">시작 시간</span>
-                <input type="time" value="${esc(e.start_time||'')}" onchange="parsedEvents[${i}].start_time=this.value" />
+            <div class="ai-time-section" style="${e.all_day?'display:none':''}">
+              <div class="date-time-row" style="margin-top:6px">
+                <div class="dt-col">
+                  <span class="small-label">시작 시간</span>
+                  <input type="time" value="${esc(e.start_time||'')}" onchange="parsedEvents[${i}].start_time=this.value" />
+                </div>
+                <div class="dt-col">
+                  <span class="small-label">종료 시간</span>
+                  <input type="time" value="${esc(e.end_time||'')}" onchange="parsedEvents[${i}].end_time=this.value" />
+                </div>
               </div>
-              <div class="dt-col">
-                <span class="small-label">종료 시간</span>
-                <input type="time" value="${esc(e.end_time||'')}" onchange="parsedEvents[${i}].end_time=this.value" />
-              </div>
-            </div>` : ''}
+            </div>
             <div class="date-time-row" style="margin-top:6px;align-items:center;gap:6px">
-              <input type="checkbox" id="allday-${i}" ${e.all_day?'checked':''} onchange="parsedEvents[${i}].all_day=this.checked;renderAiResults()" />
+              <input type="checkbox" id="allday-${i}" ${e.all_day?'checked':''} onchange="setAiAllDay(${i},this.checked)" />
               <label for="allday-${i}" style="margin:0;font-size:12px;cursor:pointer">종일</label>
             </div>
           </div>
@@ -364,7 +511,10 @@ function renderAiResults() {
           <span class="field-icon">👤</span>
           <div class="field-col">
             <label>담당자</label>
-            <input type="text" value="${esc(e.assignee||'')}" onchange="parsedEvents[${i}].assignee=this.value||null" />
+            <input type="text" value="${esc(e.assignee||'')}"
+              oninput="parsedEvents[${i}].assignee=this.value||null;editorAcAssignee(this,'ai',${i})"
+              onfocus="editorAcAssignee(this,'ai',${i})"
+              onblur="hideEditorAc()" />
           </div>
         </div>
         <div class="field-group">
@@ -378,6 +528,7 @@ function renderAiResults() {
     </div>
   `).join('');
   document.getElementById('ai-result-section').classList.remove('hidden');
+  updateAiConfirmCount();
 }
 
 function removeAiItem(i) {
@@ -390,8 +541,12 @@ function removeAiItem(i) {
 
 async function confirmAiEvents() {
   if (!MEETING_ID) { alert('회의록을 먼저 저장하세요.'); return; }
-  const toSave = parsedEvents.filter(Boolean);
-  if (!toSave.length) return;
+  const toSave = parsedEvents.filter((e, i) => {
+    if (!e) return false;
+    const chk = document.getElementById(`ai-include-${i}`);
+    return chk ? chk.checked : e._include !== false;
+  });
+  if (!toSave.length) { alert('등록할 일정이 없습니다. 체크박스를 확인하세요.'); return; }
   const res  = await fetch('/api/ai/confirm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -453,6 +608,89 @@ function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 }
 
+/* ── AI 버튼 레이블 업데이트 ─────────────────────────── */
+function updateAiBtnLabel() {
+  const btn = document.getElementById('btn-ai-toggle');
+  if (!btn) return;
+  btn.textContent = linkedEvents.length ? '일정 관리' : '일정 생성(AI)';
+}
+
+/* ── 종일 in-place 업데이트 (아코디언 닫힘 방지) ────── */
+function setAiAllDay(i, checked) {
+  parsedEvents[i].all_day = checked;
+  const item = document.getElementById(`ai-item-${i}`);
+  if (!item) return;
+  item.querySelector('.ai-time-section').style.display = checked ? 'none' : '';
+}
+
+function setLinkedAllDay(i, checked) {
+  linkedEvents[i].all_day = checked ? 1 : 0;
+  const item = document.getElementById(`linked-item-${i}`);
+  if (!item) return;
+  item.querySelector('.linked-time-section').style.display = checked ? 'none' : '';
+}
+
+/* ── 자동완성 (프로젝트 / 담당자) ───────────────────────── */
+let _meProjects = [];
+let _meMembers  = [];
+let _editorAcCb = null;
+
+async function loadEditorAcData() {
+  try {
+    const [pr, mb] = await Promise.all([
+      fetch('/api/projects').then(r => r.json()),
+      fetch('/api/members').then(r => r.json()),
+    ]);
+    _meProjects = pr;
+    _meMembers  = mb;
+  } catch (_) {}
+}
+
+function _showEditorAc(items, inputEl, cb) {
+  const dd = document.getElementById('editor-ac-dd');
+  _editorAcCb = cb;
+  if (!items.length) { dd.classList.add('hidden'); return; }
+  const rect = inputEl.getBoundingClientRect();
+  dd.style.left  = rect.left + 'px';
+  dd.style.top   = (rect.bottom + 2) + 'px';
+  dd.style.width = rect.width + 'px';
+  dd.style.maxHeight = '180px';
+  dd.style.overflowY = 'auto';
+  dd.innerHTML = items.map(v =>
+    `<li onmousedown="event.preventDefault();_selectEditorAc('${v.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${esc(v)}</li>`
+  ).join('');
+  dd.classList.remove('hidden');
+}
+
+function _selectEditorAc(val) {
+  if (_editorAcCb) _editorAcCb(val);
+  hideEditorAc();
+}
+
+function hideEditorAc() {
+  document.getElementById('editor-ac-dd')?.classList.add('hidden');
+}
+
+function editorAcProject(inputEl, type, idx) {
+  const val = inputEl.value.trim();
+  const list = val ? _meProjects.filter(p => p.toLowerCase().includes(val.toLowerCase())) : _meProjects;
+  _showEditorAc(list, inputEl, (v) => {
+    inputEl.value = v;
+    if (type === 'ai') parsedEvents[idx].project = v;
+    else linkedEvents[idx].project = v;
+  });
+}
+
+function editorAcAssignee(inputEl, type, idx) {
+  const val = inputEl.value.trim();
+  const list = val ? _meMembers.filter(m => m.toLowerCase().includes(val.toLowerCase())) : _meMembers;
+  _showEditorAc(list, inputEl, (v) => {
+    inputEl.value = v;
+    if (type === 'ai') parsedEvents[idx].assignee = v;
+    else linkedEvents[idx].assignee = v;
+  });
+}
+
 /* ── 연결된 일정 ─────────────────────────────────────── */
 function renderLinkedEvents() {
   const sec = document.getElementById('linked-events-section');
@@ -484,7 +722,10 @@ function renderLinkedEvents() {
           <span class="field-icon">🗂️</span>
           <div class="field-col">
             <label>프로젝트</label>
-            <input type="text" value="${esc(e.project||'')}" onchange="linkedEvents[${i}].project=this.value||null" />
+            <input type="text" value="${esc(e.project||'')}"
+              oninput="linkedEvents[${i}].project=this.value||null;editorAcProject(this,'linked',${i})"
+              onfocus="editorAcProject(this,'linked',${i})"
+              onblur="hideEditorAc()" />
           </div>
         </div>
         <div class="field-group">
@@ -500,19 +741,20 @@ function renderLinkedEvents() {
                 <input type="date" value="${esc((e.end_datetime||e.start_datetime||'').slice(0,10))}" onchange="linkedEvents[${i}]._end_date=this.value" />
               </div>
             </div>
-            ${!e.all_day ? `
-            <div class="date-time-row" style="margin-top:6px">
-              <div class="dt-col">
-                <span class="small-label">시작 시간</span>
-                <input type="time" value="${esc((e.start_datetime||'').slice(11,16))}" onchange="linkedEvents[${i}]._start_time=this.value" />
+            <div class="linked-time-section" style="${e.all_day?'display:none':''}">
+              <div class="date-time-row" style="margin-top:6px">
+                <div class="dt-col">
+                  <span class="small-label">시작 시간</span>
+                  <input type="time" value="${esc((e.start_datetime||'').slice(11,16))}" onchange="linkedEvents[${i}]._start_time=this.value" />
+                </div>
+                <div class="dt-col">
+                  <span class="small-label">종료 시간</span>
+                  <input type="time" value="${esc((e.end_datetime||'').slice(11,16))}" onchange="linkedEvents[${i}]._end_time=this.value" />
+                </div>
               </div>
-              <div class="dt-col">
-                <span class="small-label">종료 시간</span>
-                <input type="time" value="${esc((e.end_datetime||'').slice(11,16))}" onchange="linkedEvents[${i}]._end_time=this.value" />
-              </div>
-            </div>` : ''}
+            </div>
             <div class="date-time-row" style="margin-top:6px;align-items:center;gap:6px">
-              <input type="checkbox" id="linked-allday-${i}" ${e.all_day?'checked':''} onchange="linkedEvents[${i}].all_day=this.checked?1:0;renderLinkedEvents()" />
+              <input type="checkbox" id="linked-allday-${i}" ${e.all_day?'checked':''} onchange="setLinkedAllDay(${i},this.checked)" />
               <label for="linked-allday-${i}" style="margin:0;font-size:12px;cursor:pointer">종일</label>
             </div>
           </div>
@@ -528,7 +770,10 @@ function renderLinkedEvents() {
           <span class="field-icon">👤</span>
           <div class="field-col">
             <label>담당자</label>
-            <input type="text" value="${esc(e.assignee||'')}" onchange="linkedEvents[${i}].assignee=this.value||null" />
+            <input type="text" value="${esc(e.assignee||'')}"
+              oninput="linkedEvents[${i}].assignee=this.value||null;editorAcAssignee(this,'linked',${i})"
+              onfocus="editorAcAssignee(this,'linked',${i})"
+              onblur="hideEditorAc()" />
           </div>
         </div>
         <div class="field-group">
@@ -629,6 +874,7 @@ async function deleteLinkedEvent(i) {
   if (res.ok) {
     linkedEvents.splice(i, 1);
     renderLinkedEvents();
+    updateAiBtnLabel();
   } else {
     alert('삭제 실패');
   }
