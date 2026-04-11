@@ -869,12 +869,15 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
   padding: 11px 12px;
   vertical-align: middle;
 }
-.meeting-table .col-type  { width: 52px; text-align: center; }
-.meeting-table .col-events{ width: 44px; text-align: center; }
+.meeting-table .col-type  { width: 72px; text-align: center; white-space: nowrap; }
 .meeting-table .col-title { width: auto; font-weight: 500; }
 .meeting-table .col-author{ width: 86px; color: var(--text-muted); }
 .meeting-table .col-team  { width: 86px; color: var(--text-muted); }
 .meeting-table .col-date  { width: 96px; white-space: nowrap; font-size: 0.82rem; }
+
+.meeting-title-wrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.meeting-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-count-badge  { flex-shrink: 0; }
 
 .doc-badge {
   display: inline-block;
