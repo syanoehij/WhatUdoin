@@ -864,7 +864,7 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
   text-transform: uppercase;
   white-space: nowrap;
 }
-.meeting-table th.col-date { text-align: right; padding-right: 20px; }
+.meeting-table th.col-date { text-align: right; padding-right: 28px; }
 .meeting-row {
   cursor: pointer;
   border-bottom: 1px solid var(--border-faint);
@@ -881,7 +881,7 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
 .meeting-table .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meeting-table .col-title  { font-weight: 500; min-width: 0; }
 .meeting-table .col-team   { }
-.meeting-table .col-date   { white-space: nowrap; font-size: 0.8rem; color: var(--text-faint); text-align: right; padding-right: 20px; }
+.meeting-table .col-date   { white-space: nowrap; font-size: 0.8rem; color: var(--text-faint); text-align: right; padding-right: 28px; }
 
 .meeting-title-wrap { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .meeting-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); transition: color 0.12s; }
