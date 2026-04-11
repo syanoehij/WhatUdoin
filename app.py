@@ -626,6 +626,22 @@ async def ai_confirm(request: Request):
     return {"saved": saved}
 
 
+@app.post("/api/ai/refine")
+async def ai_refine(request: Request):
+    """2차 AI: 검토자 — 1차 추출 결과를 원본 텍스트와 함께 재검토."""
+    body = await request.json()
+    text   = body.get("text", "").strip()
+    events = body.get("events", [])
+    model  = body.get("model", llm_parser.DEFAULT_MODEL)
+    if not text:
+        raise HTTPException(status_code=400, detail="텍스트를 입력하세요.")
+    try:
+        refined = llm_parser.refine_schedule(text, events, model)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")
+    return {"events": refined}
+
+
 @app.get("/api/ai/models")
 def ai_models():
     return {"models": llm_parser.get_available_models()}

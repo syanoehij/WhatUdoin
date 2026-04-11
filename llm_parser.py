@@ -40,8 +40,10 @@ def parse_schedule(text: str, model: str = DEFAULT_MODEL) -> list[dict]:
 규칙:
 - 날짜가 "이번 주", "다음 주 화요일", "4월 말" 처럼 상대적이면 오늘 날짜 기준으로 계산하세요
 - "일주일 동안" 이면 오늘부터 7일
+- 날짜가 전혀 언급되지 않거나 "언제까지인지 모른다", "마감 미정", "가능한 빨리" 같은 표현이면 date를 null로 쓰세요 (임의로 오늘 날짜를 넣지 마세요)
 - 모르는 값은 null로 쓰세요
 - 담당자는 assignee 필드에, 프로젝트명은 project 필드에 넣으세요
+- 회의·미팅 자체도 일정으로 추출하되, 회의 참석자 전원이 담당자인 경우 가장 대표 담당자 1명만 쓰세요
 - 시간 정보가 없으면 all_day를 true로 설정하세요
 - 종료 날짜가 시작 날짜와 같으면 end_date는 null로 쓰세요
 - 여러 날에 걸치는 일정이면 end_date에 종료 날짜를 쓰세요
@@ -57,6 +59,9 @@ def parse_schedule(text: str, model: str = DEFAULT_MODEL) -> list[dict]:
 입력: 4월 21일부터 23일까지 출장
 출력: [{{"title":"출장","project":null,"date":"2026-04-21","end_date":"2026-04-23","start_time":null,"end_time":null,"all_day":true,"location":null,"assignee":null,"description":null}}]
 
+입력: 김민준이 결제 모듈 테스트를 맡기로 했습니다. 언제까지라는 말은 없었고 가능한 빨리 해달라고 했습니다.
+출력: [{{"title":"결제 모듈 테스트","project":null,"date":null,"end_date":null,"start_time":null,"end_time":null,"all_day":true,"location":null,"assignee":"김민준","description":"마감일 미정, 가능한 빨리 완료"}}]
+
 이제 아래 텍스트를 분석하세요:
 {text}
 
@@ -71,6 +76,50 @@ JSON:"""
 
     raw = response.json().get("response", "")
     return _extract_json(raw)
+
+
+def refine_schedule(text: str, first_pass: list[dict], model: str = DEFAULT_MODEL) -> list[dict]:
+    """2차 AI: 검토자 역할 — 1차 추출 결과를 원본 텍스트와 함께 검토해 누락·오류를 수정."""
+    today = date.today().isoformat()
+
+    first_pass_json = json.dumps(first_pass, ensure_ascii=False, indent=2)
+
+    prompt = f"""당신은 꼼꼼한 일정 데이터 검토자입니다.
+아래에 원본 회의록과, 1차 AI가 추출한 일정 JSON이 있습니다.
+원본을 다시 읽고 1차 결과를 검토해서 최종 JSON 배열을 출력하세요.
+
+오늘 날짜: {today}
+
+검토 항목:
+1. 누락된 일정이 있으면 추가하세요
+2. 날짜 계산이 틀렸으면 수정하세요 (상대적 날짜 기준: 오늘 {today})
+3. 담당자·장소·프로젝트가 잘못 됐거나 누락됐으면 수정하세요
+4. 제목이 어색하면 자연스럽게 다듬으세요
+5. 원본에 없는 내용을 추가하지 마세요
+6. 날짜가 언급되지 않은 일정은 date를 null로 유지하세요
+7. 1차 결과가 맞으면 그대로 유지하세요 — 멀쩡한 항목을 굳이 바꾸지 마세요
+
+출력 형식: JSON 배열만. 설명 없이.
+필드: title, project, date(YYYY-MM-DD|null), end_date(YYYY-MM-DD|null), start_time(HH:MM|null), end_time(HH:MM|null), all_day(bool), location, assignee, description
+
+--- 원본 회의록 ---
+{text}
+
+--- 1차 추출 결과 ---
+{first_pass_json}
+
+--- 최종 검토 결과 JSON ---"""
+
+    response = requests.post(
+        OLLAMA_URL,
+        json={"model": model, "prompt": prompt, "stream": False},
+        timeout=180,
+    )
+    response.raise_for_status()
+    raw = response.json().get("response", "")
+    result = _extract_json(raw)
+    # 2차가 빈 배열을 돌려주면 1차 결과 사용 (안전망)
+    return result if result else first_pass
 
 
 def _extract_json(raw: str) -> list[dict]:
@@ -241,14 +290,14 @@ JSON:"""
 
 
 def to_event_payload(parsed: dict) -> dict:
-    date_str   = parsed.get("date") or date.today().isoformat()
+    date_str   = parsed.get("date") or None          # null → 날짜 미입력, 강제 오늘 대입 없음
     end_date   = parsed.get("end_date") or date_str
     all_day    = parsed.get("all_day") or not parsed.get("start_time")
     start_time = parsed.get("start_time") or "00:00"
     end_time   = parsed.get("end_time") or ("00:00" if all_day else None)
 
-    start_datetime = f"{date_str}T{start_time}"
-    end_datetime   = f"{end_date}T{end_time}" if end_time else None
+    start_datetime = f"{date_str}T{start_time}" if date_str else None
+    end_datetime   = f"{end_date}T{end_time}" if (end_date and end_time) else None
 
     return {
         "title":          parsed.get("title") or "제목 없음",
@@ -259,6 +308,8 @@ def to_event_payload(parsed: dict) -> dict:
         "all_day":        1 if all_day else 0,
         "start_datetime": start_datetime,
         "end_datetime":   end_datetime,
+        "priority":       parsed.get("priority") or "normal",
+        "kanban_status":  parsed.get("kanban_status") or None,
         "created_by":     "editor",
         "source":         "ai_parsed",
     }

@@ -303,23 +303,49 @@ async function runAiParse() {
   document.getElementById('btn-run-ai').disabled = true;
 
   try {
-    const res  = await fetch('/api/ai/parse', {
+    // ── 1단계: AI 일정 추출 ──
+    setLoadingMsg('📋 1단계: AI가 일정을 추출하는 중...');
+    const res1  = await fetch('/api/ai/parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: content, model }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || '파싱 실패');
-    if (!data.events.length) {
+    const data1 = await res1.json();
+    if (!res1.ok) throw new Error(data1.detail || '파싱 실패');
+    if (!data1.events.length) {
       showAiError('일정 정보를 찾지 못했습니다. 더 구체적인 내용을 작성해보세요.');
       return;
     }
-    parsedEvents = data.events.map(e => ({...e, _include: true, _conflict: null}));
-    setLoadingMsg('🔍 중복 일정 검사 중...');
-    // 1차: 빠른 서버 exact 매칭
+
+    // ── 2단계: AI 검토자가 재점검 ──
+    setLoadingMsg('🔍 2단계: AI 검토자가 내용을 점검하는 중...');
+    let finalEvents = data1.events;
+    try {
+      const res2  = await fetch('/api/ai/refine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: content, events: data1.events, model }),
+      });
+      if (res2.ok) {
+        const data2 = await res2.json();
+        if (data2.events && data2.events.length) finalEvents = data2.events;
+      }
+    } catch (_) { /* 2차 실패 시 1차 결과 사용 */ }
+
+    parsedEvents = finalEvents.map(e => ({
+      ...e,
+      _include:      !!e.date,
+      _conflict:     null,
+      priority:      e.priority || 'normal',
+      kanban_status: e.kanban_status || null,
+    }));
+
+    // ── 3단계: 중복 검사 ──
+    setLoadingMsg('🔎 3단계: 기존 일정과 중복 검사 중...');
     await checkConflictsForParsed();
-    // 2차: AI가 전체 통합 검토 (1차 오탐 제거 + 미감지 추가)
-    setLoadingMsg('🤖 AI가 중복 여부를 최종 검토 중...');
+
+    // ── 4단계: AI 중복 최종 검토 ──
+    setLoadingMsg('🤖 4단계: AI가 중복 여부를 최종 검토 중...');
     await aiReviewConflicts(model);
     renderAiResults();
   } catch (e) {
@@ -436,6 +462,7 @@ function renderAiResults() {
       <div class="item-header" onclick="toggleResultItem('ai-item-${i}')">
         <span class="item-toggle">▶</span>
         <span class="item-title">${esc(e.title||'제목 없음')}</span>
+        ${!e.date ? `<span class="date-missing-warn" title="날짜를 직접 입력해야 등록할 수 있습니다">⚠ 날짜 미입력</span>` : ''}
         ${e._conflict ? (() => {
           const typeLabel = e._conflict.type === 'exact' ? '중복' : '유사';
           const aiNote   = e._conflict.ai_confirmed ? ` (AI 확인: ${esc(e._conflict.ai_reason || '')})` : '';
@@ -475,7 +502,7 @@ function renderAiResults() {
             <div class="date-time-row">
               <div class="dt-col">
                 <span class="small-label">시작 날짜</span>
-                <input type="date" value="${esc(e.date||'')}" onchange="parsedEvents[${i}].date=this.value" />
+                <input type="date" value="${esc(e.date||'')}" onchange="setAiDate(${i},this.value)" />
               </div>
               <div class="dt-col">
                 <span class="small-label">종료 날짜</span>
@@ -522,6 +549,33 @@ function renderAiResults() {
           <div class="field-col">
             <label>내용</label>
             <textarea rows="2" onchange="parsedEvents[${i}].description=this.value||null">${esc(e.description||'')}</textarea>
+          </div>
+        </div>
+        <div class="field-group">
+          <span class="field-icon">🔥</span>
+          <div class="field-col">
+            <label>우선순위</label>
+            <div class="priority-btn-group" id="ai-priority-${i}">
+              ${PRIORITIES.map(([p,l]) => `
+              <button class="priority-btn ${(e.priority||'normal')===p?'active':''}" data-priority="${p}"
+                onclick="setAiPriority(${i},'${p}')">${l}</button>`).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="field-group">
+          <span class="field-icon">📋</span>
+          <div class="field-col">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <label style="margin:0">칸반</label>
+              <input type="checkbox" id="ai-kanban-${i}" ${e.kanban_status?'checked':''}
+                onchange="setAiKanban(${i},this.checked)" />
+              <label for="ai-kanban-${i}" style="margin:0;font-size:12px;cursor:pointer">칸반에 등록</label>
+            </div>
+            <div class="kanban-status-btns" id="ai-kstatus-${i}" style="${e.kanban_status?'':'display:none'}">
+              ${KANBAN_STATUSES.map(([v,l]) => `
+              <button class="status-btn ${e.kanban_status===v?'active':''}"
+                onclick="setAiKanbanStatus(${i},'${v}')">${l}</button>`).join('')}
+            </div>
           </div>
         </div>
       </div>
@@ -621,6 +675,63 @@ function setAiAllDay(i, checked) {
   const item = document.getElementById(`ai-item-${i}`);
   if (!item) return;
   item.querySelector('.ai-time-section').style.display = checked ? 'none' : '';
+}
+
+function setAiDate(i, v) {
+  parsedEvents[i].date = v || null;
+  const item = document.getElementById(`ai-item-${i}`);
+  if (!item) return;
+  // 날짜 미입력 배지 토글
+  let warn = item.querySelector('.date-missing-warn');
+  if (v) {
+    if (warn) warn.remove();
+    // 날짜를 입력하면 자동으로 등록으로 전환 (아직 체크 안 된 경우만)
+    const chk = document.getElementById(`ai-include-${i}`);
+    if (chk && !chk.checked) {
+      chk.checked = true;
+      toggleAiInclude(i, true);
+    }
+  } else {
+    if (!warn) {
+      warn = document.createElement('span');
+      warn.className = 'date-missing-warn';
+      warn.title = '날짜를 직접 입력해야 등록할 수 있습니다';
+      warn.textContent = '⚠ 날짜 미입력';
+      item.querySelector('.item-title').after(warn);
+    }
+  }
+}
+
+function setAiPriority(i, p) {
+  parsedEvents[i].priority = p;
+  const group = document.getElementById(`ai-priority-${i}`);
+  if (!group) return;
+  group.querySelectorAll('.priority-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.priority === p);
+  });
+}
+
+function setAiKanban(i, checked) {
+  parsedEvents[i].kanban_status = checked ? 'todo' : null;
+  const statusDiv = document.getElementById(`ai-kstatus-${i}`);
+  if (!statusDiv) return;
+  statusDiv.style.display = checked ? '' : 'none';
+  if (checked) {
+    const labels = Object.fromEntries(KANBAN_STATUSES);
+    statusDiv.querySelectorAll('.status-btn').forEach(btn => {
+      btn.classList.toggle('active', labels['todo'] === btn.textContent.trim());
+    });
+  }
+}
+
+function setAiKanbanStatus(i, v) {
+  parsedEvents[i].kanban_status = v;
+  const statusDiv = document.getElementById(`ai-kstatus-${i}`);
+  if (!statusDiv) return;
+  const labels = Object.fromEntries(KANBAN_STATUSES);
+  statusDiv.querySelectorAll('.status-btn').forEach(btn => {
+    btn.classList.toggle('active', labels[v] === btn.textContent.trim());
+  });
 }
 
 function setLinkedAllDay(i, checked) {

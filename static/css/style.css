@@ -869,12 +869,12 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
   padding: 11px 12px;
   vertical-align: middle;
 }
+.meeting-table .col-type  { width: 52px; text-align: center; }
+.meeting-table .col-events{ width: 44px; text-align: center; }
 .meeting-table .col-title { width: auto; font-weight: 500; }
-.meeting-table .col-type  { width: 60px; }
-.meeting-table .col-author{ width: 90px; color: var(--text-muted); }
-.meeting-table .col-team  { width: 90px; color: var(--text-muted); }
-.meeting-table .col-events{ width: 50px; text-align: center; }
-.meeting-table .col-date  { width: 100px; white-space: nowrap; font-size: 0.82rem; }
+.meeting-table .col-author{ width: 86px; color: var(--text-muted); }
+.meeting-table .col-team  { width: 86px; color: var(--text-muted); }
+.meeting-table .col-date  { width: 96px; white-space: nowrap; font-size: 0.82rem; }
 
 .doc-badge {
   display: inline-block;
@@ -1293,6 +1293,20 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
   white-space: nowrap;
   flex-shrink: 0;
   cursor: help;
+}
+
+/* 날짜 미입력 경고 뱃지 */
+.date-missing-warn {
+  font-size: 0.72rem;
+  color: #b45309;
+  background: rgba(251,191,36,0.18);
+  border: 1px solid rgba(180,83,9,0.4);
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: default;
+  font-weight: 600;
 }
 .conflict-warn.ai-confirmed {
   color: #b45309;

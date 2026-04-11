@@ -88,11 +88,11 @@
     <table class="meeting-table" id="meetings-table">
       <thead>
         <tr>
-          <th class="col-title">제목</th>
           <th class="col-type">구분</th>
+          <th class="col-events">일정</th>
+          <th class="col-title">제목</th>
           <th class="col-author">작성자</th>
           <th class="col-team">팀</th>
-          <th class="col-events">일정</th>
           <th class="col-date">날짜</th>
         </tr>
       </thead>
@@ -176,13 +176,13 @@ function renderMeetingList(ym) {
 
   tbody.innerHTML = meetings.map(m => `
     <tr class="meeting-row" onclick="location.href='/meetings/${m.id}?from=meetings'">
-      <td class="col-title">${escHtml(m.title)}</td>
       <td class="col-type">
         <span class="doc-badge ${m.is_team_doc ? 'doc-team' : 'doc-personal'}">${m.is_team_doc ? '팀' : '개인'}</span>
       </td>
+      <td class="col-events">${m.event_count ? `<span class="event-count-badge">${m.event_count}</span>` : '<span class="text-faint">-</span>'}</td>
+      <td class="col-title">${escHtml(m.title)}</td>
       <td class="col-author">${escHtml(m.author_name || '-')}</td>
       <td class="col-team">${escHtml(m.team_name || '-')}</td>
-      <td class="col-events">${m.event_count ? `<span class="event-count-badge">${m.event_count}</span>` : '-'}</td>
       <td class="col-date text-muted">${(m.meeting_date || m.updated_at || '').slice(0, 10)}</td>
     </tr>
   `).join('');
