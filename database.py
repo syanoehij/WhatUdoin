@@ -248,25 +248,39 @@ def update_kanban_status(event_id: int, kanban_status=_MISSING, priority=_MISSIN
 
 
 def get_project_timeline(team_id: int = None) -> list[dict]:
-    """프로젝트별 일정 반환 (project 필드가 있는 이벤트)"""
+    """팀 → 프로젝트 2단계 그룹으로 일정 반환"""
     with get_conn() as conn:
         if team_id:
             rows = conn.execute(
-                "SELECT * FROM events WHERE project IS NOT NULL AND project != '' AND team_id = ? ORDER BY start_datetime",
+                """SELECT e.*, t.name as team_name
+                   FROM events e LEFT JOIN teams t ON e.team_id = t.id
+                   WHERE e.project IS NOT NULL AND e.project != '' AND e.team_id = ?
+                   ORDER BY e.start_datetime""",
                 (team_id,)
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM events WHERE project IS NOT NULL AND project != '' ORDER BY start_datetime"
+                """SELECT e.*, t.name as team_name
+                   FROM events e LEFT JOIN teams t ON e.team_id = t.id
+                   WHERE e.project IS NOT NULL AND e.project != ''
+                   ORDER BY e.start_datetime"""
             ).fetchall()
-    projects: dict[str, list] = {}
+    # team_name → project → events
+    teams: dict[str, dict[str, list]] = {}
     for row in rows:
         d = dict(row)
+        tname = d.get("team_name") or "미분류"
         p = d["project"]
-        if p not in projects:
-            projects[p] = []
-        projects[p].append(d)
-    return [{"name": name, "events": evs} for name, evs in sorted(projects.items())]
+        if tname not in teams:
+            teams[tname] = {}
+        if p not in teams[tname]:
+            teams[tname][p] = []
+        teams[tname][p].append(d)
+    result = []
+    for tname, projs in sorted(teams.items()):
+        proj_list = [{"name": pname, "events": evs} for pname, evs in sorted(projs.items())]
+        result.append({"team_name": tname, "projects": proj_list})
+    return result
 
 
 def get_projects() -> list[str]:
