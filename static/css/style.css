@@ -1103,6 +1103,21 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--accent)
 [data-theme="dark"] .fc-scrollgrid,
 [data-theme="dark"] .fc-scrollgrid-sync-table td { border-color: var(--border) !important; }
 
+/* 헤더 행 (요일/날짜) 배경 */
+[data-theme="dark"] .fc-col-header,
+[data-theme="dark"] .fc-col-header-cell,
+[data-theme="dark"] .fc-scrollgrid-section-header td,
+[data-theme="dark"] .fc-scrollgrid-section-header th { background: var(--surface-2) !important; }
+
+/* all-day 섹션 및 그 왼쪽 축 */
+[data-theme="dark"] .fc-timegrid-axis,
+[data-theme="dark"] .fc-scrollgrid-section-sticky > td,
+[data-theme="dark"] .fc-scrollgrid-section-liquid > td { background: var(--surface); }
+
+/* 스크롤 하니스 */
+[data-theme="dark"] .fc-scroller-harness,
+[data-theme="dark"] .fc-scroller { background: var(--surface); }
+
 [data-theme="dark"] .fc-toolbar-title { color: var(--text); }
 
 [data-theme="dark"] .fc-button-primary {
