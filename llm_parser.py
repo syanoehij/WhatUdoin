@@ -254,7 +254,9 @@ def review_all_conflicts(candidates: list[dict], existing: list[dict], model: st
 [{{"index":1,"is_duplicate":false,"reason":"기존에 없는 새 일정","existing_title":null}},{{"index":2,"is_duplicate":true,"reason":"'xxx'와 동일 날짜·동일 업무","existing_title":"xxx"}}]
 
 판단 기준:
-- 제목·날짜가 모두 같으면 중복
+- 제목·날짜·담당자가 모두 같으면 중복
+- 제목·날짜가 같아도 담당자가 서로 다르면(둘 다 지정된 경우) 중복 아님 — 다른 사람의 별개 일정
+- 담당자 중 하나가 "미지정"이면 담당자 무시하고 제목·날짜로만 판단
 - 제목이 유사해도 회차(1차/2차)·단계가 다르면 중복 아님
 - 기존 일정에 없으면 반드시 중복 아님
 - 애매하면 is_duplicate:false

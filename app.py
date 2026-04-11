@@ -441,16 +441,21 @@ async def check_event_conflicts(request: Request):
             if date_diff <= 1 and cand_title and ex_title == cand_title:
                 cand_assignee = (cand.get("assignee") or "").strip()
                 ex_assignee   = (ex.get("assignee") or "").strip()
-                # 담당자까지 같으면 exact, 다르면 similar (같은 이름 업무를 다른 사람이 담당)
-                same_assignee = (cand_assignee == ex_assignee)
-                conflict_type = "exact" if same_assignee else "similar"
-                conflict = {"type": conflict_type, "existing_id": ex["id"], "existing_title": ex["title"]}
+                # 양쪽 담당자가 모두 존재하고 다르면 별개 일정으로 취급 — 중복 아님
+                if cand_assignee and ex_assignee and cand_assignee != ex_assignee:
+                    continue
+                conflict = {"type": "exact", "existing_id": ex["id"], "existing_title": ex["title"]}
                 break
 
-            # 부분 포함: 같은 날짜만
+            # 부분 포함: 같은 날짜만 + 담당자도 같을 때만
             if date_diff == 0 and cand_title and ex_title and len(cand_title) >= 2 and (
                 cand_title in ex_title or ex_title in cand_title
             ):
+                cand_assignee = (cand.get("assignee") or "").strip()
+                ex_assignee   = (ex.get("assignee") or "").strip()
+                # 담당자가 다르면 별개 일정 — 중복 아님
+                if cand_assignee and ex_assignee and cand_assignee != ex_assignee:
+                    continue
                 conflict = {"type": "similar", "existing_id": ex["id"], "existing_title": ex["title"]}
                 break
 
