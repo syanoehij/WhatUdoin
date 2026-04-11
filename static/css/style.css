@@ -833,10 +833,12 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
   display: block;
   width: 100%;
 }
+/* grid 레이아웃: 구분(72) | 작성자(110) | 제목(1fr) | 팀(100) | 날짜(96) */
 .meetings-content .meeting-table tr {
-  display: table;
+  display: grid;
+  grid-template-columns: 72px 110px 1fr 100px 96px;
   width: 100%;
-  table-layout: fixed;
+  align-items: center;
 }
 .meetings-content .empty-state {
   padding: 60px 28px;
@@ -846,38 +848,58 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
 .meeting-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 .meeting-table thead tr {
   border-bottom: 2px solid var(--border);
 }
 .meeting-table th {
-  padding: 10px 12px;
+  padding: 9px 14px;
   text-align: left;
+  font-size: 0.74rem;
   font-weight: 600;
-  color: var(--text-muted);
-  font-size: 0.8rem;
+  color: var(--text-faint);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
+.meeting-table th.col-date { text-align: right; padding-right: 20px; }
 .meeting-row {
   cursor: pointer;
-  border-bottom: 1px solid var(--border-light);
-  transition: background 0.1s;
+  border-bottom: 1px solid var(--border-faint);
+  transition: background 0.12s;
 }
 .meeting-row:hover { background: var(--surface-2); }
+.meeting-row:hover .meeting-title-text { color: var(--accent); }
 .meeting-row td {
-  padding: 11px 12px;
+  padding: 13px 14px;
+  vertical-align: middle;
+  overflow: hidden;
+}
+.meeting-table .col-type   { text-align: center; white-space: nowrap; }
+.meeting-table .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meeting-table .col-title  { font-weight: 500; min-width: 0; }
+.meeting-table .col-team   { }
+.meeting-table .col-date   { white-space: nowrap; font-size: 0.8rem; color: var(--text-faint); text-align: right; padding-right: 20px; }
+
+.meeting-title-wrap { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.meeting-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); transition: color 0.12s; }
+.event-count-badge  { flex-shrink: 0; }
+
+/* 팀 이름 배지 (회의록 리스트) */
+.team-name-badge {
+  display: inline-block;
+  font-size: 0.74rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  white-space: nowrap;
+  max-width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   vertical-align: middle;
 }
-.meeting-table .col-type  { width: 72px; text-align: center; white-space: nowrap; }
-.meeting-table .col-title { width: auto; font-weight: 500; }
-.meeting-table .col-author{ width: 86px; color: var(--text-muted); }
-.meeting-table .col-team  { width: 86px; color: var(--text-muted); }
-.meeting-table .col-date  { width: 96px; white-space: nowrap; font-size: 0.82rem; }
-
-.meeting-title-wrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.meeting-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.event-count-badge  { flex-shrink: 0; }
 
 .doc-badge {
   display: inline-block;

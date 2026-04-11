@@ -89,8 +89,8 @@
       <thead>
         <tr>
           <th class="col-type">구분</th>
-          <th class="col-title">제목</th>
           <th class="col-author">작성자</th>
+          <th class="col-title">제목</th>
           <th class="col-team">팀</th>
           <th class="col-date">날짜</th>
         </tr>
@@ -173,22 +173,28 @@ function renderMeetingList(ym) {
   document.getElementById('meetings-table').style.display = '';
   empty.classList.add('hidden');
 
-  tbody.innerHTML = meetings.map(m => `
+  tbody.innerHTML = meetings.map(m => {
+    const rawDate = (m.meeting_date || m.updated_at || '').slice(0, 10);
+    const fmtDate = rawDate ? (() => {
+      const [y, mo, d] = rawDate.split('-');
+      return `${parseInt(mo)}/${parseInt(d)}`;
+    })() : '-';
+    return `
     <tr class="meeting-row" onclick="location.href='/meetings/${m.id}?from=meetings'">
       <td class="col-type">
         <span class="doc-badge ${m.is_team_doc ? 'doc-team' : 'doc-personal'}">${m.is_team_doc ? '팀' : '개인'}</span>
       </td>
+      <td class="col-author">${escHtml(m.author_name || '-')}</td>
       <td class="col-title">
         <div class="meeting-title-wrap">
           <span class="meeting-title-text">${escHtml(m.title)}</span>
           ${m.event_count ? `<span class="event-count-badge">${m.event_count}</span>` : ''}
         </div>
       </td>
-      <td class="col-author">${escHtml(m.author_name || '-')}</td>
-      <td class="col-team">${escHtml(m.team_name || '-')}</td>
-      <td class="col-date text-muted">${(m.meeting_date || m.updated_at || '').slice(0, 10)}</td>
-    </tr>
-  `).join('');
+      <td class="col-team">${m.team_name ? `<span class="team-name-badge">${escHtml(m.team_name)}</span>` : '<span style="color:var(--text-faint);font-size:0.8rem;">-</span>'}</td>
+      <td class="col-date">${fmtDate}</td>
+    </tr>`;
+  }).join('');
 }
 
 function selectMonth(ym) {
