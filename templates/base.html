@@ -20,6 +20,11 @@
   {% block extra_head %}{% endblock %}
   <script>
     const CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id} | tojson if user else 'null' }};
+    // 다크 테마 깜빡임 방지: 렌더링 전에 적용
+    (function() {
+      if (localStorage.getItem('theme') === 'dark')
+        document.documentElement.setAttribute('data-theme', 'dark');
+    })();
   </script>
 </head>
 <body>
@@ -36,12 +41,33 @@
     </nav>
     <div class="header-right">
       {% if user %}
-        {% if user.role == 'admin' %}
-          <a href="/admin" class="user-badge user-badge-link">{{ user.name }} <span class="user-role">(관리자)</span></a>
-        {% else %}
-          <button class="user-badge user-badge-link" onclick="openChangePwModal()">{{ user.name }} <span class="user-role">(에디터)</span></button>
-        {% endif %}
-        <button class="btn btn-sm" onclick="doLogout()">로그아웃</button>
+        <div class="profile-menu" id="profile-menu">
+          <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu()">
+            {{ user.name }}
+            <span class="user-role">{% if user.role == 'admin' %}(관리자){% else %}(에디터){% endif %}</span>
+            <span class="profile-caret">▾</span>
+          </button>
+          <div class="profile-dropdown hidden" id="profile-dropdown">
+            <div class="profile-dropdown-header">
+              <div class="profile-dropdown-name">{{ user.name }}</div>
+              <div class="profile-dropdown-role">{% if user.role == 'admin' %}관리자{% else %}에디터{% endif %}</div>
+            </div>
+            {% if user.role == 'admin' %}
+              <a href="/admin" class="profile-dropdown-item" onclick="closeProfileMenu()">⚙️ 관리자 설정</a>
+            {% endif %}
+            <button class="profile-dropdown-item" onclick="closeProfileMenu(); openChangePwModal()">🔑 비밀번호 변경</button>
+            <div class="profile-dropdown-sep"></div>
+            <div class="profile-dropdown-item theme-row">
+              <span class="theme-label-text">🌙 다크 테마</span>
+              <label class="switch switch-sm" onclick="event.stopPropagation()">
+                <input type="checkbox" id="dark-toggle" onchange="applyDarkTheme(this.checked)" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="profile-dropdown-sep"></div>
+            <button class="profile-dropdown-item danger" onclick="closeProfileMenu(); doLogout()">로그아웃</button>
+          </div>
+        </div>
       {% else %}
         <button class="btn btn-sm btn-outline" onclick="openLoginModal()">로그인</button>
       {% endif %}
@@ -163,11 +189,11 @@
               <div class="date-stack">
                 <div class="date-stack-row time-row">
                   <span class="date-btn-label">시작</span>
-                  <input type="time" id="f-start-time" style="flex:1;border:1px solid #dfe6e9;border-radius:6px;padding:6px 8px;font-size:0.88rem;outline:none;font-family:inherit;" />
+                  <input type="time" id="f-start-time" class="time-input" />
                 </div>
                 <div class="date-stack-row time-row">
                   <span class="date-btn-label">종료</span>
-                  <input type="time" id="f-end-time" style="flex:1;border:1px solid #dfe6e9;border-radius:6px;padding:6px 8px;font-size:0.88rem;outline:none;font-family:inherit;" />
+                  <input type="time" id="f-end-time" class="time-input" />
                 </div>
               </div>
             </div>
@@ -220,7 +246,7 @@
             </div>
             <div class="form-row">
               <label>우선순위</label>
-              <select id="f-priority" style="flex:1;border:1px solid #dfe6e9;border-radius:6px;padding:6px 10px;font-size:0.88rem;outline:none;font-family:inherit;background:#fff;">
+              <select id="f-priority" class="priority-select">
                 <option value="urgent">🔴 긴급</option>
                 <option value="high">🟠 높음</option>
                 <option value="normal" selected>🔵 보통</option>
@@ -252,21 +278,48 @@
   {% block scripts %}{% endblock %}
 
   <script>
+    /* ── 프로필 드롭다운 ── */
+    function toggleProfileMenu() {
+      const menu = document.getElementById('profile-menu');
+      const dd   = document.getElementById('profile-dropdown');
+      const isOpen = !dd.classList.contains('hidden');
+      if (isOpen) { dd.classList.add('hidden'); menu.classList.remove('open'); }
+      else        { dd.classList.remove('hidden'); menu.classList.add('open'); }
+    }
+    function closeProfileMenu() {
+      document.getElementById('profile-dropdown')?.classList.add('hidden');
+      document.getElementById('profile-menu')?.classList.remove('open');
+    }
+    document.addEventListener('click', function(e) {
+      const menu = document.getElementById('profile-menu');
+      if (menu && !menu.contains(e.target)) closeProfileMenu();
+    });
+
+    /* ── 다크 테마 ── */
+    function applyDarkTheme(isDark) {
+      if (isDark) document.documentElement.setAttribute('data-theme', 'dark');
+      else        document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    }
+    // 페이지 로드 시 토글 상태 동기화
+    document.addEventListener('DOMContentLoaded', function() {
+      const toggle = document.getElementById('dark-toggle');
+      if (toggle) toggle.checked = localStorage.getItem('theme') === 'dark';
+    });
+
+    /* ── 로그인 모달 ── */
     function openLoginModal() {
       document.getElementById('login-modal-overlay').classList.remove('hidden');
       setTimeout(() => document.getElementById('login-pw').focus(), 50);
     }
-
     function closeLoginModal() {
       document.getElementById('login-modal-overlay').classList.add('hidden');
       document.getElementById('login-pw').value = '';
       document.getElementById('login-error').classList.add('hidden');
     }
-
     function closeLoginModalOuter(e) {
       if (e.target === document.getElementById('login-modal-overlay')) closeLoginModal();
     }
-
     async function doLogin() {
       const pw = document.getElementById('login-pw').value.trim();
       if (!pw) return;
@@ -284,17 +337,16 @@
         el.classList.remove('hidden');
       }
     }
-
     async function doLogout() {
       await fetch('/api/logout', { method: 'POST' });
       location.href = '/';
     }
 
+    /* ── 비밀번호 변경 모달 ── */
     function openChangePwModal() {
       document.getElementById('change-pw-overlay').classList.remove('hidden');
       setTimeout(() => document.getElementById('change-pw-current').focus(), 50);
     }
-
     function closeChangePwModal() {
       document.getElementById('change-pw-overlay').classList.add('hidden');
       document.getElementById('change-pw-current').value = '';
@@ -302,11 +354,9 @@
       document.getElementById('change-pw-error').classList.add('hidden');
       document.getElementById('change-pw-success').classList.add('hidden');
     }
-
     function closeChangePwModalOuter(e) {
       if (e.target === document.getElementById('change-pw-overlay')) closeChangePwModal();
     }
-
     async function doChangePw() {
       const current = document.getElementById('change-pw-current').value.trim();
       const newPw   = document.getElementById('change-pw-new').value.trim();
