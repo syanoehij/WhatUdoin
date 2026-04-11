@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}WhatUDoin{% endblock %}</title>
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
 
   <!-- FullCalendar -->
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
@@ -63,12 +64,14 @@
       </div>
       <p class="login-desc">비밀번호를 입력하세요.<br><small>비밀번호가 아이디 역할을 합니다.</small></p>
       <div id="login-error" class="form-error hidden"></div>
+      <form onsubmit="doLogin(); return false;" autocomplete="on">
+      <input type="text" name="username" autocomplete="username" style="display:none" />
       <div class="form-row-inline">
         <label>비밀번호</label>
-        <input type="password" id="login-pw" placeholder="비밀번호 입력"
-               onkeydown="if(event.key==='Enter') doLogin()" />
-        <button class="btn btn-primary" onclick="doLogin()">로그인</button>
+        <input type="password" id="login-pw" name="password" placeholder="비밀번호 입력" autocomplete="current-password" />
+        <button type="submit" class="btn btn-primary">로그인</button>
       </div>
+      </form>
       <div class="login-links">
         <a href="/admin" class="login-link">관리자 로그인</a>
         <span class="login-link-sep">·</span>
@@ -88,19 +91,21 @@
       </div>
       <div id="change-pw-error" class="form-error hidden"></div>
       <div id="change-pw-success" class="form-success hidden"></div>
+      <form onsubmit="doChangePw(); return false;" autocomplete="on">
+      <input type="text" name="username" autocomplete="username" style="display:none" />
       <div class="form-row">
         <label>현재 비밀번호</label>
-        <input type="password" id="change-pw-current" placeholder="현재 비밀번호 입력" />
+        <input type="password" id="change-pw-current" name="current-password" placeholder="현재 비밀번호 입력" autocomplete="current-password" />
       </div>
       <div class="form-row">
         <label>새 비밀번호</label>
-        <input type="password" id="change-pw-new" placeholder="새 비밀번호 입력"
-               onkeydown="if(event.key==='Enter') doChangePw()" />
+        <input type="password" id="change-pw-new" name="new-password" placeholder="새 비밀번호 입력" autocomplete="new-password" />
       </div>
       <div class="modal-actions">
-        <button class="btn btn-primary" onclick="doChangePw()">변경</button>
-        <button class="btn btn-ghost" onclick="closeChangePwModal()">취소</button>
+        <button type="submit" class="btn btn-primary">변경</button>
+        <button type="button" class="btn btn-ghost" onclick="closeChangePwModal()">취소</button>
       </div>
+      </form>
       <div class="login-links">
         <a href="/admin" class="login-link">관리자 로그인</a>
       </div>

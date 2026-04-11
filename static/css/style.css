@@ -64,7 +64,7 @@ nav { display: flex; gap: 4px; }
 .btn-outline:hover { background: rgba(255,255,255,0.15); }
 
 /* ── Main ── */
-main { padding: 20px 24px; max-width: 1200px; margin: 0 auto; width: 100%; flex: 1; }
+main { padding: 20px 24px; width: 100%; flex: 1; }
 
 /* ── Footer ── */
 .site-footer {
