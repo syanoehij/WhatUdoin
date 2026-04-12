@@ -59,6 +59,11 @@ def _require_admin(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
+    return templates.TemplateResponse(request, "home.html", _ctx(request))
+
+
+@app.get("/calendar", response_class=HTMLResponse)
+def calendar_page(request: Request):
     teams = db.get_all_teams()
     return templates.TemplateResponse(request, "calendar.html", _ctx(request, teams=teams))
 
