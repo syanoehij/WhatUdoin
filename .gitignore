@@ -1,8 +1,13 @@
 __pycache__/
 *.pyc
 events.db
+whatudoin.db
 .claude/
 .playwright-mcp/
 /*.png
 /*.jpg
 /*.jpeg
+# PyInstaller 빌드 산출물
+build/
+dist/
+*.spec.bak

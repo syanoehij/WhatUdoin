@@ -1,9 +1,13 @@
+import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-DB_PATH = "events.db"
+# PyInstaller 번들 시 exe 옆 디렉토리, 개발 시 소스 파일 디렉토리
+_RUN_DIR = Path(os.environ.get("WHATUDOIN_RUN_DIR", Path(__file__).parent))
+DB_PATH  = str(_RUN_DIR / "whatudoin.db")
 
 
 def init_db():

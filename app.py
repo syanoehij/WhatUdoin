@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+import os
 import re
 import uuid
 
@@ -12,8 +13,15 @@ import database as db
 import llm_parser
 import auth
 
+# ── 경로 해석 ─────────────────────────────────────────────
+# PyInstaller 번들: WHATUDOIN_BASE_DIR = sys._MEIPASS (읽기전용 자원)
+#                   WHATUDOIN_RUN_DIR  = exe 옆 디렉토리 (쓰기 가능)
+# 개발 실행:        두 값 모두 소스 파일 디렉토리
+_BASE_DIR = Path(os.environ.get("WHATUDOIN_BASE_DIR", Path(__file__).parent))
+_RUN_DIR  = Path(os.environ.get("WHATUDOIN_RUN_DIR",  Path(__file__).parent))
+
 # 회의록 이미지 저장 루트 (앱 기동 전에 생성해야 StaticFiles 마운트 가능)
-MEETINGS_DIR = Path("meetings")
+MEETINGS_DIR = _RUN_DIR / "meetings"
 MEETINGS_DIR.mkdir(exist_ok=True)
 
 
@@ -24,9 +32,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="WhatUDoin", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/uploads/meetings", StaticFiles(directory="meetings"), name="meetings_files")
-templates = Jinja2Templates(directory="templates")
+app.mount("/static",          StaticFiles(directory=str(_BASE_DIR / "static")),   name="static")
+app.mount("/uploads/meetings", StaticFiles(directory=str(MEETINGS_DIR)),           name="meetings_files")
+templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
 
 
 @app.get("/favicon.ico", include_in_schema=False)
