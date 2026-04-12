@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}프로젝트 관리 · WhatUDoin{% endblock %}
+{% block title %}간트 · WhatUDoin{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -767,6 +767,26 @@ function render() {
 document.getElementById('gantt-timeline').addEventListener('scroll', function () {
   document.getElementById('gantt-header-clip').scrollLeft = this.scrollLeft;
 });
+
+// ── 마우스 휠로 날짜 이동 ─────────────────────────────────
+// deltaY 누적 후 80단위마다 1일 이동 → 천천히 자연스럽게 이동
+let _wheelAccum = 0;
+let _wheelRaf   = null;
+document.querySelector('.gantt-scroll').addEventListener('wheel', (e) => {
+  e.preventDefault();
+  _wheelAccum += e.deltaY;
+  if (_wheelRaf) return;
+  _wheelRaf = requestAnimationFrame(() => {
+    _wheelRaf = null;
+    const days = Math.trunc(_wheelAccum / 80);
+    if (days !== 0) {
+      viewStart = addDays(viewStart, days);
+      _wheelAccum -= days * 80;
+      saveProjectState();
+      render();
+    }
+  });
+}, { passive: false });
 
 // ── 반응형 재렌더 ─────────────────────────────────────────
 let _resizePending = false;

@@ -87,7 +87,7 @@ def kanban_page(request: Request):
     return templates.TemplateResponse(request, "kanban.html", _ctx(request, teams=teams))
 
 
-@app.get("/project", response_class=HTMLResponse)
+@app.get("/gantt", response_class=HTMLResponse)
 def project_page(request: Request):
     teams = db.get_all_teams()
     return templates.TemplateResponse(request, "project.html", _ctx(request, teams=teams))
