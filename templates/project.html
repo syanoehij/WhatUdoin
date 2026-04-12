@@ -425,8 +425,15 @@ function navToday() {
   viewStart = addDays(today(), -Math.floor(daysShown / 3));
   render(); requestAnimationFrame(scrollToToday);
 }
-function navPrev() { viewStart = addDays(viewStart, -Math.floor(daysShown / 2)); render(); }
-function navNext() { viewStart = addDays(viewStart, Math.floor(daysShown / 2)); render(); }
+function navStep() {
+  if (daysShown >= 180) return 30;
+  if (daysShown >= 60)  return 14;
+  if (daysShown >= 21)  return 7;
+  if (daysShown >= 7)   return 3;
+  return 1;
+}
+function navPrev() { viewStart = addDays(viewStart, -navStep()); render(); }
+function navNext() { viewStart = addDays(viewStart, navStep()); render(); }
 
 // ── 데이터 로드 ──────────────────────────────────────────
 async function loadData() {
