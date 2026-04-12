@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const el = document.getElementById('calendar');
   calendar = new FullCalendar.Calendar(el, {
     initialView: localStorage.getItem('cal_view') || 'dayGridMonth',
+    initialDate: localStorage.getItem('cal_date') || undefined,
     locale: 'ko',
     firstDay: 1,
     height: 'auto',
@@ -90,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
     datesSet(info) {
       applyStickyAllDay();
       localStorage.setItem('cal_view', info.view.type);
+      localStorage.setItem('cal_date', info.view.currentStart.toISOString().slice(0, 10));
     },
     eventDidMount() { applyStickyAllDay(); },
     eventClick(info) {

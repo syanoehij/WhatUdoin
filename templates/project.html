@@ -348,10 +348,12 @@ const collapsedProjects = new Set(); // "팀이름::프로젝트이름"
 // ── localStorage 유틸 ────────────────────────────────────
 const LS_ZOOM      = 'proj_zoom';
 const LS_COLLAPSED = 'proj_collapsed';
+const LS_DATE      = 'proj_date';
 
 function saveProjectState() {
   localStorage.setItem(LS_ZOOM, daysShown);
   localStorage.setItem(LS_COLLAPSED, JSON.stringify([...collapsedProjects]));
+  if (viewStart) localStorage.setItem(LS_DATE, viewStart.toISOString().slice(0, 10));
 }
 function loadProjectState() {
   const z = parseInt(localStorage.getItem(LS_ZOOM));
@@ -360,6 +362,11 @@ function loadProjectState() {
     const c = JSON.parse(localStorage.getItem(LS_COLLAPSED) || '[]');
     if (Array.isArray(c)) c.forEach(k => collapsedProjects.add(k));
   } catch (_) {}
+  const d = localStorage.getItem(LS_DATE);
+  if (d) {
+    const [y, m, day] = d.split('-').map(Number);
+    viewStart = new Date(y, m - 1, day);
+  }
 }
 
 const ROW_H  = 34; // 고정 행 높이
@@ -443,7 +450,7 @@ function setViewPreset(v) {
 // ── 네비게이션 ───────────────────────────────────────────
 function navToday() {
   viewStart = addDays(today(), -Math.floor(daysShown / 3));
-  render(); requestAnimationFrame(scrollToToday);
+  saveProjectState(); render(); requestAnimationFrame(scrollToToday);
 }
 function navStep() {
   if (daysShown >= 180) return 30;
@@ -452,8 +459,8 @@ function navStep() {
   if (daysShown >= 7)   return 3;
   return 1;
 }
-function navPrev() { viewStart = addDays(viewStart, -navStep()); render(); }
-function navNext() { viewStart = addDays(viewStart, navStep()); render(); }
+function navPrev() { viewStart = addDays(viewStart, -navStep()); saveProjectState(); render(); }
+function navNext() { viewStart = addDays(viewStart, navStep()); saveProjectState(); render(); }
 
 // ── 데이터 로드 ──────────────────────────────────────────
 async function loadData() {
@@ -788,7 +795,7 @@ function scrollToToday() {
 (function init() {
   loadProjectState();           // localStorage 복원
   syncSlider(); syncViewBtns(); updateZoomLabel();
-  viewStart = addDays(today(), -Math.floor(daysShown / 3));
+  if (!viewStart) viewStart = addDays(today(), -Math.floor(daysShown / 3));
   loadData();
 })();
 
