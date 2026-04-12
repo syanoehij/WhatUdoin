@@ -551,10 +551,11 @@ async def manage_create_project(request: Request):
     data = await request.json()
     name = data.get("name", "").strip()
     color = data.get("color") or None
+    memo  = data.get("memo", "").strip() or None
     if not name:
         raise HTTPException(status_code=400, detail="프로젝트 이름을 입력하세요.")
     try:
-        proj_id = db.create_project(name, color)
+        proj_id = db.create_project(name, color, memo)
     except Exception:
         raise HTTPException(status_code=409, detail="같은 이름의 프로젝트가 이미 있습니다.")
     return {"id": proj_id, "name": name}
@@ -580,6 +581,14 @@ async def manage_project_status(name: str, request: Request):
     data = await request.json()
     is_active = 1 if data.get("is_active", True) else 0
     db.update_project_status(name, is_active)
+    return {"ok": True}
+
+
+@app.patch("/api/manage/projects/{name:path}/memo")
+async def manage_project_memo(name: str, request: Request):
+    _require_editor(request)
+    data = await request.json()
+    db.update_project_memo(name, data.get("memo"))
     return {"ok": True}
 
 

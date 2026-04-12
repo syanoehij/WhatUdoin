@@ -91,6 +91,7 @@ def init_db():
             ("start_date", "TEXT"),
             ("end_date",   "TEXT"),
             ("is_active",  "INTEGER DEFAULT 1"),
+            ("memo",       "TEXT"),
         ])
         # ── pending_users ──
         conn.execute("""
@@ -378,6 +379,7 @@ def get_all_projects_with_events() -> list[dict]:
             "id": r["id"], "name": r["name"], "color": r["color"],
             "start_date": r["start_date"], "end_date": r["end_date"],
             "is_active": r["is_active"] if r["is_active"] is not None else 1,
+            "memo": r["memo"],
             "events": [],
         }
 
@@ -386,7 +388,8 @@ def get_all_projects_with_events() -> list[dict]:
         name = r["project"]
         if name not in proj_map:
             proj_map[name] = {"id": None, "name": name, "color": None,
-                              "start_date": None, "end_date": None, "is_active": 1, "events": []}
+                              "start_date": None, "end_date": None, "is_active": 1,
+                              "memo": None, "events": []}
 
     # 이벤트 분류
     unset_events = []
@@ -396,7 +399,8 @@ def get_all_projects_with_events() -> list[dict]:
         if p.strip():
             if p not in proj_map:
                 proj_map[p] = {"id": None, "name": p, "color": None,
-                               "start_date": None, "end_date": None, "is_active": 1, "events": []}
+                               "start_date": None, "end_date": None, "is_active": 1,
+                               "memo": None, "events": []}
             proj_map[p]["events"].append(d)
         else:
             unset_events.append(d)
@@ -406,14 +410,15 @@ def get_all_projects_with_events() -> list[dict]:
     result = active + inactive
     if unset_events:
         result.append({"id": None, "name": "미지정", "color": None,
-                       "start_date": None, "end_date": None, "is_active": 1, "events": unset_events})
+                       "start_date": None, "end_date": None, "is_active": 1,
+                       "memo": None, "events": unset_events})
     return result
 
 
-def create_project(name: str, color: str = None) -> int:
+def create_project(name: str, color: str = None, memo: str = None) -> int:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO projects (name, color) VALUES (?, ?)", (name, color)
+            "INSERT INTO projects (name, color, memo) VALUES (?, ?, ?)", (name, color, memo)
         )
     return cur.lastrowid
 
@@ -435,6 +440,15 @@ def delete_project(name: str, delete_events: bool = False):
         else:
             conn.execute("UPDATE events SET project = NULL WHERE project = ?", (name,))
         conn.execute("DELETE FROM projects WHERE name = ?", (name,))
+
+
+def update_project_memo(name: str, memo: str):
+    with get_conn() as conn:
+        existing = conn.execute("SELECT id FROM projects WHERE name = ?", (name,)).fetchone()
+        if existing:
+            conn.execute("UPDATE projects SET memo = ? WHERE name = ?", (memo or None, name))
+        else:
+            conn.execute("INSERT INTO projects (name, memo) VALUES (?, ?)", (name, memo or None))
 
 
 def update_project_color(name: str, color: str):

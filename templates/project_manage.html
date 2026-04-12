@@ -255,15 +255,17 @@
   .pm-btn-danger { border-color: #cc4444; color: #cc4444; background: transparent; }
   .pm-btn-danger:hover { background: rgba(204,68,68,0.08); }
 
-  /* ── 생성 폼 패널 ── */
-  .pm-create-panel {
+  /* ── 생성/편집 패널 공통 ── */
+  .pm-create-panel,
+  .pm-edit-panel {
     flex: 1;
     display: none;
     flex-direction: column;
     min-height: 0;
     overflow-y: auto;
   }
-  .pm-create-panel.visible { display: flex; }
+  .pm-create-panel.visible,
+  .pm-edit-panel.visible { display: flex; }
   .pm-create-header {
     padding: 20px 24px 16px;
     border-bottom: 1px solid var(--border);
@@ -445,29 +447,57 @@
         <button class="pm-btn" onclick="hideCreatePanel()">취소</button>
       </div>
     </div>
+    <!-- 프로젝트 편집 패널 -->
+    <div class="pm-edit-panel" id="pm-edit-panel">
+      <div class="pm-create-header">
+        <div class="pm-create-title">프로젝트 편집</div>
+        <div class="pm-create-subtitle" id="ed-subtitle"></div>
+      </div>
+      <div class="pm-create-body">
+        <div class="pm-field">
+          <label>프로젝트 이름 <span style="color:var(--accent)">*</span></label>
+          <input type="text" id="ed-name" maxlength="60" />
+        </div>
+        <div class="pm-field">
+          <label>색상</label>
+          <div class="pm-color-row">
+            <input type="color" class="pm-color-swatch" id="ed-color" value="#4a90d9"
+                   oninput="syncEditPresets(this.value)" />
+            <div class="pm-color-presets" id="ed-presets"></div>
+          </div>
+        </div>
+        <div class="pm-field">
+          <label>일정 기간 <span style="color:var(--text-faint);font-weight:400;">(설정 시 하위 일정 범위 대신 이 날짜로 표시)</span></label>
+          <div class="pm-date-row">
+            <div class="pm-field" style="gap:4px;">
+              <label style="font-weight:400;">시작일</label>
+              <input type="date" id="ed-start" />
+            </div>
+            <div class="pm-field" style="gap:4px;">
+              <label style="font-weight:400;">종료일</label>
+              <input type="date" id="ed-end" />
+            </div>
+          </div>
+        </div>
+        <div class="pm-field">
+          <label>메모 <span style="color:var(--text-faint);font-weight:400;">(선택)</span></label>
+          <textarea id="ed-memo" placeholder="프로젝트에 대한 간략한 설명…"></textarea>
+        </div>
+      </div>
+      <div class="pm-create-footer">
+        <button class="pm-btn pm-btn-accent" style="padding:8px 22px;font-size:0.9rem;" onclick="saveEdit()">저장</button>
+        <button class="pm-btn" onclick="hideEditPanel()">취소</button>
+      </div>
+    </div>
+
     <div id="pm-detail" class="pm-detail" style="display:none;">
       <div class="pm-detail-header">
         <div class="pm-detail-title-row">
           <span id="det-name" class="pm-detail-name"></span>
           <span id="det-closed-badge" class="pm-closed-badge" style="display:none;">종료됨</span>
         </div>
+        <div id="det-memo" style="font-size:0.82rem;color:var(--text-muted);margin-bottom:8px;white-space:pre-wrap;display:none;"></div>
         <div class="pm-detail-actions" id="det-actions"></div>
-        <!-- 이름/색상 편집 폼 -->
-        <div class="pm-edit-form" id="det-edit-name-form">
-          <input class="wide" type="text" id="edit-name" placeholder="프로젝트 이름" maxlength="60" />
-          <input type="color" id="edit-color" value="#4a90d9" title="색상" />
-          <button class="pm-btn pm-btn-accent" onclick="saveEditName()">저장</button>
-          <button class="pm-btn" onclick="hideEditForms()">취소</button>
-        </div>
-        <!-- 간트 기간 편집 폼 -->
-        <div class="pm-edit-form" id="det-edit-date-form">
-          <label>시작일</label>
-          <input class="med" type="date" id="edit-start" />
-          <label>종료일</label>
-          <input class="med" type="date" id="edit-end" />
-          <button class="pm-btn pm-btn-accent" onclick="saveEditDates()">저장</button>
-          <button class="pm-btn" onclick="hideEditForms()">취소</button>
-        </div>
       </div>
 
       <!-- 연결된 일정 -->
@@ -547,17 +577,27 @@ function selectProjItem(idx) {
 
 /* ── 오른쪽 상세 렌더 ── */
 function renderDetail(idx) {
-  const p       = projects[idx];
+  const p        = projects[idx];
   const isClosed = p.is_active === 0;
   const isUnset  = p.name === '미지정';
 
-  document.getElementById('pm-no-select').style.display = 'none';
-  document.getElementById('pm-detail').style.display    = 'flex';
-  hideEditForms();
+  document.getElementById('pm-no-select').style.display     = 'none';
+  document.getElementById('pm-create-panel').classList.remove('visible');
+  document.getElementById('pm-edit-panel').classList.remove('visible');
+  document.getElementById('pm-detail').style.display        = 'flex';
 
   document.getElementById('det-name').textContent = p.name;
   const badge = document.getElementById('det-closed-badge');
   badge.style.display = isClosed ? '' : 'none';
+
+  // 메모
+  const memoEl = document.getElementById('det-memo');
+  if (p.memo) {
+    memoEl.textContent   = p.memo;
+    memoEl.style.display = '';
+  } else {
+    memoEl.style.display = 'none';
+  }
 
   // 액션 버튼
   const actions = document.getElementById('det-actions');
@@ -568,14 +608,12 @@ function renderDetail(idx) {
       ? `<button class="pm-btn pm-btn-resume" onclick="toggleStatus(${idx}, true)">프로젝트 재개</button>`
       : `<button class="pm-btn pm-btn-close"  onclick="toggleStatus(${idx}, false)">프로젝트 종료</button>`;
     actions.innerHTML = `
+      <button class="pm-btn pm-btn-accent" onclick="showEditPanel(${idx})">편집</button>
       ${statusBtn}
-      <button class="pm-btn pm-btn-accent" onclick="showEditNameForm(${idx})">이름/색상 변경</button>
-      <button class="pm-btn pm-btn-accent" onclick="showEditDateForm(${idx})">일정 기간</button>
       <button class="pm-btn pm-btn-warn"   onclick="deleteProject(${idx}, false)">프로젝트만 삭제</button>
       <button class="pm-btn pm-btn-danger" onclick="deleteProject(${idx}, true)">프로젝트+일정 삭제</button>
     `;
   }
-  hideEditForms();
 
   // 일정 목록
   const evEl = document.getElementById('det-events');
@@ -583,9 +621,9 @@ function renderDetail(idx) {
     evEl.innerHTML = '<div class="pm-empty">연결된 일정 없음</div>';
   } else {
     evEl.innerHTML = p.events.map(e => {
-      const s = (e.start_datetime || '').slice(0, 10);
-      const en = (e.end_datetime  || '').slice(0, 10);
-      const date = en && en !== s ? `${s} ~ ${en}` : s;
+      const s  = (e.start_datetime || '').slice(0, 10);
+      const en = (e.end_datetime   || '').slice(0, 10);
+      const date     = en && en !== s ? `${s} ~ ${en}` : s;
       const assignee = e.assignee
         ? `<span class="pm-ev-assignee" title="${escHtml(e.assignee)}">${escHtml(e.assignee)}</span>` : '';
       return `
@@ -602,38 +640,45 @@ function renderDetail(idx) {
 function hideDetail() {
   document.getElementById('pm-no-select').style.display = '';
   document.getElementById('pm-detail').style.display    = 'none';
-  hideEditForms();
 }
 
-/* ── 편집 폼 ── */
-function hideEditForms() {
-  document.getElementById('det-edit-name-form').classList.remove('visible');
-  document.getElementById('det-edit-date-form').classList.remove('visible');
-}
-
-function showEditNameForm(idx) {
-  hideEditForms();
+/* ── 편집 패널 ── */
+function showEditPanel(idx) {
   const p = projects[idx];
-  document.getElementById('edit-name').value  = p.name;
-  document.getElementById('edit-color').value = p.color || '#4a90d9';
-  document.getElementById('det-edit-name-form').classList.add('visible');
-  document.getElementById('edit-name').focus();
+  document.getElementById('pm-detail').style.display    = 'none';
+  document.getElementById('pm-no-select').style.display = 'none';
+  document.getElementById('pm-create-panel').classList.remove('visible');
+
+  document.getElementById('ed-subtitle').textContent = p.name;
+  document.getElementById('ed-name').value  = p.name;
+  document.getElementById('ed-color').value = p.color || '#4a90d9';
+  document.getElementById('ed-start').value = p.start_date || '';
+  document.getElementById('ed-end').value   = p.end_date   || '';
+  document.getElementById('ed-memo').value  = p.memo || '';
+  renderEditPresets(p.color || '#4a90d9');
+
+  document.getElementById('pm-edit-panel').classList.add('visible');
+  setTimeout(() => document.getElementById('ed-name').focus(), 50);
 }
 
-function showEditDateForm(idx) {
-  hideEditForms();
-  const p = projects[idx];
-  document.getElementById('edit-start').value = p.start_date || '';
-  document.getElementById('edit-end').value   = p.end_date   || '';
-  document.getElementById('det-edit-date-form').classList.add('visible');
+function hideEditPanel() {
+  document.getElementById('pm-edit-panel').classList.remove('visible');
+  if (selIdx !== null) renderDetail(selIdx);
+  else document.getElementById('pm-no-select').style.display = '';
 }
 
-async function saveEditName() {
+async function saveEdit() {
   const p       = projects[selIdx];
-  const newName = document.getElementById('edit-name').value.trim();
-  const color   = document.getElementById('edit-color').value;
-  if (!newName) return;
+  const newName = document.getElementById('ed-name').value.trim();
+  const color   = document.getElementById('ed-color').value;
+  const start   = document.getElementById('ed-start').value || null;
+  const end     = document.getElementById('ed-end').value   || null;
+  const memo    = document.getElementById('ed-memo').value.trim() || null;
+  if (!newName) { document.getElementById('ed-name').focus(); return; }
 
+  let target = p.name;
+
+  // 이름 변경
   if (newName !== p.name) {
     const r = await fetch(`/api/manage/projects/${encodeURIComponent(p.name)}`, {
       method: 'PUT',
@@ -650,28 +695,28 @@ async function saveEditName() {
       });
       if (!r2.ok) { toast('병합 실패'); return; }
     } else if (!r.ok) { toast((await r.json()).detail || '오류'); return; }
+    target = newName;
   }
 
-  const target = newName !== p.name ? newName : p.name;
-  await fetch(`/api/manage/projects/${encodeURIComponent(target)}/color`, {
-    method: 'PATCH', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ color }),
-  });
+  // 색상 · 기간 · 메모 저장 (병렬)
+  await Promise.all([
+    fetch(`/api/manage/projects/${encodeURIComponent(target)}/color`, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ color }),
+    }),
+    fetch(`/api/manage/projects/${encodeURIComponent(target)}/dates`, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ start_date: start, end_date: end }),
+    }),
+    fetch(`/api/manage/projects/${encodeURIComponent(target)}/memo`, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ memo }),
+    }),
+  ]);
 
   selName = target;
   toast('저장됨');
-  await loadProjects();
-}
-
-async function saveEditDates() {
-  const p     = projects[selIdx];
-  const start = document.getElementById('edit-start').value || null;
-  const end   = document.getElementById('edit-end').value   || null;
-  await fetch(`/api/manage/projects/${encodeURIComponent(p.name)}/dates`, {
-    method: 'PATCH', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ start_date: start, end_date: end }),
-  });
-  toast('일정 기간 저장됨');
+  document.getElementById('pm-edit-panel').classList.remove('visible');
   await loadProjects();
 }
 
@@ -764,8 +809,23 @@ function pickPreset(color) {
   renderPresets(color);
 }
 function syncColorPresets(color) {
-  // 프리셋 중 일치하는 게 있으면 selected 표시
   renderPresets(PRESET_COLORS.includes(color) ? color : '');
+}
+
+/* ── 편집 패널 색상 프리셋 ── */
+function renderEditPresets(selected) {
+  document.getElementById('ed-presets').innerHTML = PRESET_COLORS.map(c => `
+    <div class="pm-color-preset${c === selected ? ' selected' : ''}"
+         style="background:${c}" title="${c}"
+         onclick="pickEditPreset('${c}')"></div>
+  `).join('');
+}
+function pickEditPreset(color) {
+  document.getElementById('ed-color').value = color;
+  renderEditPresets(color);
+}
+function syncEditPresets(color) {
+  renderEditPresets(PRESET_COLORS.includes(color) ? color : '');
 }
 
 async function createProject() {
@@ -773,11 +833,12 @@ async function createProject() {
   const color = document.getElementById('cr-color').value;
   const start = document.getElementById('cr-start').value || null;
   const end   = document.getElementById('cr-end').value   || null;
+  const memo  = document.getElementById('cr-memo').value.trim() || null;
   if (!name) { document.getElementById('cr-name').focus(); return; }
   const res = await fetch('/api/manage/projects', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ name, color }),
+    body: JSON.stringify({ name, color, memo }),
   });
   if (!res.ok) { toast((await res.json()).detail || '오류'); return; }
   // 날짜 있으면 추가 저장
