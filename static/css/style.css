@@ -848,12 +848,79 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
 }
 .meetings-content-header {
   display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+.meetings-header-top {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 14px 28px;
-  border-bottom: 1px solid var(--border-light);
+  padding: 14px 28px 10px;
+}
+.meetings-search-row {
+  padding: 0 28px 12px;
+}
+.meetings-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  transition: border-color 0.15s;
+}
+.meetings-search-wrap:focus-within {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.meetings-search-icon { font-size: 0.85rem; flex-shrink: 0; opacity: 0.5; }
+.meetings-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 0.87rem;
+  color: var(--text);
+  outline: none;
+  font-family: inherit;
+}
+.meetings-search-input::placeholder { color: var(--text-faint); }
+.meetings-search-clear {
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0 2px;
+  line-height: 1;
   flex-shrink: 0;
+}
+.meetings-search-clear:hover { color: var(--text); }
+/* 검색 하이라이트 */
+mark.search-hl {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+/* 월 네비게이터 — 전체 항목 */
+.month-nav-all {
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: none;
+}
+.month-nav-all.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.month-nav-divider {
+  height: 1px;
+  background: var(--border-faint);
+  margin: 4px 12px 6px;
 }
 .meetings-month-label {
   font-size: 1.05rem;

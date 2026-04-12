@@ -77,16 +77,26 @@
   <!-- ── 오른쪽: 회의록 리스트 ── -->
   <div class="meetings-content">
     <div class="meetings-content-header" id="meetings-header">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span id="current-month-label" class="meetings-month-label"></span>
-        <span id="current-month-count" class="count-badge"></span>
+      <div class="meetings-header-top">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span id="current-month-label" class="meetings-month-label"></span>
+          <span id="current-month-count" class="count-badge"></span>
+        </div>
+        {% if user and user.role in ('editor', 'admin') %}
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline btn-sm" onclick="openWeeklyReportModal()">📊 주간 업무 작성(AI)</button>
+          <a href="/meetings/new" class="btn btn-primary btn-sm">+ 새 회의록</a>
+        </div>
+        {% endif %}
       </div>
-      {% if user and user.role in ('editor', 'admin') %}
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-outline btn-sm" onclick="openWeeklyReportModal()">📊 주간 업무 작성(AI)</button>
-        <a href="/meetings/new" class="btn btn-primary btn-sm">+ 새 회의록</a>
+      <div class="meetings-search-row">
+        <div class="meetings-search-wrap">
+          <span class="meetings-search-icon">🔍</span>
+          <input type="text" id="meetings-search" class="meetings-search-input"
+                 placeholder="제목으로 검색…" oninput="onSearch(this.value)" autocomplete="off">
+          <button class="meetings-search-clear hidden" id="search-clear-btn" onclick="clearSearch()">✕</button>
+        </div>
       </div>
-      {% endif %}
     </div>
 
     <table class="meeting-table" id="meetings-table">
@@ -115,19 +125,26 @@ const ALL_MEETINGS  = {{ meetings | tojson | safe }};
 const CURRENT_UID   = {{ user.id if user else 'null' }};
 const CURRENT_UNAME = {{ (user.name or user.username) | tojson | safe if user else 'null' }};
 
-// ── 작성자 필터 상태 ─────────────────────────────────────
-// null = 전체, '__me__' = 내 작성, 'name' = 특정 작성자
+// ── 상태 ────────────────────────────────────────────────
+// selectedAuthor: null=전체, '__me__'=내 작성, 'name'=특정 작성자
+// selectedYM:     'YYYY-MM'=특정 월, '__all__'=전체
 let selectedAuthor = null;
 let selectedYM     = null;
+let searchQuery    = '';
 
-// ── 필터 적용된 회의록 ────────────────────────────────────
+// ── 작성자 + 검색 필터 적용 ──────────────────────────────
 function getFiltered() {
-  if (!selectedAuthor) return ALL_MEETINGS;
-  if (selectedAuthor === '__me__') return ALL_MEETINGS.filter(m => m.author_id === CURRENT_UID);
-  return ALL_MEETINGS.filter(m => m.author_name === selectedAuthor);
+  let list = ALL_MEETINGS;
+  if (selectedAuthor === '__me__') list = list.filter(m => m.author_id === CURRENT_UID);
+  else if (selectedAuthor)         list = list.filter(m => m.author_name === selectedAuthor);
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    list = list.filter(m => (m.title || '').toLowerCase().includes(q));
+  }
+  return list;
 }
 
-// ── 월별 그룹 계산 (필터 반영) ───────────────────────────
+// ── 월별 그룹 계산 ───────────────────────────────────────
 function buildGroups() {
   const filtered = getFiltered();
   const byMonth = {}, byYear = {};
@@ -142,7 +159,7 @@ function buildGroups() {
     if (!byYear[yr]) byYear[yr] = [];
     byYear[yr].push(ym);
   });
-  return { byMonth, byYear };
+  return { byMonth, byYear, filtered };
 }
 
 // ── 작성자 필터 섹션 렌더링 ──────────────────────────────
@@ -150,7 +167,6 @@ function renderAuthorFilter() {
   const section = document.getElementById('author-filter-section');
   if (!section) return;
 
-  // 전체 작성자 목록 (중복 제거, 현재 유저 제외한 나머지)
   const authorMap = {};
   ALL_MEETINGS.forEach(m => {
     if (m.author_name && m.author_id !== CURRENT_UID)
@@ -177,12 +193,13 @@ function renderAuthorFilter() {
 // ── 작성자 선택 ──────────────────────────────────────────
 function selectAuthor(key) {
   selectedAuthor = key;
-  const { byMonth, byYear } = buildGroups();
+  const { byMonth, byYear, filtered } = buildGroups();
   renderAuthorFilter();
-  renderMonthNav(byMonth, byYear);
+  renderMonthNav(byMonth, byYear, filtered);
 
-  // 선택된 월이 필터 결과에 있으면 유지, 없으면 가장 최근 월로 이동
-  if (selectedYM && byMonth[selectedYM]) {
+  if (selectedYM === '__all__') {
+    renderAllList(filtered);
+  } else if (selectedYM && byMonth[selectedYM]) {
     renderMeetingList(selectedYM, byMonth);
   } else {
     const allYMs = Object.keys(byMonth).sort().reverse();
@@ -192,13 +209,23 @@ function selectAuthor(key) {
 }
 
 // ── 왼쪽 네비게이터 렌더링 ───────────────────────────────
-function renderMonthNav(byMonth, byYear) {
+function renderMonthNav(byMonth, byYear, filtered) {
   const body = document.getElementById('month-nav-body');
+  const total = filtered ? filtered.length : 0;
+
+  const allItem = `
+    <div class="month-nav-item month-nav-all ${selectedYM === '__all__' ? 'active' : ''}"
+         onclick="selectMonth('__all__')">
+      <span>전체</span>
+      <span class="month-nav-count">${total}</span>
+    </div>`;
+
   if (!Object.keys(byYear).length) {
-    body.innerHTML = '<p class="text-muted" style="padding:16px;font-size:0.82rem;">회의록이 없습니다.</p>';
+    body.innerHTML = allItem + '<p class="text-muted" style="padding:8px 16px;font-size:0.82rem;">회의록이 없습니다.</p>';
     return;
   }
-  body.innerHTML = Object.keys(byYear).sort().reverse().map(yr => `
+
+  const yearHtml = Object.keys(byYear).sort().reverse().map(yr => `
     <div class="month-nav-year">
       <div class="month-nav-year-label">${yr}년</div>
       ${byYear[yr].map(ym => {
@@ -211,12 +238,43 @@ function renderMonthNav(byMonth, byYear) {
         </div>`;
       }).join('')}
     </div>`).join('');
+
+  body.innerHTML = allItem + '<div class="month-nav-divider"></div>' + yearHtml;
 }
 
-// ── 오른쪽 리스트 렌더링 ─────────────────────────────────
+// ── 전체 목록 렌더링 ─────────────────────────────────────
+function renderAllList(filtered) {
+  const meetings = [...filtered].sort((a, b) => {
+    const da = a.meeting_date || a.updated_at || '';
+    const db = b.meeting_date || b.updated_at || '';
+    return db.localeCompare(da);
+  });
+
+  document.getElementById('meetings-header').style.display = '';
+  document.getElementById('current-month-label').textContent = '전체';
+  document.getElementById('current-month-count').textContent = `${meetings.length}건`;
+
+  const tbody = document.getElementById('meetings-tbody');
+  const empty = document.getElementById('meetings-empty');
+
+  if (!meetings.length) {
+    tbody.innerHTML = '';
+    document.getElementById('meetings-table').style.display = 'none';
+    empty.classList.remove('hidden');
+    empty.querySelector('p').textContent = searchQuery ? '검색 결과가 없습니다.' : '등록된 회의록이 없습니다.';
+    return;
+  }
+
+  document.getElementById('meetings-table').style.display = '';
+  empty.classList.add('hidden');
+  tbody.innerHTML = meetings.map(m => renderRow(m, true)).join('');
+}
+
+// ── 월별 목록 렌더링 ─────────────────────────────────────
 function renderMeetingList(ym, byMonth) {
   const meetings = byMonth[ym] || [];
   const [yr, mo] = ym.split('-');
+  document.getElementById('meetings-header').style.display = '';
   document.getElementById('current-month-label').textContent = `${yr}년 ${parseInt(mo)}월`;
   document.getElementById('current-month-count').textContent = `${meetings.length}건`;
 
@@ -233,37 +291,84 @@ function renderMeetingList(ym, byMonth) {
 
   document.getElementById('meetings-table').style.display = '';
   empty.classList.add('hidden');
-
-  tbody.innerHTML = meetings.map(m => {
-    const rawDate = (m.meeting_date || m.updated_at || '').slice(0, 10);
-    const fmtDate = rawDate ? (() => {
-      const [y, mo2, d] = rawDate.split('-');
-      return `${parseInt(mo2)}/${parseInt(d)}`;
-    })() : '-';
-    const isMine = m.author_id === CURRENT_UID;
-    return `
-    <tr class="meeting-row ${isMine ? 'mine' : ''}" onclick="location.href='/meetings/${m.id}?from=meetings'">
-      <td class="col-type">
-        <span class="doc-badge ${m.is_team_doc ? 'doc-team' : 'doc-personal'}">${m.is_team_doc ? '팀' : '개인'}</span>
-      </td>
-      <td class="col-author ${isMine ? 'author-me' : ''}">${escHtml(m.author_name || '-')}</td>
-      <td class="col-title">
-        <div class="meeting-title-wrap">
-          <span class="meeting-title-text">${escHtml(m.title)}</span>
-          ${m.event_count ? `<span class="event-count-badge">${m.event_count}</span>` : ''}
-        </div>
-      </td>
-      <td class="col-team">${m.team_name ? `<span class="team-name-badge">${escHtml(m.team_name)}</span>` : '<span style="color:var(--text-faint);font-size:0.8rem;">-</span>'}</td>
-      <td class="col-date">${fmtDate}</td>
-    </tr>`;
-  }).join('');
+  tbody.innerHTML = meetings.map(m => renderRow(m, false)).join('');
 }
 
+// ── 행 HTML 생성 ─────────────────────────────────────────
+function renderRow(m, showYear) {
+  const rawDate = (m.meeting_date || m.updated_at || '').slice(0, 10);
+  let fmtDate = '-';
+  if (rawDate) {
+    const [y, mo2, d] = rawDate.split('-');
+    fmtDate = showYear ? `${y.slice(2)}/${parseInt(mo2)}/${parseInt(d)}` : `${parseInt(mo2)}/${parseInt(d)}`;
+  }
+  const isMine = m.author_id === CURRENT_UID;
+  const titleHtml = searchQuery
+    ? escHtml(m.title).replace(new RegExp(escRegex(searchQuery), 'gi'), s => `<mark class="search-hl">${s}</mark>`)
+    : escHtml(m.title);
+  return `
+  <tr class="meeting-row ${isMine ? 'mine' : ''}" onclick="location.href='/meetings/${m.id}?from=meetings'">
+    <td class="col-type">
+      <span class="doc-badge ${m.is_team_doc ? 'doc-team' : 'doc-personal'}">${m.is_team_doc ? '팀' : '개인'}</span>
+    </td>
+    <td class="col-author ${isMine ? 'author-me' : ''}">${escHtml(m.author_name || '-')}</td>
+    <td class="col-title">
+      <div class="meeting-title-wrap">
+        <span class="meeting-title-text">${titleHtml}</span>
+        ${m.event_count ? `<span class="event-count-badge">${m.event_count}</span>` : ''}
+      </div>
+    </td>
+    <td class="col-team">${m.team_name ? `<span class="team-name-badge">${escHtml(m.team_name)}</span>` : '<span style="color:var(--text-faint);font-size:0.8rem;">-</span>'}</td>
+    <td class="col-date">${fmtDate}</td>
+  </tr>`;
+}
+
+// ── 월/전체 선택 ─────────────────────────────────────────
 function selectMonth(ym) {
   selectedYM = ym;
-  const { byMonth, byYear } = buildGroups();
-  renderMonthNav(byMonth, byYear);
-  renderMeetingList(ym, byMonth);
+  const { byMonth, byYear, filtered } = buildGroups();
+  renderMonthNav(byMonth, byYear, filtered);
+  if (ym === '__all__') {
+    renderAllList(filtered);
+  } else {
+    renderMeetingList(ym, byMonth);
+  }
+}
+
+// ── 검색 ─────────────────────────────────────────────────
+function onSearch(val) {
+  searchQuery = val.trim();
+  const clearBtn = document.getElementById('search-clear-btn');
+  clearBtn.classList.toggle('hidden', !searchQuery);
+
+  const { byMonth, byYear, filtered } = buildGroups();
+  renderMonthNav(byMonth, byYear, filtered);
+
+  if (searchQuery) {
+    // 검색 중에는 전체 뷰
+    selectedYM = '__all__';
+    renderAllList(filtered);
+  } else {
+    // 검색 해제: 이전 월로 복귀 (없으면 최근 월)
+    if (selectedYM === '__all__') {
+      const allYMs = Object.keys(byMonth).sort().reverse();
+      selectedYM = allYMs[0] || null;
+    }
+    if (selectedYM && byMonth[selectedYM]) {
+      renderMeetingList(selectedYM, byMonth);
+    } else {
+      const allYMs = Object.keys(byMonth).sort().reverse();
+      if (allYMs.length) { selectedYM = allYMs[0]; renderMeetingList(selectedYM, byMonth); }
+      else showEmpty();
+    }
+    renderMonthNav(byMonth, byYear, filtered);
+  }
+}
+
+function clearSearch() {
+  document.getElementById('meetings-search').value = '';
+  onSearch('');
+  document.getElementById('meetings-search').focus();
 }
 
 function showEmpty() {
@@ -277,19 +382,21 @@ function showEmpty() {
 function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+function escRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 // ── 초기화 ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   renderAuthorFilter();
-  const { byMonth, byYear } = buildGroups();
+  const { byMonth, byYear, filtered } = buildGroups();
   const allYMs = Object.keys(byMonth).sort().reverse();
   if (allYMs.length) {
-    renderMonthNav(byMonth, byYear);
-    const ym = allYMs[0];
-    selectedYM = ym;
-    renderMeetingList(ym, byMonth);
+    selectedYM = allYMs[0];
+    renderMonthNav(byMonth, byYear, filtered);
+    renderMeetingList(selectedYM, byMonth);
   } else {
-    renderMonthNav(byMonth, byYear);
+    renderMonthNav(byMonth, byYear, filtered);
     document.getElementById('meetings-header').style.display = 'none';
     document.getElementById('meetings-table').style.display = 'none';
     const el = document.getElementById('meetings-empty');
