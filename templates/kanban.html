@@ -385,7 +385,8 @@ function renderBoard() {
   const grouped = {};
   COLUMNS.forEach(c => grouped[c.status] = []);
   allEvents.forEach(e => {
-    if (grouped[e.kanban_status] !== undefined) grouped[e.kanban_status].push(e);
+    const status = e.kanban_status || 'backlog';  // 미지정은 Backlog로
+    if (grouped[status] !== undefined) grouped[status].push(e);
   });
 
   let total = allEvents.length;
@@ -464,7 +465,8 @@ async function onDrop(e, newStatus) {
 
   // Optimistic UI update
   const ev = allEvents.find(e => e.id === id);
-  if (!ev || ev.kanban_status === newStatus) return;
+  const curStatus = ev?.kanban_status || 'backlog';
+  if (!ev || curStatus === newStatus) return;
   ev.kanban_status = newStatus;
   renderBoard();
 

@@ -250,8 +250,17 @@ def delete_event(event_id: int):
 
 
 def get_kanban_events(team_id: int = None) -> list[dict]:
-    # 종료된 프로젝트 및 완료 처리된 일정은 칸반에서 제외
-    inactive_filter = """
+    # 조건:
+    #   - kanban_status가 설정된 일정, 또는
+    #   - 프로젝트 없는(미지정) 일정 (kanban_status 없어도 Backlog로 표시)
+    # 제외:
+    #   - 종료된 프로젝트 소속 일정
+    #   - 완료 처리된 미지정 일정 (is_active = 0)
+    base_filter = """
+        AND (
+            e.kanban_status IS NOT NULL
+            OR (e.project IS NULL OR e.project = '')
+        )
         AND (e.project IS NULL OR e.project = '' OR e.project NOT IN (
             SELECT name FROM projects WHERE is_active = 0
         ))
@@ -260,12 +269,12 @@ def get_kanban_events(team_id: int = None) -> list[dict]:
     with get_conn() as conn:
         if team_id:
             rows = conn.execute(
-                f"SELECT * FROM events e WHERE e.kanban_status IS NOT NULL AND e.team_id = ? {inactive_filter} ORDER BY e.start_datetime",
+                f"SELECT * FROM events e WHERE e.team_id = ? {base_filter} ORDER BY e.start_datetime",
                 (team_id,)
             ).fetchall()
         else:
             rows = conn.execute(
-                f"SELECT * FROM events e WHERE e.kanban_status IS NOT NULL {inactive_filter} ORDER BY e.start_datetime"
+                f"SELECT * FROM events e WHERE 1=1 {base_filter} ORDER BY e.start_datetime"
             ).fetchall()
     return [dict(r) for r in rows]
 

@@ -233,7 +233,10 @@ function buildBoard(containerId, events) {
   container.innerHTML = '';
   const grouped = {};
   COLUMNS.forEach(c => grouped[c.status] = []);
-  events.forEach(e => { if (grouped[e.kanban_status] !== undefined) grouped[e.kanban_status].push(e); });
+  events.forEach(e => {
+    const status = e.kanban_status || 'backlog';  // 미지정은 Backlog로
+    if (grouped[status] !== undefined) grouped[status].push(e);
+  });
 
   COLUMNS.forEach(({ status, label }) => {
     const cards = grouped[status];
