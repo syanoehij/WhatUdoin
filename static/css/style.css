@@ -1821,3 +1821,27 @@ select.form-input {
 .mt-8 { margin-top: 8px; }
 .mt-16 { margin-top: 16px; }
 .dt-inputs { display: flex; gap: 4px; align-items: center; }
+
+/* ── 캘린더 주차 뱃지 ── */
+/* 월 뷰: 월요일 날짜 셀 왼쪽 */
+.fc-week-num {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-faint);
+  background: var(--surface-2);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-right: 4px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  align-self: center;
+}
+/* 주/2주 뷰: 툴바 제목 옆 */
+.fc-toolbar-week-num {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: 6px;
+  vertical-align: middle;
+}

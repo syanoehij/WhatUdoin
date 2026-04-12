@@ -94,6 +94,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const _d = calendar.getDate();
       const _ds = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
       localStorage.setItem('cal_date', _ds);
+      updateWeekLabel(info);
+    },
+    dayCellDidMount(info) {
+      // 월 뷰 월요일 셀에 주차 뱃지 삽입
+      if (calendar.view.type !== 'dayGridMonth') return;
+      if (info.date.getDay() !== 1) return;  // 1 = 월요일
+      const wn = isoWeekNum(info.date);
+      const top = info.el.querySelector('.fc-daygrid-day-top');
+      if (!top || top.querySelector('.fc-week-num')) return;
+      const badge = document.createElement('span');
+      badge.className = 'fc-week-num';
+      badge.textContent = `W${wn}`;
+      top.insertBefore(badge, top.firstChild);
     },
     eventDidMount() { applyStickyAllDay(); },
     eventClick(info) {
@@ -300,6 +313,37 @@ async function editFromDetail() {
   const data = await res.json();
   document.getElementById('detail-overlay').classList.add('hidden');
   openModal('', data);
+}
+
+// ── ISO 주차 계산 ──────────────────────────────────────
+function isoWeekNum(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;                        // 일=0 → 7로
+  d.setUTCDate(d.getUTCDate() + 4 - day);               // 해당 주 목요일
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+// ── 주/2주 뷰 툴바 제목에 주차 표기 ──────────────────────
+function updateWeekLabel(info) {
+  // 기존 뱃지 제거
+  document.querySelectorAll('.fc-toolbar-week-num').forEach(el => el.remove());
+
+  const view = info.view.type;
+  if (view !== 'timeGridWeek' && view !== 'timeGridTwoWeek') return;
+
+  const start = info.view.activeStart;
+  const end   = new Date(info.view.activeEnd.getTime() - 86400000); // exclusive end → 마지막 날 (UTC 자정 기준)
+  const w1 = isoWeekNum(start);
+  const w2 = isoWeekNum(end);
+  const label = w1 === w2 ? `(W${w1})` : `(W${w1}~${w2})`;
+
+  const titleEl = document.querySelector('.fc-toolbar-title');
+  if (!titleEl) return;
+  const badge = document.createElement('span');
+  badge.className = 'fc-toolbar-week-num';
+  badge.textContent = ' ' + label;
+  titleEl.appendChild(badge);
 }
 
 // 캘린더는 자체 날짜 탐색이 검색 역할 — 검색바 비활성화
