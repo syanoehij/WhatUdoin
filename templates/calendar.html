@@ -47,7 +47,7 @@ let currentDetailEventTeamId = null;
 document.addEventListener('DOMContentLoaded', () => {
   const el = document.getElementById('calendar');
   calendar = new FullCalendar.Calendar(el, {
-    initialView: 'dayGridMonth',
+    initialView: localStorage.getItem('cal_view') || 'dayGridMonth',
     locale: 'ko',
     firstDay: 1,
     height: 'auto',
@@ -87,7 +87,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const ok = await patchEventDatetime(info.event);
       if (!ok) info.revert();
     },
-    datesSet() { applyStickyAllDay(); },
+    datesSet(info) {
+      applyStickyAllDay();
+      localStorage.setItem('cal_view', info.view.type);
+    },
     eventDidMount() { applyStickyAllDay(); },
     eventClick(info) {
       if (info.event.extendedProps.type === 'meeting') {

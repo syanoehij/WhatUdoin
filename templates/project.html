@@ -345,6 +345,23 @@ let viewStart = null;
 let allTeams  = [];
 const collapsedProjects = new Set(); // "팀이름::프로젝트이름"
 
+// ── localStorage 유틸 ────────────────────────────────────
+const LS_ZOOM      = 'proj_zoom';
+const LS_COLLAPSED = 'proj_collapsed';
+
+function saveProjectState() {
+  localStorage.setItem(LS_ZOOM, daysShown);
+  localStorage.setItem(LS_COLLAPSED, JSON.stringify([...collapsedProjects]));
+}
+function loadProjectState() {
+  const z = parseInt(localStorage.getItem(LS_ZOOM));
+  if (z && ZOOM_STEPS.includes(z)) daysShown = z;
+  try {
+    const c = JSON.parse(localStorage.getItem(LS_COLLAPSED) || '[]');
+    if (Array.isArray(c)) c.forEach(k => collapsedProjects.add(k));
+  } catch (_) {}
+}
+
 const ROW_H  = 34; // 고정 행 높이
 const BAR_H  = 22;
 const HEADER_H = 40; // gantt-header 높이 (20+20)
@@ -395,6 +412,7 @@ function getDayPx() {
 // ── 줌 ────────────────────────────────────────────────────
 function onZoomSlider(idx) {
   daysShown = ZOOM_STEPS[idx];
+  saveProjectState();
   updateZoomLabel(); syncViewBtns(); render();
 }
 function updateZoomLabel() {
@@ -418,6 +436,7 @@ function syncViewBtns() {
 }
 function setViewPreset(v) {
   daysShown = PRESET_DAYS[v];
+  saveProjectState();
   syncSlider(); syncViewBtns(); render(); requestAnimationFrame(scrollToToday);
 }
 
@@ -449,6 +468,7 @@ async function loadData() {
 function toggleProject(key) {
   if (collapsedProjects.has(key)) collapsedProjects.delete(key);
   else collapsedProjects.add(key);
+  saveProjectState();
   syncCollapseBtn();
   render();
 }
@@ -460,6 +480,7 @@ function collapseAll() {
   } else {
     collapsedProjects.clear();
   }
+  saveProjectState();
   syncCollapseBtn();
   render();
 }
@@ -765,7 +786,8 @@ function scrollToToday() {
 
 // ── 초기화 ───────────────────────────────────────────────
 (function init() {
-  updateZoomLabel(); syncViewBtns();
+  loadProjectState();           // localStorage 복원
+  syncSlider(); syncViewBtns(); updateZoomLabel();
   viewStart = addDays(today(), -Math.floor(daysShown / 3));
   loadData();
 })();
