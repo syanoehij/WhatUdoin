@@ -91,7 +91,9 @@ document.addEventListener('DOMContentLoaded', () => {
     datesSet(info) {
       applyStickyAllDay();
       localStorage.setItem('cal_view', info.view.type);
-      localStorage.setItem('cal_date', info.view.currentStart.toISOString().slice(0, 10));
+      const _d = calendar.getDate();
+      const _ds = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
+      localStorage.setItem('cal_date', _ds);
     },
     eventDidMount() { applyStickyAllDay(); },
     eventClick(info) {
