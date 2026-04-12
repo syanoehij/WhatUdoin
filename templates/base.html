@@ -19,7 +19,7 @@
   <link rel="stylesheet" href="/static/css/style.css" />
   {% block extra_head %}{% endblock %}
   <script>
-    const CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id} | tojson if user else 'null' }};
+    const CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id, 'name': user.name} | tojson if user else 'null' }};
     // 다크 테마 깜빡임 방지: 렌더링 전에 적용
     (function() {
       if (localStorage.getItem('theme') === 'dark')
