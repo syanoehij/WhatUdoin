@@ -760,6 +760,8 @@ async function toggleEventStatus(id, activate) {
     body: JSON.stringify({ is_active: activate }),
   });
   if (!res.ok) { toast('변경 실패'); return; }
+  sessionStorage.setItem('pm_restore_name',   selName || '');
+  sessionStorage.setItem('pm_restore_filter', filter);
   location.reload();
 }
 
@@ -919,6 +921,21 @@ document.getElementById('cr-name').addEventListener('keydown', e => {
   if (e.key === 'Escape') hideCreatePanel();
 });
 
-loadProjects();
+// 새로고침 후 선택 복원 (미지정 완료/재개 등)
+(async () => {
+  const restoreName   = sessionStorage.getItem('pm_restore_name');
+  const restoreFilter = sessionStorage.getItem('pm_restore_filter');
+  if (restoreName !== null) {
+    sessionStorage.removeItem('pm_restore_name');
+    sessionStorage.removeItem('pm_restore_filter');
+    if (restoreFilter) {
+      filter = restoreFilter;
+      document.getElementById('filter-active').classList.toggle('active', filter === 'active');
+      document.getElementById('filter-closed').classList.toggle('active', filter === 'closed');
+    }
+    if (restoreName) selName = restoreName;
+  }
+  await loadProjects();
+})();
 </script>
 {% endblock %}
