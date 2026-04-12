@@ -132,18 +132,20 @@ main { padding: 0; }
 /* ── 팀 컬럼 ─────────────────────────────────────────── */
 .gantt-team-col {
   width: 60px; min-width: 60px;
-  background: var(--surface); border-right: 1px solid var(--border);
+  background: var(--surface-2); border-right: 2px solid var(--border);
   display: flex; flex-direction: column; z-index: 25;
 }
 .gantt-team-rows { flex: 1; }
 .gantt-team-cell {
   display: flex; align-items: center; justify-content: center;
-  text-align: center; border-bottom: 1px solid var(--border);
-  font-size: 0.72rem; font-weight: 700; color: var(--text);
+  text-align: center; border-bottom: 2px solid var(--border);
+  font-size: 0.72rem; font-weight: 800; color: var(--text);
   padding: 4px; overflow: hidden; box-sizing: border-box;
   word-break: break-all; line-height: 1.4;
+  background: var(--surface-2);
+  letter-spacing: 0.03em;
 }
-.gantt-team-cell.team-divider { border-top: 2px solid var(--border); }
+.gantt-team-cell.team-divider { border-top: 3px solid var(--border); }
 
 /* ── 이름 컬럼 ─────────────────────────────────────── */
 .gantt-name-col {
@@ -157,7 +159,7 @@ main { padding: 0; }
 .proj-header-row {
   display: flex; align-items: center;
   padding: 0 8px 0 0;
-  font-size: 0.82rem; font-weight: 700; color: var(--text);
+  font-size: 0.84rem; font-weight: 700; color: var(--text);
   cursor: pointer; box-sizing: border-box;
   border-bottom: 1px solid var(--border);
   user-select: none; flex-shrink: 0;
@@ -166,12 +168,12 @@ main { padding: 0; }
 }
 .proj-header-row:hover { background: var(--surface-3); }
 .proj-toggle {
-  font-size: 0.6rem; margin: 0 4px 0 6px;
+  font-size: 0.6rem; margin: 0 5px 0 8px;
   flex-shrink: 0; transition: transform 0.15s;
   color: var(--text-muted);
 }
 .proj-toggle.collapsed { transform: rotate(-90deg); }
-.proj-color-bar { width: 4px; align-self: stretch; flex-shrink: 0; margin-right: 6px; }
+.proj-color-bar { width: 5px; align-self: stretch; flex-shrink: 0; margin-right: 7px; }
 .proj-name {
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1;
 }
@@ -183,8 +185,8 @@ main { padding: 0; }
 /* 이벤트 행 */
 .event-name-row {
   display: flex; align-items: center;
-  padding: 0 8px 0 22px;
-  font-size: 0.78rem; color: var(--text);
+  padding: 0 8px 0 26px;
+  font-size: 0.77rem; color: var(--text-muted);
   box-sizing: border-box;
   border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
@@ -193,7 +195,7 @@ main { padding: 0; }
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1;
 }
 .event-date-badge {
-  font-size: 0.68rem; color: var(--text-faint); margin-left: 4px;
+  font-size: 0.66rem; color: var(--text-faint); margin-left: 4px;
   flex-shrink: 0; white-space: nowrap;
 }
 
@@ -206,14 +208,15 @@ main { padding: 0; }
   background: var(--surface-2);
 }
 .gantt-header-months {
-  position: relative; height: 20px; border-bottom: 1px solid var(--border);
+  position: relative; height: 22px; border-bottom: 2px solid var(--border);
 }
 .gantt-header-month {
-  position: absolute; top: 0; height: 20px;
-  display: flex; align-items: center; padding: 0 6px;
-  font-size: 0.72rem; font-weight: 700; color: var(--text);
-  border-right: 1px solid var(--border);
+  position: absolute; top: 0; height: 22px;
+  display: flex; align-items: center; padding: 0 8px;
+  font-size: 0.73rem; font-weight: 800; color: var(--text);
+  border-right: 2px solid var(--border);
   overflow: hidden; white-space: nowrap; box-sizing: border-box;
+  letter-spacing: 0.02em;
 }
 .gantt-header-units { position: relative; height: 20px; }
 .gantt-header-unit {
@@ -223,8 +226,9 @@ main { padding: 0; }
   border-right: 1px solid var(--border-light);
   overflow: hidden; box-sizing: border-box; user-select: none;
 }
-.gantt-header-unit.is-today   { background: rgba(214,48,49,0.08); color: #d63031; font-weight: 700; }
-.gantt-header-unit.is-weekend { color: var(--text-faint); }
+.gantt-header-unit.is-today   { background: rgba(214,48,49,0.12); color: #d63031; font-weight: 700; }
+.gantt-header-unit.is-weekend { color: var(--text-faint); background: rgba(0,0,0,0.04); }
+[data-theme="dark"] .gantt-header-unit.is-weekend { background: rgba(255,255,255,0.04); }
 
 /* ── 행 ────────────────────────────────────────────── */
 .gantt-rows { position: relative; }
@@ -236,32 +240,31 @@ main { padding: 0; }
   background: var(--surface-2); border-bottom: 1px solid var(--border);
 }
 .gantt-row.row-event { background: var(--surface); }
+.gantt-row.row-event:nth-child(even) { background: color-mix(in srgb, var(--surface) 92%, var(--surface-2) 8%); }
 .gantt-row.row-event:hover { background: var(--surface-2); }
-.gantt-row.team-divider { border-top: 2px solid var(--border); }
+.gantt-row.team-divider { border-top: 3px solid var(--border); }
 
-.gantt-weekend-bg {
-  position: absolute; top: 0; bottom: 0;
-  background: rgba(0,0,0,0.025); pointer-events: none; z-index: 0;
-}
-[data-theme="dark"] .gantt-weekend-bg { background: rgba(255,255,255,0.03); }
 .gantt-today-line {
-  position: absolute; top: 0; width: 2px;
-  background: #d63031; opacity: 0.5; z-index: 6; pointer-events: none;
+  position: absolute; top: 0; width: 3px;
+  background: #d63031; opacity: 0.85; z-index: 6; pointer-events: none;
+  border-radius: 1px;
 }
 .gantt-bar {
   position: absolute;
-  border-radius: 4px; cursor: pointer;
+  border-radius: 5px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  text-align: center; padding: 0 5px;
-  font-size: 0.71rem; font-weight: 600; color: #fff;
+  text-align: center; padding: 0 6px;
+  font-size: 0.72rem; font-weight: 600; color: #fff;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-  transition: filter 0.12s; z-index: 3; box-sizing: border-box;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.18);
+  border-bottom: 2px solid rgba(0,0,0,0.2);
+  transition: filter 0.12s, box-shadow 0.12s; z-index: 3; box-sizing: border-box;
 }
-.gantt-bar:hover { filter: brightness(1.12); z-index: 4; }
+.gantt-bar:hover { filter: brightness(1.1); box-shadow: 0 4px 8px rgba(0,0,0,0.35); z-index: 4; }
 .gantt-proj-span {
   position: absolute; pointer-events: none; z-index: 1;
-  opacity: 0.28; border-radius: 2px;
+  opacity: 0.13; border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.1);
 }
 .gantt-empty {
   padding: 80px 40px; text-align: center;
@@ -369,8 +372,8 @@ function loadProjectState() {
   }
 }
 
-const ROW_H  = 34; // 고정 행 높이
-const BAR_H  = 22;
+const ROW_H  = 38; // 고정 행 높이
+const BAR_H  = 26;
 const HEADER_H = 40; // gantt-header 높이 (20+20)
 
 const PROJECT_COLORS = [
@@ -693,17 +696,6 @@ function render() {
           evGRow.className = 'gantt-row row-event';
           evGRow.style.height = ROW_H + 'px';
           evGRow.style.width  = Math.ceil(totalW) + 'px';
-
-          // 주말 배경
-          for (let i = 0; i < daysShown; i++) {
-            const d = addDays(viewStart, i);
-            if (d.getDay() === 0 || d.getDay() === 6) {
-              const bg = document.createElement('div');
-              bg.className = 'gantt-weekend-bg';
-              bg.style.cssText = `left:${i * dayPx}px;width:${dayPx}px`;
-              evGRow.appendChild(bg);
-            }
-          }
 
           // 바
           const evStart = parseDate(ev.start_datetime);
