@@ -647,16 +647,20 @@ function renderDetail(idx) {
       const assignee = e.assignee
         ? `<span class="pm-ev-assignee" title="${escHtml(e.assignee)}">${escHtml(e.assignee)}</span>` : '';
       let actionBtn;
+      const isDone = e.is_active === 0;
       if (isUnset) {
-        actionBtn = e.is_active !== 0
+        actionBtn = !isDone
           ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, false)">완료 처리</button>`
           : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`;
       } else {
-        actionBtn = `<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeEvent(${e.id})">프로젝트 제외</button>`;
+        const doneBtn = !isDone
+          ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, false)">완료 처리</button>`
+          : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`;
+        actionBtn = `${doneBtn}<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeEvent(${e.id})">프로젝트 제외</button>`;
       }
       return `
-        <div class="pm-ev-row">
-          <span class="pm-ev-title" title="${escHtml(e.title)}">${escHtml(e.title)}</span>
+        <div class="pm-ev-row" style="${isDone ? 'opacity:0.45;' : ''}">
+          <span class="pm-ev-title" style="${isDone ? 'text-decoration:line-through;' : ''}" title="${escHtml(e.title)}">${escHtml(e.title)}</span>
           <span class="pm-ev-date">${date}</span>
           ${assignee}
           ${actionBtn}
