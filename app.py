@@ -667,6 +667,15 @@ async def manage_update_event(event_id: int, request: Request):
     return {"ok": True}
 
 
+@app.patch("/api/manage/events/{event_id}/status")
+async def manage_event_status(event_id: int, request: Request):
+    _require_editor(request)
+    data = await request.json()
+    is_active = 1 if data.get("is_active", True) else 0
+    db.update_event_active_status(event_id, is_active)
+    return {"ok": True}
+
+
 @app.delete("/api/manage/events/{event_id}")
 def manage_delete_event(event_id: int, request: Request):
     _require_editor(request)

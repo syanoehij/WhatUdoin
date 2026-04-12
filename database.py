@@ -132,6 +132,7 @@ def init_db():
             ("meeting_id",    "INTEGER"),
             ("kanban_status", "TEXT"),
             ("priority",      "TEXT DEFAULT 'normal'"),
+            ("is_active",     "INTEGER DEFAULT 1"),
         ])
         _migrate(conn, "users", [
             ("password",   "TEXT NOT NULL DEFAULT ''"),
@@ -249,11 +250,12 @@ def delete_event(event_id: int):
 
 
 def get_kanban_events(team_id: int = None) -> list[dict]:
-    # 종료된 프로젝트의 일정은 칸반에서 제외
+    # 종료된 프로젝트 및 완료 처리된 일정은 칸반에서 제외
     inactive_filter = """
         AND (e.project IS NULL OR e.project = '' OR e.project NOT IN (
             SELECT name FROM projects WHERE is_active = 0
         ))
+        AND (e.is_active IS NULL OR e.is_active = 1)
     """
     with get_conn() as conn:
         if team_id:
@@ -322,6 +324,8 @@ def get_project_timeline(team_id: int = None) -> list[dict]:
         p = d["project"] if d.get("project") and d["project"].strip() else "미지정"
         if p in inactive:
             continue  # 종료된 프로젝트 건너뜀
+        if p == "미지정" and d.get("is_active") == 0:
+            continue  # 완료 처리된 미지정 일정 건너뜀
         if tname not in teams:
             teams[tname] = {}
         if p not in teams[tname]:
@@ -440,6 +444,11 @@ def delete_project(name: str, delete_events: bool = False):
         else:
             conn.execute("UPDATE events SET project = NULL WHERE project = ?", (name,))
         conn.execute("DELETE FROM projects WHERE name = ?", (name,))
+
+
+def update_event_active_status(event_id: int, is_active: int):
+    with get_conn() as conn:
+        conn.execute("UPDATE events SET is_active = ? WHERE id = ?", (is_active, event_id))
 
 
 def update_project_memo(name: str, memo: str):
