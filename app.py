@@ -99,6 +99,12 @@ def project_page(request: Request):
     return templates.TemplateResponse(request, "project.html", _ctx(request, teams=teams))
 
 
+@app.get("/project-manage", response_class=HTMLResponse)
+def project_manage_page(request: Request):
+    _require_editor(request)
+    return templates.TemplateResponse(request, "project_manage.html", _ctx(request))
+
+
 @app.get("/meetings", response_class=HTMLResponse)
 def meetings_page(request: Request):
     meetings = db.get_all_meetings()
@@ -529,6 +535,137 @@ def list_projects():
 @app.get("/api/project-timeline")
 def project_timeline(team_id: int = None):
     return db.get_project_timeline(team_id)
+
+
+# ── 프로젝트 관리 API ────────────────────────────────────
+
+@app.get("/api/manage/projects")
+def manage_list_projects(request: Request):
+    _require_editor(request)
+    return db.get_all_projects_with_events()
+
+
+@app.post("/api/manage/projects")
+async def manage_create_project(request: Request):
+    _require_editor(request)
+    data = await request.json()
+    name = data.get("name", "").strip()
+    color = data.get("color") or None
+    if not name:
+        raise HTTPException(status_code=400, detail="프로젝트 이름을 입력하세요.")
+    try:
+        proj_id = db.create_project(name, color)
+    except Exception:
+        raise HTTPException(status_code=409, detail="같은 이름의 프로젝트가 이미 있습니다.")
+    return {"id": proj_id, "name": name}
+
+
+@app.put("/api/manage/projects/{name:path}")
+async def manage_rename_project(name: str, request: Request):
+    _require_editor(request)
+    data = await request.json()
+    new_name = data.get("name", "").strip()
+    force    = data.get("force", False)
+    if not new_name:
+        raise HTTPException(status_code=400, detail="새 이름을 입력하세요.")
+    if new_name != name and not force and db.project_name_exists(new_name):
+        raise HTTPException(status_code=409, detail=f'"{new_name}" 프로젝트가 이미 존재합니다. 병합하시겠습니까?')
+    db.rename_project(name, new_name)
+    return {"ok": True}
+
+
+@app.patch("/api/manage/projects/{name:path}/status")
+async def manage_project_status(name: str, request: Request):
+    _require_editor(request)
+    data = await request.json()
+    is_active = 1 if data.get("is_active", True) else 0
+    db.update_project_status(name, is_active)
+    return {"ok": True}
+
+
+@app.patch("/api/manage/projects/{name:path}/color")
+async def manage_project_color(name: str, request: Request):
+    _require_editor(request)
+    data = await request.json()
+    color = data.get("color", "").strip() or None
+    db.update_project_color(name, color)
+    return {"ok": True}
+
+
+@app.patch("/api/manage/projects/{name:path}/dates")
+async def manage_project_dates(name: str, request: Request):
+    _require_editor(request)
+    data = await request.json()
+    db.update_project_dates(name, data.get("start_date"), data.get("end_date"))
+    return {"ok": True}
+
+
+@app.delete("/api/manage/projects/{name:path}")
+async def manage_delete_project(name: str, request: Request):
+    _require_editor(request)
+    data = {}
+    try:
+        data = await request.json()
+    except Exception:
+        pass
+    delete_events = data.get("delete_events", False)
+    db.delete_project(name, delete_events)
+    return {"ok": True}
+
+
+@app.post("/api/manage/projects/{name:path}/events")
+async def manage_add_event(name: str, request: Request):
+    user = _require_editor(request)
+    data = await request.json()
+    title = data.get("title", "").strip()
+    start = data.get("start_datetime", "").strip()
+    if not title or not start:
+        raise HTTPException(status_code=400, detail="제목과 시작일을 입력하세요.")
+    payload = {
+        "title":          title,
+        "project":        name if name != "미지정" else None,
+        "start_datetime": start,
+        "end_datetime":   data.get("end_datetime") or None,
+        "assignee":       data.get("assignee") or None,
+        "description":    "",
+        "location":       "",
+        "all_day":        1,
+        "source":         "manual",
+        "meeting_id":     None,
+        "kanban_status":  None,
+        "priority":       "normal",
+        "created_by":     str(user["id"]),
+        "team_id":        user.get("team_id"),
+    }
+    event_id = db.create_event(payload)
+    return {"id": event_id}
+
+
+@app.put("/api/manage/events/{event_id}")
+async def manage_update_event(event_id: int, request: Request):
+    user = _require_editor(request)
+    event = db.get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    data = await request.json()
+    # 수정 가능한 필드만 반영
+    updated = {**event}
+    for field in ("title", "project", "description", "location", "assignee",
+                  "all_day", "start_datetime", "end_datetime", "kanban_status", "priority"):
+        if field in data:
+            updated[field] = data[field]
+    db.update_event(event_id, updated)
+    return {"ok": True}
+
+
+@app.delete("/api/manage/events/{event_id}")
+def manage_delete_event(event_id: int, request: Request):
+    _require_editor(request)
+    event = db.get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    db.delete_event(event_id)
+    return {"ok": True}
 
 
 @app.get("/api/members")

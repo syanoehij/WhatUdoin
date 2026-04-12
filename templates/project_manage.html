@@ -1,0 +1,785 @@
+{% extends "base.html" %}
+{% block title %}프로젝트 관리 – WhatUDoin{% endblock %}
+
+{% block extra_head %}
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  main { max-width: none; padding: 0; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* ── 필터 버튼 ── */
+  .pm-filter-bar {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+  }
+  .pm-filter-btn {
+    flex: 1;
+    padding: 5px 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.12s, color 0.12s;
+  }
+  .pm-filter-btn.active {
+    background: var(--accent-bg);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* ── 새 프로젝트 버튼 ── */
+  .pm-new-btn {
+    margin: 8px 12px 4px;
+    display: block;
+    padding: 7px 0;
+    border-radius: 7px;
+    border: 1px dashed var(--border);
+    background: transparent;
+    color: var(--accent);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    width: calc(100% - 24px);
+    transition: background 0.12s;
+  }
+  .pm-new-btn:hover { background: var(--accent-bg); }
+
+  /* ── 왼쪽 프로젝트 항목 ── */
+  .pm-proj-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    cursor: pointer;
+    border-radius: 0;
+    transition: background 0.1s;
+    border-left: 3px solid transparent;
+  }
+  .pm-proj-item:hover { background: var(--surface-2); }
+  .pm-proj-item.active {
+    background: var(--accent-bg);
+    border-left-color: var(--accent);
+  }
+  .pm-proj-item.closed { opacity: 0.5; }
+  .pm-proj-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,0.1);
+  }
+  .pm-proj-label {
+    flex: 1;
+    font-size: 0.88rem;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pm-proj-item.closed .pm-proj-label { text-decoration: line-through; color: var(--text-muted); }
+  .pm-proj-cnt {
+    font-size: 0.72rem;
+    background: var(--surface-3);
+    padding: 1px 6px;
+    border-radius: 10px;
+    color: var(--text-faint);
+    flex-shrink: 0;
+  }
+  .pm-proj-item.active .pm-proj-cnt { background: var(--accent); color: #fff; }
+
+  /* ── 오른쪽 패널 ── */
+  .pm-detail {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .pm-detail-header {
+    padding: 16px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .pm-detail-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .pm-detail-name {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .pm-closed-badge {
+    font-size: 0.7rem;
+    background: #666;
+    color: #fff;
+    border-radius: 4px;
+    padding: 2px 7px;
+  }
+  .pm-detail-actions {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+
+  /* ── 편집 폼 (이름변경) ── */
+  .pm-edit-form {
+    display: none;
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-top: 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .pm-edit-form.visible { display: flex; }
+  .pm-edit-form label { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+  .pm-edit-form input[type="text"],
+  .pm-edit-form input[type="date"] {
+    padding: 5px 9px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.85rem;
+  }
+  .pm-edit-form input[type="color"] {
+    width: 34px; height: 30px;
+    padding: 2px 3px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    cursor: pointer;
+  }
+  .pm-edit-form input.wide { flex: 1; min-width: 140px; }
+  .pm-edit-form input.med  { min-width: 128px; }
+  .pm-form-sep { width: 100%; height: 1px; background: var(--border); margin: 4px 0; }
+
+  /* ── 일정 목록 ── */
+  .pm-events-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 24px 24px;
+  }
+  .pm-events-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  .pm-ev-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 7px;
+    border-bottom: 1px solid var(--border-faint);
+  }
+  .pm-ev-row:last-child { border-bottom: none; }
+  .pm-ev-row:hover { background: var(--surface-2); }
+  .pm-ev-title {
+    flex: 1;
+    font-size: 0.88rem;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pm-ev-date {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .pm-ev-assignee {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border-radius: 20px;
+    padding: 1px 8px;
+    flex-shrink: 0;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pm-empty {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 6px 2px;
+  }
+
+  /* ── 오른쪽 빈 상태 ── */
+  .pm-no-select {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-faint);
+    font-size: 0.9rem;
+  }
+
+  /* ── 버튼 ── */
+  .pm-btn {
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .pm-btn:hover { background: var(--surface-3, var(--border)); }
+  .pm-btn-accent { border-color: var(--accent); color: var(--accent); background: transparent; }
+  .pm-btn-accent:hover { background: var(--accent-bg); }
+  .pm-btn-resume { border-color: #4caf50; color: #4caf50; background: transparent; }
+  .pm-btn-resume:hover { background: rgba(76,175,80,0.1); }
+  .pm-btn-close  { border-color: #888; color: #888; background: transparent; }
+  .pm-btn-close:hover  { background: rgba(136,136,136,0.1); }
+  .pm-btn-warn   { border-color: #c87000; color: #c87000; background: transparent; }
+  .pm-btn-warn:hover   { background: rgba(200,112,0,0.08); }
+  .pm-btn-danger { border-color: #cc4444; color: #cc4444; background: transparent; }
+  .pm-btn-danger:hover { background: rgba(204,68,68,0.08); }
+
+  /* ── 생성 폼 패널 ── */
+  .pm-create-panel {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .pm-create-panel.visible { display: flex; }
+  .pm-create-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .pm-create-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .pm-create-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .pm-create-body {
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .pm-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .pm-field label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .pm-field input[type="text"],
+  .pm-field input[type="date"],
+  .pm-field textarea {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.9rem;
+    font-family: inherit;
+  }
+  .pm-field textarea {
+    resize: vertical;
+    min-height: 72px;
+  }
+  .pm-field input:focus,
+  .pm-field textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .pm-color-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .pm-color-swatch {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .pm-color-presets {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .pm-color-preset {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.1s, transform 0.1s;
+  }
+  .pm-color-preset:hover { transform: scale(1.15); }
+  .pm-color-preset.selected { border-color: var(--text); }
+  .pm-date-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .pm-create-footer {
+    padding: 0 24px 20px;
+    display: flex;
+    gap: 8px;
+  }
+
+  /* ── 토스트 ── */
+  .pm-toast {
+    position: fixed;
+    bottom: 20px; right: 20px;
+    background: #333; color: #fff;
+    padding: 9px 16px;
+    border-radius: 8px;
+    font-size: 0.86rem;
+    opacity: 0;
+    transition: opacity 0.22s;
+    pointer-events: none;
+    z-index: 9999;
+  }
+  .pm-toast.show { opacity: 1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="meetings-layout">
+
+  <!-- ── 왼쪽: 프로젝트 목록 ── -->
+  <aside class="month-nav" style="width:240px;min-width:200px;">
+    <div class="month-nav-header" style="padding:14px 14px 10px;">
+      <span class="page-title" style="font-size:0.95rem;">🗂 프로젝트 관리</span>
+    </div>
+
+    <!-- 필터 -->
+    <div class="pm-filter-bar">
+      <button class="pm-filter-btn active" id="filter-active" onclick="setFilter('active')">진행중</button>
+      <button class="pm-filter-btn" id="filter-closed" onclick="setFilter('closed')">완료</button>
+    </div>
+
+    <!-- + 추가 버튼 -->
+    <button class="pm-new-btn" onclick="showCreatePanel()">+ 새 프로젝트</button>
+
+    <!-- 목록 -->
+    <div class="month-nav-body" id="pm-list">
+      <div class="pm-empty" style="padding:12px 14px;">불러오는 중…</div>
+    </div>
+  </aside>
+
+  <!-- ── 오른쪽: 상세 패널 ── -->
+  <div class="meetings-content" style="overflow:hidden;">
+    <div id="pm-no-select" class="pm-no-select">
+      프로젝트를 선택하거나 새 프로젝트를 추가하세요
+    </div>
+
+    <!-- 새 프로젝트 생성 패널 -->
+    <div class="pm-create-panel" id="pm-create-panel">
+      <div class="pm-create-header">
+        <div class="pm-create-title">+ 새 프로젝트</div>
+        <div class="pm-create-subtitle">프로젝트 정보를 입력하세요. 간트 기간은 선택 사항입니다.</div>
+      </div>
+      <div class="pm-create-body">
+        <!-- 이름 -->
+        <div class="pm-field">
+          <label>프로젝트 이름 <span style="color:var(--accent)">*</span></label>
+          <input type="text" id="cr-name" placeholder="예) FE 개편, 백엔드 API v2" maxlength="60" />
+        </div>
+        <!-- 색상 -->
+        <div class="pm-field">
+          <label>색상</label>
+          <div class="pm-color-row">
+            <input type="color" class="pm-color-swatch" id="cr-color" value="#4a90d9"
+                   oninput="syncColorPresets(this.value)" />
+            <div class="pm-color-presets" id="cr-presets"></div>
+          </div>
+        </div>
+        <!-- 간트 기간 -->
+        <div class="pm-field">
+          <label>간트 기간 <span style="color:var(--text-faint);font-weight:400;">(설정 시 하위 일정 범위 대신 이 날짜로 표시)</span></label>
+          <div class="pm-date-row">
+            <div class="pm-field" style="gap:4px;">
+              <label style="font-weight:400;">시작일</label>
+              <input type="date" id="cr-start" />
+            </div>
+            <div class="pm-field" style="gap:4px;">
+              <label style="font-weight:400;">종료일</label>
+              <input type="date" id="cr-end" />
+            </div>
+          </div>
+        </div>
+        <!-- 메모 -->
+        <div class="pm-field">
+          <label>메모 <span style="color:var(--text-faint);font-weight:400;">(선택)</span></label>
+          <textarea id="cr-memo" placeholder="프로젝트에 대한 간략한 설명…"></textarea>
+        </div>
+      </div>
+      <div class="pm-create-footer">
+        <button class="pm-btn pm-btn-accent" style="padding:8px 22px;font-size:0.9rem;" onclick="createProject()">프로젝트 생성</button>
+        <button class="pm-btn" onclick="hideCreatePanel()">취소</button>
+      </div>
+    </div>
+    <div id="pm-detail" class="pm-detail" style="display:none;">
+      <div class="pm-detail-header">
+        <div class="pm-detail-title-row">
+          <span id="det-name" class="pm-detail-name"></span>
+          <span id="det-closed-badge" class="pm-closed-badge" style="display:none;">종료됨</span>
+        </div>
+        <div class="pm-detail-actions" id="det-actions"></div>
+        <!-- 이름변경/색상/날짜 편집 폼 -->
+        <div class="pm-edit-form" id="det-edit-form">
+          <input class="wide" type="text"  id="edit-name"  placeholder="프로젝트 이름" maxlength="60" />
+          <input            type="color" id="edit-color" value="#4a90d9" title="색상" />
+          <div class="pm-form-sep"></div>
+          <label>간트 시작일</label>
+          <input class="med" type="date" id="edit-start" />
+          <label>종료일</label>
+          <input class="med" type="date" id="edit-end" />
+          <button class="pm-btn pm-btn-accent" onclick="saveEdit()">저장</button>
+          <button class="pm-btn" onclick="hideEditForm()">취소</button>
+        </div>
+      </div>
+
+      <!-- 연결된 일정 -->
+      <div class="pm-events-wrap">
+        <div class="pm-events-title">연결된 일정</div>
+        <div id="det-events"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="pm-toast" id="pm-toast"></div>
+
+<script>
+let projects  = [];
+let filter    = 'active';   // 'active' | 'closed'
+let selIdx    = null;       // 현재 선택된 프로젝트 인덱스
+let selName   = null;       // 선택 유지를 위한 이름
+
+/* ── 데이터 로드 ── */
+async function loadProjects() {
+  const res = await fetch('/api/manage/projects');
+  projects  = await res.json();
+  renderList();
+  if (selName !== null) {
+    // 선택 유지: 같은 이름 찾기
+    const cur = projects.findIndex(p => p.name === selName);
+    selIdx = cur >= 0 ? cur : null;
+    if (selIdx !== null) renderDetail(selIdx);
+    else { selName = null; hideDetail(); }
+  }
+}
+
+/* ── 왼쪽 목록 렌더 ── */
+function renderList() {
+  const el  = document.getElementById('pm-list');
+  const vis = filter === 'closed'
+    ? projects.filter(p => p.is_active === 0 && p.name !== '미지정')
+    : projects.filter(p => p.is_active !== 0);
+
+  if (!vis.length) {
+    el.innerHTML = `<div class="pm-empty" style="padding:12px 14px;">${filter === 'closed' ? '완료된 프로젝트 없음' : '진행중인 프로젝트 없음'}</div>`;
+    return;
+  }
+  el.innerHTML = vis.map(p => {
+    const idx     = projects.indexOf(p);
+    const dot     = p.color ? `style="background:${p.color}"` : 'style="background:var(--text-muted)"';
+    const isActive = selIdx === idx;
+    const closed  = p.is_active === 0 ? ' closed' : '';
+    return `
+      <div class="pm-proj-item${isActive ? ' active' : ''}${closed}" onclick="selectProjItem(${idx})">
+        <span class="pm-proj-dot" ${dot}></span>
+        <span class="pm-proj-label">${escHtml(p.name)}</span>
+        <span class="pm-proj-cnt">${p.events.length}</span>
+      </div>`;
+  }).join('');
+}
+
+/* ── 필터 변경 ── */
+function setFilter(f) {
+  filter = f;
+  document.getElementById('filter-active').classList.toggle('active', f === 'active');
+  document.getElementById('filter-closed').classList.toggle('active', f === 'closed');
+  selIdx = null;
+  hideDetail();
+  renderList();
+}
+
+/* ── 프로젝트 선택 ── */
+function selectProjItem(idx) {
+  selIdx  = idx;
+  selName = projects[idx].name;
+  renderList();
+  renderDetail(idx);
+}
+
+/* ── 오른쪽 상세 렌더 ── */
+function renderDetail(idx) {
+  const p       = projects[idx];
+  const isClosed = p.is_active === 0;
+  const isUnset  = p.name === '미지정';
+
+  document.getElementById('pm-no-select').style.display = 'none';
+  document.getElementById('pm-detail').style.display    = 'flex';
+
+  document.getElementById('det-name').textContent = p.name;
+  const badge = document.getElementById('det-closed-badge');
+  badge.style.display = isClosed ? '' : 'none';
+
+  // 액션 버튼
+  const actions = document.getElementById('det-actions');
+  if (isUnset) {
+    actions.innerHTML = '';
+  } else {
+    const statusBtn = isClosed
+      ? `<button class="pm-btn pm-btn-resume" onclick="toggleStatus(${idx}, true)">프로젝트 재개</button>`
+      : `<button class="pm-btn pm-btn-close"  onclick="toggleStatus(${idx}, false)">프로젝트 종료</button>`;
+    actions.innerHTML = `
+      ${statusBtn}
+      <button class="pm-btn pm-btn-accent" onclick="showEditForm(${idx})">이름 변경 / 설정</button>
+      <button class="pm-btn pm-btn-warn"   onclick="deleteProject(${idx}, false)">프로젝트만 삭제</button>
+      <button class="pm-btn pm-btn-danger" onclick="deleteProject(${idx}, true)">프로젝트+일정 삭제</button>
+    `;
+  }
+  hideEditForm();
+
+  // 일정 목록
+  const evEl = document.getElementById('det-events');
+  if (!p.events.length) {
+    evEl.innerHTML = '<div class="pm-empty">연결된 일정 없음</div>';
+  } else {
+    evEl.innerHTML = p.events.map(e => {
+      const s = (e.start_datetime || '').slice(0, 10);
+      const en = (e.end_datetime  || '').slice(0, 10);
+      const date = en && en !== s ? `${s} ~ ${en}` : s;
+      const assignee = e.assignee
+        ? `<span class="pm-ev-assignee" title="${escHtml(e.assignee)}">${escHtml(e.assignee)}</span>` : '';
+      return `
+        <div class="pm-ev-row">
+          <span class="pm-ev-title" title="${escHtml(e.title)}">${escHtml(e.title)}</span>
+          <span class="pm-ev-date">${date}</span>
+          ${assignee}
+        </div>`;
+    }).join('');
+  }
+}
+
+function hideDetail() {
+  document.getElementById('pm-no-select').style.display = '';
+  document.getElementById('pm-detail').style.display    = 'none';
+}
+
+/* ── 편집 폼 ── */
+function showEditForm(idx) {
+  const p = projects[idx];
+  document.getElementById('edit-name').value  = p.name;
+  document.getElementById('edit-color').value = p.color || '#4a90d9';
+  document.getElementById('edit-start').value = p.start_date || '';
+  document.getElementById('edit-end').value   = p.end_date   || '';
+  document.getElementById('det-edit-form').classList.add('visible');
+}
+function hideEditForm() {
+  document.getElementById('det-edit-form').classList.remove('visible');
+}
+
+async function saveEdit() {
+  const p        = projects[selIdx];
+  const newName  = document.getElementById('edit-name').value.trim();
+  const color    = document.getElementById('edit-color').value;
+  const start    = document.getElementById('edit-start').value || null;
+  const end      = document.getElementById('edit-end').value   || null;
+  if (!newName) return;
+
+  if (newName !== p.name) {
+    const r = await fetch(`/api/manage/projects/${encodeURIComponent(p.name)}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ name: newName }),
+    });
+    if (r.status === 409) {
+      const msg = (await r.json()).detail;
+      if (!confirm(`${msg}\n\n확인: 기존 "${newName}" 프로젝트에 병합합니다.`)) return;
+      const r2 = await fetch(`/api/manage/projects/${encodeURIComponent(p.name)}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name: newName, force: true }),
+      });
+      if (!r2.ok) { toast('병합 실패'); return; }
+    } else if (!r.ok) { toast((await r.json()).detail || '오류'); return; }
+  }
+
+  const target = newName !== p.name ? newName : p.name;
+  await Promise.all([
+    fetch(`/api/manage/projects/${encodeURIComponent(target)}/color`, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ color }),
+    }),
+    fetch(`/api/manage/projects/${encodeURIComponent(target)}/dates`, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ start_date: start, end_date: end }),
+    }),
+  ]);
+
+  // 이름이 바뀌면 선택 이름 갱신
+  selName = target;
+  toast('저장됨');
+  await loadProjects();
+}
+
+/* ── 종료 / 재개 ── */
+async function toggleStatus(idx, activate) {
+  const p = projects[idx];
+  const msg = activate
+    ? `"${p.name}" 프로젝트를 재개합니다.\n간트와 칸반에 다시 노출됩니다.`
+    : `"${p.name}" 프로젝트를 종료합니다.\n간트와 칸반에서 숨겨집니다.`;
+  if (!confirm(msg)) return;
+  const res = await fetch(`/api/manage/projects/${encodeURIComponent(p.name)}/status`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ is_active: activate }),
+  });
+  if (!res.ok) { toast('변경 실패'); return; }
+  location.reload();
+}
+
+/* ── 삭제 ── */
+async function deleteProject(idx, withEvents) {
+  const p = projects[idx];
+  const evCount = p.events.length;
+  const msg = withEvents
+    ? `"${p.name}" 프로젝트와 하위 일정 ${evCount}개를 모두 삭제합니다.\n정말 삭제하시겠습니까?`
+    : `"${p.name}" 프로젝트를 삭제합니다.\n하위 일정 ${evCount}개는 '미지정'으로 이동됩니다.\n계속하시겠습니까?`;
+  if (!confirm(msg)) return;
+  const res = await fetch(`/api/manage/projects/${encodeURIComponent(p.name)}`, {
+    method: 'DELETE',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ delete_events: withEvents }),
+  });
+  if (!res.ok) { toast('삭제 실패'); return; }
+  selIdx  = null;
+  selName = null;
+  hideDetail();
+  toast(withEvents ? '프로젝트 및 일정 삭제됨' : '프로젝트 삭제됨');
+  await loadProjects();
+}
+
+/* ── 새 프로젝트 생성 패널 ── */
+const PRESET_COLORS = [
+  '#4a90d9','#e17055','#00b894','#6c5ce7','#e84393',
+  '#00a8a8','#d48806','#0984e3','#c0392b','#7c4dff',
+  '#00875a','#1565c0','#c62828','#5c35a0','#d4480d',
+];
+
+function showCreatePanel() {
+  selIdx  = null;
+  selName = null;
+  document.getElementById('pm-no-select').style.display    = 'none';
+  document.getElementById('pm-detail').style.display       = 'none';
+  document.getElementById('pm-create-panel').classList.add('visible');
+  renderList();
+  // 프리셋 색상 렌더
+  renderPresets('#4a90d9');
+  document.getElementById('cr-name').value  = '';
+  document.getElementById('cr-color').value = '#4a90d9';
+  document.getElementById('cr-start').value = '';
+  document.getElementById('cr-end').value   = '';
+  document.getElementById('cr-memo').value  = '';
+  setTimeout(() => document.getElementById('cr-name').focus(), 50);
+}
+function hideCreatePanel() {
+  document.getElementById('pm-create-panel').classList.remove('visible');
+  document.getElementById('pm-no-select').style.display = '';
+}
+function renderPresets(selected) {
+  document.getElementById('cr-presets').innerHTML = PRESET_COLORS.map(c => `
+    <div class="pm-color-preset${c === selected ? ' selected' : ''}"
+         style="background:${c}" title="${c}"
+         onclick="pickPreset('${c}')"></div>
+  `).join('');
+}
+function pickPreset(color) {
+  document.getElementById('cr-color').value = color;
+  renderPresets(color);
+}
+function syncColorPresets(color) {
+  // 프리셋 중 일치하는 게 있으면 selected 표시
+  renderPresets(PRESET_COLORS.includes(color) ? color : '');
+}
+
+async function createProject() {
+  const name  = document.getElementById('cr-name').value.trim();
+  const color = document.getElementById('cr-color').value;
+  const start = document.getElementById('cr-start').value || null;
+  const end   = document.getElementById('cr-end').value   || null;
+  if (!name) { document.getElementById('cr-name').focus(); return; }
+  const res = await fetch('/api/manage/projects', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name, color }),
+  });
+  if (!res.ok) { toast((await res.json()).detail || '오류'); return; }
+  // 날짜 있으면 추가 저장
+  if (start || end) {
+    await fetch(`/api/manage/projects/${encodeURIComponent(name)}/dates`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ start_date: start, end_date: end }),
+    });
+  }
+  hideCreatePanel();
+  toast('프로젝트 추가됨');
+  await loadProjects();
+  // 방금 만든 프로젝트 자동 선택
+  const idx = projects.findIndex(p => p.name === name);
+  if (idx >= 0) selectProjItem(idx);
+}
+
+/* ── 유틸 ── */
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('pm-toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+document.getElementById('cr-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') createProject();
+  if (e.key === 'Escape') hideCreatePanel();
+});
+
+loadProjects();
+</script>
+{% endblock %}

@@ -76,6 +76,22 @@ def init_db():
                 edited_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # ── projects ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                color TEXT,
+                start_date TEXT,
+                end_date TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        _migrate(conn, "projects", [
+            ("start_date", "TEXT"),
+            ("end_date",   "TEXT"),
+            ("is_active",  "INTEGER DEFAULT 1"),
+        ])
         # ── pending_users ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS pending_users (
@@ -232,15 +248,21 @@ def delete_event(event_id: int):
 
 
 def get_kanban_events(team_id: int = None) -> list[dict]:
+    # 종료된 프로젝트의 일정은 칸반에서 제외
+    inactive_filter = """
+        AND (e.project IS NULL OR e.project = '' OR e.project NOT IN (
+            SELECT name FROM projects WHERE is_active = 0
+        ))
+    """
     with get_conn() as conn:
         if team_id:
             rows = conn.execute(
-                "SELECT * FROM events WHERE kanban_status IS NOT NULL AND team_id = ? ORDER BY start_datetime",
+                f"SELECT * FROM events e WHERE e.kanban_status IS NOT NULL AND e.team_id = ? {inactive_filter} ORDER BY e.start_datetime",
                 (team_id,)
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM events WHERE kanban_status IS NOT NULL ORDER BY start_datetime"
+                f"SELECT * FROM events e WHERE e.kanban_status IS NOT NULL {inactive_filter} ORDER BY e.start_datetime"
             ).fetchall()
     return [dict(r) for r in rows]
 
@@ -267,13 +289,13 @@ def update_kanban_status(event_id: int, kanban_status=_MISSING, priority=_MISSIN
 
 
 def get_project_timeline(team_id: int = None) -> list[dict]:
-    """팀 → 프로젝트 2단계 그룹으로 일정 반환"""
+    """팀 → 프로젝트 2단계 그룹으로 일정 반환 (프로젝트 없는 일정은 '미지정'으로 묶음)"""
     with get_conn() as conn:
         if team_id:
             rows = conn.execute(
                 """SELECT e.*, t.name as team_name
                    FROM events e LEFT JOIN teams t ON e.team_id = t.id
-                   WHERE e.project IS NOT NULL AND e.project != '' AND e.team_id = ?
+                   WHERE e.team_id = ?
                    ORDER BY e.start_datetime""",
                 (team_id,)
             ).fetchall()
@@ -281,15 +303,24 @@ def get_project_timeline(team_id: int = None) -> list[dict]:
             rows = conn.execute(
                 """SELECT e.*, t.name as team_name
                    FROM events e LEFT JOIN teams t ON e.team_id = t.id
-                   WHERE e.project IS NOT NULL AND e.project != ''
                    ORDER BY e.start_datetime"""
             ).fetchall()
-    # team_name → project → events
+        # projects 테이블에서 메타 조회
+        proj_meta_rows = conn.execute(
+            "SELECT name, color, start_date, end_date, is_active FROM projects"
+        ).fetchall()
+    proj_meta = {r["name"]: dict(r) for r in proj_meta_rows}
+    # 비활성(종료) 프로젝트 이름 집합
+    inactive = {name for name, m in proj_meta.items() if m.get("is_active") == 0}
+
+    # team_name → project → events (비활성 프로젝트 제외)
     teams: dict[str, dict[str, list]] = {}
     for row in rows:
         d = dict(row)
         tname = d.get("team_name") or "미분류"
-        p = d["project"]
+        p = d["project"] if d.get("project") and d["project"].strip() else "미지정"
+        if p in inactive:
+            continue  # 종료된 프로젝트 건너뜀
         if tname not in teams:
             teams[tname] = {}
         if p not in teams[tname]:
@@ -297,7 +328,19 @@ def get_project_timeline(team_id: int = None) -> list[dict]:
         teams[tname][p].append(d)
     result = []
     for tname, projs in sorted(teams.items()):
-        proj_list = [{"name": pname, "events": evs} for pname, evs in sorted(projs.items())]
+        # 일반 프로젝트 정렬 후 미지정을 맨 뒤로
+        normal = sorted((k, v) for k, v in projs.items() if k != "미지정")
+        unset  = [("미지정", projs["미지정"])] if "미지정" in projs else []
+        proj_list = []
+        for pname, evs in normal + unset:
+            meta = proj_meta.get(pname, {})
+            proj_list.append({
+                "name":       pname,
+                "events":     evs,
+                "color":      meta.get("color"),
+                "start_date": meta.get("start_date"),
+                "end_date":   meta.get("end_date"),
+            })
         result.append({"team_name": tname, "projects": proj_list})
     return result
 
@@ -308,6 +351,135 @@ def get_projects() -> list[str]:
             "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' ORDER BY project"
         ).fetchall()
     return [row[0] for row in rows]
+
+
+# ── Project Management ───────────────────────────────────
+
+def get_all_projects_with_events() -> list[dict]:
+    """프로젝트 목록 + 각 프로젝트의 일정 반환 (projects 테이블 + events.project 합산)"""
+    with get_conn() as conn:
+        # projects 테이블의 프로젝트
+        proj_rows = conn.execute("SELECT * FROM projects ORDER BY is_active DESC, name").fetchall()
+        # events에서 project 이름 목록 (projects 테이블에 없는 것도 포함)
+        ev_proj_rows = conn.execute(
+            "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != ''"
+        ).fetchall()
+        # 이벤트들
+        ev_rows = conn.execute(
+            """SELECT e.*, t.name as team_name
+               FROM events e LEFT JOIN teams t ON e.team_id = t.id
+               ORDER BY e.start_datetime"""
+        ).fetchall()
+
+    # projects 테이블 기반 dict
+    proj_map: dict[str, dict] = {}
+    for r in proj_rows:
+        proj_map[r["name"]] = {
+            "id": r["id"], "name": r["name"], "color": r["color"],
+            "start_date": r["start_date"], "end_date": r["end_date"],
+            "is_active": r["is_active"] if r["is_active"] is not None else 1,
+            "events": [],
+        }
+
+    # events.project에만 있는 프로젝트도 추가
+    for r in ev_proj_rows:
+        name = r["project"]
+        if name not in proj_map:
+            proj_map[name] = {"id": None, "name": name, "color": None,
+                              "start_date": None, "end_date": None, "is_active": 1, "events": []}
+
+    # 이벤트 분류
+    unset_events = []
+    for r in ev_rows:
+        d = dict(r)
+        p = d.get("project") or ""
+        if p.strip():
+            if p not in proj_map:
+                proj_map[p] = {"id": None, "name": p, "color": None,
+                               "start_date": None, "end_date": None, "is_active": 1, "events": []}
+            proj_map[p]["events"].append(d)
+        else:
+            unset_events.append(d)
+
+    active   = sorted((p for p in proj_map.values() if p.get("is_active", 1)), key=lambda x: x["name"])
+    inactive = sorted((p for p in proj_map.values() if not p.get("is_active", 1)), key=lambda x: x["name"])
+    result = active + inactive
+    if unset_events:
+        result.append({"id": None, "name": "미지정", "color": None,
+                       "start_date": None, "end_date": None, "is_active": 1, "events": unset_events})
+    return result
+
+
+def create_project(name: str, color: str = None) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO projects (name, color) VALUES (?, ?)", (name, color)
+        )
+    return cur.lastrowid
+
+
+def rename_project(old_name: str, new_name: str):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE projects SET name = ? WHERE name = ?", (new_name, old_name)
+        )
+        conn.execute(
+            "UPDATE events SET project = ? WHERE project = ?", (new_name, old_name)
+        )
+
+
+def delete_project(name: str, delete_events: bool = False):
+    with get_conn() as conn:
+        if delete_events:
+            conn.execute("DELETE FROM events WHERE project = ?", (name,))
+        else:
+            conn.execute("UPDATE events SET project = NULL WHERE project = ?", (name,))
+        conn.execute("DELETE FROM projects WHERE name = ?", (name,))
+
+
+def update_project_color(name: str, color: str):
+    with get_conn() as conn:
+        existing = conn.execute("SELECT id FROM projects WHERE name = ?", (name,)).fetchone()
+        if existing:
+            conn.execute("UPDATE projects SET color = ? WHERE name = ?", (color, name))
+        else:
+            conn.execute("INSERT INTO projects (name, color) VALUES (?, ?)", (name, color))
+
+
+def update_project_status(name: str, is_active: int):
+    """프로젝트 활성/종료 상태 변경. projects 테이블에 없으면 먼저 생성."""
+    with get_conn() as conn:
+        existing = conn.execute("SELECT id FROM projects WHERE name = ?", (name,)).fetchone()
+        if existing:
+            conn.execute("UPDATE projects SET is_active = ? WHERE name = ?", (is_active, name))
+        else:
+            conn.execute("INSERT INTO projects (name, is_active) VALUES (?, ?)", (name, is_active))
+
+
+def update_project_dates(name: str, start_date: str = None, end_date: str = None):
+    with get_conn() as conn:
+        existing = conn.execute("SELECT id FROM projects WHERE name = ?", (name,)).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE projects SET start_date = ?, end_date = ? WHERE name = ?",
+                (start_date or None, end_date or None, name)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO projects (name, start_date, end_date) VALUES (?, ?, ?)",
+                (name, start_date or None, end_date or None)
+            )
+
+
+def project_name_exists(name: str) -> bool:
+    with get_conn() as conn:
+        row = conn.execute("SELECT 1 FROM projects WHERE name = ?", (name,)).fetchone()
+        if row:
+            return True
+        row2 = conn.execute(
+            "SELECT 1 FROM events WHERE project = ? LIMIT 1", (name,)
+        ).fetchone()
+        return bool(row2)
 
 
 def check_conflicts(start_dt: str, end_dt: str, team_id: int = None, exclude_id: int = None) -> list[dict]:

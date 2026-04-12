@@ -177,6 +177,9 @@ main { padding: 0; }
 .proj-name {
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1;
 }
+.proj-name.unset {
+  color: var(--text-faint); font-style: italic; font-weight: 500;
+}
 .proj-count {
   font-size: 0.7rem; font-weight: 400; color: var(--text-faint);
   margin-left: 4px; flex-shrink: 0;
@@ -261,9 +264,11 @@ main { padding: 0; }
   transition: filter 0.12s, box-shadow 0.12s; z-index: 3; box-sizing: border-box;
 }
 .gantt-bar:hover { filter: brightness(1.1); box-shadow: 0 4px 8px rgba(0,0,0,0.35); z-index: 4; }
+[data-theme="dark"] .gantt-bar { filter: saturate(0.75) brightness(0.82); }
+[data-theme="dark"] .gantt-bar:hover { filter: saturate(0.85) brightness(0.95); }
 .gantt-proj-span {
   position: absolute; pointer-events: none; z-index: 1;
-  opacity: 0.13; border-radius: 4px;
+  opacity: 0.22; border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.1);
 }
 .gantt-empty {
@@ -589,7 +594,7 @@ function render() {
 
   const hasProjects = allTeams.some(t => t.projects.length > 0);
   if (!hasProjects) {
-    ganttRowsEl.innerHTML = `<div class="gantt-empty">프로젝트가 있는 일정이 없습니다.<br>일정 등록 시 프로젝트 이름을 입력하세요.</div>`;
+    ganttRowsEl.innerHTML = `<div class="gantt-empty">등록된 일정이 없습니다.</div>`;
     return;
   }
 
@@ -602,7 +607,7 @@ function render() {
     team.projects.forEach((proj, pidx) => {
       const projKey = `${team.team_name}::${proj.name}`;
       const isCollapsed = collapsedProjects.has(projKey);
-      const color = projectColor(proj.name);
+      const color = proj.color || projectColor(proj.name);
       const isFirstInTeam = pidx === 0;
 
       // 이벤트 정렬
@@ -620,12 +625,13 @@ function render() {
       toggleEl.className = 'proj-toggle' + (isCollapsed ? ' collapsed' : '');
       toggleEl.textContent = '▼';
 
+      const isUnset = proj.name === '미지정';
       const colorBar = document.createElement('div');
       colorBar.className = 'proj-color-bar';
-      colorBar.style.background = color;
+      colorBar.style.background = isUnset ? 'var(--text-faint)' : color;
 
       const nameEl = document.createElement('span');
-      nameEl.className = 'proj-name';
+      nameEl.className = 'proj-name' + (isUnset ? ' unset' : '');
       nameEl.textContent = proj.name;
 
       const countEl = document.createElement('span');
@@ -646,13 +652,20 @@ function render() {
       pGRow.style.width  = Math.ceil(totalW) + 'px';
 
       // 프로젝트 전체 스팬 표시 (반투명 배경)
-      if (sortedEvs.length > 0) {
+      // 프로젝트에 지정된 날짜가 있으면 그것을, 없으면 일정의 min/max를 사용
+      let spanMinDate = null, spanMaxDate = null;
+      if (proj.start_date && proj.end_date) {
+        spanMinDate = parseDate(proj.start_date);
+        spanMaxDate = parseDate(proj.end_date);
+      } else if (sortedEvs.length > 0) {
         const evStarts = sortedEvs.map(e => parseDate(e.start_datetime)).filter(Boolean);
         const evEnds   = sortedEvs.map(e => e.end_datetime ? parseDate(e.end_datetime) : parseDate(e.start_datetime)).filter(Boolean);
-        const minDate  = new Date(Math.min(...evStarts.map(d => d.getTime())));
-        const maxDate  = new Date(Math.max(...evEnds.map(d => d.getTime())));
-        const s = Math.max(0, daysBetween(viewStart, minDate));
-        const e = Math.min(daysShown, daysBetween(viewStart, maxDate) + 1);
+        spanMinDate = new Date(Math.min(...evStarts.map(d => d.getTime())));
+        spanMaxDate = new Date(Math.max(...evEnds.map(d => d.getTime())));
+      }
+      if (spanMinDate && spanMaxDate) {
+        const s = Math.max(0, daysBetween(viewStart, spanMinDate));
+        const e = Math.min(daysShown, daysBetween(viewStart, spanMaxDate) + 1);
         if (e > s) {
           const span = document.createElement('div');
           span.className = 'gantt-proj-span';

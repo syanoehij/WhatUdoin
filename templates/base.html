@@ -38,6 +38,7 @@
       <a href="/meetings" class="nav-link {% if request.url.path.startswith('/meetings') %}nav-active{% endif %}">📋 회의록</a>
       <a href="/kanban" class="nav-link {% if request.url.path.startswith('/kanban') %}nav-active{% endif %}">📌 칸반</a>
       <a href="/gantt" class="nav-link {% if request.url.path.startswith('/gantt') %}nav-active{% endif %}">📊 간트</a>
+      {% if user %}<a href="/project-manage" class="nav-link {% if request.url.path.startswith('/project-manage') %}nav-active{% endif %}">🗂 프로젝트 관리</a>{% endif %}
     </nav>
     <!-- 전역 검색바 -->
     <div class="global-search-wrap" id="global-search-wrap">
