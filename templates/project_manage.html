@@ -373,7 +373,7 @@
 <div class="meetings-layout">
 
   <!-- ── 왼쪽: 프로젝트 목록 ── -->
-  <aside class="month-nav" style="width:240px;min-width:200px;">
+  <aside class="month-nav" style="width:300px;min-width:260px;">
     <div class="month-nav-header" style="padding:14px 14px 10px;">
       <span class="page-title" style="font-size:0.95rem;">🗂 프로젝트 관리</span>
     </div>
@@ -422,7 +422,7 @@
         </div>
         <!-- 간트 기간 -->
         <div class="pm-field">
-          <label>간트 기간 <span style="color:var(--text-faint);font-weight:400;">(설정 시 하위 일정 범위 대신 이 날짜로 표시)</span></label>
+          <label>일정 기간 <span style="color:var(--text-faint);font-weight:400;">(설정 시 하위 일정 범위 대신 이 날짜로 표시)</span></label>
           <div class="pm-date-row">
             <div class="pm-field" style="gap:4px;">
               <label style="font-weight:400;">시작일</label>
@@ -452,17 +452,21 @@
           <span id="det-closed-badge" class="pm-closed-badge" style="display:none;">종료됨</span>
         </div>
         <div class="pm-detail-actions" id="det-actions"></div>
-        <!-- 이름변경/색상/날짜 편집 폼 -->
-        <div class="pm-edit-form" id="det-edit-form">
-          <input class="wide" type="text"  id="edit-name"  placeholder="프로젝트 이름" maxlength="60" />
-          <input            type="color" id="edit-color" value="#4a90d9" title="색상" />
-          <div class="pm-form-sep"></div>
-          <label>간트 시작일</label>
+        <!-- 이름/색상 편집 폼 -->
+        <div class="pm-edit-form" id="det-edit-name-form">
+          <input class="wide" type="text" id="edit-name" placeholder="프로젝트 이름" maxlength="60" />
+          <input type="color" id="edit-color" value="#4a90d9" title="색상" />
+          <button class="pm-btn pm-btn-accent" onclick="saveEditName()">저장</button>
+          <button class="pm-btn" onclick="hideEditForms()">취소</button>
+        </div>
+        <!-- 간트 기간 편집 폼 -->
+        <div class="pm-edit-form" id="det-edit-date-form">
+          <label>시작일</label>
           <input class="med" type="date" id="edit-start" />
           <label>종료일</label>
           <input class="med" type="date" id="edit-end" />
-          <button class="pm-btn pm-btn-accent" onclick="saveEdit()">저장</button>
-          <button class="pm-btn" onclick="hideEditForm()">취소</button>
+          <button class="pm-btn pm-btn-accent" onclick="saveEditDates()">저장</button>
+          <button class="pm-btn" onclick="hideEditForms()">취소</button>
         </div>
       </div>
 
@@ -534,6 +538,7 @@ function setFilter(f) {
 
 /* ── 프로젝트 선택 ── */
 function selectProjItem(idx) {
+  document.getElementById('pm-create-panel').classList.remove('visible');
   selIdx  = idx;
   selName = projects[idx].name;
   renderList();
@@ -548,6 +553,7 @@ function renderDetail(idx) {
 
   document.getElementById('pm-no-select').style.display = 'none';
   document.getElementById('pm-detail').style.display    = 'flex';
+  hideEditForms();
 
   document.getElementById('det-name').textContent = p.name;
   const badge = document.getElementById('det-closed-badge');
@@ -563,12 +569,13 @@ function renderDetail(idx) {
       : `<button class="pm-btn pm-btn-close"  onclick="toggleStatus(${idx}, false)">프로젝트 종료</button>`;
     actions.innerHTML = `
       ${statusBtn}
-      <button class="pm-btn pm-btn-accent" onclick="showEditForm(${idx})">이름 변경 / 설정</button>
+      <button class="pm-btn pm-btn-accent" onclick="showEditNameForm(${idx})">이름/색상 변경</button>
+      <button class="pm-btn pm-btn-accent" onclick="showEditDateForm(${idx})">일정 기간</button>
       <button class="pm-btn pm-btn-warn"   onclick="deleteProject(${idx}, false)">프로젝트만 삭제</button>
       <button class="pm-btn pm-btn-danger" onclick="deleteProject(${idx}, true)">프로젝트+일정 삭제</button>
     `;
   }
-  hideEditForm();
+  hideEditForms();
 
   // 일정 목록
   const evEl = document.getElementById('det-events');
@@ -586,6 +593,7 @@ function renderDetail(idx) {
           <span class="pm-ev-title" title="${escHtml(e.title)}">${escHtml(e.title)}</span>
           <span class="pm-ev-date">${date}</span>
           ${assignee}
+          <button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeEvent(${e.id})">프로젝트 제외</button>
         </div>`;
     }).join('');
   }
@@ -594,27 +602,36 @@ function renderDetail(idx) {
 function hideDetail() {
   document.getElementById('pm-no-select').style.display = '';
   document.getElementById('pm-detail').style.display    = 'none';
+  hideEditForms();
 }
 
 /* ── 편집 폼 ── */
-function showEditForm(idx) {
+function hideEditForms() {
+  document.getElementById('det-edit-name-form').classList.remove('visible');
+  document.getElementById('det-edit-date-form').classList.remove('visible');
+}
+
+function showEditNameForm(idx) {
+  hideEditForms();
   const p = projects[idx];
   document.getElementById('edit-name').value  = p.name;
   document.getElementById('edit-color').value = p.color || '#4a90d9';
-  document.getElementById('edit-start').value = p.start_date || '';
-  document.getElementById('edit-end').value   = p.end_date   || '';
-  document.getElementById('det-edit-form').classList.add('visible');
-}
-function hideEditForm() {
-  document.getElementById('det-edit-form').classList.remove('visible');
+  document.getElementById('det-edit-name-form').classList.add('visible');
+  document.getElementById('edit-name').focus();
 }
 
-async function saveEdit() {
-  const p        = projects[selIdx];
-  const newName  = document.getElementById('edit-name').value.trim();
-  const color    = document.getElementById('edit-color').value;
-  const start    = document.getElementById('edit-start').value || null;
-  const end      = document.getElementById('edit-end').value   || null;
+function showEditDateForm(idx) {
+  hideEditForms();
+  const p = projects[idx];
+  document.getElementById('edit-start').value = p.start_date || '';
+  document.getElementById('edit-end').value   = p.end_date   || '';
+  document.getElementById('det-edit-date-form').classList.add('visible');
+}
+
+async function saveEditName() {
+  const p       = projects[selIdx];
+  const newName = document.getElementById('edit-name').value.trim();
+  const color   = document.getElementById('edit-color').value;
   if (!newName) return;
 
   if (newName !== p.name) {
@@ -636,20 +653,38 @@ async function saveEdit() {
   }
 
   const target = newName !== p.name ? newName : p.name;
-  await Promise.all([
-    fetch(`/api/manage/projects/${encodeURIComponent(target)}/color`, {
-      method: 'PATCH', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ color }),
-    }),
-    fetch(`/api/manage/projects/${encodeURIComponent(target)}/dates`, {
-      method: 'PATCH', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ start_date: start, end_date: end }),
-    }),
-  ]);
+  await fetch(`/api/manage/projects/${encodeURIComponent(target)}/color`, {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ color }),
+  });
 
-  // 이름이 바뀌면 선택 이름 갱신
   selName = target;
   toast('저장됨');
+  await loadProjects();
+}
+
+async function saveEditDates() {
+  const p     = projects[selIdx];
+  const start = document.getElementById('edit-start').value || null;
+  const end   = document.getElementById('edit-end').value   || null;
+  await fetch(`/api/manage/projects/${encodeURIComponent(p.name)}/dates`, {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ start_date: start, end_date: end }),
+  });
+  toast('일정 기간 저장됨');
+  await loadProjects();
+}
+
+/* ── 일정 프로젝트 제외 (미지정으로 이동) ── */
+async function excludeEvent(id) {
+  if (!confirm('이 일정을 프로젝트에서 제외합니다.\n일정 자체는 삭제되지 않고 미지정으로 이동됩니다.')) return;
+  const res = await fetch(`/api/manage/events/${id}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ project: null }),
+  });
+  if (!res.ok) { toast('실패'); return; }
+  toast('미지정으로 이동됨');
   await loadProjects();
 }
 
