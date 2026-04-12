@@ -180,8 +180,23 @@ function initMeetingEditor() {
       ['hr', 'quote'],
       ['ul', 'ol', 'task'],
       ['table'],
+      ['image'],
     ],
     usageStatistics: false,
+    hooks: {
+      addImageBlobHook: async (blob, callback) => {
+        const form = new FormData();
+        form.append('file', blob, blob.name || 'image.png');
+        try {
+          const res = await fetch('/api/upload/image', { method: 'POST', body: form });
+          if (!res.ok) throw new Error('upload failed');
+          const { url } = await res.json();
+          callback(url, '');
+        } catch {
+          alert('이미지 업로드에 실패했습니다.');
+        }
+      },
+    },
   });
 
   // 연결된 일정 초기 렌더링 — 있으면 패널 자동 오픈

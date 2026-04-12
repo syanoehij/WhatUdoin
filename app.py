@@ -1,11 +1,20 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException, Response
+from datetime import datetime
+from pathlib import Path
+import re
+import uuid
+
+from fastapi import FastAPI, Request, HTTPException, Response, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import database as db
 import llm_parser
 import auth
+
+# 회의록 이미지 저장 루트 (앱 기동 전에 생성해야 StaticFiles 마운트 가능)
+MEETINGS_DIR = Path("meetings")
+MEETINGS_DIR.mkdir(exist_ok=True)
 
 
 @asynccontextmanager
@@ -16,6 +25,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="WhatUDoin", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/uploads/meetings", StaticFiles(directory="meetings"), name="meetings_files")
 templates = Jinja2Templates(directory="templates")
 
 
@@ -577,12 +587,37 @@ def meetings_calendar():
     return result
 
 
+@app.post("/api/upload/image")
+async def upload_image(request: Request, file: UploadFile = File(...)):
+    """회의록 이미지 업로드 — meetings/{year}/{month}/{uuid}.ext 로 저장"""
+    _require_editor(request)
+    ext = Path(file.filename).suffix.lower() if file.filename else ".png"
+    if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+        ext = ".png"
+    now = datetime.now()
+    folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
+    folder.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}{ext}"
+    (folder / filename).write_bytes(await file.read())
+    return {"url": f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"}
+
+
+def _delete_meeting_images(content: str):
+    """마크다운 content에서 /uploads/meetings/… 경로 이미지를 찾아 파일 삭제"""
+    for url in re.findall(r'/uploads/meetings/\d{4}/\d{2}/[\w\-.]+', content or ""):
+        # URL: /uploads/meetings/2026/04/abc.png → 실제 파일: meetings/2026/04/abc.png
+        p = Path(url.replace("/uploads/", "", 1))
+        if p.exists():
+            p.unlink()
+
+
 @app.delete("/api/meetings/{meeting_id}")
 def delete_meeting(meeting_id: int, request: Request):
     _require_editor(request)
     meeting = db.get_meeting(meeting_id)
     if not meeting:
         raise HTTPException(status_code=404)
+    _delete_meeting_images(meeting.get("content", ""))
     db.delete_meeting(meeting_id)
     return {"ok": True}
 
