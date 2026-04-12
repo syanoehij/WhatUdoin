@@ -64,21 +64,84 @@ body {
 header {
   background: #24292f;
   color: white;
-  padding: 12px 24px;
+  padding: 10px 24px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   flex-shrink: 0;
 }
 [data-theme="dark"] header { background: #161b22; border-bottom: 1px solid #30363d; }
 
-.header-left { display: flex; align-items: center; gap: 12px; }
+.header-left { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 header h1 { font-size: 1.3rem; font-weight: 700; }
 .site-title-link { text-decoration: none; color: inherit; }
 .site-title-link:hover h1 { opacity: 0.85; }
 header .subtitle { font-size: 0.85rem; opacity: 0.8; }
-nav { display: flex; gap: 4px; }
+nav { display: flex; gap: 4px; margin-right: auto; }
+
+/* ── 전역 검색바 ── */
+.global-search-wrap {
+  width: 240px;
+  flex-shrink: 0;
+  transition: width 0.2s;
+}
+.global-search-wrap:focus-within { width: 300px; }
+.global-search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: text;
+  transition: background 0.15s, border-color 0.15s;
+}
+.global-search-box:focus-within {
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(255,255,255,0.5);
+}
+.global-search-icon { font-size: 0.8rem; opacity: 0.6; flex-shrink: 0; }
+.global-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+  min-width: 0;
+}
+.global-search-input::placeholder { color: rgba(255,255,255,0.45); }
+.global-search-kbd {
+  font-size: 0.72rem;
+  padding: 1px 5px;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 4px;
+  color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.05);
+  white-space: nowrap;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.global-search-wrap.search-disabled .global-search-box {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.global-search-wrap.search-disabled .global-search-input { cursor: not-allowed; }
+
+/* ── 검색 하이라이트 (칸반·프로젝트) ── */
+@keyframes search-blink {
+  0%   { outline-color: var(--accent); box-shadow: 0 0 0 0 transparent; }
+  40%  { outline-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-bg); }
+  100% { outline-color: var(--accent); box-shadow: 0 0 0 0 transparent; }
+}
+.search-match {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 1px;
+  animation: search-blink 0.65s ease-out 3;
+}
+.search-dim { opacity: 0.25 !important; transition: opacity 0.2s; }
 .nav-link {
   color: white;
   text-decoration: none;
@@ -846,66 +909,22 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
   min-height: 0;   /* flex 자식이 shrink 되도록 */
   padding: 0;
 }
-.meetings-content-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  border-bottom: 1px solid var(--border-light);
-  flex-shrink: 0;
-}
-.meetings-header-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 14px 28px 10px;
-}
-.meetings-search-row {
-  padding: 0 28px 12px;
-}
-.meetings-search-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 10px;
-  transition: border-color 0.15s;
-}
-.meetings-search-wrap:focus-within {
-  border-color: var(--accent);
-  background: var(--surface);
-}
-.meetings-search-icon { font-size: 0.85rem; flex-shrink: 0; opacity: 0.5; }
-.meetings-search-input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  font-size: 0.87rem;
-  color: var(--text);
-  outline: none;
-  font-family: inherit;
-}
-.meetings-search-input::placeholder { color: var(--text-faint); }
-.meetings-search-clear {
-  border: none;
-  background: none;
-  color: var(--text-faint);
-  cursor: pointer;
-  font-size: 0.8rem;
-  padding: 0 2px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-.meetings-search-clear:hover { color: var(--text); }
-/* 검색 하이라이트 */
+/* 검색 하이라이트 (회의록 제목 텍스트) */
 mark.search-hl {
   background: var(--accent-bg);
   color: var(--accent);
   font-weight: 600;
   border-radius: 2px;
   padding: 0 1px;
+}
+.meetings-content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
 }
 /* 월 네비게이터 — 전체 항목 */
 .month-nav-all {

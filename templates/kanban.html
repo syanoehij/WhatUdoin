@@ -603,5 +603,25 @@ window.onEventSaved = loadKanban;
 
 // 초기 로드
 loadKanban();
+
+// ── 전역 검색 연결 ──────────────────────────────────────
+window.__pageSearch = {
+  enabled: true,
+  placeholder: '카드 제목·프로젝트 검색…',
+  onSearch(q) {
+    const lower = q.trim().toLowerCase();
+    document.querySelectorAll('.kanban-card').forEach(card => {
+      card.classList.remove('search-match', 'search-dim');
+      if (!lower) return;
+      const title = (card.querySelector('.card-title')?.textContent || '').toLowerCase();
+      const proj  = (card.querySelector('.card-project-badge')?.textContent || '').toLowerCase();
+      if (title.includes(lower) || proj.includes(lower)) {
+        card.classList.add('search-match');
+      } else {
+        card.classList.add('search-dim');
+      }
+    });
+  },
+};
 </script>
 {% endblock %}

@@ -77,26 +77,16 @@
   <!-- ── 오른쪽: 회의록 리스트 ── -->
   <div class="meetings-content">
     <div class="meetings-content-header" id="meetings-header">
-      <div class="meetings-header-top">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span id="current-month-label" class="meetings-month-label"></span>
-          <span id="current-month-count" class="count-badge"></span>
-        </div>
-        {% if user and user.role in ('editor', 'admin') %}
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline btn-sm" onclick="openWeeklyReportModal()">📊 주간 업무 작성(AI)</button>
-          <a href="/meetings/new" class="btn btn-primary btn-sm">+ 새 회의록</a>
-        </div>
-        {% endif %}
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span id="current-month-label" class="meetings-month-label"></span>
+        <span id="current-month-count" class="count-badge"></span>
       </div>
-      <div class="meetings-search-row">
-        <div class="meetings-search-wrap">
-          <span class="meetings-search-icon">🔍</span>
-          <input type="text" id="meetings-search" class="meetings-search-input"
-                 placeholder="제목으로 검색…" oninput="onSearch(this.value)" autocomplete="off">
-          <button class="meetings-search-clear hidden" id="search-clear-btn" onclick="clearSearch()">✕</button>
-        </div>
+      {% if user and user.role in ('editor', 'admin') %}
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline btn-sm" onclick="openWeeklyReportModal()">📊 주간 업무 작성(AI)</button>
+        <a href="/meetings/new" class="btn btn-primary btn-sm">+ 새 회의록</a>
       </div>
+      {% endif %}
     </div>
 
     <table class="meeting-table" id="meetings-table">
@@ -139,7 +129,10 @@ function getFiltered() {
   else if (selectedAuthor)         list = list.filter(m => m.author_name === selectedAuthor);
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
-    list = list.filter(m => (m.title || '').toLowerCase().includes(q));
+    list = list.filter(m =>
+      (m.title || '').toLowerCase().includes(q) ||
+      (m.content || '').toLowerCase().includes(q)
+    );
   }
   return list;
 }
@@ -335,21 +328,16 @@ function selectMonth(ym) {
   }
 }
 
-// ── 검색 ─────────────────────────────────────────────────
-function onSearch(val) {
-  searchQuery = val.trim();
-  const clearBtn = document.getElementById('search-clear-btn');
-  clearBtn.classList.toggle('hidden', !searchQuery);
-
+// ── 검색 (전역 검색바와 연결) ────────────────────────────
+function applySearch(q) {
+  searchQuery = q.trim();
   const { byMonth, byYear, filtered } = buildGroups();
-  renderMonthNav(byMonth, byYear, filtered);
 
   if (searchQuery) {
-    // 검색 중에는 전체 뷰
     selectedYM = '__all__';
+    renderMonthNav(byMonth, byYear, filtered);
     renderAllList(filtered);
   } else {
-    // 검색 해제: 이전 월로 복귀 (없으면 최근 월)
     if (selectedYM === '__all__') {
       const allYMs = Object.keys(byMonth).sort().reverse();
       selectedYM = allYMs[0] || null;
@@ -365,11 +353,11 @@ function onSearch(val) {
   }
 }
 
-function clearSearch() {
-  document.getElementById('meetings-search').value = '';
-  onSearch('');
-  document.getElementById('meetings-search').focus();
-}
+window.__pageSearch = {
+  enabled: true,
+  placeholder: '회의록 제목·내용 검색…',
+  onSearch: applySearch,
+};
 
 function showEmpty() {
   document.getElementById('meetings-header').style.display = 'none';

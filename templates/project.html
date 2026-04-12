@@ -612,6 +612,7 @@ function render() {
           // 이름 컬럼
           const evNameRow = document.createElement('div');
           evNameRow.className = 'event-name-row';
+          evNameRow.dataset.title = (ev.title || '').toLowerCase();
           evNameRow.style.height = ROW_H + 'px';
 
           const evText = document.createElement('span');
@@ -739,5 +740,24 @@ function scrollToToday() {
   viewStart = addDays(today(), -Math.floor(daysShown / 3));
   loadData();
 })();
+
+// ── 전역 검색 연결 ──────────────────────────────────────
+window.__pageSearch = {
+  enabled: true,
+  placeholder: '일정 제목·프로젝트 검색…',
+  onSearch(q) {
+    const lower = q.trim().toLowerCase();
+    document.querySelectorAll('.event-name-row').forEach(row => {
+      row.classList.remove('search-match', 'search-dim');
+      if (!lower) return;
+      const title = row.dataset.title || '';
+      if (title.includes(lower)) {
+        row.classList.add('search-match');
+      } else {
+        row.classList.add('search-dim');
+      }
+    });
+  },
+};
 </script>
 {% endblock %}

@@ -39,6 +39,16 @@
       <a href="/kanban" class="nav-link {% if request.url.path.startswith('/kanban') %}nav-active{% endif %}">📌 칸반</a>
       <a href="/project" class="nav-link {% if request.url.path.startswith('/project') %}nav-active{% endif %}">📊 프로젝트</a>
     </nav>
+    <!-- 전역 검색바 -->
+    <div class="global-search-wrap" id="global-search-wrap">
+      <div class="global-search-box" onclick="document.getElementById('global-search-input').focus()">
+        <span class="global-search-icon">🔍</span>
+        <input type="text" id="global-search-input" class="global-search-input"
+               placeholder="검색…" autocomplete="off" spellcheck="false">
+        <kbd class="global-search-kbd" id="global-search-kbd">Ctrl K</kbd>
+      </div>
+    </div>
+
     <div class="header-right">
       {% if user %}
         <div class="profile-menu" id="profile-menu">
@@ -278,6 +288,46 @@
   {% block scripts %}{% endblock %}
 
   <script>
+    /* ── 전역 검색바 ── */
+    document.addEventListener('DOMContentLoaded', function() {
+      const cfg   = window.__pageSearch;
+      const wrap  = document.getElementById('global-search-wrap');
+      const input = document.getElementById('global-search-input');
+      const kbd   = document.getElementById('global-search-kbd');
+
+      if (!cfg || cfg.enabled === false) {
+        input.disabled = true;
+        input.placeholder = cfg && cfg.placeholder ? cfg.placeholder : '이 페이지에서는 검색이 지원되지 않습니다';
+        wrap.classList.add('search-disabled');
+        return;
+      }
+
+      input.placeholder = cfg.placeholder || '검색…';
+
+      input.addEventListener('input', function() {
+        kbd.style.display = input.value ? 'none' : '';
+        cfg.onSearch(input.value);
+      });
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          input.value = '';
+          kbd.style.display = '';
+          cfg.onSearch('');
+          input.blur();
+        }
+      });
+      document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+          // 입력 중인 다른 필드가 있으면 무시
+          const tag = document.activeElement.tagName;
+          if (tag === 'TEXTAREA') return;
+          e.preventDefault();
+          input.focus();
+          input.select();
+        }
+      });
+    });
+
     /* ── 프로필 드롭다운 ── */
     function toggleProfileMenu() {
       const menu = document.getElementById('profile-menu');

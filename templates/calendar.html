@@ -295,5 +295,7 @@ async function editFromDetail() {
   openModal('', data);
 }
 
+// 캘린더는 자체 날짜 탐색이 검색 역할 — 검색바 비활성화
+window.__pageSearch = { enabled: false, placeholder: '캘린더에서는 검색이 지원되지 않습니다' };
 </script>
 {% endblock %}
