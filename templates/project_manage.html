@@ -760,8 +760,7 @@ async function toggleEventStatus(id, activate) {
     body: JSON.stringify({ is_active: activate }),
   });
   if (!res.ok) { toast('변경 실패'); return; }
-  toast(activate ? '재개됨' : '완료 처리됨');
-  await loadProjects();
+  location.reload();
 }
 
 /* ── 일정 프로젝트 제외 (미지정으로 이동) ── */
