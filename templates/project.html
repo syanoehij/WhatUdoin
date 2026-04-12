@@ -290,6 +290,7 @@ main { padding: 0; }
     <button class="nav-btn" onclick="navNext()">&#9654;</button>
     <button class="nav-btn" onclick="navToday()">오늘</button>
   </div>
+  <button class="nav-btn" id="btn-collapse-all" onclick="collapseAll()" title="모든 프로젝트 닫기">접기</button>
   <div class="spacer"></div>
   <div class="zoom-control">
     <span class="zoom-icon">축소</span>
@@ -440,6 +441,7 @@ async function loadData() {
   const teamId = document.getElementById('team-filter').value;
   const url = '/api/project-timeline' + (teamId ? `?team_id=${teamId}` : '');
   allTeams = await (await fetch(url)).json();
+  syncCollapseBtn();
   render(); requestAnimationFrame(scrollToToday);
 }
 
@@ -447,7 +449,27 @@ async function loadData() {
 function toggleProject(key) {
   if (collapsedProjects.has(key)) collapsedProjects.delete(key);
   else collapsedProjects.add(key);
+  syncCollapseBtn();
   render();
+}
+
+function collapseAll() {
+  const anyOpen = allTeams.some(t => t.projects.some(p => !collapsedProjects.has(`${t.team_name}::${p.name}`)));
+  if (anyOpen) {
+    allTeams.forEach(t => t.projects.forEach(p => collapsedProjects.add(`${t.team_name}::${p.name}`)));
+  } else {
+    collapsedProjects.clear();
+  }
+  syncCollapseBtn();
+  render();
+}
+
+function syncCollapseBtn() {
+  const btn = document.getElementById('btn-collapse-all');
+  if (!btn || !allTeams.length) return;
+  const anyOpen = allTeams.some(t => t.projects.some(p => !collapsedProjects.has(`${t.team_name}::${p.name}`)));
+  btn.textContent = anyOpen ? '접기' : '펼치기';
+  btn.title = anyOpen ? '모든 프로젝트 닫기' : '모든 프로젝트 열기';
 }
 
 // ── 렌더링 ──────────────────────────────────────────────
