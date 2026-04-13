@@ -386,15 +386,6 @@
       <button class="pm-filter-btn" id="filter-closed" onclick="setFilter('closed')">완료</button>
     </div>
 
-    <!-- 검색 -->
-    <div style="padding:6px 12px 2px;">
-      <input type="text" id="pm-search" placeholder="프로젝트 검색…"
-             oninput="renderList()"
-             style="width:100%;box-sizing:border-box;padding:5px 10px;border:1px solid var(--border);
-                    border-radius:6px;background:var(--surface);color:var(--text);
-                    font-size:0.84rem;font-family:inherit;outline:none;" />
-    </div>
-
     <!-- + 추가 버튼 -->
     <button class="pm-new-btn" onclick="showCreatePanel()">+ 새 프로젝트</button>
 
@@ -552,7 +543,7 @@ function unsetVisibleEvents(p) {
 
 function renderList() {
   const el  = document.getElementById('pm-list');
-  const q   = (document.getElementById('pm-search')?.value || '').trim().toLowerCase();
+  const q   = (document.getElementById('global-search-input')?.value || '').trim().toLowerCase();
   let vis;
   if (filter === 'closed') {
     vis = projects.filter(p => {
@@ -970,5 +961,13 @@ document.getElementById('cr-name').addEventListener('keydown', e => {
   }
   await loadProjectList();
 })();
+
+window.__pageSearch = {
+  enabled: true,
+  placeholder: '프로젝트 검색…',
+  onSearch(q) {
+    renderList();
+  },
+};
 </script>
 {% endblock %}
