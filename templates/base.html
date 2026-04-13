@@ -65,11 +65,11 @@
               <div class="profile-dropdown-name">{{ user.name }}</div>
               <div class="profile-dropdown-role">{% if user.role == 'admin' %}관리자{% else %}에디터{% endif %}</div>
             </div>
-            <button class="profile-dropdown-item" onclick="closeProfileMenu(); openChangePwModal()">🔑 비밀번호 변경</button>
             <button class="profile-dropdown-item" onclick="closeProfileMenu(); openUserSettings()">⚙️ 설정</button>
+            <button class="profile-dropdown-item" onclick="closeProfileMenu(); openChangePwModal()">🔑 비밀번호 변경</button>
             <a href="/admin" class="profile-dropdown-item" onclick="closeProfileMenu()">
               🔧 관리자 페이지
-              <span class="dropdown-red-dot hidden" id="dropdown-red-dot"></span>
+              <span class="dropdown-pending-badge hidden" id="dropdown-pending-badge"></span>
             </a>
             <div class="profile-dropdown-sep"></div>
             <div class="profile-dropdown-item theme-row">
@@ -386,23 +386,25 @@
       });
     });
 
-    /* ── 관리자 레드닷 ── */
+    /* ── 가입 신청 알림 뱃지 ── */
     if (CURRENT_USER) {
       fetch('/api/admin/pending/count')
         .then(r => r.ok ? r.json() : null)
         .then(data => {
           if (data && data.count > 0) {
-            // 프로필 버튼 레드닷
+            const n = data.count;
+            // 프로필 버튼 레드닷 (점)
             const dot = document.getElementById('profile-red-dot');
             if (dot) {
               dot.classList.remove('hidden');
-              dot.title = `가입 신청 ${data.count}건`;
+              dot.title = `가입 신청 ${n}건`;
             }
-            // 드롭다운 내 관리자 페이지 레드닷
-            const ddot = document.getElementById('dropdown-red-dot');
-            if (ddot) {
-              ddot.classList.remove('hidden');
-              ddot.title = `가입 신청 ${data.count}건`;
+            // 드롭다운 숫자 뱃지
+            const badge = document.getElementById('dropdown-pending-badge');
+            if (badge) {
+              badge.textContent = n;
+              badge.classList.remove('hidden');
+              badge.title = `가입 신청 ${n}건`;
             }
           }
         })

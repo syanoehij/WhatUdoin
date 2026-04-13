@@ -1940,3 +1940,22 @@ select.form-input {
   outline-offset: -2px;
   border-radius: 10px;
 }
+
+/* ── 드롭다운 가입 신청 숫자 뱃지 ── */
+.dropdown-pending-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #e53e3e;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: auto;
+  animation: pulse-dot 1.8s ease-in-out infinite;
+  flex-shrink: 0;
+}
