@@ -293,7 +293,10 @@ async def admin_rename_user(user_id: int, request: Request):
 
 @app.get("/api/admin/pending/count")
 def admin_pending_count(request: Request):
-    _require_admin(request)
+    # 로그인된 모든 사용자가 접근 가능 (뱃지 표시용)
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
     return {"count": len(db.get_pending_users())}
 
 

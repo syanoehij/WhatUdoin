@@ -526,8 +526,10 @@
     let _autoRefreshTimer = null;
     function startAutoRefresh() {
       if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
-      const ms = parseInt(localStorage.getItem('auto_refresh_interval') || '300000', 10);
-      if (ms > 0) {
+      const raw = localStorage.getItem('auto_refresh_interval');
+      const ms  = parseInt(raw || '300000', 10);
+      // 최소 60초 미만은 무시 (잘못된 값 방어)
+      if (ms >= 60000) {
         _autoRefreshTimer = setInterval(() => location.reload(), ms);
       }
     }
