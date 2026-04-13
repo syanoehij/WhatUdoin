@@ -384,6 +384,22 @@
       if (toggle) toggle.checked = localStorage.getItem('theme') === 'dark';
     });
 
+    /* ── ESC 키로 모달 닫기 ── */
+    document.addEventListener('keydown', function(e) {
+      if (e.key !== 'Escape') return;
+      // 열려있는 모달 오버레이를 순서대로 닫음 (가장 나중에 열린 것부터)
+      const overlays = [...document.querySelectorAll('.modal-overlay:not(.hidden)')];
+      if (!overlays.length) return;
+      const top = overlays[overlays.length - 1];
+      const id  = top.id;
+      if (id === 'modal-overlay')        { closeModal(); }
+      else if (id === 'detail-overlay')  { closeDetail && closeDetail(); }
+      else if (id === 'kdetail-overlay') { closeKDetail && closeKDetail(); }
+      else if (id === 'login-modal-overlay') { closeLoginModal(); }
+      else if (id === 'change-pw-overlay')   { closeChangePwModal(); }
+      else { top.classList.add('hidden'); }
+    });
+
     /* ── 로그인 모달 ── */
     function openLoginModal() {
       document.getElementById('login-modal-overlay').classList.remove('hidden');
