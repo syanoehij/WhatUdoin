@@ -505,6 +505,19 @@ async def update_event_datetime(event_id: int, request: Request):
     return {"ok": True}
 
 
+@app.patch("/api/events/{event_id}/project")
+async def update_event_project(event_id: int, request: Request):
+    user = _require_editor(request)
+    event = db.get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not auth.can_edit_event(user, event):
+        raise HTTPException(status_code=403, detail="다른 팀의 일정은 수정할 수 없습니다.")
+    data = await request.json()
+    db.update_event_project(event_id, data.get("project"))
+    return {"ok": True}
+
+
 @app.post("/api/events/check-conflicts")
 async def check_event_conflicts(request: Request):
     """AI 파싱 결과와 기존 일정의 중복 여부를 검사합니다."""

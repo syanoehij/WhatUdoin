@@ -258,6 +258,14 @@ def update_event(event_id: int, data: dict):
         )
 
 
+def update_event_project(event_id: int, project: str | None):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE events SET project = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (project or None, event_id),
+        )
+
+
 def update_event_datetime(event_id: int, start_datetime: str, end_datetime: str | None, all_day: int):
     with get_conn() as conn:
         conn.execute(

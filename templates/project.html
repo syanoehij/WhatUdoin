@@ -266,10 +266,18 @@ main { padding: 0; }
 }
 .gantt-bar:hover { filter: brightness(1.1); box-shadow: 0 4px 8px rgba(0,0,0,0.35); z-index: 4; }
 .gantt-bar.bar-dragging {
-  cursor: grabbing !important; opacity: 0.82; z-index: 10 !important;
+  cursor: grabbing !important; opacity: 0.55; z-index: 10 !important;
   box-shadow: 0 6px 16px rgba(0,0,0,0.4); transition: none;
 }
 .gantt-bar.bar-no-drag { cursor: pointer; }
+/* 드래그 드롭 대상 프로젝트 강조 */
+.gantt-row.proj-drop-target { background: rgba(9,105,218,0.12) !important; }
+.proj-header-row.proj-drop-target {
+  background: var(--accent-light) !important;
+  color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 [data-theme="dark"] .gantt-bar { filter: saturate(0.75) brightness(0.82); }
 [data-theme="dark"] .gantt-bar:hover { filter: saturate(0.85) brightness(0.95); }
 .gantt-proj-span {
@@ -535,8 +543,12 @@ function syncCollapseBtn() {
   btn.title = anyOpen ? '모든 프로젝트 닫기' : '모든 프로젝트 열기';
 }
 
+// 행 → 프로젝트 맵 (드래그 드롭에서 참조)
+let _rowProjectMap = []; // [{ projKey, projName }] — gantt-rows 행 순서와 1:1
+
 // ── 렌더링 ──────────────────────────────────────────────
 function render() {
+  _rowProjectMap = [];
   const dayPx  = getDayPx();
   const totalW = daysShown * dayPx;
   const viewEnd = addDays(viewStart, daysShown);
@@ -695,6 +707,7 @@ function render() {
       countEl.className = 'proj-count';
       countEl.textContent = `(${sortedEvs.length})`;
 
+      pNameRow.dataset.projKey = projKey;
       pNameRow.appendChild(toggleEl);
       pNameRow.appendChild(colorBar);
       pNameRow.appendChild(nameEl);
@@ -705,8 +718,11 @@ function render() {
       const pGRow = document.createElement('div');
       pGRow.className = 'gantt-row row-proj-header' +
         (isDivider && isFirstInTeam ? ' team-divider' : '');
+      pGRow.dataset.projKey = projKey;
       pGRow.style.height = ROW_H + 'px';
       pGRow.style.width  = Math.ceil(totalW) + 'px';
+      // rowMap에 프로젝트 헤더 행 등록
+      _rowProjectMap.push({ projKey, projName: proj.name });
 
       // 프로젝트 전체 스팬 표시 (반투명 배경)
       // 프로젝트에 지정된 날짜가 있으면 그것을, 없으면 일정의 min/max를 사용
@@ -761,6 +777,9 @@ function render() {
           evNameRow.appendChild(evDate);
           nameRowsEl.appendChild(evNameRow);
 
+          // rowMap에 이벤트 행 등록
+          _rowProjectMap.push({ projKey, projName: proj.name });
+
           // 간트 이벤트 행
           const evGRow = document.createElement('div');
           evGRow.className = 'gantt-row row-event';
@@ -802,7 +821,7 @@ function render() {
                   evOverdue ? '⚠ 기한 초과' : '',
                 ].filter(Boolean).join('\n');
                 if (CURRENT_USER) {
-                  setupBarDrag(bar, ev, evStart, evEnd !== evStart ? evEnd : null);
+                  setupBarProjectDrag(bar, ev);
                 } else {
                   bar.classList.add('bar-no-drag');
                   bar.addEventListener('click', () => openBarDetail(ev.id));
@@ -881,92 +900,99 @@ async function openBarDetail(eventId) {
 }
 window.onEventSaved = loadData;
 
-// ── 간트 바 드래그 이동 ──────────────────────────────────
-let _dragState = null;
+// ── 간트 바 드래그 → 프로젝트 이동 ──────────────────────
+let _projDragState = null;
 
-function setupBarDrag(bar, ev, evStart, evEnd) {
+function setupBarProjectDrag(bar, ev) {
   bar.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-
-    const dayPx = getDayPx();
-    const origLeft = parseFloat(bar.style.left);
-    const origWidth = parseFloat(bar.style.width);
-    const duration = evEnd ? daysBetween(evStart, evEnd) : 0;
-
-    _dragState = {
-      bar, ev, evStart: new Date(evStart), evEnd: evEnd ? new Date(evEnd) : null,
-      duration, dayPx, startX: e.clientX, origLeft, origWidth,
+    _projDragState = {
+      bar, ev,
+      startY: e.clientY,
       moved: false,
+      targetProjKey: null,
+      targetProjName: null,
     };
-
-    bar.classList.add('bar-dragging');
-    document.addEventListener('mousemove', _onBarDragMove, { passive: false });
-    document.addEventListener('mouseup', _onBarDragEnd);
+    document.addEventListener('mousemove', _onProjDragMove);
+    document.addEventListener('mouseup',   _onProjDragEnd);
   });
 }
 
-function _onBarDragMove(e) {
-  if (!_dragState) return;
-  const { bar, startX, origLeft, origWidth, dayPx } = _dragState;
-  const dx = e.clientX - startX;
-  if (Math.abs(dx) > 4) _dragState.moved = true;
-  if (_dragState.moved) {
-    // 스냅: 반 이상 이동하면 1일 단위로 스냅
-    const dayDelta = Math.round(dx / dayPx);
-    bar.style.left  = (origLeft + dayDelta * dayPx) + 'px';
-    bar.style.width = origWidth + 'px';
+function _projDropClear() {
+  document.querySelectorAll('.gantt-row.proj-drop-target, .proj-header-row.proj-drop-target')
+    .forEach(el => el.classList.remove('proj-drop-target'));
+}
+
+function _onProjDragMove(e) {
+  if (!_projDragState) return;
+  const dy = Math.abs(e.clientY - _projDragState.startY);
+  if (dy > 6) _projDragState.moved = true;
+  if (!_projDragState.moved) return;
+
+  _projDragState.bar.classList.add('bar-dragging');
+
+  // 커서 아래 행의 프로젝트 찾기
+  const rowsEl = document.getElementById('gantt-rows');
+  const rect   = rowsEl.getBoundingClientRect();
+  const relY   = e.clientY - rect.top;
+  const rowIdx = Math.floor(relY / ROW_H);
+  const target = (rowIdx >= 0 && rowIdx < _rowProjectMap.length)
+    ? _rowProjectMap[rowIdx] : null;
+
+  _projDropClear();
+
+  if (target) {
+    _projDragState.targetProjKey  = target.projKey;
+    _projDragState.targetProjName = target.projName;
+    // 간트 프로젝트 헤더 행 강조
+    const gRow = document.querySelector(`.gantt-row[data-proj-key="${target.projKey}"]`);
+    if (gRow) gRow.classList.add('proj-drop-target');
+    // 이름 컬럼 프로젝트 헤더 강조
+    const nRow = document.querySelector(`.proj-header-row[data-proj-key="${target.projKey}"]`);
+    if (nRow) nRow.classList.add('proj-drop-target');
+  } else {
+    _projDragState.targetProjKey  = null;
+    _projDragState.targetProjName = null;
   }
 }
 
-async function _onBarDragEnd(e) {
-  document.removeEventListener('mousemove', _onBarDragMove);
-  document.removeEventListener('mouseup', _onBarDragEnd);
+async function _onProjDragEnd(e) {
+  document.removeEventListener('mousemove', _onProjDragMove);
+  document.removeEventListener('mouseup',   _onProjDragEnd);
 
-  if (!_dragState) return;
-  const { bar, ev, evStart, evEnd, duration, dayPx, startX, moved } = _dragState;
-  _dragState = null;
+  if (!_projDragState) return;
+  const { bar, ev, moved, targetProjKey, targetProjName } = _projDragState;
+  _projDragState = null;
 
   bar.classList.remove('bar-dragging');
+  _projDropClear();
 
   if (!moved) {
     openBarDetail(ev.id);
     return;
   }
 
-  const dx = e.clientX - startX;
-  const dayDelta = Math.round(dx / dayPx);
-  if (dayDelta === 0) { render(); return; }
+  if (!targetProjName) return;
 
-  const newStart = addDays(evStart, dayDelta);
-  const newEnd   = evEnd ? addDays(evEnd, dayDelta) : null;
+  // 미지정 프로젝트는 빈 문자열로 저장
+  const newProj = targetProjName === '미지정' ? '' : targetProjName;
+  const oldProj = ev.project || '';
+  if (newProj === oldProj) return; // 같은 프로젝트면 무시
 
-  // 낙관적 업데이트: 즉시 재렌더
-  ev.start_datetime = fmtDate(newStart);
-  ev.end_datetime   = newEnd ? fmtDate(newEnd) : null;
-  render();
-
-  // 서버 저장
+  // 서버 저장 후 데이터 새로고침
   try {
-    const res = await fetch(`/api/events/${ev.id}/datetime`, {
+    const res = await fetch(`/api/events/${ev.id}/project`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        start_datetime: fmtDate(newStart),
-        end_datetime: newEnd ? fmtDate(newEnd) : null,
-        all_day: ev.all_day || 0,
-      }),
+      body: JSON.stringify({ project: newProj || null }),
     });
-    if (!res.ok) {
-      // 롤백
-      ev.start_datetime = fmtDate(evStart);
-      ev.end_datetime   = evEnd ? fmtDate(evEnd) : null;
-      render();
+    if (res.ok) {
+      loadData();
     }
   } catch (_) {
-    ev.start_datetime = fmtDate(evStart);
-    ev.end_datetime   = evEnd ? fmtDate(evEnd) : null;
+    // 실패 시 재렌더만 (롤백)
     render();
   }
 }
