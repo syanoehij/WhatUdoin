@@ -181,24 +181,6 @@
   .priority-dot.normal { background: #74b9ff; }
   .priority-dot.low    { background: var(--text-faint); }
 
-  /* ── 상태/우선순위 상단 컨트롤 박스 ── */
-  .kdetail-controls {
-    background: var(--surface-2);
-    border-radius: 8px;
-    padding: 10px 14px;
-    margin-bottom: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .kdetail-ctrl-row {
-    display: grid;
-    grid-template-columns: 80px 1fr;
-    gap: 8px;
-    align-items: center;
-    font-size: 0.93rem;
-  }
-
   /* 빈 컬럼 placeholder */
   .kanban-empty {
     color: var(--text-faint);
@@ -208,50 +190,7 @@
     grid-column: 1 / -1;
   }
 
-  /* ── 카드 상세/수정 모달 ── */
-  .kanban-detail-status {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin-top: 4px;
-  }
-  .status-btn {
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: var(--surface-2);
-    color: var(--text);
-    font-size: 0.78rem;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background 0.1s;
-  }
-  .status-btn:hover { background: var(--surface-3); }
-  .status-btn.active { background: #0984e3; color: #fff; border-color: #0984e3; }
 
-  /* 우선순위 버튼 */
-  .kanban-detail-priority {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin-top: 4px;
-  }
-  .priority-btn {
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: var(--surface-2);
-    color: var(--text);
-    font-size: 0.78rem;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background 0.1s, color 0.1s, border-color 0.1s;
-  }
-  .priority-btn:hover { background: var(--surface-3); }
-  .priority-btn.active[data-priority="urgent"] { background: #d63031; color: #fff; border-color: #d63031; }
-  .priority-btn.active[data-priority="high"]   { background: #e17055; color: #fff; border-color: #e17055; }
-  .priority-btn.active[data-priority="normal"] { background: #0984e3; color: #fff; border-color: #0984e3; }
-  .priority-btn.active[data-priority="low"]    { background: #b2bec3; color: #fff; border-color: #b2bec3; }
 </style>
 {% endblock %}
 
@@ -307,48 +246,10 @@
   {% endfor %}
 </div>
 
-<!-- ── 카드 상세 모달 ── -->
-<div id="kdetail-overlay" class="modal-overlay hidden" onclick="closeKDetail(event)">
-  <div class="modal" style="width:640px;">
-    <div class="modal-header">
-      <h2 id="kdetail-title"></h2>
-      <button class="icon-btn" onclick="closeKDetail()">✕</button>
-    </div>
-    <!-- ── 상태 / 우선순위: 제목 바로 아래 고정 ── -->
-    <div class="kdetail-controls">
-      <div class="kdetail-ctrl-row">
-        <span class="detail-label">칸반 상태</span>
-        <div class="kanban-detail-status" id="kdetail-status-btns"></div>
-      </div>
-      <div class="kdetail-ctrl-row">
-        <span class="detail-label">우선순위</span>
-        <div class="kanban-detail-priority" id="kdetail-priority-btns"></div>
-      </div>
-    </div>
-    <!-- ── 상세 정보 ── -->
-    <div id="kdetail-body" class="detail-body"></div>
-    <div class="modal-actions">
-      <button class="btn btn-danger hidden" id="kbtn-remove" onclick="removeFromKanban()">칸반에서 제거</button>
-      <div>
-        <button class="btn" onclick="closeKDetail()">닫기</button>
-        <button class="btn btn-primary" id="kbtn-edit" onclick="editKanbanEvent()">수정</button>
-      </div>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-const COLUMNS = [
-  { status: 'backlog',     label: 'Backlog' },
-  { status: 'todo',        label: 'Todo' },
-  { status: 'in_progress', label: 'In Progress' },
-  { status: 'peer_review', label: 'Peer Review' },
-  { status: 'done',        label: 'Done' },
-  { status: 'blocked',     label: 'Blocked' },
-];
-
 const PROJECT_COLORS = [
   '#0984e3','#00b894','#e17055','#a29bfe','#fd79a8','#fdcb6e',
   '#6c5ce7','#00cec9','#e84393','#2d3436','#74b9ff','#55efc4',
@@ -377,7 +278,6 @@ function fmtDate(str) {
 }
 
 let allEvents = [];
-let currentKDetailId = null;
 let dragSrcId = null;
 let _kanbanMyOnly = false;
 
@@ -525,126 +425,9 @@ async function onDrop(e, newStatus) {
   }
 }
 
-// ── 카드 상세 모달 ───────────────────────────────────────
-function openKDetail(id) {
-  const e = allEvents.find(ev => ev.id === id);
-  if (!e) return;
-  currentKDetailId = id;
-
-  document.getElementById('kdetail-title').textContent = e.title;
-
-  const priorityLabels = { urgent:'🔴 긴급', high:'🟠 높음', normal:'🔵 보통', low:'⚪ 낮음' };
-  const rows = [
-    ['프로젝트', e.project   || '-'],
-    ['기간',     fmtDate(e.start_datetime) + (e.end_datetime ? ' ~ ' + fmtDate(e.end_datetime) : '')],
-    ['담당자',   e.assignee  || '-'],
-    ['장소',     e.location  || '-'],
-    ['내용',     e.description || '-'],
-  ];
-  document.getElementById('kdetail-body').innerHTML = rows.map(([label, val]) => `
-    <div class="detail-row">
-      <span class="detail-label">${label}</span>
-      <span class="detail-val">${esc(val)}</span>
-    </div>`).join('');
-
-  // 상태 변경 버튼
-  const statusContainer = document.getElementById('kdetail-status-btns');
-  statusContainer.innerHTML = COLUMNS.map(({ status, label }) =>
-    `<button class="status-btn ${e.kanban_status === status ? 'active' : ''}"
-       onclick="changeStatus('${status}')">${label}</button>`
-  ).join('');
-
-  // 우선순위 변경 버튼
-  const PRIORITIES = [
-    { value: 'urgent', label: '🔴 긴급' },
-    { value: 'high',   label: '🟠 높음' },
-    { value: 'normal', label: '🔵 보통' },
-    { value: 'low',    label: '⚪ 낮음' },
-  ];
-  const curPriority = e.priority || 'normal';
-  const prioContainer = document.getElementById('kdetail-priority-btns');
-  prioContainer.innerHTML = PRIORITIES.map(p =>
-    `<button class="priority-btn ${curPriority === p.value ? 'active' : ''}"
-       data-priority="${p.value}"
-       onclick="changePriority('${p.value}')">${p.label}</button>`
-  ).join('');
-
-  // 에디터 이상만 제거/수정 가능
-  const canEdit = CURRENT_USER && (CURRENT_USER.role === 'admin' ||
-    CURRENT_USER.role === 'editor');
-  document.getElementById('kbtn-remove').classList.toggle('hidden', !canEdit);
-  document.getElementById('kbtn-edit').style.display = canEdit ? '' : 'none';
-
-  document.getElementById('kdetail-overlay').classList.remove('hidden');
-}
-
-function closeKDetail(ev) {
-  if (ev && ev.target !== document.getElementById('kdetail-overlay')) return;
-  document.getElementById('kdetail-overlay').classList.add('hidden');
-  currentKDetailId = null;
-}
-
-async function changeStatus(newStatus) {
-  if (!currentKDetailId) return;
-  const ev = allEvents.find(e => e.id === currentKDetailId);
-  if (!ev || ev.kanban_status === newStatus) return;
-
-  ev.kanban_status = newStatus;
-  // 버튼 active 상태 업데이트
-  document.querySelectorAll('#kdetail-status-btns .status-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.textContent === COLUMNS.find(c => c.status === newStatus)?.label);
-  });
-  renderBoard();
-
-  await fetch(`/api/events/${currentKDetailId}/kanban`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kanban_status: newStatus }),
-  });
-}
-
-async function changePriority(newPriority) {
-  if (!currentKDetailId) return;
-  const ev = allEvents.find(e => e.id === currentKDetailId);
-  if (!ev || ev.priority === newPriority) return;
-
-  ev.priority = newPriority;
-  // 버튼 active 상태 업데이트
-  document.querySelectorAll('#kdetail-priority-btns .priority-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.priority === newPriority);
-  });
-  renderBoard();
-
-  await fetch(`/api/events/${currentKDetailId}/kanban`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ priority: newPriority }),
-  });
-}
-
-async function removeFromKanban() {
-  if (!currentKDetailId || !confirm('이 일정을 칸반에서 제거할까요?\n(일정은 삭제되지 않습니다)')) return;
-  await fetch(`/api/events/${currentKDetailId}/kanban`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kanban_status: null }),
-  });
-  document.getElementById('kdetail-overlay').classList.add('hidden');
-  currentKDetailId = null;
-  loadKanban();
-}
-
-async function editKanbanEvent() {
-  if (!currentKDetailId) return;
-  const id = currentKDetailId;   // closeKDetail()이 null로 초기화하기 전에 저장
-  closeKDetail();
-  const res = await fetch(`/api/events/${id}`);
-  const data = await res.json();
-  openModal('', data);
-}
-
 // 칸반 페이지 콜백 설정
-window.onEventSaved = loadKanban;
+window.onEventSaved   = loadKanban;
+window.onKDetailSaved = loadKanban;
 
 // 초기 로드
 loadKanban();

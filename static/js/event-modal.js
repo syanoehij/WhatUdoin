@@ -1,9 +1,20 @@
-// event-modal.js — 공유 일정 등록/수정 모달
-// base.html에서 로드되어 calendar, kanban 양쪽에서 동일하게 사용됩니다.
+// event-modal.js — 공유 일정 등록/수정 모달 + 칸반 상세 모달
+// base.html에서 로드되어 calendar, kanban, home 등에서 공유 사용됩니다.
 //
 // 페이지별 콜백 (각 페이지에서 설정):
 //   window.onEventSaved()              — 저장/삭제 후 호출
+//   window.onKDetailSaved()            — 칸반 상태/우선순위 변경 후 호출
 //   window.onModalDateChanged(s, e)    — 날짜 변경 시 호출 (캘린더 전용)
+
+// ── 칸반 컬럼 정의 (공유) ─────────────────────────────────
+var COLUMNS = [
+  { status: 'backlog',     label: 'Backlog' },
+  { status: 'todo',        label: 'Todo' },
+  { status: 'in_progress', label: 'In Progress' },
+  { status: 'peer_review', label: 'Peer Review' },
+  { status: 'done',        label: 'Done' },
+  { status: 'blocked',     label: 'Blocked' },
+];
 
 let _allProjects = [];
 let _allMembers  = [];
@@ -179,6 +190,7 @@ function openModal(dateStr = '', eventData = null) {
   document.getElementById('f-priority').value    = 'normal';
   document.getElementById('f-kanban').checked    = true;
   _currentEditKanbanStatus = null;
+  _activePresets = new Set();
 
   const [defStart, defEnd] = getDefaultTimes();
   _fpInstance.setDate([today, today], true);
@@ -253,19 +265,41 @@ function getDefaultTimes() {
   return [fmt(startHour), fmt(endHour)];
 }
 
+let _activePresets = new Set();
+
+const _PRESET_RANGES = {
+  am:      { start: '08:00', end: '12:00' },
+  pm:      { start: '13:00', end: '17:00' },
+  evening: { start: '18:00', end: '22:00' },
+};
+
 function setTimePreset(preset) {
-  const presets = {
-    am:      ['08:00', '12:00'],
-    pm:      ['13:00', '17:00'],
-    evening: ['18:00', '22:00'],
-  };
-  const [start, end] = presets[preset];
+  // 멀티셀렉트: 클릭 시 토글
+  if (_activePresets.has(preset)) {
+    _activePresets.delete(preset);
+  } else {
+    _activePresets.add(preset);
+  }
+
+  // 버튼 active 상태 갱신
+  document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
+  _activePresets.forEach(p => {
+    const btn = document.querySelector(`.btn-preset[data-preset="${p}"]`);
+    if (btn) btn.classList.add('active');
+  });
+
+  if (_activePresets.size === 0) return;
+
+  // AND 조합: 선택된 프리셋들의 start 최솟값, end 최댓값
+  const starts = [..._activePresets].map(p => _PRESET_RANGES[p].start);
+  const ends   = [..._activePresets].map(p => _PRESET_RANGES[p].end);
+  const start  = starts.reduce((a, b) => a < b ? a : b);
+  const end    = ends.reduce((a, b) => a > b ? a : b);
+
   document.getElementById('f-start-time').value = start;
   document.getElementById('f-end-time').value   = end;
   document.getElementById('f-allday').checked   = false;
   toggleAllDay();
-  document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
-  document.querySelector(`.btn-preset[onclick="setTimePreset('${preset}')"]`).classList.add('active');
 }
 
 // ── 저장 / 삭제 ──────────────────────────────────────────
@@ -361,6 +395,115 @@ function formatDatetime(str, allDay) {
 
 function esc(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── 칸반 상세 모달 (공유) ─────────────────────────────────
+let currentKDetailId = null;
+let _kdetailData     = null;
+
+function _renderKDetailButtons() {
+  const e = _kdetailData;
+  if (!e) return;
+
+  const statusEl = document.getElementById('kdetail-status-btns');
+  if (statusEl) {
+    statusEl.innerHTML = COLUMNS.map(({ status, label }) =>
+      `<button class="status-btn ${e.kanban_status === status ? 'active' : ''}"
+         onclick="changeStatus('${status}')">${label}</button>`
+    ).join('');
+  }
+
+  const PRIORITIES = [
+    { value: 'urgent', label: '🔴 긴급' },
+    { value: 'high',   label: '🟠 높음' },
+    { value: 'normal', label: '🔵 보통' },
+    { value: 'low',    label: '⚪ 낮음' },
+  ];
+  const curPriority = e.priority || 'normal';
+  const prioEl = document.getElementById('kdetail-priority-btns');
+  if (prioEl) {
+    prioEl.innerHTML = PRIORITIES.map(p =>
+      `<button class="priority-btn ${curPriority === p.value ? 'active' : ''}"
+         data-priority="${p.value}"
+         onclick="changePriority('${p.value}')">${p.label}</button>`
+    ).join('');
+  }
+}
+
+async function openKDetail(id) {
+  const res = await fetch(`/api/events/${id}`);
+  if (!res.ok) return;
+  const e = await res.json();
+  currentKDetailId = id;
+  _kdetailData = e;
+
+  document.getElementById('kdetail-title').textContent = e.title;
+
+  const fmtD = s => s ? s.slice(0, 10) : '';
+  const rows = [
+    ['프로젝트', e.project     || '-'],
+    ['기간',     fmtD(e.start_datetime) + (e.end_datetime ? ' ~ ' + fmtD(e.end_datetime) : '')],
+    ['담당자',   e.assignee    || '-'],
+    ['장소',     e.location    || '-'],
+    ['내용',     e.description || '-'],
+  ];
+  document.getElementById('kdetail-body').innerHTML = rows.map(([label, val]) => `
+    <div class="detail-row">
+      <span class="detail-label">${label}</span>
+      <span class="detail-val">${esc(val)}</span>
+    </div>`).join('');
+
+  _renderKDetailButtons();
+
+  const canEdit = CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor');
+  const editBtn = document.getElementById('kbtn-edit');
+  if (editBtn) editBtn.style.display = canEdit ? '' : 'none';
+
+  document.getElementById('kdetail-overlay').classList.remove('hidden');
+}
+
+function closeKDetail(ev) {
+  if (ev && ev.target !== document.getElementById('kdetail-overlay')) return;
+  document.getElementById('kdetail-overlay').classList.add('hidden');
+  currentKDetailId = null;
+  _kdetailData     = null;
+}
+
+async function changeStatus(newStatus) {
+  if (!currentKDetailId || !_kdetailData) return;
+  if (_kdetailData.kanban_status === newStatus) return;
+  _kdetailData.kanban_status = newStatus;
+  _renderKDetailButtons();
+  await fetch(`/api/events/${currentKDetailId}/kanban`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kanban_status: newStatus }),
+  });
+  if (window.onKDetailSaved) window.onKDetailSaved();
+}
+
+async function changePriority(newPriority) {
+  if (!currentKDetailId || !_kdetailData) return;
+  if (_kdetailData.priority === newPriority) return;
+  _kdetailData.priority = newPriority;
+  _renderKDetailButtons();
+  await fetch(`/api/events/${currentKDetailId}/kanban`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ priority: newPriority }),
+  });
+  if (window.onKDetailSaved) window.onKDetailSaved();
+}
+
+async function editKanbanEvent() {
+  if (!currentKDetailId) return;
+  const id = currentKDetailId;
+  document.getElementById('kdetail-overlay').classList.add('hidden');
+  currentKDetailId = null;
+  _kdetailData     = null;
+  const res = await fetch(`/api/events/${id}`);
+  const data = await res.json();
+  openModal('', data);
 }
 
 // ── 초기화 ───────────────────────────────────────────────

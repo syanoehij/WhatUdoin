@@ -186,15 +186,6 @@
 
 {% block scripts %}
 <script>
-const COLUMNS = [
-  { status: 'backlog',     label: 'Backlog' },
-  { status: 'todo',        label: 'Todo' },
-  { status: 'in_progress', label: 'In Progress' },
-  { status: 'peer_review', label: 'Peer Review' },
-  { status: 'done',        label: 'Done' },
-  { status: 'blocked',     label: 'Blocked' },
-];
-
 const PROJECT_COLORS = ['#6c5ce7','#00b894','#0984e3','#e17055','#fdcb6e','#fd79a8','#00cec9','#a29bfe'];
 function projectColor(name) {
   if (!name) return '#b2bec3';
@@ -339,17 +330,8 @@ async function loadUser() {
   }
 }
 
-let currentKDetailId = null;
-function openKDetail(id) {
-  currentKDetailId = id;
-  fetch(`/api/events/${id}`)
-    .then(r => r.json())
-    .then(data => openModal('', data))
-    .catch(() => {});
-}
-window.onEventSaved = () => {
-  if (CURRENT_USER) loadUser(); else loadGuest();
-};
+window.onEventSaved   = () => { if (CURRENT_USER) loadUser(); else loadGuest(); };
+window.onKDetailSaved = window.onEventSaved;
 
 // ── 초기화 ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {

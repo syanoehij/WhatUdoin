@@ -1873,3 +1873,62 @@ select.form-input {
   margin-left: 6px;
   vertical-align: middle;
 }
+
+/* ── 칸반 상세 모달 공유 스타일 ── */
+.kdetail-controls {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kdetail-ctrl-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.93rem;
+}
+.kanban-detail-status {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.status-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.78rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s;
+}
+.status-btn:hover { background: var(--surface-3); }
+.status-btn.active { background: #0984e3; color: #fff; border-color: #0984e3; }
+.kanban-detail-priority {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.priority-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.78rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.priority-btn:hover { background: var(--surface-3); }
+.priority-btn.active[data-priority="urgent"] { background: #d63031; color: #fff; border-color: #d63031; }
+.priority-btn.active[data-priority="high"]   { background: #e17055; color: #fff; border-color: #e17055; }
+.priority-btn.active[data-priority="normal"] { background: #0984e3; color: #fff; border-color: #0984e3; }
+.priority-btn.active[data-priority="low"]    { background: #b2bec3; color: #fff; border-color: #b2bec3; }

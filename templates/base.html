@@ -66,8 +66,9 @@
               <div class="profile-dropdown-role">{% if user.role == 'admin' %}관리자{% else %}에디터{% endif %}</div>
             </div>
             <button class="profile-dropdown-item" onclick="closeProfileMenu(); openChangePwModal()">🔑 비밀번호 변경</button>
+            <button class="profile-dropdown-item" onclick="closeProfileMenu(); openUserSettings()">⚙️ 설정</button>
             <a href="/admin" class="profile-dropdown-item" onclick="closeProfileMenu()">
-              ⚙️ 관리자 페이지
+              🔧 관리자 페이지
               <span class="dropdown-red-dot hidden" id="dropdown-red-dot"></span>
             </a>
             <div class="profile-dropdown-sep"></div>
@@ -195,9 +196,9 @@
 
             <div id="time-section">
               <div class="time-presets" style="margin:10px 0 6px;">
-                <button type="button" class="btn btn-preset" onclick="setTimePreset('am')">오전</button>
-                <button type="button" class="btn btn-preset" onclick="setTimePreset('pm')">오후</button>
-                <button type="button" class="btn btn-preset" onclick="setTimePreset('evening')">저녁</button>
+                <button type="button" class="btn btn-preset" data-preset="am" onclick="setTimePreset('am')">오전</button>
+                <button type="button" class="btn btn-preset" data-preset="pm" onclick="setTimePreset('pm')">오후</button>
+                <button type="button" class="btn btn-preset" data-preset="evening" onclick="setTimePreset('evening')">저녁</button>
               </div>
               <div class="col-section-label">시간</div>
               <div class="date-stack">
@@ -285,6 +286,59 @@
           </div>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ── 칸반 카드 상세 모달 (공유) ── -->
+  <div id="kdetail-overlay" class="modal-overlay hidden" onclick="closeKDetail(event)">
+    <div class="modal" style="width:640px;">
+      <div class="modal-header">
+        <h2 id="kdetail-title"></h2>
+        <button class="icon-btn" onclick="closeKDetail()">✕</button>
+      </div>
+      <div class="kdetail-controls">
+        <div class="kdetail-ctrl-row">
+          <span class="detail-label">칸반 상태</span>
+          <div class="kanban-detail-status" id="kdetail-status-btns"></div>
+        </div>
+        <div class="kdetail-ctrl-row">
+          <span class="detail-label">우선순위</span>
+          <div class="kanban-detail-priority" id="kdetail-priority-btns"></div>
+        </div>
+      </div>
+      <div id="kdetail-body" class="detail-body"></div>
+      <div class="modal-actions">
+        <div></div>
+        <div>
+          <button class="btn" onclick="closeKDetail()">닫기</button>
+          <button class="btn btn-primary" id="kbtn-edit" onclick="editKanbanEvent()">수정</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 사용자 설정 모달 ── -->
+  <div id="user-settings-overlay" class="modal-overlay hidden" onclick="closeUserSettings(event)">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>⚙️ 사용자 설정</h2>
+        <button class="icon-btn" onclick="closeUserSettings()">✕</button>
+      </div>
+      <div class="form-row">
+        <label>자동 새로고침</label>
+        <select id="auto-refresh-select" onchange="saveAutoRefresh(this.value)">
+          <option value="0">끄기</option>
+          <option value="60000">1분</option>
+          <option value="300000">5분</option>
+          <option value="600000">10분</option>
+          <option value="1800000">30분</option>
+        </select>
+      </div>
+      <p class="text-muted" style="font-size:0.82rem;margin-top:6px;">설정은 브라우저에 저장됩니다.</p>
+      <div class="modal-actions">
+        <div></div>
+        <button class="btn" onclick="closeUserSettings()">닫기</button>
+      </div>
     </div>
   </div>
 
@@ -396,7 +450,8 @@
       else if (id === 'detail-overlay')  { closeDetail && closeDetail(); }
       else if (id === 'kdetail-overlay') { closeKDetail && closeKDetail(); }
       else if (id === 'login-modal-overlay') { closeLoginModal(); }
-      else if (id === 'change-pw-overlay')   { closeChangePwModal(); }
+      else if (id === 'change-pw-overlay')      { closeChangePwModal(); }
+      else if (id === 'user-settings-overlay') { closeUserSettings(); }
       else { top.classList.add('hidden'); }
     });
 
@@ -450,6 +505,33 @@
     function closeChangePwModalOuter(e) {
       if (e.target === document.getElementById('change-pw-overlay')) closeChangePwModal();
     }
+    /* ── 사용자 설정 모달 ── */
+    function openUserSettings() {
+      const sel = document.getElementById('auto-refresh-select');
+      if (sel) sel.value = localStorage.getItem('auto_refresh_interval') || '300000';
+      document.getElementById('user-settings-overlay').classList.remove('hidden');
+    }
+    function closeUserSettings(e) {
+      if (e && e.target !== document.getElementById('user-settings-overlay')) return;
+      document.getElementById('user-settings-overlay').classList.add('hidden');
+    }
+    function saveAutoRefresh(val) {
+      localStorage.setItem('auto_refresh_interval', val);
+      startAutoRefresh();
+    }
+
+    /* ── 자동 새로고침 ── */
+    let _autoRefreshTimer = null;
+    function startAutoRefresh() {
+      if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
+      const ms = parseInt(localStorage.getItem('auto_refresh_interval') || '300000', 10);
+      if (ms > 0) {
+        _autoRefreshTimer = setInterval(() => location.reload(), ms);
+      }
+    }
+    // 페이지 로드 시 자동 새로고침 시작 (기본값 5분)
+    startAutoRefresh();
+
     async function doChangePw() {
       const current = document.getElementById('change-pw-current').value.trim();
       const newPw   = document.getElementById('change-pw-new').value.trim();

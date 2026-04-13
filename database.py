@@ -129,14 +129,15 @@ def init_db():
 
         # ── 기존 테이블 마이그레이션 ──
         _migrate(conn, "events", [
-            ("project",       "TEXT"),
-            ("assignee",      "TEXT"),
-            ("all_day",       "INTEGER DEFAULT 0"),
-            ("team_id",       "INTEGER"),
-            ("meeting_id",    "INTEGER"),
-            ("kanban_status", "TEXT"),
-            ("priority",      "TEXT DEFAULT 'normal'"),
-            ("is_active",     "INTEGER DEFAULT 1"),
+            ("project",        "TEXT"),
+            ("assignee",       "TEXT"),
+            ("all_day",        "INTEGER DEFAULT 0"),
+            ("team_id",        "INTEGER"),
+            ("meeting_id",     "INTEGER"),
+            ("kanban_status",  "TEXT"),
+            ("priority",       "TEXT DEFAULT 'normal'"),
+            ("is_active",      "INTEGER DEFAULT 1"),
+            ("kanban_hidden",  "INTEGER DEFAULT 0"),
         ])
         _migrate(conn, "users", [
             ("password",   "TEXT NOT NULL DEFAULT ''"),
@@ -276,6 +277,7 @@ def get_kanban_events(team_id: int = None) -> list[dict]:
             SELECT name FROM projects WHERE is_active = 0
         ))
         AND (e.is_active IS NULL OR e.is_active = 1)
+        AND (e.kanban_hidden IS NULL OR e.kanban_hidden = 0)
     """
     with get_conn() as conn:
         if team_id:
@@ -346,6 +348,8 @@ def get_project_timeline(team_id: int = None) -> list[dict]:
             continue  # 종료된 프로젝트 건너뜀
         if p == "미지정" and d.get("is_active") == 0:
             continue  # 완료 처리된 미지정 일정 건너뜀
+        if d.get("kanban_hidden") == 1:
+            continue  # 칸반/간트 숨김 처리된 일정 건너뜀
         if tname not in teams:
             teams[tname] = {}
         if p not in teams[tname]:
@@ -890,6 +894,11 @@ def count_active_admins() -> int:
 
 
 # ── Settings ─────────────────────────────────────────────
+
+def update_event_kanban_hidden(event_id: int, hidden: bool):
+    with get_conn() as conn:
+        conn.execute("UPDATE events SET kanban_hidden = ? WHERE id = ?", (1 if hidden else 0, event_id))
+
 
 def get_setting(key: str, default: str = None):
     with get_conn() as conn:

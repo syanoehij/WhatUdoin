@@ -659,19 +659,26 @@ function renderDetail(idx) {
         ? `<span class="pm-ev-assignee" title="${escHtml(e.assignee)}">${escHtml(e.assignee)}</span>` : '';
       let actionBtn;
       const isDone = e.is_active === 0;
+      const isHidden = e.kanban_hidden === 1;
+      const hideBtn = isHidden
+        ? `<button class="pm-btn pm-btn-accent" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleKanbanHidden(${e.id}, false)" title="칸반/간트에 다시 표시">👁 보이기</button>`
+        : `<button class="pm-btn" style="padding:2px 8px;font-size:0.74rem;color:var(--text-muted);" onclick="toggleKanbanHidden(${e.id}, true)" title="칸반/간트에서 숨기기">숨기기</button>`;
       if (isUnset) {
-        actionBtn = !isDone
+        actionBtn = (!isDone
           ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, false)">완료 처리</button>`
-          : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`;
+          : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`)
+          + hideBtn;
       } else {
         const doneBtn = !isDone
           ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, false)">완료 처리</button>`
           : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`;
-        actionBtn = `${doneBtn}<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeEvent(${e.id})">프로젝트 제외</button>`;
+        actionBtn = `${doneBtn}${hideBtn}<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeEvent(${e.id})">프로젝트 제외</button>`;
       }
+      const rowStyle = isDone ? 'opacity:0.45;' : isHidden ? 'opacity:0.6;' : '';
+      const titleStyle = isDone ? 'text-decoration:line-through;' : '';
       return `
-        <div class="pm-ev-row" style="${isDone ? 'opacity:0.45;' : ''}">
-          <span class="pm-ev-title" style="${isDone ? 'text-decoration:line-through;' : ''}" title="${escHtml(e.title)}">${escHtml(e.title)}</span>
+        <div class="pm-ev-row" style="${rowStyle}">
+          <span class="pm-ev-title" style="${titleStyle}" title="${escHtml(e.title)}">${escHtml(e.title)}${isHidden ? ' <span style="font-size:0.7rem;color:var(--text-faint);">[숨김]</span>' : ''}</span>
           <span class="pm-ev-date">${date}</span>
           ${assignee}
           ${actionBtn}
@@ -778,6 +785,18 @@ async function toggleEventStatus(id, activate) {
   sessionStorage.setItem('pm_restore_name',   selName || '');
   sessionStorage.setItem('pm_restore_filter', filter);
   location.reload();
+}
+
+/* ── 칸반/간트 숨기기 토글 ── */
+async function toggleKanbanHidden(id, hidden) {
+  const res = await fetch(`/api/manage/events/${id}/kanban-hidden`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ hidden }),
+  });
+  if (!res.ok) { toast('변경 실패'); return; }
+  toast(hidden ? '칸반/간트에서 숨김' : '칸반/간트에 표시됨');
+  await loadProjectList();
 }
 
 /* ── 일정 프로젝트 제외 (미지정으로 이동) ── */
