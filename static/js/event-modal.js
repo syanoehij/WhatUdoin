@@ -458,6 +458,8 @@ async function openKDetail(id) {
   const canEdit = CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor');
   const editBtn = document.getElementById('kbtn-edit');
   if (editBtn) editBtn.style.display = canEdit ? '' : 'none';
+  const completeBtn = document.getElementById('kbtn-complete');
+  if (completeBtn) completeBtn.style.display = canEdit ? '' : 'none';
 
   document.getElementById('kdetail-overlay').classList.remove('hidden');
 }
@@ -504,6 +506,21 @@ async function editKanbanEvent() {
   const res = await fetch(`/api/events/${id}`);
   const data = await res.json();
   openModal('', data);
+}
+
+async function completeKanbanEvent() {
+  if (!currentKDetailId) return;
+  if (!confirm('이 일정을 완료 처리하시겠습니까?\n칸반과 간트에서 숨겨집니다.')) return;
+  const id = currentKDetailId;
+  document.getElementById('kdetail-overlay').classList.add('hidden');
+  currentKDetailId = null;
+  _kdetailData     = null;
+  await fetch(`/api/manage/events/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_active: false }),
+  });
+  if (window.onKDetailSaved) window.onKDetailSaved();
 }
 
 // ── 초기화 ───────────────────────────────────────────────

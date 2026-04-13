@@ -772,10 +772,9 @@ async function saveEdit() {
 
 /* ── 미지정 일정 완료/재개 ── */
 async function toggleEventStatus(id, activate) {
-  const msg = activate
-    ? '이 일정을 다시 진행중으로 재개합니다.'
-    : '이 일정을 완료 처리합니다.\n간트와 칸반에서 숨겨집니다.';
-  if (!confirm(msg)) return;
+  if (activate) {
+    if (!confirm('이 일정을 다시 진행중으로 재개합니다.')) return;
+  }
   const res = await fetch(`/api/manage/events/${id}/status`, {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json'},
