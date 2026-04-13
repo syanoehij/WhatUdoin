@@ -351,6 +351,15 @@ function renderBoard() {
   });
 }
 
+function isOverdue(e) {
+  if (e.kanban_status === 'done') return false;
+  const endStr = e.end_datetime || e.start_datetime;
+  if (!endStr) return false;
+  const endDate = new Date(endStr.slice(0, 10));
+  const tod = new Date(); tod.setHours(0, 0, 0, 0);
+  return endDate < tod;
+}
+
 function cardHTML(e) {
   const color = projectColor(e.project);
   const tColor = badgeTextColor(color);
@@ -360,17 +369,20 @@ function cardHTML(e) {
   const assignees = (e.assignee || '').split(',').map(s => s.trim()).filter(Boolean);
   const assigneeBadges = assignees.map(a => `<span class="card-assignee">${esc(a)}</span>`).join('');
   const priority = e.priority || 'normal';
-  const priorityLabels = { urgent:'긴급', high:'높음', normal:'보통', low:'낮음' };
   const dateStr = fmtDate(e.start_datetime);
+  const overdue = isOverdue(e);
+  const overdueBadge = overdue
+    ? `<span class="card-overdue-badge">⚠ 기한초과</span>` : '';
 
   return `
-    <div class="kanban-card" data-id="${e.id}" data-priority="${priority}" draggable="true">
+    <div class="kanban-card${overdue ? ' overdue' : ''}" data-id="${e.id}" data-priority="${priority}" draggable="true">
       ${projectBadge}
       <div class="card-title">${esc(e.title)}</div>
       <div class="card-meta">
         <span class="priority-dot ${priority}"></span>
         <span class="card-date">${dateStr}</span>
         ${assigneeBadges}
+        ${overdueBadge}
       </div>
     </div>`;
 }

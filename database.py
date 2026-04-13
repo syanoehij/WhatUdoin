@@ -138,7 +138,12 @@ def init_db():
             ("priority",       "TEXT DEFAULT 'normal'"),
             ("is_active",      "INTEGER DEFAULT 1"),
             ("kanban_hidden",  "INTEGER DEFAULT 0"),
+            ("done_at",        "TEXT DEFAULT NULL"),
         ])
+        # 기존 done 상태 일정에 done_at 백필
+        conn.execute(
+            "UPDATE events SET done_at = updated_at WHERE kanban_status = 'done' AND done_at IS NULL"
+        )
         _migrate(conn, "users", [
             ("password",   "TEXT NOT NULL DEFAULT ''"),
             ("team_id",    "INTEGER"),
@@ -224,6 +229,15 @@ def create_event(data: dict) -> int:
 
 def update_event(event_id: int, data: dict):
     data["id"] = event_id
+    # kanban_status 변경에 따른 done_at 관리
+    new_status = data.get("kanban_status")
+    if new_status == 'done':
+        data["done_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    elif new_status is not None:
+        data["done_at"] = None
+    else:
+        # kanban_status가 None이면 기존 done_at 유지 (SELECT 후 판단 불필요, 그냥 NULL)
+        data.setdefault("done_at", None)
     with get_conn() as conn:
         conn.execute(
             """UPDATE events SET
@@ -237,6 +251,7 @@ def update_event(event_id: int, data: dict):
                 end_datetime   = :end_datetime,
                 kanban_status  = :kanban_status,
                 priority       = :priority,
+                done_at        = :done_at,
                 updated_at     = CURRENT_TIMESTAMP
                WHERE id = :id""",
             data,
@@ -278,6 +293,7 @@ def get_kanban_events(team_id: int = None) -> list[dict]:
         ))
         AND (e.is_active IS NULL OR e.is_active = 1)
         AND (e.kanban_hidden IS NULL OR e.kanban_hidden = 0)
+        AND (e.done_at IS NULL OR e.done_at > datetime('now', '-7 days'))
     """
     with get_conn() as conn:
         if team_id:
@@ -299,6 +315,11 @@ def update_kanban_status(event_id: int, kanban_status=_MISSING, priority=_MISSIN
     if kanban_status is not _MISSING:
         sets.append("kanban_status = ?")
         params.append(kanban_status)
+        # done으로 변경 시 done_at 기록, 다른 상태로 변경 시 초기화
+        if kanban_status == 'done':
+            sets.append("done_at = CURRENT_TIMESTAMP")
+        else:
+            sets.append("done_at = NULL")
     if priority is not _MISSING:
         sets.append("priority = ?")
         params.append(priority)
@@ -350,6 +371,15 @@ def get_project_timeline(team_id: int = None) -> list[dict]:
             continue  # 완료 처리된 미지정 일정 건너뜀
         if d.get("kanban_hidden") == 1:
             continue  # 칸반/간트 숨김 처리된 일정 건너뜀
+        done_at = d.get("done_at")
+        if done_at:
+            from datetime import datetime as _dt, timedelta as _td
+            try:
+                done_dt = _dt.fromisoformat(done_at.replace("Z", "+00:00").split("+")[0])
+                if _dt.now() - done_dt > _td(days=7):
+                    continue  # done 후 7일 초과 → 간트에서 숨김
+            except Exception:
+                pass
         if tname not in teams:
             teams[tname] = {}
         if p not in teams[tname]:

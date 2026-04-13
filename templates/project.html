@@ -782,14 +782,24 @@ function render() {
                 const barT = Math.floor((ROW_H - BAR_H) / 2);
 
                 const bar = document.createElement('div');
-                bar.className = 'gantt-bar';
+                // 기한 초과 여부 판단
+                const evOverdue = (() => {
+                  if (ev.kanban_status === 'done') return false;
+                  const endStr = ev.end_datetime || ev.start_datetime;
+                  if (!endStr) return false;
+                  const endD = new Date(endStr.slice(0, 10));
+                  const todD = today();
+                  return endD < todD;
+                })();
+                bar.className = 'gantt-bar' + (evOverdue ? ' overdue' : '');
                 bar.style.cssText =
                   `left:${barL}px;width:${barW}px;top:${barT}px;height:${BAR_H}px;background:${color}`;
-                bar.textContent = ev.title;
+                bar.textContent = (evOverdue ? '⚠ ' : '') + ev.title;
                 bar.title = [
                   ev.title,
                   fmtDate(evStart) + (evEnd && evEnd.getTime() !== evStart.getTime() ? ' ~ ' + fmtDate(evEnd) : ''),
                   ev.assignee ? '담당: ' + ev.assignee : '',
+                  evOverdue ? '⚠ 기한 초과' : '',
                 ].filter(Boolean).join('\n');
                 if (CURRENT_USER) {
                   setupBarDrag(bar, ev, evStart, evEnd !== evStart ? evEnd : null);

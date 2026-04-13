@@ -1959,3 +1959,31 @@ select.form-input {
   animation: pulse-dot 1.8s ease-in-out infinite;
   flex-shrink: 0;
 }
+
+/* ── 기한 초과 (overdue) ── */
+.kanban-card.overdue .card-title { color: #d63031; }
+.kanban-card.overdue .card-overdue-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #d63031;
+  background: rgba(214,48,49,0.1);
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-left: 2px;
+}
+[data-theme="dark"] .kanban-card.overdue .card-title { color: #ff7675; }
+[data-theme="dark"] .kanban-card.overdue .card-overdue-badge {
+  color: #ff7675;
+  background: rgba(255,118,117,0.15);
+}
+.gantt-bar.overdue {
+  background-image: repeating-linear-gradient(
+    -45deg, transparent, transparent 6px,
+    rgba(0,0,0,0.15) 6px, rgba(0,0,0,0.15) 7px
+  ) !important;
+  outline: 2px solid rgba(214,48,49,0.7);
+  outline-offset: -2px;
+}
