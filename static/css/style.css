@@ -243,6 +243,8 @@ nav { display: flex; gap: 4px; margin-right: auto; }
   transition: background 0.1s;
 }
 .profile-dropdown-item:hover { background: var(--surface-2); }
+a.profile-dropdown-item { text-decoration: none; color: var(--text); }
+a.profile-dropdown-item:hover { color: var(--text); }
 .profile-dropdown-item.danger { color: #e05656; }
 .profile-dropdown-item.theme-row { justify-content: space-between; cursor: default; }
 .profile-dropdown-item.theme-row:hover { background: none; }
