@@ -254,7 +254,7 @@ main { padding: 0; }
 }
 .gantt-bar {
   position: absolute;
-  border-radius: 5px; cursor: pointer;
+  border-radius: 5px; cursor: grab;
   display: flex; align-items: center; justify-content: center;
   text-align: center; padding: 0 6px;
   font-size: 0.72rem; font-weight: 600; color: #fff;
@@ -262,8 +262,14 @@ main { padding: 0; }
   box-shadow: 0 2px 5px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.18);
   border-bottom: 2px solid rgba(0,0,0,0.2);
   transition: filter 0.12s, box-shadow 0.12s; z-index: 3; box-sizing: border-box;
+  user-select: none;
 }
 .gantt-bar:hover { filter: brightness(1.1); box-shadow: 0 4px 8px rgba(0,0,0,0.35); z-index: 4; }
+.gantt-bar.bar-dragging {
+  cursor: grabbing !important; opacity: 0.82; z-index: 10 !important;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.4); transition: none;
+}
+.gantt-bar.bar-no-drag { cursor: pointer; }
 [data-theme="dark"] .gantt-bar { filter: saturate(0.75) brightness(0.82); }
 [data-theme="dark"] .gantt-bar:hover { filter: saturate(0.85) brightness(0.95); }
 .gantt-proj-span {
@@ -785,7 +791,12 @@ function render() {
                   fmtDate(evStart) + (evEnd && evEnd.getTime() !== evStart.getTime() ? ' ~ ' + fmtDate(evEnd) : ''),
                   ev.assignee ? '담당: ' + ev.assignee : '',
                 ].filter(Boolean).join('\n');
-                bar.onclick = () => openBarDetail(ev.id);
+                if (CURRENT_USER) {
+                  setupBarDrag(bar, ev, evStart, evEnd !== evStart ? evEnd : null);
+                } else {
+                  bar.classList.add('bar-no-drag');
+                  bar.addEventListener('click', () => openBarDetail(ev.id));
+                }
                 evGRow.appendChild(bar);
               }
             }
@@ -859,6 +870,96 @@ async function openBarDetail(eventId) {
   openModal('', await res.json());
 }
 window.onEventSaved = loadData;
+
+// ── 간트 바 드래그 이동 ──────────────────────────────────
+let _dragState = null;
+
+function setupBarDrag(bar, ev, evStart, evEnd) {
+  bar.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const dayPx = getDayPx();
+    const origLeft = parseFloat(bar.style.left);
+    const origWidth = parseFloat(bar.style.width);
+    const duration = evEnd ? daysBetween(evStart, evEnd) : 0;
+
+    _dragState = {
+      bar, ev, evStart: new Date(evStart), evEnd: evEnd ? new Date(evEnd) : null,
+      duration, dayPx, startX: e.clientX, origLeft, origWidth,
+      moved: false,
+    };
+
+    bar.classList.add('bar-dragging');
+    document.addEventListener('mousemove', _onBarDragMove, { passive: false });
+    document.addEventListener('mouseup', _onBarDragEnd);
+  });
+}
+
+function _onBarDragMove(e) {
+  if (!_dragState) return;
+  const { bar, startX, origLeft, origWidth, dayPx } = _dragState;
+  const dx = e.clientX - startX;
+  if (Math.abs(dx) > 4) _dragState.moved = true;
+  if (_dragState.moved) {
+    // 스냅: 반 이상 이동하면 1일 단위로 스냅
+    const dayDelta = Math.round(dx / dayPx);
+    bar.style.left  = (origLeft + dayDelta * dayPx) + 'px';
+    bar.style.width = origWidth + 'px';
+  }
+}
+
+async function _onBarDragEnd(e) {
+  document.removeEventListener('mousemove', _onBarDragMove);
+  document.removeEventListener('mouseup', _onBarDragEnd);
+
+  if (!_dragState) return;
+  const { bar, ev, evStart, evEnd, duration, dayPx, startX, moved } = _dragState;
+  _dragState = null;
+
+  bar.classList.remove('bar-dragging');
+
+  if (!moved) {
+    openBarDetail(ev.id);
+    return;
+  }
+
+  const dx = e.clientX - startX;
+  const dayDelta = Math.round(dx / dayPx);
+  if (dayDelta === 0) { render(); return; }
+
+  const newStart = addDays(evStart, dayDelta);
+  const newEnd   = evEnd ? addDays(evEnd, dayDelta) : null;
+
+  // 낙관적 업데이트: 즉시 재렌더
+  ev.start_datetime = fmtDate(newStart);
+  ev.end_datetime   = newEnd ? fmtDate(newEnd) : null;
+  render();
+
+  // 서버 저장
+  try {
+    const res = await fetch(`/api/events/${ev.id}/datetime`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        start_datetime: fmtDate(newStart),
+        end_datetime: newEnd ? fmtDate(newEnd) : null,
+        all_day: ev.all_day || 0,
+      }),
+    });
+    if (!res.ok) {
+      // 롤백
+      ev.start_datetime = fmtDate(evStart);
+      ev.end_datetime   = evEnd ? fmtDate(evEnd) : null;
+      render();
+    }
+  } catch (_) {
+    ev.start_datetime = fmtDate(evStart);
+    ev.end_datetime   = evEnd ? fmtDate(evEnd) : null;
+    render();
+  }
+}
 
 // ── 오늘로 스크롤 ─────────────────────────────────────────
 function scrollToToday() {
