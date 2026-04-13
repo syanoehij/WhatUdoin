@@ -110,11 +110,6 @@
     gap: 8px;
     min-height: 60px;
   }
-  .kanban-col-body.drag-over {
-    background: var(--accent-light);
-    border-radius: 0 0 10px 10px;
-  }
-
   /* ── 칸반 카드 ── */
   .kanban-card {
     background: var(--surface);
@@ -230,16 +225,15 @@
     ('blocked',     'Blocked'),
   ] %}
   {% for status, label in cols %}
-  <div class="kanban-col {% if status == 'blocked' %}blocked{% endif %}" data-status="{{ status }}">
+  <div class="kanban-col {% if status == 'blocked' %}blocked{% endif %}" data-status="{{ status }}"
+       ondragover="onDragOver(event)"
+       ondragleave="onDragLeave(event)"
+       ondrop="onDrop(event, '{{ status }}')">
     <div class="kanban-col-header">
       <span class="col-title">{{ label }}</span>
       <span class="col-count" id="count-{{ status }}">0</span>
     </div>
-    <div class="kanban-col-body"
-         id="col-{{ status }}"
-         ondragover="onDragOver(event)"
-         ondragleave="onDragLeave(event)"
-         ondrop="onDrop(event, '{{ status }}')">
+    <div class="kanban-col-body" id="col-{{ status }}">
       <div class="kanban-empty">불러오는 중...</div>
     </div>
   </div>
@@ -394,12 +388,16 @@ function onDragOver(e) {
 }
 
 function onDragLeave(e) {
-  e.currentTarget.classList.remove('drag-over');
+  // 컬럼 내부 자식으로 이동하는 경우 무시 (dragleave 버블링 방지)
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    e.currentTarget.classList.remove('drag-over');
+  }
 }
 
 async function onDrop(e, newStatus) {
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
+  e.stopPropagation();
   if (!dragSrcId) return;
   if (!CURRENT_USER) { alert('로그인이 필요합니다.'); return; }
 

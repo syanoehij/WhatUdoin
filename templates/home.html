@@ -253,14 +253,16 @@ function buildBoard(containerId, events, draggable) {
     container.appendChild(col);
 
     if (draggable) {
-      const body = col.querySelector('.kanban-col-body');
-      body.addEventListener('dragover', e => { e.preventDefault(); body.classList.add('drag-over'); });
-      body.addEventListener('dragleave', () => body.classList.remove('drag-over'));
-      body.addEventListener('drop', e => {
+      col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drag-over'); });
+      col.addEventListener('dragleave', e => {
+        if (!col.contains(e.relatedTarget)) col.classList.remove('drag-over');
+      });
+      col.addEventListener('drop', e => {
         e.preventDefault();
-        body.classList.remove('drag-over');
+        e.stopPropagation();
+        col.classList.remove('drag-over');
         if (!homeDragSrcId) return;
-        const newStatus = body.dataset.status;
+        const newStatus = col.dataset.status;
         fetch(`/api/events/${homeDragSrcId}/kanban`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
