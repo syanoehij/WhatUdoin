@@ -303,7 +303,7 @@ main { padding: 0; }
   <div class="zoom-control">
     <span class="zoom-icon">축소</span>
     <input type="range" id="zoom-slider" class="zoom-slider"
-           min="0" max="10" step="1" value="4"
+           min="0" max="10" step="1" value="8"
            oninput="onZoomSlider(+this.value)" />
     <span class="zoom-icon">확대</span>
     <span class="zoom-value" id="zoom-label">3개월</span>
@@ -348,7 +348,7 @@ main { padding: 0; }
 const ZOOM_STEPS  = [365, 270, 180, 120, 90, 60, 45, 30, 21, 14, 7];
 const PRESET_DAYS = { month: 180, week: 90, day: 21 };
 
-let daysShown = ZOOM_STEPS[4]; // 90일
+let daysShown = ZOOM_STEPS[8]; // 기본 21일 (3주)
 let viewStart = null;
 let allTeams  = [];
 const collapsedProjects = new Set(); // "팀이름::프로젝트이름"
@@ -374,6 +374,12 @@ function loadProjectState() {
   if (d) {
     const [y, m, day] = d.split('-').map(Number);
     viewStart = new Date(y, m - 1, day);
+  }
+  // 저장된 날짜 없으면 오늘 기준으로 시작 (오늘이 화면 앞쪽에 오도록 약간 앞으로 당김)
+  if (!viewStart) {
+    const today = new Date();
+    today.setDate(today.getDate() - Math.floor(daysShown * 0.15));
+    viewStart = today;
   }
 }
 

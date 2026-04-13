@@ -1684,12 +1684,22 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--accent)
 [data-theme="dark"] .fc-daygrid-day-number       { color: var(--text-muted); }
 
 [data-theme="dark"] .fc-daygrid-day             { background: var(--surface); }
-[data-theme="dark"] .fc-daygrid-day.fc-day-today { background: var(--accent-light) !important; }
+/* 다크테마 월 뷰 오늘: accent-light(#131c2e)은 너무 어두움 → 파란 오버레이로 교체 */
+[data-theme="dark"] .fc-daygrid-day.fc-day-today { background: rgba(88,166,255,0.13) !important; }
 [data-theme="dark"] .fc-daygrid-day.fc-day-other { background: var(--bg); opacity: 0.9; }
 
 [data-theme="dark"] .fc-timegrid-col             { background: var(--surface); }
-[data-theme="dark"] .fc-timegrid-col.fc-day-today { background: var(--surface) !important; }
-.fc-timegrid-col.fc-day-today                    { background: inherit !important; }
+
+/* 주/2주 뷰: 오늘 열 타임라인 전체 배경 표시 */
+.fc-timeGridWeek-view    .fc-timegrid-col.fc-day-today,
+.fc-timeGridTwoWeek-view .fc-timegrid-col.fc-day-today { background: rgba(9,105,218,0.07) !important; }
+[data-theme="dark"] .fc-timeGridWeek-view    .fc-timegrid-col.fc-day-today,
+[data-theme="dark"] .fc-timeGridTwoWeek-view .fc-timegrid-col.fc-day-today { background: rgba(88,166,255,0.10) !important; }
+
+/* 일 뷰: 오늘 배경 제거 */
+.fc-timeGridDay-view .fc-timegrid-col.fc-day-today { background: inherit !important; }
+/* 기타 뷰 기본 억제 */
+.fc-timegrid-col.fc-day-today                      { background: inherit !important; }
 [data-theme="dark"] .fc-timegrid-slot-label-cushion { color: var(--text-muted); }
 
 [data-theme="dark"] .fc-non-business            { background: rgba(0,0,0,0.15); }

@@ -34,6 +34,7 @@
       <span class="subtitle">너 뭐하니?</span>
     </div>
     <nav>
+      {% if user %}<a href="/" class="nav-link {% if request.url.path == '/' %}nav-active{% endif %}">🏠 내 스케줄</a>{% endif %}
       <a href="/calendar" class="nav-link {% if request.url.path == '/calendar' %}nav-active{% endif %}">📅 캘린더</a>
       <a href="/meetings" class="nav-link {% if request.url.path.startswith('/meetings') %}nav-active{% endif %}">📋 회의록</a>
       <a href="/kanban" class="nav-link {% if request.url.path.startswith('/kanban') %}nav-active{% endif %}">📌 칸반</a>

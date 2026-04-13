@@ -208,7 +208,7 @@ function badgeTextColor(hex) {
 }
 function fmtDate(str) { return str ? str.slice(0,10) : ''; }
 
-function cardHTML(e) {
+function cardHTML(e, draggable) {
   const color = projectColor(e.project);
   const tColor = badgeTextColor(color);
   const projectBadge = e.project
@@ -218,6 +218,7 @@ function cardHTML(e) {
   const priority = e.priority || 'normal';
   return `
     <div class="kanban-card" data-id="${e.id}" data-priority="${priority}"
+         ${draggable ? 'draggable="true"' : ''}
          onclick="openKDetail(${e.id})">
       ${projectBadge}
       <div class="card-title">${esc(e.title)}</div>
@@ -228,13 +229,15 @@ function cardHTML(e) {
     </div>`;
 }
 
-function buildBoard(containerId, events) {
+let homeDragSrcId = null;
+
+function buildBoard(containerId, events, draggable) {
   const container = document.getElementById(containerId);
   container.innerHTML = '';
   const grouped = {};
   COLUMNS.forEach(c => grouped[c.status] = []);
   events.forEach(e => {
-    const status = e.kanban_status || 'backlog';  // 미지정은 Backlog로
+    const status = e.kanban_status || 'backlog';
     if (grouped[status] !== undefined) grouped[status].push(e);
   });
 
@@ -243,15 +246,47 @@ function buildBoard(containerId, events) {
     const col = document.createElement('div');
     col.className = 'kanban-col' + (status === 'blocked' ? ' blocked' : '');
     col.dataset.status = status;
+
+    const bodyHtml = cards.length
+      ? cards.map(e => cardHTML(e, draggable)).join('')
+      : '<div class="kanban-empty">없음</div>';
+
     col.innerHTML = `
       <div class="kanban-col-header">
         <span class="col-title">${label}</span>
         <span class="col-count">${cards.length}</span>
       </div>
-      <div class="kanban-col-body">
-        ${cards.length ? cards.map(cardHTML).join('') : '<div class="kanban-empty">없음</div>'}
+      <div class="kanban-col-body" data-status="${status}">
+        ${bodyHtml}
       </div>`;
     container.appendChild(col);
+
+    if (draggable) {
+      const body = col.querySelector('.kanban-col-body');
+      body.addEventListener('dragover', e => { e.preventDefault(); body.classList.add('drag-over'); });
+      body.addEventListener('dragleave', () => body.classList.remove('drag-over'));
+      body.addEventListener('drop', e => {
+        e.preventDefault();
+        body.classList.remove('drag-over');
+        if (!homeDragSrcId) return;
+        const newStatus = body.dataset.status;
+        fetch(`/api/events/${homeDragSrcId}/kanban`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kanban_status: newStatus }),
+        }).then(() => { if (CURRENT_USER) loadUser(); });
+        homeDragSrcId = null;
+      });
+      col.querySelectorAll('.kanban-card').forEach(card => {
+        card.addEventListener('dragstart', e => {
+          homeDragSrcId = card.dataset.id;
+          card.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+        card.addEventListener('dragover', e => e.preventDefault());
+      });
+    }
   });
 }
 
@@ -261,7 +296,7 @@ async function loadGuest() {
   const url = teamId ? `/api/kanban?team_id=${teamId}` : '/api/kanban';
   const events = await fetch(url).then(r => r.json());
   document.getElementById('guest-total').textContent = `총 ${events.length}개`;
-  buildBoard('guest-board', events);
+  buildBoard('guest-board', events, false);
 }
 
 // ── 유저 대시보드 ──────────────────────────────────────
@@ -300,7 +335,7 @@ async function loadUser() {
     document.getElementById('user-board').innerHTML =
       '<p class="no-tasks">담당으로 지정된 칸반 일정이 없습니다.</p>';
   } else {
-    buildBoard('user-board', mine);
+    buildBoard('user-board', mine, true);
   }
 }
 

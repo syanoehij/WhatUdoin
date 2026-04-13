@@ -11,3 +11,13 @@ whatudoin.db
 build/
 dist/
 *.spec.bak
+
+# Node / Playwright
+node_modules/
+package.json
+package-lock.json
+playwright.config.js
+tests/
+test-results/
+meetings/2026/04/57b6eb4358424211a588ef3739608d46.png
+meetings/2026/04/aa4dc6dcb704455982852b4a76f11eb4.png

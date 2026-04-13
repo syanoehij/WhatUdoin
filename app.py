@@ -559,7 +559,7 @@ async def manage_create_project(request: Request):
     data = await request.json()
     name = data.get("name", "").strip()
     color = data.get("color") or None
-    memo  = data.get("memo", "").strip() or None
+    memo  = (data.get("memo") or "").strip() or None
     if not name:
         raise HTTPException(status_code=400, detail="프로젝트 이름을 입력하세요.")
     try:

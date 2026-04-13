@@ -409,6 +409,8 @@ function renderBoard() {
     body.querySelectorAll('.kanban-card').forEach(card => {
       card.addEventListener('dragstart', e => onDragStart(e, card.dataset.id));
       card.addEventListener('dragend',   e => card.classList.remove('dragging'));
+      // 카드 위에서도 dragover 허용해야 col-body drop 이벤트가 발생함 (grid 2행 이상 버그 수정)
+      card.addEventListener('dragover',  e => e.preventDefault());
       card.addEventListener('click',     () => openKDetail(parseInt(card.dataset.id)));
     });
   });

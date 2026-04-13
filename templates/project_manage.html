@@ -386,6 +386,15 @@
       <button class="pm-filter-btn" id="filter-closed" onclick="setFilter('closed')">완료</button>
     </div>
 
+    <!-- 검색 -->
+    <div style="padding:6px 12px 2px;">
+      <input type="text" id="pm-search" placeholder="프로젝트 검색…"
+             oninput="renderList()"
+             style="width:100%;box-sizing:border-box;padding:5px 10px;border:1px solid var(--border);
+                    border-radius:6px;background:var(--surface);color:var(--text);
+                    font-size:0.84rem;font-family:inherit;outline:none;" />
+    </div>
+
     <!-- + 추가 버튼 -->
     <button class="pm-new-btn" onclick="showCreatePanel()">+ 새 프로젝트</button>
 
@@ -520,8 +529,8 @@ let selIdx    = null;       // 현재 선택된 프로젝트 인덱스
 let selName   = null;       // 선택 유지를 위한 이름
 
 /* ── 데이터 로드 ── */
-async function loadProjects() {
-  const res = await fetch('/api/manage/projects');
+async function loadProjectList() {
+  const res = await fetch('/api/manage/projects', { cache: 'no-store' });
   projects  = await res.json();
   renderList();
   if (selName !== null) {
@@ -543,6 +552,7 @@ function unsetVisibleEvents(p) {
 
 function renderList() {
   const el  = document.getElementById('pm-list');
+  const q   = (document.getElementById('pm-search')?.value || '').trim().toLowerCase();
   let vis;
   if (filter === 'closed') {
     vis = projects.filter(p => {
@@ -555,6 +565,7 @@ function renderList() {
       return p.is_active !== 0;
     });
   }
+  if (q) vis = vis.filter(p => p.name.toLowerCase().includes(q));
 
   if (!vis.length) {
     el.innerHTML = `<div class="pm-empty" style="padding:12px 14px;">${filter === 'closed' ? '완료된 프로젝트 없음' : '진행중인 프로젝트 없음'}</div>`;
@@ -749,7 +760,7 @@ async function saveEdit() {
   selName = target;
   toast('저장됨');
   document.getElementById('pm-edit-panel').classList.remove('visible');
-  await loadProjects();
+  await loadProjectList();
 }
 
 /* ── 미지정 일정 완료/재개 ── */
@@ -779,7 +790,7 @@ async function excludeEvent(id) {
   });
   if (!res.ok) { toast('실패'); return; }
   toast('미지정으로 이동됨');
-  await loadProjects();
+  await loadProjectList();
 }
 
 /* ── 종료 / 재개 ── */
@@ -816,7 +827,7 @@ async function deleteProject(idx, withEvents) {
   selName = null;
   hideDetail();
   toast(withEvents ? '프로젝트 및 일정 삭제됨' : '프로젝트 삭제됨');
-  await loadProjects();
+  await loadProjectList();
 }
 
 /* ── 새 프로젝트 생성 패널 ── */
@@ -900,7 +911,7 @@ async function createProject() {
   }
   hideCreatePanel();
   toast('프로젝트 추가됨');
-  await loadProjects();
+  await loadProjectList();
   // 방금 만든 프로젝트 자동 선택
   const idx = projects.findIndex(p => p.name === name);
   if (idx >= 0) selectProjItem(idx);
@@ -939,7 +950,7 @@ document.getElementById('cr-name').addEventListener('keydown', e => {
     }
     if (restoreName) selName = restoreName;
   }
-  await loadProjects();
+  await loadProjectList();
 })();
 </script>
 {% endblock %}
