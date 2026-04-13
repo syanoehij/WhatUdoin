@@ -162,6 +162,34 @@ def ai_import_page(request: Request):
     return templates.TemplateResponse(request, "ai_import.html", _ctx(request))
 
 
+# ── 팀 공지 페이지 ─────────────────────────────────────────
+
+@app.get("/notice", response_class=HTMLResponse)
+def notice_page(request: Request):
+    notice = db.get_latest_notice()
+    return templates.TemplateResponse(request, "notice.html", _ctx(request, notice=notice))
+
+
+@app.get("/notice/history", response_class=HTMLResponse)
+def notice_history_page(request: Request):
+    histories = db.get_notice_history()
+    return templates.TemplateResponse(request, "notice_history.html", _ctx(request, histories=histories))
+
+
+@app.get("/api/notice")
+def api_get_notice():
+    return db.get_latest_notice() or {}
+
+
+@app.post("/api/notice")
+async def api_save_notice(request: Request):
+    user = _require_editor(request)
+    data = await request.json()
+    content = data.get("content", "")
+    notice_id = db.save_notice(content, user["name"])
+    return {"id": notice_id}
+
+
 # ── 인증 API ────────────────────────────────────────────
 
 @app.post("/api/login")

@@ -171,6 +171,15 @@ def init_db():
                 value TEXT
             )
         """)
+        # ── team_notices ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS team_notices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT NOT NULL DEFAULT '',
+                created_by TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
         # ── 시드 데이터 ──
         if not conn.execute("SELECT 1 FROM teams LIMIT 1").fetchone():
@@ -745,6 +754,32 @@ def get_upcoming_meetings(assignee_name: str = None, limit: int = 7) -> list[dic
                    LIMIT ?""",
                 (today, limit)
             ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_latest_notice() -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM team_notices ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def save_notice(content: str, created_by: str) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO team_notices (content, created_by) VALUES (?, ?)",
+            (content, created_by)
+        )
+    return cur.lastrowid
+
+
+def get_notice_history(limit: int = 50) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM team_notices ORDER BY id DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
     return [dict(r) for r in rows]
 
 

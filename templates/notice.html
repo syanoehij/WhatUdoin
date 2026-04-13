@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — 팀 공지{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css" />
+<script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
+<style>
+  /* notice-editor-container를 editor-page/editor-container와 동일하게 */
+  #notice-editor-container {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #notice-editor-container .toastui-editor-defaultUI {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+  }
+  #notice-editor-container .toastui-editor-main {
+    flex: 1 !important;
+    overflow-y: auto !important;
+  }
+  #notice-editor-container .toastui-editor-ww-container,
+  #notice-editor-container .toastui-editor-md-container {
+    flex: 1 !important;
+    overflow-y: auto !important;
+  }
+  .notice-meta {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  #save-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--accent);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    display: none;
+    z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- .editor-page 클래스 재사용: margin -20px -24px + height calc(100vh-50px) -->
+<div class="editor-page">
+  <div class="editor-header">
+    <span style="font-size:1rem; font-weight:700;">📢 팀 공지</span>
+    <div style="display:flex; align-items:center; gap:8px;">
+      {% if notice %}
+      <span class="notice-meta" id="notice-meta">
+        마지막 저장: {{ notice.created_at[:16].replace('T', ' ') }} · {{ notice.created_by }}
+      </span>
+      {% endif %}
+      <a href="/notice/history" class="btn btn-sm">이력 보기</a>
+      {% if user and user.role in ('editor', 'admin') %}
+      <button class="btn btn-sm btn-primary" onclick="saveNotice()">저장</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="editor-body">
+    <div class="editor-main">
+      {% if user and user.role in ('editor', 'admin') %}
+      <div id="notice-editor-container"></div>
+      {% else %}
+      <div id="notice-view" style="padding:24px; overflow-y:auto; flex:1;"></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div id="save-toast">저장되었습니다.</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const IS_EDITOR     = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
+const INITIAL_MD    = {{ (notice.content if notice else '') | tojson | safe }};
+let noticeEditor    = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (IS_EDITOR) {
+    noticeEditor = new toastui.Editor({
+      el: document.getElementById('notice-editor-container'),
+      height: '100%',
+      initialEditType: 'wysiwyg',
+      initialValue: INITIAL_MD || '',
+      hideModeSwitch: false,
+      placeholder: '팀 공지 내용을 입력하세요...',
+      toolbarItems: [
+        ['heading', 'bold', 'italic', 'strike'],
+        ['hr', 'quote'],
+        ['ul', 'ol', 'task'],
+        ['table', 'image'],
+      ],
+      usageStatistics: false,
+      hooks: {
+        addImageBlobHook: async (blob, callback) => {
+          const form = new FormData();
+          form.append('file', blob, blob.name || 'image.png');
+          try {
+            const res = await fetch('/api/upload/image', { method: 'POST', body: form });
+            if (!res.ok) throw new Error('upload failed');
+            const { url } = await res.json();
+            callback(url, '');
+          } catch {
+            alert('이미지 업로드에 실패했습니다.');
+          }
+        },
+      },
+    });
+  } else {
+    // 읽기 전용
+    const viewEl = document.getElementById('notice-view');
+    if (viewEl) {
+      new toastui.Editor.factory({
+        el: viewEl,
+        viewer: true,
+        initialValue: INITIAL_MD || '(등록된 공지가 없습니다.)',
+      });
+    }
+  }
+});
+
+async function saveNotice() {
+  if (!noticeEditor) return;
+  const content = noticeEditor.getMarkdown();
+  const res = await fetch('/api/notice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  if (res.ok) {
+    const data = await res.json();
+    const toast = document.getElementById('save-toast');
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 2000);
+
+    // 메타 정보 업데이트
+    const now = new Date();
+    const metaEl = document.getElementById('notice-meta');
+    const pad = n => String(n).padStart(2, '0');
+    const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    if (metaEl) {
+      metaEl.textContent = `마지막 저장: ${dateStr} · {{ user.name if user else '' }}`;
+    } else {
+      // 처음 저장인 경우 헤더에 메타 추가
+      const header = document.querySelector('.notice-header div');
+      const span = document.createElement('span');
+      span.className = 'notice-meta';
+      span.id = 'notice-meta';
+      span.textContent = `마지막 저장: ${dateStr} · {{ user.name if user else '' }}`;
+      header.insertBefore(span, header.firstChild);
+    }
+  }
+}
+</script>
+{% endblock %}

@@ -2,6 +2,7 @@
 {% block title %}WhatUDoin{% endblock %}
 
 {% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
   main { max-width: none; padding: 20px 28px; }
 
@@ -173,15 +174,41 @@
 
 <!-- ── 유저 대시보드 (로그인) ── -->
 <div id="view-user" class="hidden">
-  <div class="home-greeting">
-    <h2 id="greeting-text"></h2>
-    <p id="greeting-sub"></p>
+
+  <!-- 상단: 인사말 + 예정 회의 (좌) / 팀 공지 (우) -->
+  <div style="display:flex; gap:24px; align-items:stretch; margin-bottom:24px;">
+
+    <!-- 왼쪽: 인사말 + 진행요약 + 예정 회의 -->
+    <div style="flex:1; min-width:0;">
+      <div class="home-greeting">
+        <h2 id="greeting-text"></h2>
+        <p id="greeting-sub"></p>
+      </div>
+      <div class="home-progress" id="user-progress"></div>
+      <div class="home-section-title">💬 예정 회의</div>
+      <div id="user-meetings" class="home-meeting-list" style="min-height:200px;"></div>
+    </div>
+
+    <!-- 오른쪽: 팀 공지 -->
+    <div id="notice-panel" style="flex:0 0 40%; min-width:0; display:flex; flex-direction:column;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+        <div class="home-section-title" style="margin-bottom:0;">
+          📢 팀 공지 <span id="notice-meta-inline" style="font-size:0.75rem; color:var(--text-faint); font-weight:400;"></span>
+        </div>
+        <a href="/notice" class="btn btn-sm" style="font-size:0.78rem;">편집</a>
+      </div>
+      <div id="notice-content-wrap"
+           style="background:var(--surface-2); border-radius:10px; padding:16px; flex:1; overflow-y:auto; font-size:0.88rem; line-height:1.6; color:var(--text);">
+        <span id="notice-loading" style="color:var(--text-faint);">불러오는 중...</span>
+      </div>
+    </div>
+
   </div>
-  <div class="home-progress" id="user-progress"></div>
-  <div class="home-section-title">💬 예정 회의</div>
-  <div id="user-meetings" class="home-meeting-list"></div>
+
+  <!-- 하단: 내 담당 일정 — 전체 너비 -->
   <div class="home-section-title">내 담당 일정</div>
   <div class="kanban-board" id="user-board"></div>
+
 </div>
 
 {% endblock %}
@@ -308,9 +335,10 @@ async function loadGuest() {
 
 // ── 유저 대시보드 ──────────────────────────────────────
 async function loadUser() {
-  const [events, meetings] = await Promise.all([
+  const [events, meetings, notice] = await Promise.all([
     fetch('/api/kanban').then(r => r.json()),
     fetch('/api/my-meetings').then(r => r.ok ? r.json() : []),
+    fetch('/api/notice').then(r => r.ok ? r.json() : {}),
   ]);
   const myName = CURRENT_USER.name.toLowerCase();
   const mine = events.filter(e =>
@@ -360,11 +388,33 @@ async function loadUser() {
     }).join('');
   }
 
+  // 팀 공지
+  renderNotice(notice);
+
   if (mine.length === 0) {
     document.getElementById('user-board').innerHTML =
       '<p class="no-tasks">담당으로 지정된 칸반 일정이 없습니다.</p>';
   } else {
     buildBoard('user-board', mine, true);
+  }
+}
+
+function renderNotice(notice) {
+  const wrap = document.getElementById('notice-content-wrap');
+  const metaInline = document.getElementById('notice-meta-inline');
+  if (!wrap) return;
+  if (!notice || !notice.content) {
+    wrap.innerHTML = '<span style="color:var(--text-faint);">등록된 팀 공지가 없습니다.</span>';
+    return;
+  }
+  if (window.marked) {
+    wrap.innerHTML = window.marked.parse(notice.content);
+  } else {
+    wrap.textContent = notice.content;
+  }
+  if (metaInline && notice.created_at) {
+    const dateStr = notice.created_at.slice(0, 16).replace('T', ' ');
+    metaInline.textContent = `(${dateStr} · ${notice.created_by})`;
   }
 }
 
