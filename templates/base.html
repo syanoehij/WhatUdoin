@@ -66,12 +66,6 @@
               <div class="profile-dropdown-role">{% if user.role == 'admin' %}관리자{% else %}에디터{% endif %}</div>
             </div>
             <button class="profile-dropdown-item" onclick="closeProfileMenu(); openUserSettings()">⚙️ 설정</button>
-            <button class="profile-dropdown-item" onclick="closeProfileMenu(); openChangePwModal()">🔑 비밀번호 변경</button>
-            <a href="/admin" class="profile-dropdown-item" onclick="closeProfileMenu()">
-              🔧 관리자 페이지
-              <span class="dropdown-pending-badge hidden" id="dropdown-pending-badge"></span>
-            </a>
-            <div class="profile-dropdown-sep"></div>
             <div class="profile-dropdown-item theme-row">
               <span class="theme-label-text">🌙 다크 테마</span>
               <label class="switch switch-sm" onclick="event.stopPropagation()">
@@ -79,6 +73,12 @@
                 <span class="slider"></span>
               </label>
             </div>
+            <div class="profile-dropdown-sep"></div>
+            <button class="profile-dropdown-item" onclick="closeProfileMenu(); openChangePwModal()">🔑 비밀번호 변경</button>
+            <a href="/admin" class="profile-dropdown-item" onclick="closeProfileMenu()">
+              🔧 관리자 페이지
+              <span class="dropdown-pending-badge hidden" id="dropdown-pending-badge"></span>
+            </a>
             <div class="profile-dropdown-sep"></div>
             <button class="profile-dropdown-item danger" onclick="closeProfileMenu(); doLogout()">로그아웃</button>
           </div>
