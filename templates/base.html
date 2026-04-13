@@ -57,7 +57,7 @@
           <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu()">
             {{ user.name }}
             <span class="user-role">{% if user.role == 'admin' %}(관리자){% else %}(에디터){% endif %}</span>
-            {% if user.role == 'admin' %}<span class="profile-red-dot hidden" id="profile-red-dot"></span>{% endif %}
+            <span class="profile-red-dot hidden" id="profile-red-dot"></span>
             <span class="profile-caret">▾</span>
           </button>
           <div class="profile-dropdown hidden" id="profile-dropdown">
@@ -66,12 +66,10 @@
               <div class="profile-dropdown-role">{% if user.role == 'admin' %}관리자{% else %}에디터{% endif %}</div>
             </div>
             <button class="profile-dropdown-item" onclick="closeProfileMenu(); openChangePwModal()">🔑 비밀번호 변경</button>
-            {% if user.role == 'admin' %}
-              <a href="/admin" class="profile-dropdown-item" onclick="closeProfileMenu()">
-                ⚙️ 관리자 페이지
-                <span class="dropdown-red-dot hidden" id="dropdown-red-dot"></span>
-              </a>
-            {% endif %}
+            <a href="/admin" class="profile-dropdown-item" onclick="closeProfileMenu()">
+              ⚙️ 관리자 페이지
+              <span class="dropdown-red-dot hidden" id="dropdown-red-dot"></span>
+            </a>
             <div class="profile-dropdown-sep"></div>
             <div class="profile-dropdown-item theme-row">
               <span class="theme-label-text">🌙 다크 테마</span>
@@ -335,7 +333,7 @@
     });
 
     /* ── 관리자 레드닷 ── */
-    if (CURRENT_USER && CURRENT_USER.role === 'admin') {
+    if (CURRENT_USER) {
       fetch('/api/admin/pending/count')
         .then(r => r.ok ? r.json() : null)
         .then(data => {
