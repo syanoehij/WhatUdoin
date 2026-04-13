@@ -328,10 +328,10 @@
         <label>자동 새로고침</label>
         <select id="auto-refresh-select" onchange="saveAutoRefresh(this.value)">
           <option value="0">끄기</option>
-          <option value="60000">1분</option>
-          <option value="300000">5분</option>
+          <option value="180000">3분</option>
+          <option value="240000">4분</option>
+          <option value="300000" selected>5분</option>
           <option value="600000">10분</option>
-          <option value="1800000">30분</option>
         </select>
       </div>
       <p class="text-muted" style="font-size:0.82rem;margin-top:6px;">설정은 브라우저에 저장됩니다.</p>
