@@ -177,7 +177,8 @@ nav { display: flex; gap: 4px; margin-right: auto; }
 .profile-btn .user-role { font-size: 0.76rem; opacity: 0.75; }
 .profile-caret { font-size: 0.7rem; opacity: 0.7; margin-left: 2px; transition: transform 0.15s; }
 .profile-menu.open .profile-caret { transform: rotate(180deg); }
-.profile-red-dot {
+.profile-red-dot,
+.dropdown-red-dot {
   display: inline-block;
   width: 8px; height: 8px;
   background: #d63031;

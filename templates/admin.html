@@ -59,14 +59,20 @@
           <td><span class="role-badge role-{{ m.role }}">{{ '관리자' if m.role == 'admin' else '에디터' }}</span></td>
           <td>{{ m.team_name or '-' }}</td>
           <td>
+            {% if m.role == 'admin' %}
+              <span class="text-muted" style="font-size:0.8rem;">–</span>
+            {% else %}
             <label class="switch switch-sm">
               <input type="checkbox" {{ 'checked' if m.is_active else '' }}
                      onchange="toggleActive({{ m.id }}, {{ m.team_id or 'null' }}, this.checked, '{{ m.role }}')" />
               <span class="slider"></span>
             </label>
+            {% endif %}
           </td>
           <td class="btn-group">
+            {% if m.role != 'admin' %}
             <button class="btn btn-sm" onclick="openRenameMember({{ m.id }}, '{{ m.name }}')">이름 변경</button>
+            {% endif %}
             <button class="btn btn-sm" onclick="openIPs({{ m.id }}, '{{ m.name }}')">IP</button>
             <button class="btn btn-sm" onclick="openResetPw({{ m.id }}, '{{ m.name }}')">비밀번호 초기화</button>
           </td>

@@ -18,9 +18,12 @@ def get_current_user(request: Request):
         user = db.get_session_user(session_id)
         if user:
             return user
-    # IP 화이트리스트 자동 로그인
+    # IP 화이트리스트 자동 로그인 (admin 계정은 제외)
     ip = get_client_ip(request)
-    return db.get_user_by_whitelist_ip(ip)
+    user = db.get_user_by_whitelist_ip(ip)
+    if user and user.get("role") == "admin":
+        return None
+    return user
 
 
 def is_editor(user) -> bool:

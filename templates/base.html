@@ -65,10 +65,13 @@
               <div class="profile-dropdown-name">{{ user.name }}</div>
               <div class="profile-dropdown-role">{% if user.role == 'admin' %}관리자{% else %}에디터{% endif %}</div>
             </div>
-            {% if user.role == 'admin' %}
-              <a href="/admin" class="profile-dropdown-item" onclick="closeProfileMenu()">⚙️ 관리자 설정</a>
-            {% endif %}
             <button class="profile-dropdown-item" onclick="closeProfileMenu(); openChangePwModal()">🔑 비밀번호 변경</button>
+            {% if user.role == 'admin' %}
+              <a href="/admin" class="profile-dropdown-item" onclick="closeProfileMenu()">
+                ⚙️ 관리자 페이지
+                <span class="dropdown-red-dot hidden" id="dropdown-red-dot"></span>
+              </a>
+            {% endif %}
             <div class="profile-dropdown-sep"></div>
             <div class="profile-dropdown-item theme-row">
               <span class="theme-label-text">🌙 다크 테마</span>
@@ -337,10 +340,17 @@
         .then(r => r.ok ? r.json() : null)
         .then(data => {
           if (data && data.count > 0) {
+            // 프로필 버튼 레드닷
             const dot = document.getElementById('profile-red-dot');
             if (dot) {
               dot.classList.remove('hidden');
               dot.title = `가입 신청 ${data.count}건`;
+            }
+            // 드롭다운 내 관리자 페이지 레드닷
+            const ddot = document.getElementById('dropdown-red-dot');
+            if (ddot) {
+              ddot.classList.remove('hidden');
+              ddot.title = `가입 신청 ${data.count}건`;
             }
           }
         })
