@@ -408,16 +408,19 @@ def list_events():
             "end": e["end_datetime"] or e["start_datetime"],
             "allDay": is_all_day,
             "extendedProps": {
-                "project":       proj_name,
-                "description":   e["description"],
-                "location":      e["location"],
-                "assignee":      e["assignee"],
-                "all_day":       is_all_day,
-                "source":        e["source"],
-                "team_id":       e["team_id"],
-                "meeting_id":    e["meeting_id"],
-                "kanban_status": e.get("kanban_status"),
-                "priority":      e.get("priority", "normal"),
+                "project":               proj_name,
+                "description":           e["description"],
+                "location":              e["location"],
+                "assignee":              e["assignee"],
+                "all_day":               is_all_day,
+                "source":                e["source"],
+                "team_id":               e["team_id"],
+                "meeting_id":            e["meeting_id"],
+                "kanban_status":         e.get("kanban_status"),
+                "priority":              e.get("priority", "normal"),
+                "event_type":            e.get("event_type", "schedule"),
+                "recurrence_rule":       e.get("recurrence_rule"),
+                "recurrence_parent_id":  e.get("recurrence_parent_id"),
             },
         }
         if proj_color:
@@ -449,6 +452,9 @@ async def create_event(request: Request):
     data.setdefault("meeting_id", None)
     data.setdefault("kanban_status", None)
     data.setdefault("priority", "normal")
+    data.setdefault("event_type", "schedule")
+    data.setdefault("recurrence_rule", None)
+    data.setdefault("recurrence_end", None)
     data["created_by"] = str(user["id"])
     data["team_id"] = user.get("team_id")
     event_id = db.create_event(data)
@@ -464,27 +470,47 @@ async def update_event(event_id: int, request: Request):
     if not auth.can_edit_event(user, event):
         raise HTTPException(status_code=403, detail="다른 팀의 일정은 수정할 수 없습니다.")
     data = await request.json()
+    edit_mode = data.pop("edit_mode", "this")
     data.setdefault("kanban_status", event.get("kanban_status"))
     data.setdefault("priority", event.get("priority", "normal"))
-    db.update_event(event_id, data)
+
+    is_recurring = bool(event.get("recurrence_rule") or event.get("recurrence_parent_id"))
+    if is_recurring:
+        if edit_mode == "all":
+            db.update_event_recurring_all(event_id, data)
+        elif edit_mode == "from_here":
+            db.update_event_recurring_from_here(event_id, data)
+        else:
+            db.update_event_recurring_this(event_id, data)
+    else:
+        db.update_event(event_id, data)
     return {"ok": True}
 
 
 @app.delete("/api/events/{event_id}")
-def delete_event(event_id: int, request: Request):
+def delete_event(event_id: int, request: Request, delete_mode: str = "this"):
     user = _require_editor(request)
     event = db.get_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     if not auth.can_edit_event(user, event):
         raise HTTPException(status_code=403, detail="다른 팀의 일정은 삭제할 수 없습니다.")
-    db.delete_event(event_id)
+    db.delete_event(event_id, delete_mode)
     return {"ok": True}
 
 
 @app.get("/api/kanban")
 def get_kanban_events(team_id: int = None):
     return db.get_kanban_events(team_id)
+
+
+@app.get("/api/my-meetings")
+def get_my_meetings(request: Request):
+    """내 담당 회의 일정 (오늘 이후, 최대 7개)"""
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=403, detail="로그인이 필요합니다.")
+    return db.get_upcoming_meetings(assignee_name=user["name"], limit=5)
 
 
 @app.patch("/api/events/{event_id}/datetime")

@@ -22,6 +22,8 @@ let _assigneeTags = [];
 let _fpInstance = null;
 let _fpSavedDates = ['', ''];
 let _currentEditKanbanStatus = null;
+let _currentEventType = 'schedule';
+let _currentIsRecurring = false;  // 현재 편집 중인 이벤트가 반복 시리즈인지
 
 // ── 프로젝트 자동완성 ─────────────────────────────────────
 async function loadProjects() {
@@ -73,6 +75,11 @@ function addAssigneeTag(name) {
   renderAssigneeTags();
   document.getElementById('assignee-input').value = '';
   document.getElementById('assignee-dropdown').classList.add('hidden');
+  // 에러 표시 해제
+  const errEl = document.getElementById('assignee-error');
+  if (errEl) errEl.style.display = 'none';
+  const wrap = document.getElementById('assignee-wrap');
+  if (wrap) wrap.style.borderColor = '';
 }
 
 function removeAssigneeTag(i) {
@@ -191,6 +198,9 @@ function openModal(dateStr = '', eventData = null) {
   document.getElementById('f-kanban').checked    = true;
   _currentEditKanbanStatus = null;
   _activePresets = new Set();
+  _currentIsRecurring = false;
+  setEventType('schedule');
+  setRecurrenceRule('');
 
   const [defStart, defEnd] = getDefaultTimes();
   _fpInstance.setDate([today, today], true);
@@ -201,6 +211,8 @@ function openModal(dateStr = '', eventData = null) {
   document.getElementById('f-allday').checked    = false;
   document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
   setAssigneeTags('');
+  // 담당자 기본값: 현재 로그인 유저
+  if (CURRENT_USER) setAssigneeTags(CURRENT_USER.name);
   document.getElementById('btn-delete').classList.add('hidden');
   document.getElementById('modal-title').textContent = '일정 추가';
   toggleAllDay();
@@ -229,6 +241,12 @@ function openModal(dateStr = '', eventData = null) {
     document.getElementById('f-priority').value = eventData.priority || 'normal';
     _currentEditKanbanStatus = eventData.kanban_status || null;
     document.getElementById('f-kanban').checked = !!eventData.kanban_status;
+    setEventType(eventData.event_type || 'schedule');
+    setRecurrenceRule(eventData.recurrence_rule || '');
+    if (eventData.recurrence_end) {
+      document.getElementById('f-recurrence-end').value = eventData.recurrence_end.slice(0, 10);
+    }
+    _currentIsRecurring = !!(eventData.recurrence_rule || eventData.recurrence_parent_id);
     document.getElementById('btn-delete').classList.remove('hidden');
   }
 
@@ -313,6 +331,16 @@ async function saveEvent(e) {
   const startTime = document.getElementById('f-start-time').value || '00:00';
   const endTime   = document.getElementById('f-end-time').value   || '00:00';
 
+  if (!document.getElementById('f-title').value.trim()) { alert('제목을 입력해주세요.'); return; }
+  if (!getAssigneeValue()) {
+    const errEl = document.getElementById('assignee-error');
+    if (errEl) {
+      errEl.style.display = 'block';
+      document.getElementById('assignee-wrap').style.borderColor = '#e17055';
+      document.getElementById('assignee-input').focus();
+    }
+    return;
+  }
   if (!startDate) { alert('시작 날짜를 선택해주세요.'); return; }
   if (endDate && endDate < startDate) {
     alert('종료 날짜는 시작 날짜보다 이전일 수 없습니다.'); return;
@@ -326,22 +354,55 @@ async function saveEvent(e) {
     ? (_currentEditKanbanStatus || 'backlog')
     : null;
 
+  const recurrenceRule = getRecurrenceRule();
+  const recurrenceEnd  = document.getElementById('f-recurrence-end').value || null;
+
+  if (recurrenceRule && !recurrenceEnd) {
+    alert('반복 요일이 선택된 경우 반복 종료일을 설정해주세요.');
+    document.getElementById('f-recurrence-end').focus();
+    return;
+  }
+
   const payload = {
-    title:          document.getElementById('f-title').value,
-    project:        document.getElementById('f-project').value || null,
-    start_datetime: `${startDate}T${allDay ? '00:00' : startTime}`,
-    end_datetime:   endDate ? `${endDate}T${allDay ? '00:00' : endTime}` : null,
-    all_day:        allDay ? 1 : 0,
-    location:       document.getElementById('f-location').value || null,
-    assignee:       getAssigneeValue(),
-    description:    document.getElementById('f-description').value || null,
-    source:         'manual',
+    title:            document.getElementById('f-title').value,
+    project:          document.getElementById('f-project').value || null,
+    start_datetime:   `${startDate}T${allDay ? '00:00' : startTime}`,
+    end_datetime:     endDate ? `${endDate}T${allDay ? '00:00' : endTime}` : null,
+    all_day:          allDay ? 1 : 0,
+    location:         document.getElementById('f-location').value || null,
+    assignee:         getAssigneeValue(),
+    description:      document.getElementById('f-description').value || null,
+    source:           'manual',
     kanban_status,
-    priority:       document.getElementById('f-priority').value,
+    priority:         document.getElementById('f-priority').value,
+    event_type:       _currentEventType,
+    recurrence_rule:  recurrenceRule,
+    recurrence_end:   recurrenceEnd,
   };
 
   const method = id ? 'PUT' : 'POST';
   const url    = id ? `/api/events/${id}` : '/api/events';
+
+  if (id && _currentIsRecurring) {
+    // 반복 일정 수정 → 모드 선택 다이얼로그
+    document.getElementById('modal-overlay').classList.add('hidden');
+    showRecurrenceDialog('edit', async (editMode) => {
+      payload.edit_mode = editMode;
+      const res2 = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res2.ok) {
+        const err = await res2.json();
+        alert(err.detail || '저장 실패');
+        return;
+      }
+      if (window.onEventSaved) window.onEventSaved();
+    });
+    return;
+  }
+
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
@@ -360,7 +421,23 @@ async function saveEvent(e) {
 
 async function deleteEvent() {
   const id = document.getElementById('event-id').value;
-  if (!id || !confirm('이 일정을 삭제할까요?')) return;
+  if (!id) return;
+
+  if (_currentIsRecurring) {
+    document.getElementById('modal-overlay').classList.add('hidden');
+    showRecurrenceDialog('delete', async (deleteMode) => {
+      const res2 = await fetch(`/api/events/${id}?delete_mode=${deleteMode}`, { method: 'DELETE' });
+      if (!res2.ok) {
+        const err = await res2.json();
+        alert(err.detail || '삭제 실패');
+        return;
+      }
+      if (window.onEventSaved) window.onEventSaved();
+    });
+    return;
+  }
+
+  if (!confirm('이 일정을 삭제할까요?')) return;
   const res = await fetch(`/api/events/${id}`, { method: 'DELETE' });
   if (!res.ok) {
     const err = await res.json();
@@ -369,6 +446,120 @@ async function deleteEvent() {
   }
   document.getElementById('modal-overlay').classList.add('hidden');
   if (window.onEventSaved) window.onEventSaved();
+}
+
+// ── 반복 요일 버튼 ───────────────────────────────────────
+const _RECDAY_LABELS = ['월', '화', '수', '목', '금'];
+let _recurrenceDays = new Set();  // 선택된 요일 (0=월, 1=화, ..., 4=금)
+
+function toggleRecurrenceDay(d) {
+  if (_recurrenceDays.has(d)) {
+    _recurrenceDays.delete(d);
+  } else {
+    _recurrenceDays.add(d);
+  }
+  _renderRecurrenceDays();
+}
+
+function _renderRecurrenceDays() {
+  document.querySelectorAll('.recday-btn').forEach(btn => {
+    const d = parseInt(btn.dataset.day, 10);
+    btn.classList.toggle('active', _recurrenceDays.has(d));
+  });
+  // 종료일 행은 항상 표시 (회의 타입일 때 반복row 자체가 보이므로)
+}
+
+function setRecurrenceRule(rule) {
+  // rule 형식: 'weekly:0,2,4'  또는 빈값
+  _recurrenceDays = new Set();
+  if (rule && rule.startsWith('weekly:')) {
+    rule.split(':')[1].split(',').forEach(d => {
+      const n = parseInt(d.trim(), 10);
+      if (!isNaN(n) && n >= 0 && n <= 4) _recurrenceDays.add(n);
+    });
+  }
+  _renderRecurrenceDays();
+  if (!rule) {
+    const endInput = document.getElementById('f-recurrence-end');
+    if (endInput) endInput.value = '';
+  }
+}
+
+function getRecurrenceRule() {
+  if (_recurrenceDays.size === 0) return null;
+  return 'weekly:' + [..._recurrenceDays].sort().join(',');
+}
+
+// ── 반복 모드 선택 다이얼로그 ─────────────────────────────
+let _recurrenceDialogCallback = null;
+
+function showRecurrenceDialog(action, callback) {
+  _recurrenceDialogCallback = callback;
+  const overlay = document.getElementById('recurrence-dialog-overlay');
+  const title = document.getElementById('recurrence-dialog-title');
+  const desc  = document.getElementById('recurrence-dialog-desc');
+  const btns  = document.getElementById('recurrence-dialog-btns');
+
+  if (action === 'delete') {
+    title.textContent = '반복 일정 삭제';
+    desc.textContent  = '어떤 일정을 삭제할까요?';
+    btns.innerHTML = `
+      <button class="btn btn-outline" onclick="confirmRecurrenceDialog('this')">이것만 삭제</button>
+      <button class="btn btn-outline" onclick="confirmRecurrenceDialog('from_here')">이후 전체 삭제</button>
+      <button class="btn btn-danger" onclick="confirmRecurrenceDialog('all')">전체 삭제</button>
+    `;
+  } else {
+    title.textContent = '반복 일정 수정';
+    desc.textContent  = '어떤 일정을 변경할까요?';
+    btns.innerHTML = `
+      <button class="btn btn-outline" onclick="confirmRecurrenceDialog('this')">이것만 수정</button>
+      <button class="btn btn-outline" onclick="confirmRecurrenceDialog('from_here')">이후 전체 수정</button>
+      <button class="btn btn-primary" onclick="confirmRecurrenceDialog('all')">전체 수정</button>
+    `;
+  }
+
+  overlay.classList.remove('hidden');
+}
+
+function confirmRecurrenceDialog(mode) {
+  document.getElementById('recurrence-dialog-overlay').classList.add('hidden');
+  if (_recurrenceDialogCallback) {
+    _recurrenceDialogCallback(mode);
+    _recurrenceDialogCallback = null;
+  }
+}
+
+function closeRecurrenceDialog() {
+  document.getElementById('recurrence-dialog-overlay').classList.add('hidden');
+  _recurrenceDialogCallback = null;
+  // 취소 시 모달 다시 열기
+  document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+// ── 일정 유형 토글 ───────────────────────────────────────
+function setEventType(type) {
+  _currentEventType = type;
+  document.getElementById('pill-schedule').classList.toggle('active', type === 'schedule');
+  document.getElementById('pill-meeting').classList.toggle('active', type === 'meeting');
+
+  const kanbanWrap = document.getElementById('kanban-toggle-wrap');
+  const recurrenceRow = document.getElementById('recurrence-row');
+
+  if (type === 'meeting') {
+    // 회의: 칸반 숨기고 반복 섹션 표시
+    kanbanWrap.style.display = 'none';
+    document.getElementById('f-kanban').checked = false;
+    if (recurrenceRow) recurrenceRow.style.display = 'block';
+  } else {
+    // 일정: 칸반 표시, 반복 섹션 숨기고 선택 초기화
+    kanbanWrap.style.display = 'flex';
+    kanbanWrap.style.alignItems = 'center';
+    kanbanWrap.style.gap = '8px';
+    document.getElementById('f-kanban').checked = true;
+    if (recurrenceRow) recurrenceRow.style.display = 'none';
+    // 반복 선택 초기화
+    setRecurrenceRule('');
+  }
 }
 
 // ── 유틸 ─────────────────────────────────────────────────

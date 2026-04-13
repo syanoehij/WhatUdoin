@@ -1987,3 +1987,105 @@ select.form-input {
   outline: 2px solid rgba(214,48,49,0.7);
   outline-offset: -2px;
 }
+
+/* ── 일정 유형 pill 버튼 ── */
+.event-type-pills {
+  display: flex; gap: 4px;
+}
+.event-type-pill {
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 0.8rem; font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text-muted);
+  cursor: pointer; transition: all 0.15s;
+  line-height: 1.4;
+}
+.event-type-pill.active {
+  background: var(--accent); color: #fff;
+  border-color: var(--accent);
+}
+.event-type-pill:hover:not(.active) {
+  border-color: var(--accent); color: var(--accent);
+}
+
+/* ── 반복 요일 버튼 ── */
+.recurrence-days {
+  display: flex; gap: 5px; margin-top: 6px;
+}
+.recday-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text-muted);
+  font-size: 0.8rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+}
+.recday-btn.active {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+.recday-btn:hover:not(.active) {
+  border-color: var(--accent); color: var(--accent);
+}
+.recurrence-end-input {
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 8px; font-size: 0.82rem;
+  background: var(--surface); color: var(--text); outline: none;
+  width: 100%; box-sizing: border-box;
+}
+.recurrence-end-input:focus { border-color: var(--accent); }
+
+/* 반복 뱃지 (캘린더 이벤트 타이틀에 🔁) */
+.fc-event-recurring::after {
+  content: ' 🔁';
+  font-size: 0.7em;
+}
+
+/* ── 반복 일정 수정/삭제 다이얼로그 ── */
+.recurrence-dialog {
+  background: var(--surface); border-radius: 12px;
+  padding: 24px; width: 320px; max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+}
+.recurrence-dialog-title {
+  font-size: 1rem; font-weight: 700; color: var(--text);
+  margin-bottom: 6px;
+}
+.recurrence-dialog-desc {
+  font-size: 0.88rem; color: var(--text-muted);
+  margin-bottom: 16px;
+}
+.recurrence-dialog-btns {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.recurrence-dialog-btns .btn {
+  width: 100%; justify-content: center;
+}
+
+/* ── 홈 회의 섹션 ── */
+.home-meeting-list {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-bottom: 24px;
+}
+.meeting-item {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface-2); border-radius: 8px;
+  padding: 8px 12px;
+  border-left: 3px solid #6c5ce7;
+}
+.meeting-item-date {
+  font-size: 0.78rem; color: var(--text-muted);
+  min-width: 80px; flex-shrink: 0;
+}
+.meeting-item-title {
+  font-size: 0.9rem; font-weight: 500; color: var(--text);
+  flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.meeting-item-assignee {
+  font-size: 0.75rem; color: var(--text-faint);
+  flex-shrink: 0;
+}
+.no-meetings {
+  color: var(--text-faint); font-size: 0.88rem;
+  padding: 10px 0; text-align: center;
+}

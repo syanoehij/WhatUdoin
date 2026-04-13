@@ -241,18 +241,21 @@
               <input type="text" id="f-location" placeholder="장소" />
             </div>
             <div class="form-row form-row-top">
-              <label>담당자</label>
-              <div class="tag-input-wrap" id="assignee-wrap" onclick="document.getElementById('assignee-input').focus()">
-                <div id="assignee-tags"></div>
-                <div class="assignee-input-row">
-                  <input type="text" id="assignee-input" placeholder="이름 입력 후 Enter"
-                         autocomplete="off"
-                         oninput="filterAssignees(this.value)"
-                         onkeydown="handleAssigneeKey(event)"
-                         onfocus="filterAssignees(this.value)"
-                         onblur="hideAssigneeDropdown()" />
+              <label>담당자 <span style="color:#e17055;">*</span></label>
+              <div>
+                <div class="tag-input-wrap" id="assignee-wrap" onclick="document.getElementById('assignee-input').focus()">
+                  <div id="assignee-tags"></div>
+                  <div class="assignee-input-row">
+                    <input type="text" id="assignee-input" placeholder="이름 입력 후 Enter"
+                           autocomplete="off"
+                           oninput="filterAssignees(this.value)"
+                           onkeydown="handleAssigneeKey(event)"
+                           onfocus="filterAssignees(this.value)"
+                           onblur="hideAssigneeDropdown()" />
+                  </div>
+                  <ul id="assignee-dropdown" class="ac-dropdown hidden"></ul>
                 </div>
-                <ul id="assignee-dropdown" class="ac-dropdown hidden"></ul>
+                <div id="assignee-error" style="display:none; color:#e17055; font-size:12px; margin-top:4px;">담당자를 입력해주세요.</div>
               </div>
             </div>
             <div class="form-row form-row-top">
@@ -268,13 +271,41 @@
                 <option value="low">⚪ 낮음</option>
               </select>
             </div>
-            <div class="left-row" style="margin-top:8px;">
-              <div class="col-section-label">칸반 등록</div>
-              <label class="switch">
-                <input type="checkbox" id="f-kanban" checked />
-                <span class="slider"></span>
-              </label>
+            <div class="left-row" style="margin-top:8px; gap:20px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div class="col-section-label">일정 유형</div>
+                <div class="event-type-pills">
+                  <button type="button" class="event-type-pill active" id="pill-schedule" onclick="setEventType('schedule')">📅 일정</button>
+                  <button type="button" class="event-type-pill" id="pill-meeting" onclick="setEventType('meeting')">💬 회의</button>
+                </div>
+              </div>
+              <div id="kanban-toggle-wrap" style="display:flex;align-items:center;gap:8px;">
+                <div class="col-section-label">칸반 등록</div>
+                <label class="switch">
+                  <input type="checkbox" id="f-kanban" checked />
+                  <span class="slider"></span>
+                </label>
+              </div>
             </div>
+
+            <!-- 반복 요일 (회의 선택 시만 표시) -->
+            <div id="recurrence-row" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <div class="col-section-label">반복 요일</div>
+                <div class="recurrence-days" id="recurrence-days">
+                  <button type="button" class="recday-btn" data-day="0" onclick="toggleRecurrenceDay(0)">월</button>
+                  <button type="button" class="recday-btn" data-day="1" onclick="toggleRecurrenceDay(1)">화</button>
+                  <button type="button" class="recday-btn" data-day="2" onclick="toggleRecurrenceDay(2)">수</button>
+                  <button type="button" class="recday-btn" data-day="3" onclick="toggleRecurrenceDay(3)">목</button>
+                  <button type="button" class="recday-btn" data-day="4" onclick="toggleRecurrenceDay(4)">금</button>
+                </div>
+              </div>
+              <div id="recurrence-end-wrap" style="display:flex;align-items:center;gap:8px;">
+                <div class="col-section-label">반복 종료 <span style="color:#e17055;">*</span></div>
+                <input type="date" id="f-recurrence-end" class="recurrence-end-input" style="width:auto;" />
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -286,6 +317,16 @@
           </div>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ── 반복 일정 수정/삭제 모드 선택 다이얼로그 ── -->
+  <div id="recurrence-dialog-overlay" class="modal-overlay hidden">
+    <div class="recurrence-dialog">
+      <div class="recurrence-dialog-title" id="recurrence-dialog-title">반복 일정 수정</div>
+      <div class="recurrence-dialog-desc" id="recurrence-dialog-desc">어떤 일정을 변경할까요?</div>
+      <div class="recurrence-dialog-btns" id="recurrence-dialog-btns"></div>
+      <button type="button" class="btn" style="margin-top:8px;width:100%;" onclick="closeRecurrenceDialog()">취소</button>
     </div>
   </div>
 

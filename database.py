@@ -129,20 +129,28 @@ def init_db():
 
         # ── 기존 테이블 마이그레이션 ──
         _migrate(conn, "events", [
-            ("project",        "TEXT"),
-            ("assignee",       "TEXT"),
-            ("all_day",        "INTEGER DEFAULT 0"),
-            ("team_id",        "INTEGER"),
-            ("meeting_id",     "INTEGER"),
-            ("kanban_status",  "TEXT"),
-            ("priority",       "TEXT DEFAULT 'normal'"),
-            ("is_active",      "INTEGER DEFAULT 1"),
-            ("kanban_hidden",  "INTEGER DEFAULT 0"),
-            ("done_at",        "TEXT DEFAULT NULL"),
+            ("project",              "TEXT"),
+            ("assignee",             "TEXT"),
+            ("all_day",              "INTEGER DEFAULT 0"),
+            ("team_id",              "INTEGER"),
+            ("meeting_id",           "INTEGER"),
+            ("kanban_status",        "TEXT"),
+            ("priority",             "TEXT DEFAULT 'normal'"),
+            ("is_active",            "INTEGER DEFAULT 1"),
+            ("kanban_hidden",        "INTEGER DEFAULT 0"),
+            ("done_at",              "TEXT DEFAULT NULL"),
+            ("event_type",           "TEXT DEFAULT 'schedule'"),
+            ("recurrence_rule",      "TEXT DEFAULT NULL"),
+            ("recurrence_end",       "TEXT DEFAULT NULL"),
+            ("recurrence_parent_id", "INTEGER DEFAULT NULL"),
         ])
         # 기존 done 상태 일정에 done_at 백필
         conn.execute(
             "UPDATE events SET done_at = updated_at WHERE kanban_status = 'done' AND done_at IS NULL"
+        )
+        # 기존 이벤트에 event_type 백필 (NULL → 'schedule')
+        conn.execute(
+            "UPDATE events SET event_type = 'schedule' WHERE event_type IS NULL"
         )
         _migrate(conn, "users", [
             ("password",   "TEXT NOT NULL DEFAULT ''"),
@@ -175,6 +183,113 @@ def init_db():
             )
 
 
+def _recurrence_dates(rule: str, start_date_str: str, end_limit_str: str | None) -> list:
+    """rule에 따라 start_date 이후의 반복 날짜 목록 반환 (start_date 자체 제외)
+
+    rule 형식: 'weekly:0,2,4'  (0=월, 1=화, 2=수, 3=목, 4=금)
+    """
+    from datetime import date as _date, timedelta as _td
+
+    if not rule or not rule.startswith('weekly:'):
+        return []
+
+    try:
+        days = sorted(set(int(d) for d in rule.split(':')[1].split(',') if d.strip().isdigit()))
+    except Exception:
+        return []
+    if not days:
+        return []
+
+    start = _date.fromisoformat(start_date_str[:10])
+    if end_limit_str:
+        end_limit = _date.fromisoformat(end_limit_str[:10])
+    else:
+        end_limit = start + _td(days=365)
+
+    MAX = 200
+    results = []
+    current = start + _td(days=1)   # start 자체는 부모이므로 다음 날부터
+
+    while current <= end_limit and len(results) < MAX:
+        wd = current.weekday()
+        if wd in days:
+            results.append(current.isoformat())
+            current = current + _td(days=1)
+        else:
+            # 이번 주/다음 주에서 다음으로 가장 가까운 선택 요일로 점프
+            next_days_this_cycle = [d for d in days if d > wd]
+            if next_days_this_cycle:
+                jump = next_days_this_cycle[0] - wd
+            else:
+                jump = 7 - wd + days[0]
+            current = current + _td(days=jump)
+
+    return results
+
+
+def _generate_recurrence_children(conn, parent_id: int, parent_data: dict):
+    """parent_data 기준으로 반복 자식 이벤트 생성 (conn 트랜잭션 내에서 호출)"""
+    rule = parent_data.get("recurrence_rule")
+    if not rule:
+        return
+    start_str = parent_data.get("start_datetime", "")
+    end_str   = parent_data.get("end_datetime") or start_str
+    if not start_str:
+        return
+
+    # 이벤트 지속 시간 계산
+    from datetime import datetime as _dt
+    def _to_dt(s):
+        s = s[:16]
+        return _dt.fromisoformat(s) if 'T' in s else _dt.fromisoformat(s + 'T00:00')
+    start_dt = _to_dt(start_str)
+    end_dt   = _to_dt(end_str)
+    duration = end_dt - start_dt
+
+    dates = _recurrence_dates(rule, start_str[:10], parent_data.get("recurrence_end"))
+    time_part = start_str[10:]  # 'T09:00' or ''
+
+    for date_str in dates:
+        new_start = date_str + time_part
+        new_end_dt = _dt.fromisoformat(new_start[:16] if 'T' in new_start else new_start + 'T00:00') + duration
+        new_end = new_end_dt.strftime('%Y-%m-%dT%H:%M') if duration.total_seconds() > 0 else None
+
+        child = {
+            "title":               parent_data["title"],
+            "team_id":             parent_data.get("team_id"),
+            "project":             parent_data.get("project"),
+            "description":         parent_data.get("description"),
+            "location":            parent_data.get("location"),
+            "assignee":            parent_data.get("assignee"),
+            "all_day":             parent_data.get("all_day", 0),
+            "start_datetime":      new_start,
+            "end_datetime":        new_end,
+            "created_by":          parent_data.get("created_by"),
+            "source":              parent_data.get("source", "manual"),
+            "meeting_id":          None,
+            "kanban_status":       None,   # 자식은 칸반 미등록
+            "priority":            parent_data.get("priority", "normal"),
+            "event_type":          parent_data.get("event_type", "schedule"),
+            "is_active":           1,
+            "recurrence_rule":     None,
+            "recurrence_end":      None,
+            "recurrence_parent_id": parent_id,
+        }
+        conn.execute(
+            """INSERT INTO events
+               (title, team_id, project, description, location, assignee, all_day,
+                start_datetime, end_datetime, created_by, source, meeting_id,
+                kanban_status, priority, event_type, is_active,
+                recurrence_rule, recurrence_end, recurrence_parent_id)
+               VALUES
+               (:title, :team_id, :project, :description, :location, :assignee, :all_day,
+                :start_datetime, :end_datetime, :created_by, :source, :meeting_id,
+                :kanban_status, :priority, :event_type, :is_active,
+                :recurrence_rule, :recurrence_end, :recurrence_parent_id)""",
+            child,
+        )
+
+
 def _migrate(conn, table: str, columns: list):
     existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
     for col, definition in columns:
@@ -204,7 +319,19 @@ def get_all_events():
 def get_event(event_id: int):
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
-    return dict(row) if row else None
+        if not row:
+            return None
+        d = dict(row)
+        # 자식 인스턴스인 경우 부모의 recurrence_rule / recurrence_end 를 포함
+        if d.get("recurrence_parent_id"):
+            parent = conn.execute(
+                "SELECT recurrence_rule, recurrence_end FROM events WHERE id = ?",
+                (d["recurrence_parent_id"],)
+            ).fetchone()
+            if parent:
+                d["recurrence_rule"] = parent["recurrence_rule"]
+                d["recurrence_end"]  = parent["recurrence_end"]
+        return d
 
 
 def create_event(data: dict) -> int:
@@ -212,50 +339,181 @@ def create_event(data: dict) -> int:
     data.setdefault("meeting_id", None)
     data.setdefault("kanban_status", None)
     data.setdefault("priority", "normal")
+    data.setdefault("event_type", "schedule")
+    data.setdefault("recurrence_rule", None)
+    data.setdefault("recurrence_end", None)
+    data.setdefault("recurrence_parent_id", None)
+    # 회의 타입은 칸반 등록 안 함
+    if data.get("event_type") == "meeting":
+        data["kanban_status"] = None
     with get_conn() as conn:
         cur = conn.execute(
             """INSERT INTO events
                (title, team_id, project, description, location, assignee, all_day,
                 start_datetime, end_datetime, created_by, source, meeting_id,
-                kanban_status, priority)
+                kanban_status, priority, event_type,
+                recurrence_rule, recurrence_end, recurrence_parent_id)
                VALUES
                (:title, :team_id, :project, :description, :location, :assignee, :all_day,
                 :start_datetime, :end_datetime, :created_by, :source, :meeting_id,
-                :kanban_status, :priority)""",
+                :kanban_status, :priority, :event_type,
+                :recurrence_rule, :recurrence_end, :recurrence_parent_id)""",
             data,
         )
-    return cur.lastrowid
+        parent_id = cur.lastrowid
+        if data.get("recurrence_rule"):
+            data["id"] = parent_id
+            _generate_recurrence_children(conn, parent_id, data)
+    return parent_id
 
 
-def update_event(event_id: int, data: dict):
+def _apply_event_update(conn, event_id: int, data: dict):
+    """단일 이벤트 행 업데이트 (conn 트랜잭션 내 공통 로직)"""
     data["id"] = event_id
-    # kanban_status 변경에 따른 done_at 관리
     new_status = data.get("kanban_status")
     if new_status == 'done':
         data["done_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     elif new_status is not None:
         data["done_at"] = None
     else:
-        # kanban_status가 None이면 기존 done_at 유지 (SELECT 후 판단 불필요, 그냥 NULL)
         data.setdefault("done_at", None)
+    data.setdefault("event_type", "schedule")
+    if data.get("event_type") == "meeting":
+        data["kanban_status"] = None
+        data["done_at"] = None
+    data.setdefault("recurrence_rule", None)
+    data.setdefault("recurrence_end", None)
+    conn.execute(
+        """UPDATE events SET
+            title          = :title,
+            project        = :project,
+            description    = :description,
+            location       = :location,
+            assignee       = :assignee,
+            all_day        = :all_day,
+            start_datetime = :start_datetime,
+            end_datetime   = :end_datetime,
+            kanban_status  = :kanban_status,
+            priority       = :priority,
+            done_at        = :done_at,
+            event_type     = :event_type,
+            recurrence_rule = :recurrence_rule,
+            recurrence_end  = :recurrence_end,
+            updated_at     = CURRENT_TIMESTAMP
+           WHERE id = :id""",
+        data,
+    )
+
+
+def update_event(event_id: int, data: dict):
     with get_conn() as conn:
+        _apply_event_update(conn, event_id, data)
+
+
+def update_event_recurring_this(event_id: int, data: dict):
+    """이것만 수정: 해당 이벤트만 변경 (반복 시리즈 유지)"""
+    with get_conn() as conn:
+        # 기존 recurrence 정보 보존
+        existing = conn.execute("SELECT recurrence_rule, recurrence_end, recurrence_parent_id FROM events WHERE id = ?", (event_id,)).fetchone()
+        if existing:
+            data.setdefault("recurrence_rule", existing["recurrence_rule"])
+            data.setdefault("recurrence_end", existing["recurrence_end"])
+        _apply_event_update(conn, event_id, data)
+
+
+def update_event_recurring_all(event_id: int, data: dict):
+    """전체 수정: 부모 + 모든 자식 재생성"""
+    with get_conn() as conn:
+        # 부모 ID 확인
+        existing = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not existing:
+            return
+        existing = dict(existing)
+        parent_id = existing.get("recurrence_parent_id") or event_id
+
+        # 부모 업데이트
+        parent_data = dict(data)
+        parent_data.setdefault("recurrence_rule", existing.get("recurrence_rule"))
+        parent_data.setdefault("recurrence_end", existing.get("recurrence_end"))
+        # 부모의 start/end는 유지 (전체 수정이지만 날짜는 parent 기준)
+        parent_row = conn.execute("SELECT * FROM events WHERE id = ?", (parent_id,)).fetchone()
+        if parent_row:
+            parent_row = dict(parent_row)
+            parent_data["start_datetime"] = parent_row["start_datetime"]
+            parent_data["end_datetime"] = parent_row["end_datetime"]
+            parent_data["all_day"] = parent_row["all_day"]
+        _apply_event_update(conn, parent_id, parent_data)
+
+        # 기존 자식 전체 삭제 후 재생성
+        conn.execute("DELETE FROM events WHERE recurrence_parent_id = ?", (parent_id,))
+        final_parent = conn.execute("SELECT * FROM events WHERE id = ?", (parent_id,)).fetchone()
+        if final_parent:
+            _generate_recurrence_children(conn, parent_id, dict(final_parent))
+
+
+def update_event_recurring_from_here(event_id: int, data: dict):
+    """이후 전체 수정: 이 이벤트 날짜부터 새 시리즈로 분리"""
+    with get_conn() as conn:
+        existing = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not existing:
+            return
+        existing = dict(existing)
+        parent_id = existing.get("recurrence_parent_id") or event_id
+        this_start = existing["start_datetime"][:10]
+
+        # 기존 부모의 반복 종료일을 이 이벤트 하루 전으로 설정
+        from datetime import date as _date, timedelta as _td
+        day_before = (_date.fromisoformat(this_start) - _td(days=1)).isoformat()
         conn.execute(
-            """UPDATE events SET
-                title          = :title,
-                project        = :project,
-                description    = :description,
-                location       = :location,
-                assignee       = :assignee,
-                all_day        = :all_day,
-                start_datetime = :start_datetime,
-                end_datetime   = :end_datetime,
-                kanban_status  = :kanban_status,
-                priority       = :priority,
-                done_at        = :done_at,
-                updated_at     = CURRENT_TIMESTAMP
-               WHERE id = :id""",
-            data,
+            "UPDATE events SET recurrence_end = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (day_before, parent_id)
         )
+        # 이 이벤트 이후(포함) 자식 모두 삭제
+        conn.execute(
+            "DELETE FROM events WHERE recurrence_parent_id = ? AND start_datetime >= ?",
+            (parent_id, this_start + 'T00:00')
+        )
+        # 이 이벤트 자체도 삭제 (새 부모로 만들 것이므로)
+        if existing.get("recurrence_parent_id"):
+            conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+
+        # 기존 부모에서 rule/type 정보 가져오기
+        old_parent = conn.execute("SELECT * FROM events WHERE id = ?", (parent_id,)).fetchone()
+        rule = data.get("recurrence_rule") or (dict(old_parent)["recurrence_rule"] if old_parent else None)
+
+        # 새 부모(이 이벤트) 생성
+        new_parent = dict(data)
+        new_parent.setdefault("recurrence_rule", rule)
+        new_parent.setdefault("recurrence_end", None)
+        new_parent["recurrence_parent_id"] = None
+        new_parent.setdefault("event_type", existing.get("event_type", "schedule"))
+        new_parent.setdefault("team_id", existing.get("team_id"))
+        new_parent.setdefault("created_by", existing.get("created_by"))
+        new_parent.setdefault("source", "manual")
+        new_parent.setdefault("meeting_id", None)
+        new_parent.setdefault("kanban_status", existing.get("kanban_status"))
+        new_parent.setdefault("priority", existing.get("priority", "normal"))
+        new_parent.setdefault("is_active", 1)
+        if new_parent.get("event_type") == "meeting":
+            new_parent["kanban_status"] = None
+
+        cur = conn.execute(
+            """INSERT INTO events
+               (title, team_id, project, description, location, assignee, all_day,
+                start_datetime, end_datetime, created_by, source, meeting_id,
+                kanban_status, priority, event_type, is_active,
+                recurrence_rule, recurrence_end, recurrence_parent_id)
+               VALUES
+               (:title, :team_id, :project, :description, :location, :assignee, :all_day,
+                :start_datetime, :end_datetime, :created_by, :source, :meeting_id,
+                :kanban_status, :priority, :event_type, :is_active,
+                :recurrence_rule, :recurrence_end, :recurrence_parent_id)""",
+            new_parent,
+        )
+        new_parent_id = cur.lastrowid
+        if rule:
+            new_parent["id"] = new_parent_id
+            _generate_recurrence_children(conn, new_parent_id, new_parent)
 
 
 def update_event_project(event_id: int, project: str | None):
@@ -279,9 +537,46 @@ def update_event_datetime(event_id: int, start_datetime: str, end_datetime: str 
         )
 
 
-def delete_event(event_id: int):
+def delete_event(event_id: int, delete_mode: str = 'this'):
+    """
+    delete_mode:
+      'this'      - 이것만 삭제 (자식이면 이 인스턴스만, 부모면 부모+모든자식)
+      'all'       - 부모 + 모든 자식 삭제
+      'from_here' - 이 이벤트 날짜 이후(포함) 삭제, 부모 series 단축
+    """
     with get_conn() as conn:
-        conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+        row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not row:
+            return
+        row = dict(row)
+        parent_id = row.get("recurrence_parent_id") or event_id
+
+        if delete_mode == 'all':
+            conn.execute("DELETE FROM events WHERE id = ? OR recurrence_parent_id = ?", (parent_id, parent_id))
+        elif delete_mode == 'from_here':
+            from datetime import date as _date, timedelta as _td
+            this_start = row["start_datetime"][:10]
+            day_before = (_date.fromisoformat(this_start) - _td(days=1)).isoformat()
+            # 부모 series 종료일 단축
+            conn.execute(
+                "UPDATE events SET recurrence_end = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (day_before, parent_id)
+            )
+            # 이 이벤트 이후(포함) 자식 삭제
+            conn.execute(
+                "DELETE FROM events WHERE recurrence_parent_id = ? AND start_datetime >= ?",
+                (parent_id, this_start + 'T00:00')
+            )
+            # 이 이벤트 자신도 삭제 (자식인 경우)
+            if row.get("recurrence_parent_id"):
+                conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+        else:  # 'this'
+            if row.get("recurrence_parent_id"):
+                # 자식 인스턴스만 삭제
+                conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+            else:
+                # 부모 삭제 → 자식도 전부 삭제
+                conn.execute("DELETE FROM events WHERE id = ? OR recurrence_parent_id = ?", (event_id, event_id))
 
 
 def get_kanban_events(team_id: int = None) -> list[dict]:
@@ -302,6 +597,8 @@ def get_kanban_events(team_id: int = None) -> list[dict]:
         AND (e.is_active IS NULL OR e.is_active = 1)
         AND (e.kanban_hidden IS NULL OR e.kanban_hidden = 0)
         AND (e.done_at IS NULL OR e.done_at > datetime('now', '-7 days'))
+        AND (e.event_type IS NULL OR e.event_type = 'schedule')
+        AND e.recurrence_parent_id IS NULL
     """
     with get_conn() as conn:
         if team_id:
@@ -379,6 +676,10 @@ def get_project_timeline(team_id: int = None) -> list[dict]:
             continue  # 완료 처리된 미지정 일정 건너뜀
         if d.get("kanban_hidden") == 1:
             continue  # 칸반/간트 숨김 처리된 일정 건너뜀
+        if d.get("event_type") == "meeting":
+            continue  # 회의 타입은 간트에서 제외
+        if d.get("recurrence_parent_id"):
+            continue  # 반복 자식 인스턴스는 간트에서 제외
         done_at = d.get("done_at")
         if done_at:
             from datetime import datetime as _dt, timedelta as _td
@@ -410,6 +711,41 @@ def get_project_timeline(team_id: int = None) -> list[dict]:
             })
         result.append({"team_name": tname, "projects": proj_list})
     return result
+
+
+def get_upcoming_meetings(assignee_name: str = None, limit: int = 7) -> list[dict]:
+    """event_type='meeting'인 일정 중 오늘 이후 최대 limit개 반환 (담당자 필터 가능)"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        if assignee_name:
+            rows = conn.execute(
+                """SELECT * FROM events
+                   WHERE event_type = 'meeting'
+                   AND (is_active IS NULL OR is_active = 1)
+                   AND start_datetime >= ?
+                   AND (assignee LIKE ? OR assignee LIKE ? OR assignee LIKE ? OR assignee = ?)
+                   ORDER BY start_datetime
+                   LIMIT ?""",
+                (
+                    today,
+                    f"%,{assignee_name},%",
+                    f"{assignee_name},%",
+                    f"%,{assignee_name}",
+                    assignee_name,
+                    limit,
+                )
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT * FROM events
+                   WHERE event_type = 'meeting'
+                   AND (is_active IS NULL OR is_active = 1)
+                   AND start_datetime >= ?
+                   ORDER BY start_datetime
+                   LIMIT ?""",
+                (today, limit)
+            ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_projects() -> list[str]:

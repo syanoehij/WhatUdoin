@@ -139,13 +139,31 @@ document.addEventListener('DOMContentLoaded', () => {
       badge.textContent = `W${wn}`;
       top.insertBefore(badge, top.firstChild);
     },
-    eventDidMount() { applyStickyAllDay(); },
+    eventDidMount(info) {
+      applyStickyAllDay();
+      // 반복 일정에 🔁 뱃지 추가
+      const p = info.event.extendedProps;
+      if (p.recurrence_rule || p.recurrence_parent_id) {
+        const titleEl = info.el.querySelector('.fc-event-title');
+        if (titleEl && !titleEl.querySelector('.rec-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'rec-badge';
+          badge.textContent = ' 🔁';
+          badge.style.fontSize = '0.7em';
+          titleEl.appendChild(badge);
+        }
+      }
+    },
     eventClick(info) {
       if (info.event.extendedProps.type === 'meeting') {
         location.href = `/meetings/${info.event.extendedProps.meeting_id}?from=calendar`;
         return;
       }
-      showDetail(info.event);
+      // 상세 모달 없이 바로 수정 모달 열기
+      fetch(`/api/events/${info.event.id}`)
+        .then(r => r.json())
+        .then(data => openModal('', data))
+        .catch(() => {});
     },
     dateClick(info) {
       if (CURRENT_USER) openModal(info.dateStr);

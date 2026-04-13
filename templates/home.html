@@ -178,6 +178,8 @@
     <p id="greeting-sub"></p>
   </div>
   <div class="home-progress" id="user-progress"></div>
+  <div class="home-section-title">💬 예정 회의</div>
+  <div id="user-meetings" class="home-meeting-list"></div>
   <div class="home-section-title">내 담당 일정</div>
   <div class="kanban-board" id="user-board"></div>
 </div>
@@ -306,7 +308,10 @@ async function loadGuest() {
 
 // ── 유저 대시보드 ──────────────────────────────────────
 async function loadUser() {
-  const events = await fetch('/api/kanban').then(r => r.json());
+  const [events, meetings] = await Promise.all([
+    fetch('/api/kanban').then(r => r.json()),
+    fetch('/api/my-meetings').then(r => r.ok ? r.json() : []),
+  ]);
   const myName = CURRENT_USER.name.toLowerCase();
   const mine = events.filter(e =>
     (e.assignee || '').split(',').map(s => s.trim().toLowerCase()).includes(myName)
@@ -336,12 +341,38 @@ async function loadUser() {
     ${blocked ? `<div class="progress-chip chip-blocked"><span class="chip-num">${blocked}</span><span class="chip-label">보류</span></div>` : ''}
   `;
 
+  // 회의 섹션
+  const meetingsEl = document.getElementById('user-meetings');
+  if (!meetings || meetings.length === 0) {
+    meetingsEl.innerHTML = '<p class="no-meetings">예정된 회의가 없습니다.</p>';
+  } else {
+    meetingsEl.innerHTML = meetings.map(m => {
+      const dateStr = m.start_datetime ? m.start_datetime.slice(0, 10) : '';
+      const timeStr = m.all_day || !m.start_datetime
+        ? '종일'
+        : m.start_datetime.slice(11, 16);
+      const assignee = m.assignee ? esc(m.assignee) : '';
+      return `<div class="meeting-item" style="cursor:pointer;" onclick="openMeetingModal(${m.id})">
+        <span class="meeting-item-date">${esc(dateStr)} ${esc(timeStr)}</span>
+        <span class="meeting-item-title">${esc(m.title)}</span>
+        ${assignee ? `<span class="meeting-item-assignee">${assignee}</span>` : ''}
+      </div>`;
+    }).join('');
+  }
+
   if (mine.length === 0) {
     document.getElementById('user-board').innerHTML =
       '<p class="no-tasks">담당으로 지정된 칸반 일정이 없습니다.</p>';
   } else {
     buildBoard('user-board', mine, true);
   }
+}
+
+function openMeetingModal(id) {
+  fetch(`/api/events/${id}`)
+    .then(r => r.json())
+    .then(data => openModal('', data))
+    .catch(() => {});
 }
 
 window.onEventSaved   = () => { if (CURRENT_USER) loadUser(); else loadGuest(); };
