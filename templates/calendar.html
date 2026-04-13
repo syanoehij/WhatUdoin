@@ -9,13 +9,13 @@
 
 {% block content %}
 <div class="toolbar">
-  {% if user and user.role in ('editor', 'admin') %}
-  <button class="btn btn-primary" onclick="openModal()">+ 일정 추가</button>
-  {% else %}
-  <button class="btn btn-outline" onclick="openLoginModal()">로그인하여 일정 추가</button>
-  {% endif %}
   {% if user %}
-  <button class="btn btn-outline" id="my-only-btn" onclick="toggleMyOnly()" title="내 담당 일정만 보기" style="margin-left:auto">👤 내 일정만</button>
+  <button class="btn btn-outline" id="my-only-btn" onclick="toggleMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
+  {% endif %}
+  {% if user and user.role in ('editor', 'admin') %}
+  <button class="btn btn-primary" onclick="openModal()" style="margin-left:auto">+ 일정 추가</button>
+  {% else %}
+  <button class="btn btn-outline" onclick="openLoginModal()" style="margin-left:auto">로그인하여 일정 추가</button>
   {% endif %}
 </div>
 
