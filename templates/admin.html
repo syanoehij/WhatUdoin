@@ -12,6 +12,7 @@
     <button class="tab-btn active" onclick="switchTab('pending', this)">가입 신청 <span class="badge">{{ pending|length }}</span></button>
     <button class="tab-btn" onclick="switchTab('members', this)">멤버 목록</button>
     <button class="tab-btn" onclick="switchTab('teams', this)">팀 관리</button>
+    <button class="tab-btn" onclick="switchTab('settings', this)">시스템 설정</button>
   </div>
 
   <!-- ── 가입 신청 탭 ── -->
@@ -60,11 +61,12 @@
           <td>
             <label class="switch switch-sm">
               <input type="checkbox" {{ 'checked' if m.is_active else '' }}
-                     onchange="toggleActive({{ m.id }}, {{ m.team_id or 'null' }}, this.checked)" />
+                     onchange="toggleActive({{ m.id }}, {{ m.team_id or 'null' }}, this.checked, '{{ m.role }}')" />
               <span class="slider"></span>
             </label>
           </td>
           <td class="btn-group">
+            <button class="btn btn-sm" onclick="openRenameMember({{ m.id }}, '{{ m.name }}')">이름 변경</button>
             <button class="btn btn-sm" onclick="openIPs({{ m.id }}, '{{ m.name }}')">IP</button>
             <button class="btn btn-sm" onclick="openResetPw({{ m.id }}, '{{ m.name }}')">비밀번호 초기화</button>
           </td>
@@ -72,6 +74,19 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  <!-- ── 시스템 설정 탭 ── -->
+  <div id="tab-settings" class="tab-panel hidden">
+    <div class="admin-section-title">LLM 서버 설정</div>
+    <div class="form-row">
+      <label>Ollama 서버 주소</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="llm-url-input" placeholder="http://localhost:11434" style="flex:1;" />
+        <button class="btn btn-primary" onclick="saveLlmUrl()">저장</button>
+      </div>
+    </div>
+    <p class="text-muted" style="margin-top:8px;font-size:0.85rem;">변경 후 서버 재시작 없이 즉시 적용됩니다.</p>
   </div>
 
   <!-- ── 팀 탭 ── -->
@@ -141,6 +156,27 @@
   </div>
 </div>
 
+<!-- ── 이름 변경 모달 ── -->
+<div id="rename-modal" class="modal-overlay hidden" onclick="closeRenameModal(event)">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2>이름 변경: <span id="rename-modal-name"></span></h2>
+      <button class="icon-btn" onclick="closeRenameModal()">✕</button>
+    </div>
+    <div class="form-row">
+      <label>새 이름</label>
+      <input type="text" id="rename-input" placeholder="새 이름" />
+    </div>
+    <div class="modal-actions">
+      <div></div>
+      <div>
+        <button class="btn" onclick="closeRenameModal()">취소</button>
+        <button class="btn btn-primary" onclick="confirmRename()">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── 비밀번호 초기화 모달 ── -->
 <div id="pw-modal" class="modal-overlay hidden" onclick="closePwModal(event)">
   <div class="modal modal-sm">
@@ -166,7 +202,8 @@
 {% block scripts %}
 <script>
 let _approvePendingId = null;
-let _resetPwUserId = null;
+let _resetPwUserId   = null;
+let _renameMemberId  = null;
 
 // ── 탭 ──────────────────────────────────────────────────
 function switchTab(name, btn) {
@@ -174,6 +211,7 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`tab-${name}`).classList.remove('hidden');
   btn.classList.add('active');
+  if (name === 'settings') loadLlmSettings();
 }
 
 // ── 가입 신청 ────────────────────────────────────────────
@@ -209,12 +247,73 @@ async function rejectPending(id) {
 }
 
 // ── 멤버 관리 ────────────────────────────────────────────
-async function toggleActive(userId, teamId, isActive) {
-  await fetch(`/api/admin/users/${userId}`, {
+async function toggleActive(userId, teamId, isActive, role) {
+  if (!isActive && role === 'admin') {
+    alert('관리자 계정은 비활성화할 수 없습니다.');
+    document.querySelector(`#member-${userId} input[type="checkbox"]`).checked = true;
+    return;
+  }
+  const res = await fetch(`/api/admin/users/${userId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ team_id: teamId, is_active: isActive ? 1 : 0 }),
   });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert(err.detail || '오류가 발생했습니다.');
+    document.querySelector(`#member-${userId} input[type="checkbox"]`).checked = !isActive;
+  }
+}
+
+// ── 이름 변경 ─────────────────────────────────────────────
+function openRenameMember(userId, name) {
+  _renameMemberId = userId;
+  document.getElementById('rename-modal-name').textContent = name;
+  document.getElementById('rename-input').value = name;
+  document.getElementById('rename-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('rename-input').select(), 50);
+}
+function closeRenameModal(e) {
+  if (!e || e.target === document.getElementById('rename-modal'))
+    document.getElementById('rename-modal').classList.add('hidden');
+}
+async function confirmRename() {
+  const newName = document.getElementById('rename-input').value.trim();
+  if (!newName) { alert('이름을 입력하세요.'); return; }
+  const res = await fetch(`/api/admin/users/${_renameMemberId}/name`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: newName }),
+  });
+  if (res.ok) {
+    // 테이블에서 이름 즉시 갱신
+    const row = document.getElementById(`member-${_renameMemberId}`);
+    if (row) row.cells[0].textContent = newName;
+    closeRenameModal();
+  } else {
+    const err = await res.json().catch(() => ({}));
+    alert(err.detail || '오류가 발생했습니다.');
+  }
+}
+
+// ── LLM 설정 ─────────────────────────────────────────────
+async function loadLlmSettings() {
+  const res = await fetch('/api/admin/settings/llm');
+  if (res.ok) {
+    const data = await res.json();
+    document.getElementById('llm-url-input').value = data.ollama_url || '';
+  }
+}
+async function saveLlmUrl() {
+  const url = document.getElementById('llm-url-input').value.trim();
+  if (!url) { alert('URL을 입력하세요.'); return; }
+  const res = await fetch('/api/admin/settings/llm', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ollama_url: url }),
+  });
+  if (res.ok) { alert('저장되었습니다.'); }
+  else { const e = await res.json().catch(() => ({})); alert(e.detail || '오류'); }
 }
 
 // ── IP 관리 ──────────────────────────────────────────────

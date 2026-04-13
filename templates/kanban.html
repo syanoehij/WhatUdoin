@@ -258,13 +258,20 @@
 {% block content %}
 <div class="kanban-toolbar">
   <div class="kanban-toolbar-left">
-    <label>팀 필터</label>
+    <label>팀</label>
     <select id="team-filter" onchange="loadKanban()">
       <option value="">전체</option>
       {% for team in teams %}
       <option value="{{ team.id }}">{{ team.name }}</option>
       {% endfor %}
     </select>
+    <label>프로젝트</label>
+    <select id="project-filter" onchange="renderBoard()">
+      <option value="">전체</option>
+    </select>
+    {% if user %}
+    <button class="btn btn-outline btn-sm" id="kbn-my-only-btn" onclick="toggleKanbanMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
+    {% endif %}
     <span id="kanban-total" class="kanban-total-label"></span>
   </div>
   {% if user and user.role in ('editor', 'admin') %}
@@ -372,24 +379,58 @@ function fmtDate(str) {
 let allEvents = [];
 let currentKDetailId = null;
 let dragSrcId = null;
+let _kanbanMyOnly = false;
+
+function toggleKanbanMyOnly() {
+  if (!CURRENT_USER) return;
+  _kanbanMyOnly = !_kanbanMyOnly;
+  const btn = document.getElementById('kbn-my-only-btn');
+  if (btn) {
+    btn.classList.toggle('btn-primary', _kanbanMyOnly);
+    btn.classList.toggle('btn-outline', !_kanbanMyOnly);
+  }
+  renderBoard();
+}
 
 async function loadKanban() {
   const teamId = document.getElementById('team-filter').value;
   const url = teamId ? `/api/kanban?team_id=${teamId}` : '/api/kanban';
   const res = await fetch(url);
   allEvents = await res.json();
+
+  // 프로젝트 필터 목록 갱신
+  const projSel = document.getElementById('project-filter');
+  const prevProj = projSel.value;
+  const projects = [...new Set(allEvents.map(e => e.project).filter(Boolean))].sort();
+  projSel.innerHTML = '<option value="">전체</option>' +
+    projects.map(p => `<option value="${esc(p)}"${p === prevProj ? ' selected' : ''}>${esc(p)}</option>`).join('');
+
   renderBoard();
 }
 
 function renderBoard() {
+  const projFilter = document.getElementById('project-filter').value;
+
+  let filtered = allEvents;
+  if (projFilter) {
+    filtered = filtered.filter(e => e.project === projFilter);
+  }
+  if (_kanbanMyOnly && CURRENT_USER) {
+    const myName = CURRENT_USER.name.toLowerCase();
+    filtered = filtered.filter(e => {
+      const assignee = (e.assignee || '').toLowerCase();
+      return assignee.split(',').map(s => s.trim()).some(a => a && (a.includes(myName) || myName.includes(a)));
+    });
+  }
+
   const grouped = {};
   COLUMNS.forEach(c => grouped[c.status] = []);
-  allEvents.forEach(e => {
+  filtered.forEach(e => {
     const status = e.kanban_status || 'backlog';  // 미지정은 Backlog로
     if (grouped[status] !== undefined) grouped[status].push(e);
   });
 
-  let total = allEvents.length;
+  let total = filtered.length;
   document.getElementById('kanban-total').textContent = `총 ${total}개`;
 
   const PRIORITY_ORDER = { urgent: 0, high: 1, normal: 2, low: 3 };

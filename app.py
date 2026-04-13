@@ -28,6 +28,10 @@ MEETINGS_DIR.mkdir(exist_ok=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    # 저장된 Ollama URL 로드
+    saved_url = db.get_setting("ollama_url")
+    if saved_url:
+        llm_parser.set_ollama_base_url(saved_url)
     yield
 
 
@@ -267,7 +271,47 @@ def admin_users(request: Request):
 async def admin_update_user(user_id: int, request: Request):
     _require_admin(request)
     data = await request.json()
+    # 관리자 계정 비활성화 보호
+    if not data.get("is_active"):
+        user = db.get_user(user_id)
+        if user and user.get("role") == "admin":
+            raise HTTPException(status_code=400, detail="관리자 계정은 비활성화할 수 없습니다.")
     db.update_user(user_id, data)
+    return {"ok": True}
+
+
+@app.put("/api/admin/users/{user_id}/name")
+async def admin_rename_user(user_id: int, request: Request):
+    _require_admin(request)
+    data = await request.json()
+    new_name = data.get("name", "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="이름을 입력하세요.")
+    db.update_user_name(user_id, new_name)
+    return {"ok": True}
+
+
+@app.get("/api/admin/pending/count")
+def admin_pending_count(request: Request):
+    _require_admin(request)
+    return {"count": len(db.get_pending_users())}
+
+
+@app.get("/api/admin/settings/llm")
+def admin_get_llm_settings(request: Request):
+    _require_admin(request)
+    return {"ollama_url": db.get_setting("ollama_url") or llm_parser.OLLAMA_BASE_URL}
+
+
+@app.put("/api/admin/settings/llm")
+async def admin_set_llm_settings(request: Request):
+    _require_admin(request)
+    data = await request.json()
+    url = data.get("ollama_url", "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="URL을 입력하세요.")
+    db.set_setting("ollama_url", url)
+    llm_parser.set_ollama_base_url(url)
     return {"ok": True}
 
 
@@ -337,19 +381,35 @@ async def admin_toggle_whitelist(ip_id: int, request: Request):
 @app.get("/api/events")
 def list_events():
     events = db.get_all_events()
-    return [
-        {
+    proj_colors = db.get_project_colors()
+    result = []
+    for e in events:
+        proj_name = e.get("project")
+        proj_color = proj_colors.get(proj_name) if proj_name else None
+
+        # 24시간 초과 이벤트는 allDay로 처리
+        is_all_day = bool(e["all_day"])
+        if not is_all_day and e.get("end_datetime") and e.get("start_datetime"):
+            try:
+                _start = datetime.fromisoformat(e["start_datetime"])
+                _end   = datetime.fromisoformat(e["end_datetime"])
+                if (_end - _start).total_seconds() >= 86400:
+                    is_all_day = True
+            except Exception:
+                pass
+
+        ev = {
             "id": e["id"],
             "title": e["title"],
             "start": e["start_datetime"],
             "end": e["end_datetime"] or e["start_datetime"],
-            "allDay": bool(e["all_day"]),
+            "allDay": is_all_day,
             "extendedProps": {
-                "project":       e["project"],
+                "project":       proj_name,
                 "description":   e["description"],
                 "location":      e["location"],
                 "assignee":      e["assignee"],
-                "all_day":       bool(e["all_day"]),
+                "all_day":       is_all_day,
                 "source":        e["source"],
                 "team_id":       e["team_id"],
                 "meeting_id":    e["meeting_id"],
@@ -357,8 +417,11 @@ def list_events():
                 "priority":      e.get("priority", "normal"),
             },
         }
-        for e in events
-    ]
+        if proj_color:
+            ev["backgroundColor"] = proj_color
+            ev["borderColor"]     = proj_color
+        result.append(ev)
+    return result
 
 
 @app.get("/api/events/{event_id}")

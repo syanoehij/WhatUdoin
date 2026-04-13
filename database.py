@@ -150,6 +150,13 @@ def init_db():
         _migrate(conn, "meetings", [
             ("meeting_date", "TEXT"),
         ])
+        # ── settings ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """)
 
         # ── 시드 데이터 ──
         if not conn.execute("SELECT 1 FROM teams LIMIT 1").fetchone():
@@ -854,3 +861,46 @@ def get_events_by_date_range(start_date: str, end_date: str, team_id: int = None
                 (start_date, end_date)
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Project Colors ──────────────────────────────────────
+
+def get_project_colors() -> dict:
+    """projects 테이블에서 color가 설정된 {name: color} 딕셔너리 반환"""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT name, color FROM projects WHERE color IS NOT NULL AND color != ''"
+        ).fetchall()
+    return {r["name"]: r["color"] for r in rows}
+
+
+# ── User name change ─────────────────────────────────────
+
+def update_user_name(user_id: int, new_name: str):
+    with get_conn() as conn:
+        conn.execute("UPDATE users SET name = ? WHERE id = ?", (new_name, user_id))
+
+
+def count_active_admins() -> int:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = 1"
+        ).fetchone()
+    return row[0] if row else 0
+
+
+# ── Settings ─────────────────────────────────────────────
+
+def get_setting(key: str, default: str = None):
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(key: str, value: str):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value)
+        )

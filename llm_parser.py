@@ -3,15 +3,23 @@ import json
 import re
 from datetime import date
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_URL = OLLAMA_BASE_URL + "/api/generate"
 DEFAULT_MODEL = "gemma4:e2b"
+
+
+def set_ollama_base_url(base_url: str):
+    """Ollama 서버 주소를 런타임에 변경한다."""
+    global OLLAMA_BASE_URL, OLLAMA_URL
+    OLLAMA_BASE_URL = base_url.rstrip("/")
+    OLLAMA_URL = OLLAMA_BASE_URL + "/api/generate"
 
 
 def get_available_models() -> list[str]:
     """Ollama에서 사용 가능한 모델 목록 반환. DEFAULT_MODEL을 맨 앞에 배치. 실패 시 기본 모델만 반환."""
     try:
         response = requests.get(
-            "http://localhost:11434/api/tags",
+            OLLAMA_BASE_URL + "/api/tags",
             timeout=5,
         )
         response.raise_for_status()

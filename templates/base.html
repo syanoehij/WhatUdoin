@@ -57,6 +57,7 @@
           <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu()">
             {{ user.name }}
             <span class="user-role">{% if user.role == 'admin' %}(관리자){% else %}(에디터){% endif %}</span>
+            {% if user.role == 'admin' %}<span class="profile-red-dot hidden" id="profile-red-dot"></span>{% endif %}
             <span class="profile-caret">▾</span>
           </button>
           <div class="profile-dropdown hidden" id="profile-dropdown">
@@ -329,6 +330,22 @@
         }
       });
     });
+
+    /* ── 관리자 레드닷 ── */
+    if (CURRENT_USER && CURRENT_USER.role === 'admin') {
+      fetch('/api/admin/pending/count')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data && data.count > 0) {
+            const dot = document.getElementById('profile-red-dot');
+            if (dot) {
+              dot.classList.remove('hidden');
+              dot.title = `가입 신청 ${data.count}건`;
+            }
+          }
+        })
+        .catch(() => {});
+    }
 
     /* ── 프로필 드롭다운 ── */
     function toggleProfileMenu() {

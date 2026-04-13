@@ -299,6 +299,9 @@ main { padding: 0; }
     <button class="nav-btn" onclick="navToday()">오늘</button>
   </div>
   <button class="nav-btn" id="btn-collapse-all" onclick="collapseAll()" title="모든 프로젝트 닫기">접기</button>
+  {% if user %}
+  <button class="nav-btn" id="gantt-my-only-btn" onclick="toggleGanttMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
+  {% endif %}
   <div class="spacer"></div>
   <div class="zoom-control">
     <span class="zoom-icon">축소</span>
@@ -351,7 +354,19 @@ const PRESET_DAYS = { month: 180, week: 90, day: 21 };
 let daysShown = ZOOM_STEPS[8]; // 기본 21일 (3주)
 let viewStart = null;
 let allTeams  = [];
+let _ganttMyOnly = false;
 const collapsedProjects = new Set(); // "팀이름::프로젝트이름"
+
+function toggleGanttMyOnly() {
+  if (!CURRENT_USER) return;
+  _ganttMyOnly = !_ganttMyOnly;
+  const btn = document.getElementById('gantt-my-only-btn');
+  if (btn) {
+    btn.classList.toggle('active', _ganttMyOnly);
+    btn.title = _ganttMyOnly ? '전체 일정 보기' : '내 담당 일정만 보기';
+  }
+  render();
+}
 
 // ── localStorage 유틸 ────────────────────────────────────
 const LS_ZOOM      = 'proj_zoom';
@@ -558,6 +573,7 @@ function render() {
 
   const DAY_KO = ['일','월','화','수','목','금','토'];
   if (daysShown > 60) {
+    // 주차 레이블 (월 단위 이상: 60일 초과)
     let prevWk = null, wStart = 0;
     const addWeekLabel = (endPx, startPx, startDay) => {
       const w = endPx - startPx; if (w < 2) return;
@@ -576,6 +592,28 @@ function render() {
       }
     }
     addWeekLabel(daysShown * dayPx, wStart, Math.round(wStart / dayPx));
+  } else if (daysShown >= 14) {
+    // 21~60일 뷰: 일(요일) 레이블 + 월요일에 W주차 표시
+    for (let i = 0; i < daysShown; i++) {
+      const d = addDays(viewStart, i);
+      const isToday   = daysBetween(tod, d) === 0;
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const isMon     = d.getDay() === 1;
+      const el = document.createElement('div');
+      el.className = 'gantt-header-unit' +
+        (isToday ? ' is-today' : isWeekend ? ' is-weekend' : '');
+      el.style.cssText = `left:${i * dayPx}px;width:${dayPx}px`;
+      el.title = isMon ? `W${isoWeek(d)}` : '';
+      if (daysShown <= 30) {
+        el.textContent = isMon && dayPx >= 28
+          ? `${d.getDate()}(W${isoWeek(d)})`
+          : `${d.getDate()}(${DAY_KO[d.getDay()]})`;
+      } else {
+        el.textContent = String(d.getDate());
+        if (isMon) el.textContent = `W${isoWeek(d)}`;
+      }
+      unitsEl.appendChild(el);
+    }
   } else {
     for (let i = 0; i < daysShown; i++) {
       const d = addDays(viewStart, i);
@@ -585,9 +623,7 @@ function render() {
       el.className = 'gantt-header-unit' +
         (isToday ? ' is-today' : isWeekend ? ' is-weekend' : '');
       el.style.cssText = `left:${i * dayPx}px;width:${dayPx}px`;
-      el.textContent = daysShown <= 30
-        ? `${d.getDate()}(${DAY_KO[d.getDay()]})`
-        : String(d.getDate());
+      el.textContent = `${d.getDate()}(${DAY_KO[d.getDay()]})`;
       unitsEl.appendChild(el);
     }
   }
@@ -616,8 +652,17 @@ function render() {
       const color = proj.color || projectColor(proj.name);
       const isFirstInTeam = pidx === 0;
 
+      // 내 일정만 필터
+      let projEvs = proj.events;
+      if (_ganttMyOnly && CURRENT_USER) {
+        const myName = CURRENT_USER.name.toLowerCase();
+        projEvs = projEvs.filter(e => {
+          const assignee = (e.assignee || '').toLowerCase();
+          return assignee.split(',').map(s => s.trim()).some(a => a && (a.includes(myName) || myName.includes(a)));
+        });
+      }
       // 이벤트 정렬
-      const sortedEvs = [...proj.events].sort((a, b) =>
+      const sortedEvs = [...projEvs].sort((a, b) =>
         a.start_datetime > b.start_datetime ? 1 : -1);
 
       // ── 프로젝트 헤더 행 ──────────────────────────

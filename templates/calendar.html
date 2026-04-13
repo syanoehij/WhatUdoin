@@ -14,6 +14,9 @@
   {% else %}
   <button class="btn btn-outline" onclick="openLoginModal()">로그인하여 일정 추가</button>
   {% endif %}
+  {% if user %}
+  <button class="btn btn-outline" id="my-only-btn" onclick="toggleMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
+  {% endif %}
 </div>
 
 <div id="calendar"></div>
@@ -42,6 +45,18 @@
 let calendar;
 let currentDetailEventId = null;
 let currentDetailEventTeamId = null;
+let _myOnly = false;
+
+function toggleMyOnly() {
+  if (!CURRENT_USER) return;
+  _myOnly = !_myOnly;
+  const btn = document.getElementById('my-only-btn');
+  if (btn) {
+    btn.classList.toggle('btn-primary', _myOnly);
+    btn.classList.toggle('btn-outline', !_myOnly);
+  }
+  calendar.getEventSourceById('main-events').refetch();
+}
 
 // ── FullCalendar 초기화 ─────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -69,7 +84,23 @@ document.addEventListener('DOMContentLoaded', () => {
       },
     },
     eventSources: [
-      { url: '/api/events' },
+      {
+        id: 'main-events',
+        events: async function(fetchInfo, successCb, failureCb) {
+          try {
+            const res = await fetch('/api/events');
+            let evs = await res.json();
+            if (_myOnly && CURRENT_USER) {
+              const myName = CURRENT_USER.name.toLowerCase();
+              evs = evs.filter(e => {
+                const assignee = (e.extendedProps?.assignee || '').toLowerCase();
+                return assignee.split(',').map(s => s.trim()).some(a => a && (a.includes(myName) || myName.includes(a)));
+              });
+            }
+            successCb(evs);
+          } catch(err) { failureCb(err); }
+        },
+      },
       { url: '/api/meetings/calendar', color: '#00b894', textColor: 'white', editable: false },
     ],
     editable: !!(CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor')),
