@@ -330,6 +330,26 @@
     font-size: 0.88rem;
   }
 
+  /* ── 뷰어 전환 버튼 (경고 노랑/주황) ── */
+  .btn-warn { background: #f59e0b; color: #fff; }
+  .btn-warn:hover { background: #d97706; }
+
+  /* ── 잠금 배너 ── */
+  .ck-lock-banner {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff8e1; border: 1px solid #ffe082;
+    padding: 8px 16px; font-size: 0.86rem; color: #7a5800;
+    flex-shrink: 0;
+  }
+  .dark .ck-lock-banner { background: #3d2f00; border-color: #7a6000; color: #ffd166; }
+  .ck-lock-banner-icon { font-size: 1rem; flex-shrink: 0; }
+  .ck-lock-refresh {
+    margin-left: auto; flex-shrink: 0;
+    background: none; border: 1px solid #ffe082; border-radius: 5px;
+    padding: 2px 8px; font-size: 0.78rem; cursor: pointer; color: inherit;
+  }
+  .ck-lock-refresh:hover { background: rgba(0,0,0,0.05); }
+
   /* ── 저장 토스트 ── */
   #ck-save-toast {
     position: fixed;
@@ -414,7 +434,7 @@
         <button class="btn btn-sm btn-primary" id="ck-edit-btn" onclick="switchToEdit()" style="display:none;">편집</button>
         <!-- 편집 모드 전용 버튼 -->
         <button class="btn btn-sm" id="ck-rename-btn" onclick="toggleRenameForm()" style="display:none;">이름 변경</button>
-        <button class="btn btn-sm" id="ck-viewer-btn" onclick="switchToViewer()" style="display:none;">뷰어로 전환</button>
+        <button class="btn btn-sm btn-warn" id="ck-viewer-btn" onclick="switchToViewer()" style="display:none;">뷰어로 전환</button>
         <button class="btn btn-sm btn-primary" id="ck-save-btn" onclick="saveContent()" style="display:none;">저장</button>
         <button class="btn btn-sm btn-danger" id="ck-delete-btn" onclick="deleteChecklist()">삭제</button>
         {% endif %}
@@ -435,6 +455,13 @@
       <button class="btn btn-sm btn-ghost" onclick="closeRenameForm()">취소</button>
     </div>
     {% endif %}
+
+    <!-- 잠금 배너 -->
+    <div class="ck-lock-banner" id="ck-lock-banner" style="display:none;">
+      <span class="ck-lock-banner-icon">🔒</span>
+      <span id="ck-lock-msg"></span>
+      <button class="ck-lock-refresh" onclick="refreshLockStatus()">새로고침</button>
+    </div>
 
     <!-- 뷰어 (비편집자용 / 편집자도 뷰 모드) -->
     <div class="ck-viewer-wrap" id="ck-viewer-wrap" style="display:none;">
@@ -459,19 +486,24 @@
 const IS_EDITOR = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
 const ALL_PROJECTS = {{ projects | tojson | safe }};
 
-let _allChecklists   = [];   // 전체 목록
-let _curProj         = null; // 현재 선택된 프로젝트 필터 (null = 전체)
-let _curId           = null; // 현재 선택된 체크리스트 id
-let _curItem         = null; // 현재 선택된 체크리스트 데이터
-let _ckEditor        = null; // Toast UI Editor 인스턴스
-let _ckViewer        = null; // Toast UI Viewer 인스턴스
-let _dirty           = false;
-let _autoSaveTimer   = null;
-let _editMode        = false; // true = 편집기 모드, false = 뷰어 모드
+let _allChecklists      = [];    // 전체 목록
+let _curProj            = null;  // 현재 선택된 프로젝트 필터 (null = 전체)
+let _curId              = null;  // 현재 선택된 체크리스트 id
+let _curItem            = null;  // 현재 선택된 체크리스트 데이터
+let _ckEditor           = null;  // Toast UI Editor 인스턴스
+let _ckViewer           = null;  // Toast UI Viewer 인스턴스
+let _dirty              = false;
+let _autoSaveTimer      = null;
+let _editMode           = false; // true = 편집기 모드, false = 뷰어 모드
+let _lockedByOther      = false; // 다른 사람이 편집 중
+let _heartbeatInterval  = null;  // 잠금 heartbeat 타이머
 
-// ── 이탈 방지 ──────────────────────────────────────────────
+// ── 이탈 방지 / 잠금 해제 ──────────────────────────────────
 window.addEventListener('beforeunload', (e) => {
   if (IS_EDITOR && _dirty) { e.preventDefault(); e.returnValue = ''; }
+  if (IS_EDITOR && _curId && _editMode) {
+    fetch(`/api/checklists/${_curId}/lock`, { method: 'DELETE', keepalive: true });
+  }
 });
 
 // ── 프로젝트 색상 ──────────────────────────────────────────
@@ -570,12 +602,25 @@ async function openChecklist(id, forceEdit = false) {
   if (_dirty && _editMode) {
     if (!confirm('저장되지 않은 변경사항이 있습니다. 이동하시겠습니까?')) return;
   }
+  // 이전 항목 잠금 해제
+  if (IS_EDITOR && _curId && _editMode && _curId !== id) {
+    await fetch(`/api/checklists/${_curId}/lock`, { method: 'DELETE' });
+    _stopHeartbeat();
+  }
+
   _curId = id;
   renderList();
 
-  const res = await fetch(`/api/checklists/${id}`);
-  if (!res.ok) return;
-  _curItem = await res.json();
+  const [itemRes, lockRes] = await Promise.all([
+    fetch(`/api/checklists/${id}`),
+    fetch(`/api/checklists/${id}/lock`),
+  ]);
+  if (!itemRes.ok) return;
+  _curItem = await itemRes.json();
+
+  // 잠금 상태 반영
+  const lockData = lockRes.ok ? await lockRes.json() : { locked_by: null };
+  _setLockState(lockData.locked_by);
 
   document.getElementById('ck-placeholder').style.display = 'none';
   document.getElementById('ck-right-header').style.display = '';
@@ -583,15 +628,51 @@ async function openChecklist(id, forceEdit = false) {
   closeRenameForm();
   setDirty(false);
 
-  if (forceEdit && IS_EDITOR) {
+  if (forceEdit && IS_EDITOR && !_lockedByOther) {
     _showEditorMode();
   } else {
     _showViewerMode();
   }
 }
 
+// ── 잠금 상태 설정 ─────────────────────────────────────────
+function _setLockState(lockedBy) {
+  const myName = CURRENT_USER?.name || '';
+  _lockedByOther = !!(lockedBy && lockedBy !== myName);
+  const banner = document.getElementById('ck-lock-banner');
+  if (banner) {
+    if (_lockedByOther) {
+      document.getElementById('ck-lock-msg').textContent = `${lockedBy}님이 편집 중입니다. 편집 및 체크박스 변경이 잠겨 있습니다.`;
+      banner.style.display = '';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+  // 편집 버튼 가시성 조정
+  if (IS_EDITOR) {
+    const editBtn = document.getElementById('ck-edit-btn');
+    if (editBtn) editBtn.style.display = _lockedByOther ? 'none' : '';
+  }
+}
+
+async function refreshLockStatus() {
+  if (!_curId) return;
+  const res = await fetch(`/api/checklists/${_curId}/lock`);
+  if (res.ok) {
+    const data = await res.json();
+    _setLockState(data.locked_by);
+    renderViewer(_curItem.content);
+  }
+}
+
 // ── 뷰어 모드로 전환 ──────────────────────────────────────
 function _showViewerMode() {
+  // 편집 모드에서 전환 시 잠금 해제
+  if (_editMode && IS_EDITOR && _curId) {
+    fetch(`/api/checklists/${_curId}/lock`, { method: 'DELETE' });
+    _stopHeartbeat();
+  }
+
   _editMode = false;
   if (_ckEditor) { _ckEditor.destroy(); _ckEditor = null; }
 
@@ -600,7 +681,7 @@ function _showViewerMode() {
 
   // 버튼 가시성
   if (IS_EDITOR) {
-    document.getElementById('ck-edit-btn').style.display    = '';    // 편집 버튼 표시
+    document.getElementById('ck-edit-btn').style.display    = _lockedByOther ? 'none' : '';
     document.getElementById('ck-rename-btn').style.display  = 'none';
     document.getElementById('ck-viewer-btn').style.display  = 'none';
     document.getElementById('ck-save-btn').style.display    = 'none';
@@ -610,7 +691,18 @@ function _showViewerMode() {
 }
 
 // ── 편집 모드로 전환 ──────────────────────────────────────
-function _showEditorMode() {
+async function _showEditorMode() {
+  // 잠금 획득
+  const lockRes = await fetch(`/api/checklists/${_curId}/lock`, { method: 'POST' });
+  if (!lockRes.ok) {
+    const err = await lockRes.json().catch(() => ({}));
+    alert(err.detail || '편집 잠금을 획득하지 못했습니다. 다른 사람이 편집 중입니다.');
+    // 잠금 상태 갱신 후 뷰어 유지
+    const lockInfo = await fetch(`/api/checklists/${_curId}/lock`);
+    if (lockInfo.ok) { const d = await lockInfo.json(); _setLockState(d.locked_by); }
+    return;
+  }
+
   _editMode = true;
   document.getElementById('ck-viewer-wrap').style.display = 'none';
   document.getElementById('ck-editor-wrap').style.display = '';
@@ -621,7 +713,17 @@ function _showEditorMode() {
   document.getElementById('ck-viewer-btn').style.display  = '';
   document.getElementById('ck-save-btn').style.display    = '';
 
+  // Heartbeat (2분마다 — LOCK_TIMEOUT_MINUTES=5 이내)
+  _stopHeartbeat();
+  _heartbeatInterval = setInterval(() => {
+    if (_curId && _editMode) fetch(`/api/checklists/${_curId}/lock`, { method: 'PUT' });
+  }, 120000);
+
   initEditor(_curItem.content);
+}
+
+function _stopHeartbeat() {
+  if (_heartbeatInterval) { clearInterval(_heartbeatInterval); _heartbeatInterval = null; }
 }
 
 function switchToEdit() {
@@ -692,15 +794,24 @@ function renderViewer(content) {
 
 function attachCheckboxHandlers(mdContent) {
   // Toast UI Viewer는 CSS로 체크박스를 이미 그림 — input 주입 불필요
-  // .task-list-item 클릭만 감지해서 토글하면 됨
+  // DOM class 대신 mdContent에서 상태를 읽어야 Toast UI 내부 토글과 충돌 방지
   const viewerEl = document.getElementById('ck-viewer');
   viewerEl.querySelectorAll('li.task-list-item').forEach((li, idx) => {
     if (li.dataset.ckBound) return; // 중복 바인딩 방지
     li.dataset.ckBound = '1';
-    li.style.cursor = 'pointer';
+    li.style.cursor = _lockedByOther ? 'not-allowed' : 'pointer';
     li.addEventListener('click', (e) => {
       e.preventDefault();
-      const isChecked = li.classList.contains('checked');
+      e.stopPropagation();
+      if (_lockedByOther) return; // 다른 사람이 편집 중이면 체크박스 비활성
+      // mdContent에서 idx번째 체크박스의 원래 상태를 읽음
+      let count = 0, isChecked = false;
+      const re = /^[ \t]*[-*+] \[([xX ]?)\]/gm;
+      let m;
+      while ((m = re.exec(mdContent)) !== null) {
+        if (count === idx) { isChecked = m[1].toLowerCase() === 'x'; break; }
+        count++;
+      }
       toggleCheckbox(idx, !isChecked, mdContent);
     });
   });
@@ -764,6 +875,9 @@ async function saveContent(auto = false) {
   if (res.ok) {
     setDirty(false);
     _curItem.content = content;
+    // 저장 완료 시 잠금 해제 후 뷰어로 전환
+    await fetch(`/api/checklists/${_curId}/lock`, { method: 'DELETE' });
+    _stopHeartbeat();
     // 목록 updated_at 갱신
     const updated = await fetch(`/api/checklists/${_curId}`);
     if (updated.ok) {
@@ -774,6 +888,18 @@ async function saveContent(auto = false) {
       _updateMeta();
     }
     showSaveToast(auto ? '자동 저장되었습니다.' : '저장되었습니다.');
+    // 저장 후 자동으로 뷰어 모드로 전환
+    _editMode = false; // _showViewerMode 내 lock 해제 방지용
+    if (_ckEditor) { _ckEditor.destroy(); _ckEditor = null; }
+    document.getElementById('ck-viewer-wrap').style.display = '';
+    if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
+    if (IS_EDITOR) {
+      document.getElementById('ck-edit-btn').style.display    = '';
+      document.getElementById('ck-rename-btn').style.display  = 'none';
+      document.getElementById('ck-viewer-btn').style.display  = 'none';
+      document.getElementById('ck-save-btn').style.display    = 'none';
+    }
+    renderViewer(_curItem.content);
   }
 }
 
@@ -855,6 +981,8 @@ async function deleteChecklist() {
   const res = await fetch(`/api/checklists/${_curId}`, { method: 'DELETE' });
   if (!res.ok) { alert('삭제 실패'); return; }
 
+  _stopHeartbeat();
+  _lockedByOther = false;
   _curId = null;
   _curItem = null;
   _editMode = false;
@@ -863,6 +991,7 @@ async function deleteChecklist() {
   document.getElementById('ck-placeholder').style.display = '';
   document.getElementById('ck-right-header').style.display = 'none';
   document.getElementById('ck-viewer-wrap').style.display = 'none';
+  document.getElementById('ck-lock-banner').style.display = 'none';
   if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
   closeRenameForm();
 

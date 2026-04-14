@@ -209,7 +209,12 @@ def init_db():
                 created_by TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
-            )
+            );
+            CREATE TABLE IF NOT EXISTS checklist_locks (
+                checklist_id INTEGER PRIMARY KEY,
+                user_name    TEXT NOT NULL,
+                locked_at    TEXT NOT NULL
+            );
         """)
 
         # ── 시드 데이터 ──
@@ -1560,3 +1565,62 @@ def get_checklist_projects() -> list:
             "SELECT DISTINCT project FROM checklists WHERE project != '' ORDER BY project"
         ).fetchall()
     return [r[0] for r in rows]
+
+
+# ── Checklist Locks ───────────────────────────────────────
+
+def acquire_checklist_lock(checklist_id: int, user_name: str) -> bool:
+    """잠금 획득. 이미 다른 사람이 유효한 잠금을 가지면 False 반환."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    threshold = (datetime.now(timezone.utc) - timedelta(minutes=LOCK_TIMEOUT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        existing = conn.execute(
+            "SELECT user_name FROM checklist_locks WHERE checklist_id = ? AND locked_at > ?",
+            (checklist_id, threshold)
+        ).fetchone()
+        if existing and existing["user_name"] != user_name:
+            return False
+        conn.execute(
+            "INSERT INTO checklist_locks (checklist_id, user_name, locked_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(checklist_id) DO UPDATE SET user_name = excluded.user_name, locked_at = excluded.locked_at",
+            (checklist_id, user_name, now)
+        )
+    return True
+
+
+def heartbeat_checklist_lock(checklist_id: int, user_name: str) -> bool:
+    """잠금 보유자가 heartbeat로 locked_at 갱신. 잠금 보유자가 아니면 False."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    threshold = (datetime.now(timezone.utc) - timedelta(minutes=LOCK_TIMEOUT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        existing = conn.execute(
+            "SELECT user_name FROM checklist_locks WHERE checklist_id = ? AND locked_at > ?",
+            (checklist_id, threshold)
+        ).fetchone()
+        if not existing or existing["user_name"] != user_name:
+            return False
+        conn.execute(
+            "UPDATE checklist_locks SET locked_at = ? WHERE checklist_id = ?",
+            (now, checklist_id)
+        )
+    return True
+
+
+def release_checklist_lock(checklist_id: int, user_name: str):
+    """잠금 해제 (본인 것만)."""
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM checklist_locks WHERE checklist_id = ? AND user_name = ?",
+            (checklist_id, user_name)
+        )
+
+
+def get_checklist_lock(checklist_id: int) -> dict | None:
+    """현재 유효한 잠금 반환. 없으면 None."""
+    threshold = (datetime.now(timezone.utc) - timedelta(minutes=LOCK_TIMEOUT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT user_name, locked_at FROM checklist_locks WHERE checklist_id = ? AND locked_at > ?",
+            (checklist_id, threshold)
+        ).fetchone()
+    return dict(row) if row else None

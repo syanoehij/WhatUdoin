@@ -257,12 +257,47 @@ async def update_checklist_content(checklist_id: int, request: Request):
 
 @app.delete("/api/checklists/{checklist_id}")
 def delete_checklist(checklist_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     item = db.get_checklist(checklist_id)
     if not item:
         raise HTTPException(status_code=404)
+    db.release_checklist_lock(checklist_id, user["name"])
     db.delete_checklist(checklist_id)
     return {"ok": True}
+
+
+# ── 체크리스트 잠금 API ───────────────────────────────────────
+
+@app.post("/api/checklists/{checklist_id}/lock")
+def lock_checklist(checklist_id: int, request: Request):
+    user = _require_editor(request)
+    ok = db.acquire_checklist_lock(checklist_id, user["name"])
+    if not ok:
+        lock = db.get_checklist_lock(checklist_id)
+        locked_by = lock["user_name"] if lock else "알 수 없음"
+        raise HTTPException(status_code=423, detail=f"{locked_by}님이 편집 중입니다.")
+    return {"ok": True}
+
+
+@app.put("/api/checklists/{checklist_id}/lock")
+def heartbeat_checklist_lock(checklist_id: int, request: Request):
+    user = _require_editor(request)
+    db.heartbeat_checklist_lock(checklist_id, user["name"])
+    return {"ok": True}
+
+
+@app.delete("/api/checklists/{checklist_id}/lock")
+def unlock_checklist(checklist_id: int, request: Request):
+    user = auth.get_current_user(request)
+    if user:
+        db.release_checklist_lock(checklist_id, user["name"])
+    return {"ok": True}
+
+
+@app.get("/api/checklists/{checklist_id}/lock")
+def get_checklist_lock_status(checklist_id: int):
+    lock = db.get_checklist_lock(checklist_id)
+    return {"locked_by": lock["user_name"] if lock else None}
 
 
 @app.get("/api/notice")
