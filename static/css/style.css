@@ -2033,7 +2033,7 @@ select.form-input {
 
 /* ── 반복 요일 버튼 ── */
 .recurrence-days {
-  display: flex; gap: 5px; margin-top: 6px;
+  display: flex; gap: 5px; margin-top: 0;
 }
 .recday-btn {
   width: 32px; height: 32px; border-radius: 50%;

@@ -225,6 +225,49 @@
 
           <!-- ── 오른쪽: 일정 정보 ── -->
           <div class="modal-col-right">
+            <!-- 일정 유형 + 칸반 상태 / 반복 (맨 위) -->
+            <div class="left-row" style="margin-bottom:10px; gap:20px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="col-section-label">일정 유형</div>
+                <div class="event-type-pills">
+                  <button type="button" class="event-type-pill active" id="pill-schedule" onclick="setEventType('schedule')">📅 일정</button>
+                  <button type="button" class="event-type-pill" id="pill-meeting" onclick="setEventType('meeting')">💬 회의</button>
+                </div>
+              </div>
+              <div id="kanban-toggle-wrap" style="display:none;align-items:center;gap:8px;">
+                <input type="checkbox" id="f-kanban" checked style="display:none;" />
+              </div>
+            </div>
+            <!-- 칸반 상태 선택 (일정 유형 시만 표시) -->
+            <div id="kanban-status-row" class="kanban-status-row" style="margin-bottom:10px;">
+              <div class="col-section-label">칸반 상태</div>
+              <div class="kanban-status-pills">
+                <button type="button" class="kanban-status-pill" data-status="backlog"     onclick="setKanbanStatus('backlog')">Backlog</button>
+                <button type="button" class="kanban-status-pill" data-status="todo"        onclick="setKanbanStatus('todo')">Todo</button>
+                <button type="button" class="kanban-status-pill" data-status="in_progress" onclick="setKanbanStatus('in_progress')">In Progress</button>
+                <button type="button" class="kanban-status-pill" data-status="peer_review" onclick="setKanbanStatus('peer_review')">Peer Review</button>
+                <button type="button" class="kanban-status-pill" data-status="done"        onclick="setKanbanStatus('done')">Done</button>
+                <button type="button" class="kanban-status-pill" data-status="blocked"     onclick="setKanbanStatus('blocked')">Blocked</button>
+              </div>
+            </div>
+            <!-- 반복 요일 + 반복 종료 (회의 선택 시만 표시, 한 줄) -->
+            <div id="recurrence-row" style="display:none; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--border); flex-wrap:wrap; align-items:center; gap:16px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div class="col-section-label">반복 요일</div>
+                <div class="recurrence-days" id="recurrence-days" style="margin-top:0;">
+                  <button type="button" class="recday-btn" data-day="0" onclick="toggleRecurrenceDay(0)">월</button>
+                  <button type="button" class="recday-btn" data-day="1" onclick="toggleRecurrenceDay(1)">화</button>
+                  <button type="button" class="recday-btn" data-day="2" onclick="toggleRecurrenceDay(2)">수</button>
+                  <button type="button" class="recday-btn" data-day="3" onclick="toggleRecurrenceDay(3)">목</button>
+                  <button type="button" class="recday-btn" data-day="4" onclick="toggleRecurrenceDay(4)">금</button>
+                </div>
+              </div>
+              <div id="recurrence-end-wrap" style="display:flex;align-items:center;gap:8px;">
+                <div class="col-section-label">반복 종료 <span style="color:#e17055;">*</span></div>
+                <input type="date" id="f-recurrence-end" class="recurrence-end-input" style="width:auto;" />
+              </div>
+            </div>
+
             <div class="form-row">
               <label>프로젝트</label>
               <div class="autocomplete-wrap">
@@ -261,7 +304,7 @@
             </div>
             <div class="form-row form-row-top">
               <label>내용</label>
-              <textarea id="f-description" rows="7" placeholder="내용"></textarea>
+              <textarea id="f-description" rows="6" placeholder="내용"></textarea>
             </div>
             <div class="form-row">
               <label>우선순위</label>
@@ -272,49 +315,6 @@
                 <option value="low">⚪ 낮음</option>
               </select>
             </div>
-            <div class="left-row" style="margin-top:8px; gap:20px;">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <div class="col-section-label">일정 유형</div>
-                <div class="event-type-pills">
-                  <button type="button" class="event-type-pill active" id="pill-schedule" onclick="setEventType('schedule')">📅 일정</button>
-                  <button type="button" class="event-type-pill" id="pill-meeting" onclick="setEventType('meeting')">💬 회의</button>
-                </div>
-              </div>
-              <div id="kanban-toggle-wrap" style="display:none;align-items:center;gap:8px;">
-                <input type="checkbox" id="f-kanban" checked style="display:none;" />
-              </div>
-            </div>
-            <!-- 칸반 상태 선택 (일정 유형 시만 표시) -->
-            <div id="kanban-status-row" class="kanban-status-row">
-              <div class="col-section-label">칸반 상태</div>
-              <div class="kanban-status-pills">
-                <button type="button" class="kanban-status-pill" data-status="backlog"     onclick="setKanbanStatus('backlog')">Backlog</button>
-                <button type="button" class="kanban-status-pill" data-status="todo"        onclick="setKanbanStatus('todo')">Todo</button>
-                <button type="button" class="kanban-status-pill" data-status="in_progress" onclick="setKanbanStatus('in_progress')">In Progress</button>
-                <button type="button" class="kanban-status-pill" data-status="peer_review" onclick="setKanbanStatus('peer_review')">Peer Review</button>
-                <button type="button" class="kanban-status-pill" data-status="done"        onclick="setKanbanStatus('done')">Done</button>
-                <button type="button" class="kanban-status-pill" data-status="blocked"     onclick="setKanbanStatus('blocked')">Blocked</button>
-              </div>
-            </div>
-
-            <!-- 반복 요일 (회의 선택 시만 표시) -->
-            <div id="recurrence-row" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-                <div class="col-section-label">반복 요일</div>
-                <div class="recurrence-days" id="recurrence-days">
-                  <button type="button" class="recday-btn" data-day="0" onclick="toggleRecurrenceDay(0)">월</button>
-                  <button type="button" class="recday-btn" data-day="1" onclick="toggleRecurrenceDay(1)">화</button>
-                  <button type="button" class="recday-btn" data-day="2" onclick="toggleRecurrenceDay(2)">수</button>
-                  <button type="button" class="recday-btn" data-day="3" onclick="toggleRecurrenceDay(3)">목</button>
-                  <button type="button" class="recday-btn" data-day="4" onclick="toggleRecurrenceDay(4)">금</button>
-                </div>
-              </div>
-              <div id="recurrence-end-wrap" style="display:flex;align-items:center;gap:8px;">
-                <div class="col-section-label">반복 종료 <span style="color:#e17055;">*</span></div>
-                <input type="date" id="f-recurrence-end" class="recurrence-end-input" style="width:auto;" />
-              </div>
-            </div>
-
           </div>
         </div>
 

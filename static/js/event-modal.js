@@ -550,7 +550,7 @@ function setEventType(type) {
     // 회의: 칸반 상태 선택 숨기고 반복 섹션 표시
     if (kanbanStatusRow) kanbanStatusRow.style.display = 'none';
     document.getElementById('f-kanban').checked = false;
-    if (recurrenceRow) recurrenceRow.style.display = 'block';
+    if (recurrenceRow) recurrenceRow.style.display = 'flex';
   } else {
     // 일정: 칸반 상태 선택 표시, 반복 섹션 숨기고 선택 초기화
     if (kanbanStatusRow) kanbanStatusRow.style.display = 'flex';
