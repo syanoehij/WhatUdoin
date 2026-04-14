@@ -209,6 +209,27 @@
   }
   .ck-save-indicator.dirty { color: var(--accent); }
 
+  /* ── 폴링 카운트다운 뱃지 ── */
+  .ck-poll-badge {
+    display: none;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #fef3c7;
+    color: #b45309;
+    font-size: 0.7rem;
+    font-weight: 700;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: default;
+    user-select: none;
+    transition: background 0.2s;
+  }
+  .ck-poll-badge.active { display: flex; }
+  .ck-poll-badge.flash  { background: #fde68a; }
+  .dark .ck-poll-badge  { background: #3d2f00; color: #fbbf24; }
+  .dark .ck-poll-badge.flash { background: #5a4200; }
+
   /* ── 뷰어 ── */
   .ck-viewer-wrap {
     flex: 1;
@@ -432,6 +453,7 @@
 
     <!-- 헤더 (선택 시 표시) -->
     <div class="ck-right-header" id="ck-right-header" style="display:none;">
+      <span class="ck-poll-badge" id="ck-poll-badge" title="다음 동기화까지 남은 시간"></span>
       <span class="ck-right-title" id="ck-right-title"></span>
       <span class="ck-right-meta" id="ck-right-meta"></span>
       <div class="ck-right-actions">
@@ -783,7 +805,7 @@ function _stopHeartbeat() {
 }
 
 // ── 뷰어 실시간 동기화 폴링 ───────────────────────────────
-const POLL_INTERVAL = 5000; // 5초
+const POLL_INTERVAL = 10000; // 10초
 
 async function _doPoll(id) {
   if (_editMode || !_curId || _curId !== id) { _stopPoll(); return; }
@@ -815,6 +837,9 @@ async function _doPoll(id) {
   } catch {}
 }
 
+let _countdownTimer = null;
+let _countdownVal   = 0;
+
 function _startPoll(id) {
   _stopPoll();
   _pollUpdatedAt = _curItem?.updated_at || null;
@@ -822,17 +847,57 @@ function _startPoll(id) {
 
   // 탭이 다시 보이면 즉시 한 번 실행 (숨겨진 동안 놓친 변경 반영)
   document.addEventListener('visibilitychange', _onVisibilityChange);
+
+  _startCountdown();
 }
 
 function _onVisibilityChange() {
   if (document.visibilityState === 'visible' && _pollTimer && _curId) {
     _doPoll(_curId);
+    _resetCountdown();
   }
 }
 
 function _stopPoll() {
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
   document.removeEventListener('visibilitychange', _onVisibilityChange);
+  _stopCountdown();
+}
+
+// ── 카운트다운 뱃지 ───────────────────────────────────────
+function _startCountdown() {
+  _stopCountdown();
+  _countdownVal = POLL_INTERVAL / 1000;
+  const badge = document.getElementById('ck-poll-badge');
+  if (!badge) return;
+  badge.classList.add('active');
+  badge.textContent = _countdownVal;
+
+  _countdownTimer = setInterval(() => {
+    _countdownVal--;
+    if (_countdownVal <= 0) {
+      _countdownVal = POLL_INTERVAL / 1000;
+      badge.classList.add('flash');
+      setTimeout(() => badge.classList.remove('flash'), 400);
+    }
+    badge.textContent = _countdownVal;
+  }, 1000);
+}
+
+function _resetCountdown() {
+  _countdownVal = POLL_INTERVAL / 1000;
+  const badge = document.getElementById('ck-poll-badge');
+  if (badge) {
+    badge.textContent = _countdownVal;
+    badge.classList.add('flash');
+    setTimeout(() => badge.classList.remove('flash'), 400);
+  }
+}
+
+function _stopCountdown() {
+  if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
+  const badge = document.getElementById('ck-poll-badge');
+  if (badge) { badge.classList.remove('active', 'flash'); badge.textContent = ''; }
 }
 
 function switchToEdit() {
