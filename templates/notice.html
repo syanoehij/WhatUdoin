@@ -88,6 +88,16 @@
 const IS_EDITOR     = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
 const INITIAL_MD    = {{ (notice.content if notice else '') | tojson | safe }};
 let noticeEditor    = null;
+let _noticeDirty    = false;
+let _noticeAutoSave = null;
+
+// 새로고침/이탈 방지
+window.addEventListener('beforeunload', (e) => {
+  if (IS_EDITOR && _noticeDirty) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   if (IS_EDITOR) {
@@ -105,6 +115,14 @@ document.addEventListener('DOMContentLoaded', () => {
         ['table', 'image'],
       ],
       usageStatistics: false,
+      events: {
+        change: () => {
+          _noticeDirty = true;
+          // 자동 저장: 마지막 변경 후 60초 뒤
+          clearTimeout(_noticeAutoSave);
+          _noticeAutoSave = setTimeout(() => { if (_noticeDirty) saveNotice(true); }, 60000);
+        },
+      },
       hooks: {
         addImageBlobHook: async (blob, callback) => {
           const form = new FormData();
@@ -133,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-async function saveNotice() {
+async function saveNotice(isAuto = false) {
   if (!noticeEditor) return;
   const content = noticeEditor.getMarkdown();
   const res = await fetch('/api/notice', {
@@ -142,8 +160,10 @@ async function saveNotice() {
     body: JSON.stringify({ content }),
   });
   if (res.ok) {
-    const data = await res.json();
+    _noticeDirty = false;
+    clearTimeout(_noticeAutoSave);
     const toast = document.getElementById('save-toast');
+    toast.textContent = isAuto ? '자동 저장되었습니다.' : '저장되었습니다.';
     toast.style.display = 'block';
     setTimeout(() => { toast.style.display = 'none'; }, 2000);
 
@@ -154,14 +174,6 @@ async function saveNotice() {
     const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
     if (metaEl) {
       metaEl.textContent = `마지막 저장: ${dateStr} · {{ user.name if user else '' }}`;
-    } else {
-      // 처음 저장인 경우 헤더에 메타 추가
-      const header = document.querySelector('.notice-header div');
-      const span = document.createElement('span');
-      span.className = 'notice-meta';
-      span.id = 'notice-meta';
-      span.textContent = `마지막 저장: ${dateStr} · {{ user.name if user else '' }}`;
-      header.insertBefore(span, header.firstChild);
     }
   }
 }

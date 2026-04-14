@@ -902,23 +902,48 @@ async function openBarDetail(eventId) {
 }
 window.onEventSaved = loadData;
 
-// ── 간트 바 드래그 → 프로젝트 이동 ──────────────────────
-let _projDragState = null;
+// ── 간트 바 드래그 — 수평(날짜 이동) / 수직(프로젝트 이동) ──────
+let _barDragState = null;
+let _dateDragLabel = null;
+
+function _getOrCreateDragLabel() {
+  if (!_dateDragLabel) {
+    _dateDragLabel = document.createElement('div');
+    _dateDragLabel.style.cssText =
+      'position:fixed;background:rgba(0,0,0,0.75);color:#fff;font-size:0.75rem;' +
+      'padding:3px 8px;border-radius:4px;pointer-events:none;z-index:9999;display:none;';
+    document.body.appendChild(_dateDragLabel);
+  }
+  return _dateDragLabel;
+}
+
+function _addDaysToStr(str, n) {
+  if (!str) return null;
+  const [datePart, timePart] = str.split('T');
+  const d = new Date(datePart + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  const pad = x => String(x).padStart(2, '0');
+  const newDate = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  return timePart ? `${newDate}T${timePart}` : newDate;
+}
 
 function setupBarProjectDrag(bar, ev) {
   bar.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    _projDragState = {
+    _barDragState = {
       bar, ev,
+      startX: e.clientX,
       startY: e.clientY,
+      mode: null,
       moved: false,
+      dateOffset: 0,
       targetProjKey: null,
       targetProjName: null,
     };
-    document.addEventListener('mousemove', _onProjDragMove);
-    document.addEventListener('mouseup',   _onProjDragEnd);
+    document.addEventListener('mousemove', _onBarDragMove);
+    document.addEventListener('mouseup',   _onBarDragEnd);
   });
 }
 
@@ -927,75 +952,92 @@ function _projDropClear() {
     .forEach(el => el.classList.remove('proj-drop-target'));
 }
 
-function _onProjDragMove(e) {
-  if (!_projDragState) return;
-  const dy = Math.abs(e.clientY - _projDragState.startY);
-  if (dy > 6) _projDragState.moved = true;
-  if (!_projDragState.moved) return;
+function _onBarDragMove(e) {
+  if (!_barDragState) return;
+  const dx = e.clientX - _barDragState.startX;
+  const dy = e.clientY - _barDragState.startY;
 
-  _projDragState.bar.classList.add('bar-dragging');
+  if (!_barDragState.mode) {
+    if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+    _barDragState.mode = Math.abs(dx) >= Math.abs(dy) ? 'date' : 'proj';
+    _barDragState.moved = true;
+  }
 
-  // 커서 아래 행의 프로젝트 찾기
-  const rowsEl = document.getElementById('gantt-rows');
-  const rect   = rowsEl.getBoundingClientRect();
-  const relY   = e.clientY - rect.top;
-  const rowIdx = Math.floor(relY / ROW_H);
-  const target = (rowIdx >= 0 && rowIdx < _rowProjectMap.length)
-    ? _rowProjectMap[rowIdx] : null;
+  _barDragState.bar.classList.add('bar-dragging');
 
-  _projDropClear();
-
-  if (target) {
-    _projDragState.targetProjKey  = target.projKey;
-    _projDragState.targetProjName = target.projName;
-    // 간트 프로젝트 헤더 행 강조
-    const gRow = document.querySelector(`.gantt-row[data-proj-key="${target.projKey}"]`);
-    if (gRow) gRow.classList.add('proj-drop-target');
-    // 이름 컬럼 프로젝트 헤더 강조
-    const nRow = document.querySelector(`.proj-header-row[data-proj-key="${target.projKey}"]`);
-    if (nRow) nRow.classList.add('proj-drop-target');
+  if (_barDragState.mode === 'date') {
+    const dayPx = getDayPx();
+    const offset = Math.round(dx / dayPx);
+    _barDragState.dateOffset = offset;
+    _barDragState.bar.style.transform = `translateX(${offset * dayPx}px)`;
+    const lbl = _getOrCreateDragLabel();
+    lbl.style.display = 'block';
+    lbl.style.left = (e.clientX + 12) + 'px';
+    lbl.style.top  = (e.clientY - 28) + 'px';
+    lbl.textContent = offset === 0 ? '📅 이동 없음'
+      : offset > 0  ? `📅 +${offset}일`
+      : `📅 ${offset}일`;
   } else {
-    _projDragState.targetProjKey  = null;
-    _projDragState.targetProjName = null;
+    const rowsEl = document.getElementById('gantt-rows');
+    const rect   = rowsEl.getBoundingClientRect();
+    const relY   = e.clientY - rect.top;
+    const rowIdx = Math.floor(relY / ROW_H);
+    const target = (rowIdx >= 0 && rowIdx < _rowProjectMap.length)
+      ? _rowProjectMap[rowIdx] : null;
+    _projDropClear();
+    if (target) {
+      _barDragState.targetProjKey  = target.projKey;
+      _barDragState.targetProjName = target.projName;
+      const gRow = document.querySelector(`.gantt-row[data-proj-key="${target.projKey}"]`);
+      if (gRow) gRow.classList.add('proj-drop-target');
+      const nRow = document.querySelector(`.proj-header-row[data-proj-key="${target.projKey}"]`);
+      if (nRow) nRow.classList.add('proj-drop-target');
+    } else {
+      _barDragState.targetProjKey  = null;
+      _barDragState.targetProjName = null;
+    }
   }
 }
 
-async function _onProjDragEnd(e) {
-  document.removeEventListener('mousemove', _onProjDragMove);
-  document.removeEventListener('mouseup',   _onProjDragEnd);
+async function _onBarDragEnd(e) {
+  document.removeEventListener('mousemove', _onBarDragMove);
+  document.removeEventListener('mouseup',   _onBarDragEnd);
+  if (!_barDragState) return;
 
-  if (!_projDragState) return;
-  const { bar, ev, moved, targetProjKey, targetProjName } = _projDragState;
-  _projDragState = null;
+  const { bar, ev, mode, moved, dateOffset, targetProjName } = _barDragState;
+  _barDragState = null;
 
   bar.classList.remove('bar-dragging');
+  bar.style.transform = '';
   _projDropClear();
+  if (_dateDragLabel) _dateDragLabel.style.display = 'none';
 
-  if (!moved) {
-    openBarDetail(ev.id);
-    return;
-  }
+  if (!moved) { openBarDetail(ev.id); return; }
 
-  if (!targetProjName) return;
-
-  // 미지정 프로젝트는 빈 문자열로 저장
-  const newProj = targetProjName === '미지정' ? '' : targetProjName;
-  const oldProj = ev.project || '';
-  if (newProj === oldProj) return; // 같은 프로젝트면 무시
-
-  // 서버 저장 후 데이터 새로고침
-  try {
-    const res = await fetch(`/api/events/${ev.id}/project`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: newProj || null }),
-    });
-    if (res.ok) {
-      loadData();
-    }
-  } catch (_) {
-    // 실패 시 재렌더만 (롤백)
-    render();
+  if (mode === 'date') {
+    if (dateOffset === 0) return;
+    const newStart = _addDaysToStr(ev.start_datetime, dateOffset);
+    const newEnd   = ev.end_datetime ? _addDaysToStr(ev.end_datetime, dateOffset) : null;
+    try {
+      const res = await fetch(`/api/events/${ev.id}/datetime`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ start_datetime: newStart, end_datetime: newEnd, all_day: ev.all_day ?? 0 }),
+      });
+      if (res.ok) loadData(); else render();
+    } catch (_) { render(); }
+  } else {
+    if (!targetProjName) return;
+    const newProj = targetProjName === '미지정' ? '' : targetProjName;
+    if (newProj === (ev.project || '')) return;
+    try {
+      const res = await fetch(`/api/events/${ev.id}/project`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project: newProj || null }),
+      });
+      if (res.ok) loadData(); else render();
+    } catch (_) { render(); }
   }
 }
 

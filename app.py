@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import os
 import re
@@ -463,11 +463,20 @@ def list_events():
             except Exception:
                 pass
 
+        # FullCalendar의 all-day end는 exclusive → DB 실제 끝날짜 + 1일
+        ev_end = e["end_datetime"] or e["start_datetime"]
+        if is_all_day and ev_end:
+            try:
+                _end_dt = datetime.fromisoformat(ev_end) + timedelta(days=1)
+                ev_end = _end_dt.strftime("%Y-%m-%dT00:00")
+            except Exception:
+                pass
+
         ev = {
             "id": e["id"],
             "title": e["title"],
             "start": e["start_datetime"],
-            "end": e["end_datetime"] or e["start_datetime"],
+            "end": ev_end,
             "allDay": is_all_day,
             "extendedProps": {
                 "project":               proj_name,

@@ -124,6 +124,85 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-14 3차 개선 3단계 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-14</span>
+      <span class="cl-phase-badge phase-4">3차 3단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">📅</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">fix</span> 캘린더 종일 이벤트 버그 2종 수정</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>종일 이벤트가 하루 짧게 표시되는 버그 수정 (FullCalendar exclusive end 보정)</li>
+              <li>상세 모달에서 종일 이벤트 종료일이 +1일로 표시되는 버그 수정</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🗂️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 캘린더 프로젝트 필터</div>
+          <div class="cl-item-detail">
+            툴바에 프로젝트 필터 드롭다운 추가 — 미지정 포함 프로젝트별 일정 필터링.
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🖱️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 캘린더 휠 스크롤 날짜 이동 토글</div>
+          <div class="cl-item-detail">
+            툴바 <strong>🖱 휠 이동</strong> 버튼으로 휠 날짜 이동 ON/OFF 전환 — 설정 localStorage 저장.
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">📢</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">ux</span> 팀 공지 홈 표시 일치</div>
+          <div class="cl-item-detail">
+            홈 화면 팀 공지 렌더러를 Toast UI Viewer로 교체 — 편집기 WYSIWYG 결과와 동일하게 표시.
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🔒</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 팀 공지 / 메모장 새로고침 방지 + 자동 저장</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>편집 중 변경사항이 있을 때 페이지 이탈 시 경고 표시</li>
+              <li>팀 공지: 마지막 변경 후 60초 뒤 자동 저장</li>
+              <li>메모장: 마지막 변경 후 2분 뒤 자동 저장 (기존 문서에 한함)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">↔️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 간트 바 수평 드래그로 날짜 이동</div>
+          <div class="cl-item-detail">
+            간트 바를 <strong>가로로 드래그</strong>하면 날짜 이동 (시간 유지), <strong>세로로 드래그</strong>하면 프로젝트 이동. 드래그 중 +N일 레이블 표시.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ── 2026-04-14 핫픽스 ── -->
   <div class="cl-group">
     <div class="cl-group-header">

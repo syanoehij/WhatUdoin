@@ -12,6 +12,10 @@
   {% if user %}
   <button class="btn btn-outline" id="my-only-btn" onclick="toggleMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
   {% endif %}
+  <button class="btn btn-outline" id="wheel-toggle-btn" onclick="toggleWheelNav()" title="휠 스크롤로 날짜 이동 토글">🖱 휠 이동</button>
+  <select id="cal-proj-filter" class="btn btn-outline" onchange="applyProjFilter()" style="cursor:pointer;">
+    <option value="">전체 프로젝트</option>
+  </select>
   {% if user and user.role in ('editor', 'admin') %}
   <button class="btn btn-primary" onclick="openModal()" style="margin-left:auto">+ 일정 추가</button>
   {% else %}
@@ -46,6 +50,8 @@ let calendar;
 let currentDetailEventId = null;
 let currentDetailEventTeamId = null;
 let _myOnly = false;
+let _wheelNav = localStorage.getItem('cal_wheel') !== '0';  // 기본 ON
+let _projFilter = '';  // '' = 전체, '__unassigned__' = 미지정, 그 외 = 프로젝트명
 
 function toggleMyOnly() {
   if (!CURRENT_USER) return;
@@ -56,6 +62,35 @@ function toggleMyOnly() {
     btn.classList.toggle('btn-outline', !_myOnly);
   }
   calendar.getEventSourceById('main-events').refetch();
+}
+
+function toggleWheelNav() {
+  _wheelNav = !_wheelNav;
+  localStorage.setItem('cal_wheel', _wheelNav ? '1' : '0');
+  const btn = document.getElementById('wheel-toggle-btn');
+  if (btn) {
+    btn.classList.toggle('btn-primary', _wheelNav);
+    btn.classList.toggle('btn-outline', !_wheelNav);
+  }
+}
+
+function applyProjFilter() {
+  _projFilter = document.getElementById('cal-proj-filter').value;
+  calendar.getEventSourceById('main-events').refetch();
+}
+
+function _populateProjFilter(evs) {
+  const sel = document.getElementById('cal-proj-filter');
+  const prev = sel.value;
+  const projects = [...new Set(evs
+    .map(e => e.extendedProps?.project)
+    .filter(p => p && p.trim()))
+  ].sort();
+  const hasUnassigned = evs.some(e => !e.extendedProps?.project);
+  sel.innerHTML = '<option value="">전체 프로젝트</option>' +
+    projects.map(p => `<option value="${p.replace(/"/g,'&quot;')}">${p}</option>`).join('') +
+    (hasUnassigned ? '<option value="__unassigned__">미지정</option>' : '');
+  if (prev) sel.value = prev;
 }
 
 // ── FullCalendar 초기화 ─────────────────────────────────
@@ -90,12 +125,21 @@ document.addEventListener('DOMContentLoaded', () => {
           try {
             const res = await fetch('/api/events');
             let evs = await res.json();
+            // 프로젝트 필터 드롭다운 갱신 (전체 이벤트 기준)
+            _populateProjFilter(evs);
             if (_myOnly && CURRENT_USER) {
               const myName = CURRENT_USER.name.toLowerCase();
               evs = evs.filter(e => {
                 const assignee = (e.extendedProps?.assignee || '').toLowerCase();
                 return assignee.split(',').map(s => s.trim()).some(a => a && (a.includes(myName) || myName.includes(a)));
               });
+            }
+            if (_projFilter) {
+              if (_projFilter === '__unassigned__') {
+                evs = evs.filter(e => !e.extendedProps?.project);
+              } else {
+                evs = evs.filter(e => e.extendedProps?.project === _projFilter);
+              }
             }
             successCb(evs);
           } catch(err) { failureCb(err); }
@@ -172,6 +216,13 @@ document.addEventListener('DOMContentLoaded', () => {
   calendar.render();
   applyStickyAllDay();
 
+  // 휠 토글 버튼 초기 상태
+  const wBtn = document.getElementById('wheel-toggle-btn');
+  if (wBtn) {
+    wBtn.classList.toggle('btn-primary', _wheelNav);
+    wBtn.classList.toggle('btn-outline', !_wheelNav);
+  }
+
   // 캘린더 페이지 전용 콜백 설정
   window.onEventSaved = () => calendar.refetchEvents();
   window.onModalDateChanged = updateDateEvents;
@@ -236,6 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (e.target.closest('.fc-timegrid-body')) return;
     }
 
+    if (!_wheelNav) return;
     e.preventDefault();
     if (wheelTimer) return;
     wheelTimer = setTimeout(() => { wheelTimer = null; }, 300);
@@ -319,9 +371,19 @@ function showDetail(fcEvent) {
 
   document.getElementById('detail-title').textContent = fcEvent.title;
 
+  // all-day end는 FC exclusive → 표시 시 -1일 보정
+  function _allDayEndDisplay(str) {
+    const d = new Date(str);
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  }
+  const endDisplay = fcEvent.endStr
+    ? formatDatetime(p.all_day ? _allDayEndDisplay(fcEvent.endStr) : fcEvent.endStr, p.all_day)
+    : '-';
+
   const rows = [
     ['시작',    formatDatetime(fcEvent.startStr, p.all_day)],
-    ['종료',    fcEvent.endStr ? formatDatetime(fcEvent.endStr, p.all_day) : '-'],
+    ['종료',    endDisplay],
     ['프로젝트', p.project    || '-'],
     ['장소',    p.location    || '-'],
     ['담당자',  p.assignee    || '-'],

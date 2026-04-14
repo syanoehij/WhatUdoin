@@ -190,7 +190,17 @@ function releaseLock() {
   fetch(`/api/meetings/${MEETING_ID}/lock`, { method: 'DELETE', keepalive: true }).catch(() => {});
 }
 
-window.addEventListener('beforeunload', releaseLock);
+let _meetingDirty = false;
+let _meetingAutoSave = null;
+
+// 새로고침/이탈 방지 (편집 중 변경사항 있을 때)
+window.addEventListener('beforeunload', (e) => {
+  releaseLock();
+  if (IS_EDITOR && !LOCKED_BY && _meetingDirty) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
 
 /* ── Ctrl+S 저장 단축키 ──────────────────────────────── */
 document.addEventListener('keydown', e => {
@@ -261,6 +271,18 @@ function initMeetingEditor() {
           callback(url, '');
         } catch {
           alert('이미지 업로드에 실패했습니다.');
+        }
+      },
+    },
+    events: {
+      change: () => {
+        if (!_meetingDirty) _meetingDirty = true;
+        // 자동 저장: 마지막 변경 후 2분 뒤 (기존 문서만, 쿨다운 우선)
+        if (MEETING_ID) {
+          clearTimeout(_meetingAutoSave);
+          _meetingAutoSave = setTimeout(() => {
+            if (_meetingDirty && !_saveCooldown) saveMeeting();
+          }, 120000);
         }
       },
     },
@@ -365,6 +387,8 @@ async function saveMeeting() {
   if (res.ok) {
     const data = await res.json();
     clearInterval(lockHeartbeat); // heartbeat 중단 (서버에서도 잠금 해제됨)
+    _meetingDirty = false;
+    clearTimeout(_meetingAutoSave);
     if (!MEETING_ID) {
       location.href = `/meetings/${data.id}`;
     } else {

@@ -2,7 +2,8 @@
 {% block title %}WhatUDoin{% endblock %}
 
 {% block extra_head %}
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css" />
+<script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
 <style>
   main { max-width: none; padding: 20px 28px; }
 
@@ -412,8 +413,9 @@ function renderNotice(notice) {
     wrap.innerHTML = '<span style="color:var(--text-faint);">등록된 팀 공지가 없습니다.</span>';
     return;
   }
-  if (window.marked) {
-    wrap.innerHTML = window.marked.parse(notice.content);
+  wrap.innerHTML = '';
+  if (window.toastui?.Editor) {
+    new toastui.Editor.factory({ el: wrap, viewer: true, initialValue: notice.content });
   } else {
     wrap.textContent = notice.content;
   }
