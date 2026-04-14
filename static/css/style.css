@@ -157,7 +157,7 @@ nav { display: flex; gap: 4px; margin-right: auto; }
 .nav-link:hover { background: rgba(255,255,255,0.2); opacity: 1; }
 .nav-link.nav-active { background: rgba(255,255,255,0.25); opacity: 1; }
 
-.header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 /* ── 헤더 일정 추가 버튼 ── */
 .header-add-btn {

@@ -122,14 +122,11 @@
       </div>
     </div>
 
-    {% if user %}
-    <button class="header-add-btn" onclick="openModal()" title="일정 추가">
-      <span class="header-add-icon">＋</span>
-    </button>
-    {% endif %}
-
     <div class="header-right">
       {% if user %}
+        <button class="header-add-btn" onclick="openModal()" title="일정 추가">
+          <span class="header-add-icon">＋</span>
+        </button>
         <!-- ── 알림 벨 ── -->
         <div class="notif-bell-wrap" id="notif-bell-wrap">
           <button class="notif-bell-btn" id="notif-bell-btn"
