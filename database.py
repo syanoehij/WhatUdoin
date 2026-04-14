@@ -852,7 +852,7 @@ def check_upcoming_event_alarms():
     window_end   = (now + timedelta(minutes=16)).strftime("%Y-%m-%dT%H:%M")
     with get_conn() as conn:
         rows = conn.execute(
-            """SELECT id, title, start_datetime, assignee, event_type
+            """SELECT id, title, start_datetime, assignee, event_type, created_by
                FROM events
                WHERE (is_active IS NULL OR is_active = 1)
                AND start_datetime BETWEEN ? AND ?
@@ -860,13 +860,21 @@ def check_upcoming_event_alarms():
             (window_start, window_end)
         ).fetchall()
         for row in rows:
-            if not row["assignee"]:
-                continue
             label = "회의" if row["event_type"] == "meeting" else "일정"
             time_str = row["start_datetime"][11:16] if row["start_datetime"] else ""
             message = f"15분 후 {label} 시작: {row['title']} ({time_str})"
-            assignees = [a.strip() for a in row["assignee"].split(",") if a.strip()]
-            for name in assignees:
+            # 담당자가 있으면 담당자에게, 없으면 생성자에게
+            if row["assignee"]:
+                targets = [a.strip() for a in row["assignee"].split(",") if a.strip()]
+            elif row["created_by"]:
+                # created_by는 user id(숫자) — 이름으로 변환
+                creator = conn.execute(
+                    "SELECT name FROM users WHERE id = ?", (row["created_by"],)
+                ).fetchone()
+                targets = [creator["name"]] if creator else []
+            else:
+                targets = []
+            for name in targets:
                 # 중복 방지: 같은 event_id + user_name 조합이 오늘 이미 있으면 스킵
                 exists = conn.execute(
                     """SELECT 1 FROM notifications

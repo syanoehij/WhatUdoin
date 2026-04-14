@@ -692,6 +692,9 @@ async def update_event(event_id: int, request: Request):
     data.setdefault("kanban_status", event.get("kanban_status"))
     data.setdefault("priority", event.get("priority", "normal"))
 
+    # 수정 전 담당자 목록
+    prev_assignees = set(a.strip() for a in (event.get("assignee") or "").split(",") if a.strip())
+
     is_recurring = bool(event.get("recurrence_rule") or event.get("recurrence_parent_id"))
     if is_recurring:
         if edit_mode == "all":
@@ -702,6 +705,13 @@ async def update_event(event_id: int, request: Request):
             db.update_event_recurring_this(event_id, data)
     else:
         db.update_event(event_id, data)
+
+    # 새로 추가된 담당자에게만 알림 (등록자 본인 제외)
+    new_assignees = set(a.strip() for a in (data.get("assignee") or "").split(",") if a.strip())
+    for name in new_assignees - prev_assignees:
+        if name != user["name"]:
+            db.create_notification(name, "assigned", f"📌 일정 담당자로 지정됨: {data.get('title', event.get('title',''))}", event_id)
+
     return {"ok": True}
 
 
