@@ -193,6 +193,78 @@ def notice_history_page(request: Request):
     return templates.TemplateResponse(request, "notice_history.html", _ctx(request, histories=histories))
 
 
+@app.get("/check", response_class=HTMLResponse)
+def check_page(request: Request):
+    all_projs = db.get_all_projects_with_events()
+    projects = [p for p in all_projs if p.get("is_active", 1)]
+    return templates.TemplateResponse(request, "check.html", _ctx(request, projects=projects))
+
+
+# ── 체크리스트 API ────────────────────────────────────────────
+
+@app.get("/api/checklists")
+def list_checklists(project: str = None):
+    return db.get_checklists(project=project)
+
+
+@app.post("/api/checklists")
+async def create_checklist(request: Request):
+    user = _require_editor(request)
+    data = await request.json()
+    title = data.get("title", "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="제목을 입력하세요.")
+    project = data.get("project", "").strip()
+    content = data.get("content", "").strip()
+    cid = db.create_checklist(project, title, content, user["name"])
+    return {"id": cid}
+
+
+@app.get("/api/checklists/{checklist_id}")
+def get_checklist(checklist_id: int):
+    item = db.get_checklist(checklist_id)
+    if not item:
+        raise HTTPException(status_code=404)
+    return item
+
+
+@app.patch("/api/checklists/{checklist_id}")
+async def update_checklist(checklist_id: int, request: Request):
+    _require_editor(request)
+    item = db.get_checklist(checklist_id)
+    if not item:
+        raise HTTPException(status_code=404)
+    data = await request.json()
+    title = data.get("title", item["title"]).strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="제목을 입력하세요.")
+    project = data.get("project", item["project"]).strip()
+    db.update_checklist(checklist_id, title, project)
+    return {"ok": True}
+
+
+@app.patch("/api/checklists/{checklist_id}/content")
+async def update_checklist_content(checklist_id: int, request: Request):
+    _require_editor(request)
+    item = db.get_checklist(checklist_id)
+    if not item:
+        raise HTTPException(status_code=404)
+    data = await request.json()
+    content = data.get("content", "")
+    db.update_checklist_content(checklist_id, content)
+    return {"ok": True}
+
+
+@app.delete("/api/checklists/{checklist_id}")
+def delete_checklist(checklist_id: int, request: Request):
+    _require_editor(request)
+    item = db.get_checklist(checklist_id)
+    if not item:
+        raise HTTPException(status_code=404)
+    db.delete_checklist(checklist_id)
+    return {"ok": True}
+
+
 @app.get("/api/notice")
 def api_get_notice():
     return db.get_latest_notice() or {}

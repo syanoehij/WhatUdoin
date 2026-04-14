@@ -1,0 +1,853 @@
+{% extends "base.html" %}
+{% block title %}체크리스트 – WhatUDoin{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css" />
+<script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  main { max-width: none; padding: 0; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* ── 전체 레이아웃 ── */
+  .ck-page {
+    display: flex;
+    height: calc(100vh - 50px);
+    overflow: hidden;
+  }
+
+  /* ── 왼쪽 패널: 프로젝트 필터 ── */
+  .ck-left {
+    width: 220px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .ck-left-header {
+    padding: 12px 14px 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+  }
+  .ck-proj-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 0;
+  }
+  .ck-proj-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background 0.1s;
+  }
+  .ck-proj-item:hover { background: var(--surface-2); }
+  .ck-proj-item.active {
+    background: var(--accent-bg);
+    border-left-color: var(--accent);
+  }
+  .ck-proj-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,0.1);
+  }
+  .ck-proj-label {
+    flex: 1;
+    font-size: 0.86rem;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ck-proj-cnt {
+    font-size: 0.72rem;
+    background: var(--surface-3);
+    padding: 1px 6px;
+    border-radius: 10px;
+    color: var(--text-faint);
+    flex-shrink: 0;
+  }
+  .ck-proj-item.active .ck-proj-cnt { background: var(--accent); color: #fff; }
+
+  /* ── 가운데 패널: 체크리스트 목록 ── */
+  .ck-mid {
+    width: 260px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .ck-mid-header {
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ck-mid-title {
+    flex: 1;
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ck-new-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px dashed var(--border);
+    background: transparent;
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s;
+  }
+  .ck-new-btn:hover { background: var(--accent-bg); }
+
+  .ck-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 0;
+  }
+  .ck-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    border-bottom: 1px solid var(--border-faint);
+    transition: background 0.1s;
+  }
+  .ck-item:hover { background: var(--surface-2); }
+  .ck-item.active {
+    background: var(--accent-bg);
+    border-left-color: var(--accent);
+  }
+  .ck-item-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 3px;
+  }
+  .ck-item-meta {
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ck-item-proj {
+    background: var(--surface-3);
+    border-radius: 4px;
+    padding: 0 5px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+  .ck-empty {
+    padding: 24px 16px;
+    text-align: center;
+    font-size: 0.84rem;
+    color: var(--text-faint);
+  }
+
+  /* ── 오른쪽 패널: 뷰어/편집기 ── */
+  .ck-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .ck-right-header {
+    padding: 10px 20px 8px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .ck-right-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ck-right-meta {
+    font-size: 0.75rem;
+    color: var(--text-faint);
+  }
+  .ck-right-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .ck-save-indicator {
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    white-space: nowrap;
+  }
+  .ck-save-indicator.dirty { color: var(--accent); }
+
+  /* ── 뷰어 ── */
+  .ck-viewer-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 28px;
+  }
+  .ck-viewer-wrap .toastui-editor-contents { font-size: 0.92rem; }
+
+  /* 체크박스 interactive */
+  .ck-viewer-wrap .toastui-editor-contents input[type="checkbox"] {
+    cursor: pointer;
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
+  }
+
+  /* ── 편집기 ── */
+  .ck-editor-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .ck-editor-wrap .toastui-editor-defaultUI {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+  }
+  .ck-editor-wrap .toastui-editor-main {
+    flex: 1 !important;
+    overflow-y: auto !important;
+  }
+  .ck-editor-wrap .toastui-editor-ww-container,
+  .ck-editor-wrap .toastui-editor-md-container {
+    flex: 1 !important;
+    overflow-y: auto !important;
+  }
+
+  /* ── 빈 상태 ── */
+  .ck-placeholder {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    color: var(--text-faint);
+    font-size: 0.95rem;
+  }
+
+  /* ── 새 체크리스트 폼 ── */
+  .ck-new-form {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    flex-shrink: 0;
+  }
+  .ck-new-form.visible { display: flex; }
+  .ck-new-form-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .ck-new-form input[type="text"] {
+    flex: 1;
+    min-width: 120px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.88rem;
+  }
+  .ck-new-form select {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.88rem;
+  }
+
+  /* ── 이름 편집 인라인 폼 ── */
+  .ck-rename-form {
+    display: none;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 8px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    flex-shrink: 0;
+  }
+  .ck-rename-form.visible { display: flex; }
+  .ck-rename-form input[type="text"] {
+    flex: 1;
+    min-width: 120px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.88rem;
+  }
+  .ck-rename-form select {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.88rem;
+  }
+
+  /* ── 저장 토스트 ── */
+  #ck-save-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--accent);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    display: none;
+    z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ck-page">
+
+  <!-- ── 왼쪽: 프로젝트 필터 ── -->
+  <div class="ck-left">
+    <div class="ck-left-header">프로젝트</div>
+    <div class="ck-proj-list" id="ck-proj-list">
+      <div class="ck-proj-item active" data-proj="" onclick="selectProject('')">
+        <span class="ck-proj-label">전체</span>
+        <span class="ck-proj-cnt" id="ck-cnt-all">0</span>
+      </div>
+      <!-- 프로젝트 항목은 JS로 렌더링 -->
+    </div>
+  </div>
+
+  <!-- ── 가운데: 체크리스트 목록 ── -->
+  <div class="ck-mid">
+    <div class="ck-mid-header">
+      <span class="ck-mid-title" id="ck-mid-title">전체</span>
+      {% if user and user.role in ('editor', 'admin') %}
+      <button class="ck-new-btn" onclick="openNewForm()">+ 새 항목</button>
+      {% endif %}
+    </div>
+
+    <!-- 새 항목 폼 -->
+    {% if user and user.role in ('editor', 'admin') %}
+    <div class="ck-new-form" id="ck-new-form">
+      <div class="ck-new-form-row">
+        <input type="text" id="ck-new-title" placeholder="제목을 입력하세요" onkeydown="if(event.key==='Enter')createChecklist()">
+        <select id="ck-new-project">
+          <option value="">프로젝트 없음</option>
+          {% for p in projects %}
+          <option value="{{ p.name }}">{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ck-new-form-row">
+        <button class="btn btn-sm btn-primary" onclick="createChecklist()">추가</button>
+        <button class="btn btn-sm btn-ghost" onclick="closeNewForm()">취소</button>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="ck-list" id="ck-list">
+      <div class="ck-empty">불러오는 중…</div>
+    </div>
+  </div>
+
+  <!-- ── 오른쪽: 뷰어/편집기 ── -->
+  <div class="ck-right" id="ck-right">
+    <div class="ck-placeholder" id="ck-placeholder">
+      <span style="font-size:2rem;">✅</span>
+      <span>체크리스트를 선택하세요</span>
+    </div>
+
+    <!-- 헤더 (선택 시 표시) -->
+    <div class="ck-right-header" id="ck-right-header" style="display:none;">
+      <span class="ck-right-title" id="ck-right-title"></span>
+      <span class="ck-right-meta" id="ck-right-meta"></span>
+      <div class="ck-right-actions">
+        <span class="ck-save-indicator" id="ck-dirty-indicator"></span>
+        {% if user and user.role in ('editor', 'admin') %}
+        <button class="btn btn-sm" id="ck-rename-btn" onclick="toggleRenameForm()">이름 변경</button>
+        <button class="btn btn-sm btn-primary" id="ck-save-btn" onclick="saveContent()">저장</button>
+        <button class="btn btn-sm btn-danger" id="ck-delete-btn" onclick="deleteChecklist()">삭제</button>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- 이름 변경 폼 -->
+    {% if user and user.role in ('editor', 'admin') %}
+    <div class="ck-rename-form" id="ck-rename-form">
+      <input type="text" id="ck-rename-title" placeholder="새 제목">
+      <select id="ck-rename-project">
+        <option value="">프로젝트 없음</option>
+        {% for p in projects %}
+        <option value="{{ p.name }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-sm btn-primary" onclick="saveRename()">저장</button>
+      <button class="btn btn-sm btn-ghost" onclick="closeRenameForm()">취소</button>
+    </div>
+    {% endif %}
+
+    <!-- 뷰어 (비편집자용 / 편집자도 뷰 모드) -->
+    <div class="ck-viewer-wrap" id="ck-viewer-wrap" style="display:none;">
+      <div id="ck-viewer"></div>
+    </div>
+
+    <!-- 편집기 (편집자 전용) -->
+    {% if user and user.role in ('editor', 'admin') %}
+    <div class="ck-editor-wrap" id="ck-editor-wrap" style="display:none;">
+      <div id="ck-editor-container"></div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<div id="ck-save-toast">저장되었습니다.</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const IS_EDITOR = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
+const ALL_PROJECTS = {{ projects | tojson | safe }};
+
+let _allChecklists   = [];   // 전체 목록
+let _curProj         = null; // 현재 선택된 프로젝트 필터 (null = 전체)
+let _curId           = null; // 현재 선택된 체크리스트 id
+let _curItem         = null; // 현재 선택된 체크리스트 데이터
+let _ckEditor        = null; // Toast UI Editor 인스턴스
+let _ckViewer        = null; // Toast UI Viewer 인스턴스
+let _dirty           = false;
+let _autoSaveTimer   = null;
+
+// ── 이탈 방지 ──────────────────────────────────────────────
+window.addEventListener('beforeunload', (e) => {
+  if (IS_EDITOR && _dirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// ── 프로젝트 색상 ──────────────────────────────────────────
+function projColor(name) {
+  if (!name) return '#adb5bd';
+  const palette = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
+  return palette[Math.abs(h) % palette.length];
+}
+
+// ── 페이지 초기화 ──────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadAll();
+  renderProjList();
+});
+
+async function loadAll() {
+  const res = await fetch('/api/checklists');
+  _allChecklists = res.ok ? await res.json() : [];
+  renderList();
+}
+
+// ── 프로젝트 사이드바 렌더링 ──────────────────────────────
+function renderProjList() {
+  const container = document.getElementById('ck-proj-list');
+  // 프로젝트별 카운트
+  const counts = {};
+  _allChecklists.forEach(c => { counts[c.project || ''] = (counts[c.project || ''] || 0) + 1; });
+
+  // 전체 카운트 업데이트
+  document.getElementById('ck-cnt-all').textContent = _allChecklists.length;
+
+  // 기존 동적 항목 제거
+  container.querySelectorAll('.ck-proj-dyn').forEach(el => el.remove());
+
+  // 전체 항목 active 상태
+  container.querySelector('[data-proj=""]').classList.toggle('active', _curProj === null || _curProj === '');
+
+  // 프로젝트 항목 — ALL_PROJECTS(서버 전달) + 체크리스트에 사용된 프로젝트 합산
+  const fromServer = ALL_PROJECTS.map(p => p.name).filter(Boolean);
+  const fromCklists = _allChecklists.map(c => c.project).filter(Boolean);
+  const projs = [...new Set([...fromServer, ...fromCklists])].sort();
+  projs.forEach(proj => {
+    const el = document.createElement('div');
+    el.className = 'ck-proj-item ck-proj-dyn' + (_curProj === proj ? ' active' : '');
+    el.dataset.proj = proj;
+    el.onclick = () => selectProject(proj);
+    el.innerHTML = `
+      <span class="ck-proj-dot" style="background:${projColor(proj)}"></span>
+      <span class="ck-proj-label">${proj}</span>
+      <span class="ck-proj-cnt">${counts[proj] || 0}</span>
+    `;
+    container.appendChild(el);
+  });
+}
+
+function selectProject(proj) {
+  _curProj = proj === '' ? null : proj;
+  // active 표시
+  document.querySelectorAll('.ck-proj-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.proj === (proj || ''));
+  });
+  document.getElementById('ck-mid-title').textContent = proj || '전체';
+  renderList();
+}
+
+// ── 체크리스트 목록 렌더링 ─────────────────────────────────
+function renderList() {
+  const filtered = _curProj
+    ? _allChecklists.filter(c => c.project === _curProj)
+    : _allChecklists;
+
+  const container = document.getElementById('ck-list');
+  if (!filtered.length) {
+    container.innerHTML = '<div class="ck-empty">항목이 없습니다.</div>';
+    return;
+  }
+  container.innerHTML = filtered.map(c => `
+    <div class="ck-item ${_curId === c.id ? 'active' : ''}" onclick="openChecklist(${c.id})">
+      <div class="ck-item-title">${escHtml(c.title)}</div>
+      <div class="ck-item-meta">
+        ${c.project ? `<span class="ck-item-proj" style="border-left:3px solid ${projColor(c.project)};padding-left:5px;">${escHtml(c.project)}</span>` : ''}
+        <span>${c.updated_at.replace('T',' ').substring(0,16)}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── 체크리스트 열기 ───────────────────────────────────────
+async function openChecklist(id) {
+  if (_dirty && IS_EDITOR) {
+    if (!confirm('저장되지 않은 변경사항이 있습니다. 이동하시겠습니까?')) return;
+  }
+  _curId = id;
+  renderList();
+
+  const res = await fetch(`/api/checklists/${id}`);
+  if (!res.ok) return;
+  _curItem = await res.json();
+
+  document.getElementById('ck-placeholder').style.display = 'none';
+  document.getElementById('ck-right-header').style.display = '';
+  document.getElementById('ck-right-title').textContent = _curItem.title;
+  document.getElementById('ck-right-meta').textContent =
+    `${_curItem.project ? _curItem.project + ' · ' : ''}수정: ${_curItem.updated_at.replace('T',' ').substring(0,16)} · ${_curItem.created_by}`;
+
+  closeRenameForm();
+  setDirty(false);
+
+  if (IS_EDITOR) {
+    // 편집기 모드
+    document.getElementById('ck-viewer-wrap').style.display = 'none';
+    document.getElementById('ck-editor-wrap').style.display = '';
+    initEditor(_curItem.content);
+  } else {
+    // 뷰어 모드
+    document.getElementById('ck-viewer-wrap').style.display = '';
+    renderViewer(_curItem.content);
+  }
+}
+
+// ── 편집기 초기화 ─────────────────────────────────────────
+function initEditor(content) {
+  const container = document.getElementById('ck-editor-container');
+  if (_ckEditor) {
+    _ckEditor.destroy();
+    _ckEditor = null;
+  }
+  container.innerHTML = '';
+
+  _ckEditor = new toastui.Editor({
+    el: container,
+    height: '100%',
+    initialEditType: 'wysiwyg',
+    initialValue: content || '',
+    previewStyle: 'tab',
+    usageStatistics: false,
+    toolbarItems: [
+      ['heading', 'bold', 'italic', 'strike'],
+      ['hr', 'quote'],
+      ['ul', 'ol', 'task'],
+      ['table', 'image', 'link'],
+      ['code', 'codeblock'],
+    ],
+    events: {
+      change: () => setDirty(true),
+    },
+  });
+}
+
+// ── 뷰어 렌더링 ───────────────────────────────────────────
+function renderViewer(content) {
+  const container = document.getElementById('ck-viewer');
+  if (_ckViewer) { _ckViewer.destroy(); _ckViewer = null; }
+  container.innerHTML = '';
+
+  _ckViewer = toastui.Editor.factory({
+    el: container,
+    viewer: true,
+    initialValue: content || '',
+    usageStatistics: false,
+  });
+
+  // 체크박스 클릭 인터랙션 — 읽기 전용 뷰어에서도 토글 가능하게
+  setTimeout(() => attachCheckboxHandlers(content), 100);
+}
+
+function attachCheckboxHandlers(mdContent) {
+  if (!IS_EDITOR) return;
+  const viewerEl = document.getElementById('ck-viewer');
+  viewerEl.querySelectorAll('input[type="checkbox"]').forEach((cb, idx) => {
+    cb.removeAttribute('disabled');
+    cb.addEventListener('change', () => toggleCheckbox(idx, cb.checked, mdContent));
+  });
+}
+
+async function toggleCheckbox(index, checked, mdContent) {
+  // markdown에서 N번째 - [ ] 또는 - [x] 를 찾아 토글
+  let md = mdContent;
+  let count = 0;
+  const newMd = md.replace(/^([ \t]*[-*+] \[)([xX ]?)(\])/gm, (match, pre, state, post) => {
+    if (count++ === index) {
+      return pre + (checked ? 'x' : ' ') + post;
+    }
+    return match;
+  });
+
+  const res = await fetch(`/api/checklists/${_curId}/content`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: newMd }),
+  });
+  if (res.ok) {
+    // 내용 갱신
+    _curItem.content = newMd;
+    renderViewer(newMd);
+    // 목록 갱신 (updated_at 반영)
+    const updated = await fetch(`/api/checklists/${_curId}`);
+    if (updated.ok) {
+      _curItem = await updated.json();
+      const idx = _allChecklists.findIndex(c => c.id === _curId);
+      if (idx >= 0) _allChecklists[idx] = {..._allChecklists[idx], updated_at: _curItem.updated_at};
+      renderList();
+    }
+    showSaveToast('체크 상태가 저장되었습니다.');
+  }
+}
+
+// ── Dirty / 자동저장 ──────────────────────────────────────
+function setDirty(val) {
+  _dirty = val;
+  const ind = document.getElementById('ck-dirty-indicator');
+  if (ind) {
+    ind.textContent = val ? '● 저장 안 됨' : '';
+    ind.className = 'ck-save-indicator' + (val ? ' dirty' : '');
+  }
+  if (val) {
+    clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(() => saveContent(true), 120000); // 2분 자동저장
+  }
+}
+
+// ── 저장 ──────────────────────────────────────────────────
+async function saveContent(auto = false) {
+  if (!_curId || !_ckEditor) return;
+  const content = _ckEditor.getMarkdown();
+  const res = await fetch(`/api/checklists/${_curId}/content`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  if (res.ok) {
+    setDirty(false);
+    _curItem.content = content;
+    // 목록 updated_at 갱신
+    const updated = await fetch(`/api/checklists/${_curId}`);
+    if (updated.ok) {
+      _curItem = await updated.json();
+      const idx = _allChecklists.findIndex(c => c.id === _curId);
+      if (idx >= 0) _allChecklists[idx] = {..._allChecklists[idx], updated_at: _curItem.updated_at};
+      renderList();
+      document.getElementById('ck-right-meta').textContent =
+        `${_curItem.project ? _curItem.project + ' · ' : ''}수정: ${_curItem.updated_at.replace('T',' ').substring(0,16)} · ${_curItem.created_by}`;
+    }
+    showSaveToast(auto ? '자동 저장되었습니다.' : '저장되었습니다.');
+  }
+}
+
+// ── 새 항목 ───────────────────────────────────────────────
+function openNewForm() {
+  document.getElementById('ck-new-form').classList.add('visible');
+  document.getElementById('ck-new-title').focus();
+  // 현재 선택된 프로젝트 기본값 설정
+  if (_curProj) {
+    const sel = document.getElementById('ck-new-project');
+    if (sel) sel.value = _curProj;
+  }
+}
+function closeNewForm() {
+  document.getElementById('ck-new-form').classList.remove('visible');
+  document.getElementById('ck-new-title').value = '';
+}
+
+async function createChecklist() {
+  const title = document.getElementById('ck-new-title').value.trim();
+  if (!title) { alert('제목을 입력하세요.'); return; }
+  const project = document.getElementById('ck-new-project')?.value || '';
+
+  const res = await fetch('/api/checklists', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, project, content: '' }),
+  });
+  if (!res.ok) { alert('생성 실패'); return; }
+  const { id } = await res.json();
+  closeNewForm();
+  await loadAll();
+  renderProjList();
+  openChecklist(id);
+}
+
+// ── 이름 변경 ─────────────────────────────────────────────
+function toggleRenameForm() {
+  const form = document.getElementById('ck-rename-form');
+  if (!form) return;
+  if (form.classList.contains('visible')) {
+    closeRenameForm();
+  } else {
+    form.classList.add('visible');
+    document.getElementById('ck-rename-title').value = _curItem?.title || '';
+    const sel = document.getElementById('ck-rename-project');
+    if (sel) sel.value = _curItem?.project || '';
+    document.getElementById('ck-rename-title').focus();
+  }
+}
+function closeRenameForm() {
+  document.getElementById('ck-rename-form')?.classList.remove('visible');
+}
+
+async function saveRename() {
+  const title = document.getElementById('ck-rename-title').value.trim();
+  if (!title) { alert('제목을 입력하세요.'); return; }
+  const project = document.getElementById('ck-rename-project')?.value || '';
+
+  const res = await fetch(`/api/checklists/${_curId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, project }),
+  });
+  if (!res.ok) { alert('저장 실패'); return; }
+
+  closeRenameForm();
+  await loadAll();
+  renderProjList();
+  openChecklist(_curId);
+}
+
+// ── 삭제 ──────────────────────────────────────────────────
+async function deleteChecklist() {
+  if (!_curId) return;
+  if (!confirm(`"${_curItem?.title}" 체크리스트를 삭제하시겠습니까?`)) return;
+
+  const res = await fetch(`/api/checklists/${_curId}`, { method: 'DELETE' });
+  if (!res.ok) { alert('삭제 실패'); return; }
+
+  _curId = null;
+  _curItem = null;
+  setDirty(false);
+
+  document.getElementById('ck-placeholder').style.display = '';
+  document.getElementById('ck-right-header').style.display = 'none';
+  document.getElementById('ck-viewer-wrap').style.display = 'none';
+  if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
+  closeRenameForm();
+
+  if (_ckEditor) { _ckEditor.destroy(); _ckEditor = null; }
+
+  await loadAll();
+  renderProjList();
+}
+
+// ── 토스트 ────────────────────────────────────────────────
+let _toastTimer = null;
+function showSaveToast(msg = '저장되었습니다.') {
+  const el = document.getElementById('ck-save-toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.style.display = 'none'; }, 2000);
+}
+
+// ── 전역 검색 설정 ─────────────────────────────────────────
+window.__pageSearch = {
+  enabled: true,
+  placeholder: '체크리스트 검색…',
+  onSearch(q) {
+    const term = q.trim().toLowerCase();
+    if (!term) { renderList(); return; }
+    const filtered = _allChecklists.filter(c =>
+      c.title.toLowerCase().includes(term) ||
+      (c.project || '').toLowerCase().includes(term)
+    );
+    const container = document.getElementById('ck-list');
+    if (!filtered.length) {
+      container.innerHTML = '<div class="ck-empty">검색 결과가 없습니다.</div>';
+      return;
+    }
+    container.innerHTML = filtered.map(c => `
+      <div class="ck-item ${_curId === c.id ? 'active' : ''}" onclick="openChecklist(${c.id})">
+        <div class="ck-item-title">${escHtml(c.title)}</div>
+        <div class="ck-item-meta">
+          ${c.project ? `<span class="ck-item-proj" style="border-left:3px solid ${projColor(c.project)};padding-left:5px;">${escHtml(c.project)}</span>` : ''}
+          <span>${c.updated_at.replace('T',' ').substring(0,16)}</span>
+        </div>
+      </div>
+    `).join('');
+  }
+};
+</script>
+{% endblock %}

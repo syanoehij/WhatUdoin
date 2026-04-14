@@ -200,6 +200,17 @@ def init_db():
                 locked_at  TEXT NOT NULL
             )
         """)
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS checklists (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                project    TEXT NOT NULL DEFAULT '',
+                title      TEXT NOT NULL,
+                content    TEXT NOT NULL DEFAULT '',
+                created_by TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
 
         # ── 시드 데이터 ──
         if not conn.execute("SELECT 1 FROM teams LIMIT 1").fetchone():
@@ -1483,3 +1494,69 @@ def get_meeting_lock(meeting_id: int) -> dict | None:
             (meeting_id, threshold)
         ).fetchone()
     return dict(row) if row else None
+
+
+# ── Checklists ────────────────────────────────────────────
+
+def create_checklist(project: str, title: str, content: str, created_by: str) -> int:
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO checklists (project, title, content, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+            (project, title, content, created_by, now, now)
+        )
+    return cur.lastrowid
+
+
+def get_checklists(project: str = None) -> list:
+    with get_conn() as conn:
+        if project is not None:
+            rows = conn.execute(
+                "SELECT id, project, title, created_by, created_at, updated_at FROM checklists WHERE project = ? ORDER BY updated_at DESC",
+                (project,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, project, title, created_by, created_at, updated_at FROM checklists ORDER BY updated_at DESC"
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_checklist(checklist_id: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM checklists WHERE id = ?", (checklist_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def update_checklist(checklist_id: int, title: str, project: str):
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE checklists SET title = ?, project = ?, updated_at = ? WHERE id = ?",
+            (title, project, now, checklist_id)
+        )
+
+
+def update_checklist_content(checklist_id: int, content: str):
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE checklists SET content = ?, updated_at = ? WHERE id = ?",
+            (content, now, checklist_id)
+        )
+
+
+def delete_checklist(checklist_id: int):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM checklists WHERE id = ?", (checklist_id,))
+
+
+def get_checklist_projects() -> list:
+    """체크리스트에 사용된 프로젝트 목록 반환."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT project FROM checklists WHERE project != '' ORDER BY project"
+        ).fetchall()
+    return [r[0] for r in rows]
