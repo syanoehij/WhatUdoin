@@ -23,14 +23,20 @@
   .notif-bell-wrap { position: relative; }
   .notif-bell-btn {
     position: relative;
-    background: none; border: none; cursor: pointer;
-    font-size: 1.1rem; padding: 5px 8px;
-    border-radius: 8px; color: var(--text);
     display: flex; align-items: center;
-    transition: background 0.15s;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: #fff; border-radius: 8px;
+    padding: 6px 10px; cursor: pointer;
+    font-size: 1rem; line-height: 1;
+    font-family: inherit; font-weight: 600;
+    transition: background 0.15s, border-color 0.15s;
+    flex-shrink: 0;
   }
-  .notif-bell-btn:hover { background: rgba(0,0,0,0.06); }
-  .dark .notif-bell-btn:hover { background: rgba(255,255,255,0.08); }
+  .notif-bell-btn:hover {
+    background: rgba(255,255,255,0.28);
+    border-color: rgba(255,255,255,0.5);
+  }
   .notif-badge {
     position: absolute; top: 1px; right: 1px;
     min-width: 16px; height: 16px;
@@ -118,7 +124,6 @@
     {% if user %}
     <button class="header-add-btn" onclick="openModal()" title="일정 추가">
       <span class="header-add-icon">＋</span>
-      <span class="header-add-label">일정</span>
     </button>
     {% endif %}
 
