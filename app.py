@@ -211,7 +211,7 @@ def check_editor_page(request: Request, checklist_id: int):
     all_projs = db.get_all_projects_with_events()
     projects = [p for p in all_projs if p.get("is_active", 1)]
     lock = db.get_checklist_lock(checklist_id)
-    locked_by = lock["locked_by"] if lock else None
+    locked_by = lock["user_name"] if lock else None
     return templates.TemplateResponse(
         request, "check_editor.html",
         _ctx(request, checklist=item, locked_by=locked_by, projects=projects)
