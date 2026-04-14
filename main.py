@@ -7,6 +7,13 @@ import sys
 import os
 import multiprocessing
 
+# Windows 콘솔 한글 깨짐 방지
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+    os.system("chcp 65001 > nul 2>&1")
+
 
 def _base_dir() -> str:
     """정적 자원(templates, static) 위치.
@@ -34,15 +41,33 @@ if __name__ == "__main__":
     import uvicorn
     from app import app as fastapi_app  # noqa: E402
 
+    PORT = 8000
+
     print("=" * 48)
     print("  WhatUdoin 서버 시작")
-    print("  http://localhost:8000  으로 접속하세요")
+    print(f"  http://localhost:{PORT}  으로 접속하세요")
     print("  종료: Ctrl+C")
     print("=" * 48)
 
-    uvicorn.run(
-        fastapi_app,
-        host="0.0.0.0",
-        port=8000,
-        log_level="info",
-    )
+    try:
+        uvicorn.run(
+            fastapi_app,
+            host="0.0.0.0",
+            port=PORT,
+            log_level="info",
+        )
+    except OSError as e:
+        if "10048" in str(e) or "address already in use" in str(e).lower():
+            print()
+            print("=" * 48)
+            print(f"  [오류] 포트 {PORT}이 이미 사용 중입니다.")
+            print("  다른 WhatUdoin이 실행 중이거나,")
+            print(f"  {PORT}번 포트를 사용하는 프로그램을 종료 후")
+            print("  다시 실행해 주세요.")
+            print("=" * 48)
+        else:
+            print(f"\n[오류] 서버 시작 실패: {e}")
+        input("\n아무 키나 누르면 종료합니다...")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\n서버를 종료합니다.")
