@@ -188,6 +188,7 @@ function renderAuthorFilter() {
 // ── 작성자 선택 ──────────────────────────────────────────
 function selectAuthor(key) {
   selectedAuthor = key;
+  localStorage.setItem('meeting_author', key === null ? '' : key);
   const { byMonth, byYear, filtered } = buildGroups();
   renderAuthorFilter();
   renderMonthNav(byMonth, byYear, filtered);
@@ -378,6 +379,19 @@ function escRegex(s) {
 
 // ── 초기화 ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  // localStorage에서 작성자 복원
+  const savedAuthor = localStorage.getItem('meeting_author');
+  if (savedAuthor !== null) {
+    if (savedAuthor === '') {
+      selectedAuthor = null;
+    } else if (savedAuthor === '__me__') {
+      if (CURRENT_UID) selectedAuthor = '__me__';
+    } else {
+      const authorNames = [...new Set(ALL_MEETINGS.map(m => m.author_name).filter(Boolean))];
+      if (authorNames.includes(savedAuthor)) selectedAuthor = savedAuthor;
+    }
+  }
+
   renderAuthorFilter();
   const { byMonth, byYear, filtered } = buildGroups();
   const allYMs = Object.keys(byMonth).sort().reverse();

@@ -141,6 +141,8 @@
   .progress-chip.chip-done { background: rgba(85,239,196,0.12); }
   .progress-chip.chip-doing { background: rgba(253,203,110,0.15); }
   .progress-chip.chip-blocked { background: rgba(255,118,117,0.1); }
+  .progress-chip.chip-overdue { background: rgba(214,48,49,0.12); }
+  .progress-chip.chip-overdue .chip-num { color: #d63031; }
   .home-section-title {
     font-size: 0.9rem; font-weight: 700;
     color: var(--text-muted); margin-bottom: 12px;
@@ -279,6 +281,60 @@ function cardHTML(e, draggable) {
 
 let homeDragSrcId = null;
 
+// ── 내 스케줄 전용 4열 칸반 ────────────────────────────────
+const HOME_COLUMNS = [
+  { status: 'todo',        label: '예정',    statuses: ['backlog', 'todo'] },
+  { status: 'in_progress', label: '진행 중', statuses: ['in_progress', 'peer_review'] },
+  { status: 'done',        label: '완료',    statuses: ['done'] },
+  { status: 'blocked',     label: '보류',    statuses: ['blocked'] },
+];
+
+function buildHomeBoard(containerId, events, draggable) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const grouped = {};
+  HOME_COLUMNS.forEach(c => grouped[c.status] = []);
+  events.forEach(e => {
+    const st = e.kanban_status || 'backlog';
+    const col = HOME_COLUMNS.find(c => c.statuses.includes(st));
+    if (col) grouped[col.status].push(e);
+  });
+  HOME_COLUMNS.forEach(({ status, label }) => {
+    const cards = grouped[status];
+    const col = document.createElement('div');
+    col.className = 'kanban-col' + (status === 'blocked' ? ' blocked' : '');
+    col.dataset.status = status;
+    const bodyHtml = cards.length
+      ? cards.map(e => cardHTML(e, draggable)).join('')
+      : '<div class="kanban-empty">없음</div>';
+    col.innerHTML = `
+      <div class="kanban-col-header">
+        <span class="col-title">${label}</span>
+        <span class="col-count">${cards.length}</span>
+      </div>
+      <div class="kanban-col-body" data-status="${status}">${bodyHtml}</div>`;
+    container.appendChild(col);
+    if (draggable) {
+      col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drag-over'); });
+      col.addEventListener('dragleave', e => { if (!col.contains(e.relatedTarget)) col.classList.remove('drag-over'); });
+      col.addEventListener('drop', e => {
+        e.preventDefault(); e.stopPropagation(); col.classList.remove('drag-over');
+        if (!homeDragSrcId) return;
+        fetch(`/api/events/${homeDragSrcId}/kanban`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kanban_status: col.dataset.status }),
+        }).then(() => { if (CURRENT_USER) loadUser(); });
+        homeDragSrcId = null;
+      });
+      col.querySelectorAll('.kanban-card').forEach(card => {
+        card.addEventListener('dragstart', e => { homeDragSrcId = card.dataset.id; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+        card.addEventListener('dragover', e => e.preventDefault());
+      });
+    }
+  });
+}
+
 function buildBoard(containerId, events, draggable) {
   const container = document.getElementById(containerId);
   container.innerHTML = '';
@@ -382,7 +438,8 @@ async function loadUser() {
     <div class="progress-chip"><span class="chip-num">${todo}</span><span class="chip-label">예정</span></div>
     <div class="progress-chip chip-doing"><span class="chip-num">${doing}</span><span class="chip-label">진행 중</span></div>
     <div class="progress-chip chip-done"><span class="chip-num">${done}</span><span class="chip-label">완료</span></div>
-    ${blocked ? `<div class="progress-chip chip-blocked"><span class="chip-num">${blocked}</span><span class="chip-label">보류</span></div>` : ''}
+    <div class="progress-chip chip-blocked"><span class="chip-num">${blocked}</span><span class="chip-label">보류</span></div>
+    ${(() => { const overdue = mine.filter(e => isOverdue(e)).length; return overdue ? `<div class="progress-chip chip-overdue"><span class="chip-num">${overdue}</span><span class="chip-label">지연</span></div>` : ''; })()}
   `;
 
   // 회의 섹션
@@ -407,12 +464,7 @@ async function loadUser() {
   // 팀 공지
   renderNotice(notice);
 
-  if (mine.length === 0) {
-    document.getElementById('user-board').innerHTML =
-      '<p class="no-tasks">담당으로 지정된 칸반 일정이 없습니다.</p>';
-  } else {
-    buildBoard('user-board', mine, true);
-  }
+  buildHomeBoard('user-board', mine, true);
 }
 
 function renderNotice(notice) {

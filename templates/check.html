@@ -519,6 +519,18 @@ function projColor(name) {
 document.addEventListener('DOMContentLoaded', async () => {
   await loadAll();
   renderProjList();
+  // 마지막 선택 프로젝트 복원
+  const savedProj = localStorage.getItem('ck_last_proj');
+  if (savedProj !== null && savedProj !== '') {
+    const allProjNames = [
+      ...ALL_PROJECTS.map(p => p.name),
+      ..._allChecklists.map(c => c.project),
+    ].filter(Boolean);
+    if (allProjNames.includes(savedProj)) {
+      selectProject(savedProj);
+    }
+    // 없으면 전체 선택 상태 유지 (기본값)
+  }
 });
 
 async function loadAll() {
@@ -568,6 +580,8 @@ function selectProject(proj) {
     el.classList.toggle('active', el.dataset.proj === (proj || ''));
   });
   document.getElementById('ck-mid-title').textContent = proj || '전체';
+  // localStorage에 마지막 선택 프로젝트 저장
+  localStorage.setItem('ck_last_proj', proj || '');
   renderList();
 }
 
@@ -577,12 +591,15 @@ function renderList() {
     ? _allChecklists.filter(c => c.project === _curProj)
     : _allChecklists;
 
+  // 이름순 정렬
+  const sorted = [...filtered].sort((a, b) => a.title.localeCompare(b.title, 'ko'));
+
   const container = document.getElementById('ck-list');
-  if (!filtered.length) {
+  if (!sorted.length) {
     container.innerHTML = '<div class="ck-empty">항목이 없습니다.</div>';
     return;
   }
-  container.innerHTML = filtered.map(c => `
+  container.innerHTML = sorted.map(c => `
     <div class="ck-item ${_curId === c.id ? 'active' : ''}" onclick="openChecklist(${c.id})">
       <div class="ck-item-title">${escHtml(c.title)}</div>
       <div class="ck-item-meta">
