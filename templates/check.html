@@ -691,22 +691,18 @@ function renderViewer(content) {
 }
 
 function attachCheckboxHandlers(mdContent) {
-  // IS_EDITOR 여부와 관계없이 뷰어에서 체크박스 토글 가능하게 처리
-  // (비편집자는 PATCH API가 403 반환하므로 서버에서 차단됨)
+  // Toast UI Viewer는 CSS로 체크박스를 이미 그림 — input 주입 불필요
+  // .task-list-item 클릭만 감지해서 토글하면 됨
   const viewerEl = document.getElementById('ck-viewer');
-  // Toast UI Viewer는 <li class="task-list-item" data-task=""> 방식으로 렌더링
   viewerEl.querySelectorAll('li.task-list-item').forEach((li, idx) => {
-    // Toast UI Viewer: 체크된 항목은 class="task-list-item checked" 또는 data-task-checked 속성 사용
-    const isChecked = li.classList.contains('checked') || li.hasAttribute('data-task-checked');
-    // 이미 주입된 checkbox가 있으면 건너뜀
-    if (li.querySelector('input[type="checkbox"]')) return;
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = isChecked;
-    cb.style.cssText = 'cursor:pointer;width:15px;height:15px;accent-color:var(--accent);margin-right:6px;flex-shrink:0;vertical-align:middle;position:relative;top:-1px;';
-    if (!IS_EDITOR) cb.disabled = true;
-    cb.addEventListener('change', () => toggleCheckbox(idx, cb.checked, mdContent));
-    li.insertBefore(cb, li.firstChild);
+    if (li.dataset.ckBound) return; // 중복 바인딩 방지
+    li.dataset.ckBound = '1';
+    li.style.cursor = 'pointer';
+    li.addEventListener('click', (e) => {
+      e.preventDefault();
+      const isChecked = li.classList.contains('checked');
+      toggleCheckbox(idx, !isChecked, mdContent);
+    });
   });
 }
 
