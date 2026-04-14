@@ -12,11 +12,11 @@
 
     <div class="ai-actions">
       <select id="model-select">
-        <option value="gemma4:e2b">gemma4:e2b</option>
-        <option value="gemma4:e4b">gemma4:e4b</option>
+        <option value="">모델 로딩 중...</option>
       </select>
       <button class="btn btn-primary" onclick="parseText()">파싱하기</button>
     </div>
+    <div id="model-status" style="font-size:0.82rem;color:var(--text-muted);margin-top:4px;display:none;"></div>
 
     <div id="loading" class="loading hidden">⏳ AI가 분석 중입니다...</div>
     <div id="error-msg" class="error-msg hidden"></div>
@@ -38,6 +38,25 @@
 {% block scripts %}
 <script>
 let parsedEvents = [];
+
+async function loadModels() {
+  const sel = document.getElementById('model-select');
+  const statusEl = document.getElementById('model-status');
+  try {
+    const res = await fetch('/api/ai/models');
+    if (!res.ok) throw new Error('서버 오류');
+    const data = await res.json();
+    const models = data.models || [];
+    if (!models.length) throw new Error('모델 없음');
+    sel.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+    statusEl.style.display = 'none';
+  } catch (e) {
+    sel.innerHTML = '<option value="">Ollama 연결 실패</option>';
+    statusEl.style.display = 'block';
+    statusEl.textContent = `Ollama에 연결할 수 없습니다. 관리자 페이지에서 서버 주소를 확인하세요. (${e.message})`;
+    statusEl.style.color = '#e74c3c';
+  }
+}
 
 async function loadProjects() {
   const res = await fetch('/api/projects');
@@ -200,6 +219,8 @@ function hideError() { document.getElementById('error-msg').classList.add('hidde
 function esc(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 }
+
+document.addEventListener('DOMContentLoaded', loadModels);
 </script>
 
 <style>

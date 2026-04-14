@@ -124,6 +124,33 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-14 Ollama 연결 개선 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-14</span>
+      <span class="cl-phase-badge phase-4">버그픽스</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🔧</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">fix</span> Ollama 서버 주소 변경 및 연결 상태 개선</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>AI 일정 파싱 페이지 모델 목록 <strong>하드코딩 → 동적 로드</strong>로 변경 (페이지 진입 시 Ollama에서 실시간 조회)</li>
+              <li>Ollama 연결 실패 시 "관리자 페이지에서 서버 주소 확인" 안내 메시지 표시</li>
+              <li>관리자 시스템 설정에 <strong>연결 테스트</strong> 버튼 추가 — 클릭 시 연결 성공/실패 및 사용 가능한 모델 목록 표시</li>
+              <li><code>GET /api/ai/models</code> 엔드포인트: 연결 실패 시 502 에러 반환으로 변경 (기존: 실패해도 기본 모델명 반환)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ── 2026-04-14 캘린더 툴바 개선 ── -->
   <div class="cl-group">
     <div class="cl-group-header">

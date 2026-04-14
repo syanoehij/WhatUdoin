@@ -17,6 +17,12 @@ def set_ollama_base_url(base_url: str):
 
 def get_available_models() -> list[str]:
     """Ollama에서 사용 가능한 모델 목록 반환. DEFAULT_MODEL을 맨 앞에 배치. 실패 시 기본 모델만 반환."""
+    models, _ = get_available_models_with_status()
+    return models
+
+
+def get_available_models_with_status() -> tuple[list[str], bool]:
+    """(모델 목록, 연결 성공 여부) 반환."""
     try:
         response = requests.get(
             OLLAMA_BASE_URL + "/api/tags",
@@ -25,14 +31,14 @@ def get_available_models() -> list[str]:
         response.raise_for_status()
         models = [m["name"] for m in response.json().get("models", [])]
         if not models:
-            return [DEFAULT_MODEL]
+            return [DEFAULT_MODEL], True
         # DEFAULT_MODEL을 맨 앞으로, 나머지는 알파벳 순
         rest = sorted(m for m in models if m != DEFAULT_MODEL)
         if DEFAULT_MODEL in models:
-            return [DEFAULT_MODEL] + rest
-        return rest
+            return [DEFAULT_MODEL] + rest, True
+        return rest, True
     except Exception:
-        return [DEFAULT_MODEL]
+        return [DEFAULT_MODEL], False
 
 
 def parse_schedule(text: str, model: str = DEFAULT_MODEL) -> list[dict]:

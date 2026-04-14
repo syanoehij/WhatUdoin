@@ -1078,7 +1078,10 @@ async def ai_refine(request: Request):
 
 @app.get("/api/ai/models")
 def ai_models():
-    return {"models": llm_parser.get_available_models()}
+    models, ok = llm_parser.get_available_models_with_status()
+    if not ok:
+        raise HTTPException(status_code=502, detail=f"Ollama 서버({llm_parser.OLLAMA_BASE_URL})에 연결할 수 없습니다.")
+    return {"models": models}
 
 
 @app.post("/api/ai/weekly-report")

@@ -90,9 +90,11 @@
       <div style="display:flex;gap:8px;align-items:center;">
         <input type="text" id="llm-url-input" placeholder="http://localhost:11434" style="flex:1;" />
         <button class="btn btn-primary" onclick="saveLlmUrl()">저장</button>
+        <button class="btn btn-outline" onclick="testLlmConnection()">연결 테스트</button>
       </div>
     </div>
-    <p class="text-muted" style="margin-top:8px;font-size:0.85rem;">변경 후 서버 재시작 없이 즉시 적용됩니다.</p>
+    <div id="llm-status" style="margin-top:8px;font-size:0.85rem;display:none;"></div>
+    <p class="text-muted" style="margin-top:6px;font-size:0.85rem;">변경 후 서버 재시작 없이 즉시 적용됩니다.</p>
   </div>
 
   <!-- ── 팀 탭 ── -->
@@ -318,8 +320,34 @@ async function saveLlmUrl() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ollama_url: url }),
   });
-  if (res.ok) { alert('저장되었습니다.'); }
-  else { const e = await res.json().catch(() => ({})); alert(e.detail || '오류'); }
+  if (res.ok) {
+    showLlmStatus('저장되었습니다. 연결 테스트를 눌러 확인하세요.', 'info');
+  } else {
+    const e = await res.json().catch(() => ({}));
+    alert(e.detail || '오류');
+  }
+}
+async function testLlmConnection() {
+  const statusEl = document.getElementById('llm-status');
+  showLlmStatus('연결 확인 중...', 'info');
+  try {
+    const res = await fetch('/api/ai/models');
+    if (res.ok) {
+      const data = await res.json();
+      const models = data.models || [];
+      showLlmStatus(`연결 성공 ✓ — 사용 가능한 모델: ${models.join(', ')}`, 'ok');
+    } else {
+      showLlmStatus('연결 실패: 서버 응답 오류', 'err');
+    }
+  } catch (e) {
+    showLlmStatus(`연결 실패: ${e.message}`, 'err');
+  }
+}
+function showLlmStatus(msg, type) {
+  const el = document.getElementById('llm-status');
+  el.style.display = 'block';
+  el.style.color = type === 'ok' ? 'var(--accent)' : type === 'err' ? '#e74c3c' : 'var(--text-muted)';
+  el.textContent = msg;
 }
 
 // ── IP 관리 ──────────────────────────────────────────────
