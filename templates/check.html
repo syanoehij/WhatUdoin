@@ -783,7 +783,7 @@ function _stopHeartbeat() {
 }
 
 // ── 뷰어 실시간 동기화 폴링 ───────────────────────────────
-const POLL_INTERVAL = 30000; // 30초
+const POLL_INTERVAL = 5000; // 5초
 
 async function _doPoll(id) {
   if (_editMode || !_curId || _curId !== id) { _stopPoll(); return; }
