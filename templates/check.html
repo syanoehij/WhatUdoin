@@ -783,41 +783,56 @@ function _stopHeartbeat() {
 }
 
 // ── 뷰어 실시간 동기화 폴링 ───────────────────────────────
+const POLL_INTERVAL = 30000; // 30초
+
+async function _doPoll(id) {
+  if (_editMode || !_curId || _curId !== id) { _stopPoll(); return; }
+  if (document.visibilityState === 'hidden') return; // 탭 백그라운드면 스킵
+  try {
+    const res = await fetch(`/api/checklists/${_curId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.updated_at === _pollUpdatedAt) return; // 변경 없음
+    _pollUpdatedAt = data.updated_at;
+    _curItem = data;
+
+    // 잠금 상태도 재확인
+    const lockRes = await fetch(`/api/checklists/${_curId}/lock`);
+    const lockData = lockRes.ok ? await lockRes.json() : { locked_by: null };
+    _setLockState(lockData.locked_by);
+
+    // 목록 updated_at 갱신
+    const idx = _allChecklists.findIndex(c => c.id === _curId);
+    if (idx >= 0) _allChecklists[idx] = { ..._allChecklists[idx], updated_at: data.updated_at };
+    renderList();
+    _updateMeta();
+
+    // 잠금 없으면 뷰어 갱신
+    if (!_lockedByOther) {
+      document.getElementById('ck-viewer-wrap').style.display = '';
+      renderViewer(data.content);
+    }
+  } catch {}
+}
+
 function _startPoll(id) {
   _stopPoll();
   _pollUpdatedAt = _curItem?.updated_at || null;
-  _pollTimer = setInterval(async () => {
-    if (_editMode || !_curId || _curId !== id) { _stopPoll(); return; }
-    try {
-      const res = await fetch(`/api/checklists/${_curId}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.updated_at === _pollUpdatedAt) return; // 변경 없음
-      _pollUpdatedAt = data.updated_at;
-      _curItem = data;
+  _pollTimer = setInterval(() => _doPoll(id), POLL_INTERVAL);
 
-      // 잠금 상태도 재확인
-      const lockRes = await fetch(`/api/checklists/${_curId}/lock`);
-      const lockData = lockRes.ok ? await lockRes.json() : { locked_by: null };
-      _setLockState(lockData.locked_by);
+  // 탭이 다시 보이면 즉시 한 번 실행 (숨겨진 동안 놓친 변경 반영)
+  document.addEventListener('visibilitychange', _onVisibilityChange);
+}
 
-      // 목록 updated_at 갱신
-      const idx = _allChecklists.findIndex(c => c.id === _curId);
-      if (idx >= 0) _allChecklists[idx] = { ..._allChecklists[idx], updated_at: data.updated_at };
-      renderList();
-      _updateMeta();
-
-      // 잠금 해제됐거나 잠금 없으면 뷰어 갱신
-      if (!_lockedByOther) {
-        document.getElementById('ck-viewer-wrap').style.display = '';
-        renderViewer(data.content);
-      }
-    } catch {}
-  }, 10000); // 10초마다
+function _onVisibilityChange() {
+  if (document.visibilityState === 'visible' && _pollTimer && _curId) {
+    _doPoll(_curId);
+  }
 }
 
 function _stopPoll() {
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  document.removeEventListener('visibilitychange', _onVisibilityChange);
 }
 
 function switchToEdit() {
