@@ -47,6 +47,19 @@
     font-weight: 500;
   }
   .kanban-total-label { font-size: 0.85rem; color: var(--text-muted); }
+  .kanban-toolbar .toolbar-btn {
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.83rem;
+    font-family: inherit;
+    transition: background 0.1s;
+    white-space: nowrap;
+  }
+  .kanban-toolbar .toolbar-btn:hover { background: var(--surface-2); }
 
   /* ── 칸반 보드 ── */
   .kanban-board {
@@ -204,7 +217,7 @@
       <option value="">전체</option>
     </select>
     {% if user %}
-    <button class="btn btn-outline btn-sm" id="kbn-my-only-btn" onclick="toggleKanbanMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
+    <button class="toolbar-btn" id="kbn-my-only-btn" onclick="toggleKanbanMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
     {% endif %}
     <span id="kanban-total" class="kanban-total-label"></span>
   </div>

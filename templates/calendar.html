@@ -84,6 +84,19 @@
   }
   .toggle-switch input:checked + .toggle-track { background: var(--accent, #0969da); }
   .toggle-switch input:checked + .toggle-track::after { transform: translateX(16px); }
+  .cal-toolbar .toolbar-btn {
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.83rem;
+    font-family: inherit;
+    transition: background 0.1s;
+    white-space: nowrap;
+  }
+  .cal-toolbar .toolbar-btn:hover { background: var(--surface-2); }
 </style>
 {% endblock %}
 
@@ -95,7 +108,7 @@
       <option value="">전체</option>
     </select>
     {% if user %}
-    <button class="btn btn-outline btn-sm" id="my-only-btn" onclick="toggleMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
+    <button class="toolbar-btn" id="my-only-btn" onclick="toggleMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
     {% endif %}
     <label class="wheel-toggle-wrap" title="휠 스크롤로 날짜 이동">
       <span class="cal-toolbar-label">🖱 휠 이동</span>
