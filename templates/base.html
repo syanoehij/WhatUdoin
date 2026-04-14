@@ -730,7 +730,7 @@
   (function() {
     if (!CURRENT_USER) return;
 
-    let _notifPrevCount = -1;
+    let _notifPrevCount = 0;
 
     // 브라우저 알림 (허용된 경우 보조 수단으로만 사용)
     if ('Notification' in window && Notification.permission === 'default') {
@@ -756,8 +756,8 @@
             badge.classList.add('hidden');
           }
         }
-        // 새 알림이 추가됐으면 브라우저 알림 시도
-        if (_notifPrevCount >= 0 && count > _notifPrevCount) {
+        // 이전보다 알림이 늘었으면 브라우저 알림 (페이지 로드 첫 폴링 포함)
+        if (count > _notifPrevCount) {
           _showBrowserNotif(`새 알림 ${count - _notifPrevCount}건이 있습니다.`);
         }
         _notifPrevCount = count;
