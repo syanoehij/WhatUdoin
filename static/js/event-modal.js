@@ -196,10 +196,11 @@ function openModal(dateStr = '', eventData = null) {
   document.getElementById('f-description').value = '';
   document.getElementById('f-priority').value    = 'normal';
   document.getElementById('f-kanban').checked    = true;
-  _currentEditKanbanStatus = null;
+  _currentEditKanbanStatus = 'backlog';
   _activePresets = new Set();
   _currentIsRecurring = false;
   setEventType('schedule');
+  setKanbanStatus('backlog');
   setRecurrenceRule('');
 
   const [defStart, defEnd] = getDefaultTimes();
@@ -242,6 +243,7 @@ function openModal(dateStr = '', eventData = null) {
     _currentEditKanbanStatus = eventData.kanban_status || null;
     document.getElementById('f-kanban').checked = !!eventData.kanban_status;
     setEventType(eventData.event_type || 'schedule');
+    setKanbanStatus(eventData.kanban_status || 'backlog');
     setRecurrenceRule(eventData.recurrence_rule || '');
     if (eventData.recurrence_end) {
       document.getElementById('f-recurrence-end').value = eventData.recurrence_end.slice(0, 10);
@@ -349,8 +351,7 @@ async function saveEvent(e) {
     alert('종료 시간은 시작 시간보다 이전일 수 없습니다.'); return;
   }
 
-  const kanbanChecked = document.getElementById('f-kanban').checked;
-  const kanban_status = kanbanChecked
+  const kanban_status = _currentEventType === 'schedule'
     ? (_currentEditKanbanStatus || 'backlog')
     : null;
 
@@ -542,24 +543,29 @@ function setEventType(type) {
   document.getElementById('pill-schedule').classList.toggle('active', type === 'schedule');
   document.getElementById('pill-meeting').classList.toggle('active', type === 'meeting');
 
-  const kanbanWrap = document.getElementById('kanban-toggle-wrap');
-  const recurrenceRow = document.getElementById('recurrence-row');
+  const kanbanStatusRow = document.getElementById('kanban-status-row');
+  const recurrenceRow   = document.getElementById('recurrence-row');
 
   if (type === 'meeting') {
-    // 회의: 칸반 숨기고 반복 섹션 표시
-    kanbanWrap.style.display = 'none';
+    // 회의: 칸반 상태 선택 숨기고 반복 섹션 표시
+    if (kanbanStatusRow) kanbanStatusRow.style.display = 'none';
     document.getElementById('f-kanban').checked = false;
     if (recurrenceRow) recurrenceRow.style.display = 'block';
   } else {
-    // 일정: 칸반 표시, 반복 섹션 숨기고 선택 초기화
-    kanbanWrap.style.display = 'flex';
-    kanbanWrap.style.alignItems = 'center';
-    kanbanWrap.style.gap = '8px';
+    // 일정: 칸반 상태 선택 표시, 반복 섹션 숨기고 선택 초기화
+    if (kanbanStatusRow) kanbanStatusRow.style.display = 'flex';
     document.getElementById('f-kanban').checked = true;
     if (recurrenceRow) recurrenceRow.style.display = 'none';
-    // 반복 선택 초기화
     setRecurrenceRule('');
   }
+}
+
+// ── 칸반 상태 선택 ───────────────────────────────────────
+function setKanbanStatus(status) {
+  _currentEditKanbanStatus = status;
+  document.querySelectorAll('.kanban-status-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.status === status);
+  });
 }
 
 // ── 유틸 ─────────────────────────────────────────────────

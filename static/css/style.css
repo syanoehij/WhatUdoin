@@ -365,12 +365,12 @@ main { padding: 20px 24px; width: 100%; flex: 1; }
   box-shadow: var(--shadow-lg);
 }
 .modal-sm { width: 400px; }
-.modal-wide { width: 820px; }
+.modal-wide { width: 960px; }
 
 /* ── 모달 2열 레이아웃 ── */
 .modal-body-cols {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 280px 1fr;
   gap: 24px;
   margin-bottom: 4px;
 }
@@ -1990,12 +1990,12 @@ select.form-input {
 
 /* ── 일정 유형 pill 버튼 ── */
 .event-type-pills {
-  display: flex; gap: 4px;
+  display: flex; gap: 6px;
 }
 .event-type-pill {
-  padding: 3px 10px; border-radius: 20px;
-  font-size: 0.8rem; font-weight: 500;
-  border: 1px solid var(--border);
+  padding: 7px 20px; border-radius: 20px;
+  font-size: 0.92rem; font-weight: 600;
+  border: 1.5px solid var(--border);
   background: var(--surface-2); color: var(--text-muted);
   cursor: pointer; transition: all 0.15s;
   line-height: 1.4;
@@ -2007,6 +2007,29 @@ select.form-input {
 .event-type-pill:hover:not(.active) {
   border-color: var(--accent); color: var(--accent);
 }
+
+/* ── 칸반 상태 선택 pills (일정 유형 선택 시) ── */
+.kanban-status-row {
+  margin-top: 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.kanban-status-pills {
+  display: flex; gap: 5px; flex-wrap: wrap;
+}
+.kanban-status-pill {
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 0.78rem; font-weight: 600;
+  border: 1.5px solid var(--border);
+  background: var(--surface-2); color: var(--text-muted);
+  cursor: pointer; transition: all 0.15s;
+}
+.kanban-status-pill:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+.kanban-status-pill.active[data-status="backlog"]     { background:#636e72; color:#fff; border-color:#636e72; }
+.kanban-status-pill.active[data-status="todo"]        { background:#0984e3; color:#fff; border-color:#0984e3; }
+.kanban-status-pill.active[data-status="in_progress"] { background:#00b894; color:#fff; border-color:#00b894; }
+.kanban-status-pill.active[data-status="peer_review"] { background:#6c5ce7; color:#fff; border-color:#6c5ce7; }
+.kanban-status-pill.active[data-status="done"]        { background:#27ae60; color:#fff; border-color:#27ae60; }
+.kanban-status-pill.active[data-status="blocked"]     { background:#d63031; color:#fff; border-color:#d63031; }
 
 /* ── 반복 요일 버튼 ── */
 .recurrence-days {

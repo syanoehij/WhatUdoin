@@ -16,7 +16,7 @@
   <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ko.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/rangePlugin.js"></script>
 
-  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="stylesheet" href="/static/css/style.css?v={{ range(1000,9999) | random }}" />
   {% block extra_head %}{% endblock %}
   <script>
     const CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id, 'name': user.name} | tojson if user else 'null' }};
@@ -273,19 +273,27 @@
               </select>
             </div>
             <div class="left-row" style="margin-top:8px; gap:20px;">
-              <div style="display:flex;align-items:center;gap:8px;">
+              <div style="display:flex;align-items:center;gap:10px;">
                 <div class="col-section-label">일정 유형</div>
                 <div class="event-type-pills">
                   <button type="button" class="event-type-pill active" id="pill-schedule" onclick="setEventType('schedule')">📅 일정</button>
                   <button type="button" class="event-type-pill" id="pill-meeting" onclick="setEventType('meeting')">💬 회의</button>
                 </div>
               </div>
-              <div id="kanban-toggle-wrap" style="display:flex;align-items:center;gap:8px;">
-                <div class="col-section-label">칸반 등록</div>
-                <label class="switch">
-                  <input type="checkbox" id="f-kanban" checked />
-                  <span class="slider"></span>
-                </label>
+              <div id="kanban-toggle-wrap" style="display:none;align-items:center;gap:8px;">
+                <input type="checkbox" id="f-kanban" checked style="display:none;" />
+              </div>
+            </div>
+            <!-- 칸반 상태 선택 (일정 유형 시만 표시) -->
+            <div id="kanban-status-row" class="kanban-status-row">
+              <div class="col-section-label">칸반 상태</div>
+              <div class="kanban-status-pills">
+                <button type="button" class="kanban-status-pill" data-status="backlog"     onclick="setKanbanStatus('backlog')">Backlog</button>
+                <button type="button" class="kanban-status-pill" data-status="todo"        onclick="setKanbanStatus('todo')">Todo</button>
+                <button type="button" class="kanban-status-pill" data-status="in_progress" onclick="setKanbanStatus('in_progress')">In Progress</button>
+                <button type="button" class="kanban-status-pill" data-status="peer_review" onclick="setKanbanStatus('peer_review')">Peer Review</button>
+                <button type="button" class="kanban-status-pill" data-status="done"        onclick="setKanbanStatus('done')">Done</button>
+                <button type="button" class="kanban-status-pill" data-status="blocked"     onclick="setKanbanStatus('blocked')">Blocked</button>
               </div>
             </div>
 
@@ -386,7 +394,7 @@
     </div>
   </div>
 
-  <script src="/static/js/event-modal.js"></script>
+  <script src="/static/js/event-modal.js?v={{ range(1000,9999) | random }}"></script>
   {% block scripts %}{% endblock %}
 
   <script>
