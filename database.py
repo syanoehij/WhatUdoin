@@ -1254,6 +1254,24 @@ def toggle_ip_whitelist(ip_id: int, enable: bool):
 
 # ── Pending Users ────────────────────────────────────────
 
+def check_register_duplicate(name: str, password: str) -> str | None:
+    """중복 여부 확인. 문제 있으면 에러 메시지 반환, 없으면 None."""
+    with get_conn() as conn:
+        # 이름 중복: 기존 활성 유저
+        if conn.execute("SELECT 1 FROM users WHERE name = ? AND is_active = 1", (name,)).fetchone():
+            return "이미 사용 중인 이름입니다."
+        # 이름 중복: 대기 중인 신청자
+        if conn.execute("SELECT 1 FROM pending_users WHERE name = ? AND status = 'pending'", (name,)).fetchone():
+            return "이미 가입 신청 중인 이름입니다."
+        # 비밀번호 중복: 기존 활성 유저
+        if conn.execute("SELECT 1 FROM users WHERE password = ? AND is_active = 1", (password,)).fetchone():
+            return "이미 사용 중인 비밀번호입니다. 다른 비밀번호를 사용하세요."
+        # 비밀번호 중복: 대기 중인 신청자
+        if conn.execute("SELECT 1 FROM pending_users WHERE password = ? AND status = 'pending'", (password,)).fetchone():
+            return "이미 가입 신청에 사용된 비밀번호입니다. 다른 비밀번호를 사용하세요."
+    return None
+
+
 def create_pending_user(name: str, password: str, memo: str) -> int:
     with get_conn() as conn:
         cur = conn.execute(

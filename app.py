@@ -417,6 +417,9 @@ async def register(request: Request):
     memo = data.get("memo", "").strip()
     if not name or not password:
         raise HTTPException(status_code=400, detail="이름과 비밀번호를 입력하세요.")
+    err = db.check_register_duplicate(name, password)
+    if err:
+        raise HTTPException(status_code=409, detail=err)
     db.create_pending_user(name, password, memo)
     return {"ok": True}
 
