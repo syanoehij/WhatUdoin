@@ -147,8 +147,8 @@ function toggleMyOnly() {
   _myOnly = !_myOnly;
   const btn = document.getElementById('my-only-btn');
   if (btn) {
-    btn.classList.toggle('btn-primary', _myOnly);
-    btn.classList.toggle('btn-outline', !_myOnly);
+    btn.textContent = _myOnly ? '👥 팀 일정 보기' : '👤 내 일정만';
+    btn.title = _myOnly ? '전체 팀 일정 보기' : '내 담당 일정만 보기';
   }
   calendar.getEventSourceById('main-events').refetch();
 }

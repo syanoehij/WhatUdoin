@@ -280,8 +280,6 @@ function toggleKanbanMyOnly() {
   _kanbanMyOnly = !_kanbanMyOnly;
   const btn = document.getElementById('kbn-my-only-btn');
   if (btn) {
-    btn.classList.toggle('btn-primary', _kanbanMyOnly);
-    btn.classList.toggle('btn-outline', !_kanbanMyOnly);
     btn.textContent = _kanbanMyOnly ? '👥 팀 일정 보기' : '👤 내 일정만';
     btn.title = _kanbanMyOnly ? '전체 팀 일정 보기' : '내 담당 일정만 보기';
   }
