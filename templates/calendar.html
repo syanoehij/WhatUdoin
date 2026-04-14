@@ -4,22 +4,111 @@
 {% block extra_head %}
 <style>
   main { max-width: none; padding: 20px 28px; }
+
+  /* ── 캘린더 툴바 (칸반 스타일) ── */
+  .cal-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .cal-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .cal-toolbar-label {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .cal-toolbar select {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 28px 6px 10px;
+    font-size: 0.88rem;
+    font-family: inherit;
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236e7681' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .cal-toolbar select:focus { border-color: var(--accent); }
+  [data-theme="dark"] .cal-toolbar select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238b949e' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+
+  /* ── 휠 이동 On/Off 토글 스위치 ── */
+  .wheel-toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .wheel-toggle-wrap .cal-toolbar-label { cursor: pointer; }
+  .toggle-switch {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track {
+    position: absolute;
+    inset: 0;
+    background: var(--border);
+    border-radius: 20px;
+    transition: background 0.2s;
+    cursor: pointer;
+  }
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s;
+  }
+  .toggle-switch input:checked + .toggle-track { background: var(--accent, #0969da); }
+  .toggle-switch input:checked + .toggle-track::after { transform: translateX(16px); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="toolbar">
-  {% if user %}
-  <button class="btn btn-outline" id="my-only-btn" onclick="toggleMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
-  {% endif %}
-  <button class="btn btn-outline" id="wheel-toggle-btn" onclick="toggleWheelNav()" title="휠 스크롤로 날짜 이동 토글">🖱 휠 이동</button>
-  <select id="cal-proj-filter" class="btn btn-outline" onchange="applyProjFilter()" style="cursor:pointer;">
-    <option value="">전체 프로젝트</option>
-  </select>
+<div class="cal-toolbar">
+  <div class="cal-toolbar-left">
+    <span class="cal-toolbar-label">프로젝트</span>
+    <select id="cal-proj-filter" onchange="applyProjFilter()">
+      <option value="">전체</option>
+    </select>
+    {% if user %}
+    <button class="btn btn-outline btn-sm" id="my-only-btn" onclick="toggleMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
+    {% endif %}
+    <label class="wheel-toggle-wrap" title="휠 스크롤로 날짜 이동">
+      <span class="cal-toolbar-label">🖱 휠 이동</span>
+      <span class="toggle-switch">
+        <input type="checkbox" id="wheel-toggle-chk" onchange="toggleWheelNav(this.checked)" />
+        <span class="toggle-track"></span>
+      </span>
+    </label>
+  </div>
   {% if user and user.role in ('editor', 'admin') %}
-  <button class="btn btn-primary" onclick="openModal()" style="margin-left:auto">+ 일정 추가</button>
+  <button class="btn btn-primary btn-sm" onclick="openModal()">+ 일정 추가</button>
   {% else %}
-  <button class="btn btn-outline" onclick="openLoginModal()" style="margin-left:auto">로그인하여 일정 추가</button>
+  <button class="btn btn-outline btn-sm" onclick="openLoginModal()">로그인하여 일정 추가</button>
   {% endif %}
 </div>
 
@@ -50,7 +139,7 @@ let calendar;
 let currentDetailEventId = null;
 let currentDetailEventTeamId = null;
 let _myOnly = false;
-let _wheelNav = localStorage.getItem('cal_wheel') !== '0';  // 기본 ON
+let _wheelNav = localStorage.getItem('cal_wheel') === '1';  // 기본 OFF
 let _projFilter = '';  // '' = 전체, '__unassigned__' = 미지정, 그 외 = 프로젝트명
 
 function toggleMyOnly() {
@@ -64,14 +153,9 @@ function toggleMyOnly() {
   calendar.getEventSourceById('main-events').refetch();
 }
 
-function toggleWheelNav() {
-  _wheelNav = !_wheelNav;
+function toggleWheelNav(val) {
+  _wheelNav = val;
   localStorage.setItem('cal_wheel', _wheelNav ? '1' : '0');
-  const btn = document.getElementById('wheel-toggle-btn');
-  if (btn) {
-    btn.classList.toggle('btn-primary', _wheelNav);
-    btn.classList.toggle('btn-outline', !_wheelNav);
-  }
 }
 
 function applyProjFilter() {
@@ -87,7 +171,7 @@ function _populateProjFilter(evs) {
     .filter(p => p && p.trim()))
   ].sort();
   const hasUnassigned = evs.some(e => !e.extendedProps?.project);
-  sel.innerHTML = '<option value="">전체 프로젝트</option>' +
+  sel.innerHTML = '<option value="">전체</option>' +
     projects.map(p => `<option value="${p.replace(/"/g,'&quot;')}">${p}</option>`).join('') +
     (hasUnassigned ? '<option value="__unassigned__">미지정</option>' : '');
   if (prev) sel.value = prev;
@@ -216,12 +300,9 @@ document.addEventListener('DOMContentLoaded', () => {
   calendar.render();
   applyStickyAllDay();
 
-  // 휠 토글 버튼 초기 상태
-  const wBtn = document.getElementById('wheel-toggle-btn');
-  if (wBtn) {
-    wBtn.classList.toggle('btn-primary', _wheelNav);
-    wBtn.classList.toggle('btn-outline', !_wheelNav);
-  }
+  // 휠 토글 체크박스 초기 상태
+  const wChk = document.getElementById('wheel-toggle-chk');
+  if (wChk) wChk.checked = _wheelNav;
 
   // 캘린더 페이지 전용 콜백 설정
   window.onEventSaved = () => calendar.refetchEvents();
