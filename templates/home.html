@@ -281,60 +281,6 @@ function cardHTML(e, draggable) {
 
 let homeDragSrcId = null;
 
-// ── 내 스케줄 전용 4열 칸반 ────────────────────────────────
-const HOME_COLUMNS = [
-  { status: 'todo',        label: '예정',    statuses: ['backlog', 'todo'] },
-  { status: 'in_progress', label: '진행 중', statuses: ['in_progress', 'peer_review'] },
-  { status: 'done',        label: '완료',    statuses: ['done'] },
-  { status: 'blocked',     label: '보류',    statuses: ['blocked'] },
-];
-
-function buildHomeBoard(containerId, events, draggable) {
-  const container = document.getElementById(containerId);
-  container.innerHTML = '';
-  const grouped = {};
-  HOME_COLUMNS.forEach(c => grouped[c.status] = []);
-  events.forEach(e => {
-    const st = e.kanban_status || 'backlog';
-    const col = HOME_COLUMNS.find(c => c.statuses.includes(st));
-    if (col) grouped[col.status].push(e);
-  });
-  HOME_COLUMNS.forEach(({ status, label }) => {
-    const cards = grouped[status];
-    const col = document.createElement('div');
-    col.className = 'kanban-col' + (status === 'blocked' ? ' blocked' : '');
-    col.dataset.status = status;
-    const bodyHtml = cards.length
-      ? cards.map(e => cardHTML(e, draggable)).join('')
-      : '<div class="kanban-empty">없음</div>';
-    col.innerHTML = `
-      <div class="kanban-col-header">
-        <span class="col-title">${label}</span>
-        <span class="col-count">${cards.length}</span>
-      </div>
-      <div class="kanban-col-body" data-status="${status}">${bodyHtml}</div>`;
-    container.appendChild(col);
-    if (draggable) {
-      col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drag-over'); });
-      col.addEventListener('dragleave', e => { if (!col.contains(e.relatedTarget)) col.classList.remove('drag-over'); });
-      col.addEventListener('drop', e => {
-        e.preventDefault(); e.stopPropagation(); col.classList.remove('drag-over');
-        if (!homeDragSrcId) return;
-        fetch(`/api/events/${homeDragSrcId}/kanban`, {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ kanban_status: col.dataset.status }),
-        }).then(() => { if (CURRENT_USER) loadUser(); });
-        homeDragSrcId = null;
-      });
-      col.querySelectorAll('.kanban-card').forEach(card => {
-        card.addEventListener('dragstart', e => { homeDragSrcId = card.dataset.id; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
-        card.addEventListener('dragend', () => card.classList.remove('dragging'));
-        card.addEventListener('dragover', e => e.preventDefault());
-      });
-    }
-  });
-}
-
 function buildBoard(containerId, events, draggable) {
   const container = document.getElementById(containerId);
   container.innerHTML = '';
@@ -464,7 +410,7 @@ async function loadUser() {
   // 팀 공지
   renderNotice(notice);
 
-  buildHomeBoard('user-board', mine, true);
+  buildBoard('user-board', mine, true);
 }
 
 function renderNotice(notice) {
