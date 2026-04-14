@@ -168,6 +168,12 @@ def ai_import_page(request: Request):
     return templates.TemplateResponse(request, "ai_import.html", _ctx(request))
 
 
+# ── 변경 이력 페이지 ──────────────────────────────────────
+@app.get("/changelog", response_class=HTMLResponse)
+def changelog_page(request: Request):
+    return templates.TemplateResponse(request, "changelog.html", _ctx(request))
+
+
 # ── 팀 공지 페이지 ─────────────────────────────────────────
 
 @app.get("/notice", response_class=HTMLResponse)

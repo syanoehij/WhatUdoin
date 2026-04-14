@@ -1,0 +1,505 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — 변경 이력{% endblock %}
+
+{% block extra_head %}
+<style>
+  .changelog-page {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 32px 24px 60px;
+  }
+  .changelog-page h1 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .changelog-page .cl-desc {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    margin-bottom: 36px;
+  }
+
+  /* 날짜 그룹 */
+  .cl-group { margin-bottom: 40px; }
+  .cl-group-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .cl-date {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .cl-phase-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 20px;
+    background: var(--surface-3);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+  .cl-phase-badge.phase-init  { background: #e3f3ff; color: #1a7bbf; border-color: #b3d9f7; }
+  .cl-phase-badge.phase-1     { background: #fdf3e3; color: #b8720a; border-color: #f5d9a8; }
+  .cl-phase-badge.phase-2     { background: #eaf8f0; color: #1a8a46; border-color: #a8e4c0; }
+  .cl-phase-badge.phase-3     { background: #f3eaff; color: #7c3aed; border-color: #d8b4fe; }
+  .cl-phase-badge.phase-4     { background: #fff0f3; color: #c0263c; border-color: #ffb3bf; }
+  .dark .cl-phase-badge.phase-init  { background: #1a3a52; color: #7ec8f7; border-color: #2d5e7e; }
+  .dark .cl-phase-badge.phase-1     { background: #3d2a00; color: #f5b84a; border-color: #6e4a10; }
+  .dark .cl-phase-badge.phase-2     { background: #0d3320; color: #4ecc8a; border-color: #1a5c38; }
+  .dark .cl-phase-badge.phase-3     { background: #250d4a; color: #c08aff; border-color: #5b2d9e; }
+  .dark .cl-phase-badge.phase-4     { background: #3d0a14; color: #ff8096; border-color: #7e1e2e; }
+
+  .cl-rule {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* 항목 */
+  .cl-items { display: flex; flex-direction: column; gap: 10px; }
+  .cl-item {
+    display: flex;
+    gap: 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    align-items: flex-start;
+  }
+  .cl-item-icon {
+    font-size: 1.05rem;
+    margin-top: 1px;
+    flex-shrink: 0;
+    width: 22px;
+    text-align: center;
+  }
+  .cl-item-body { flex: 1; min-width: 0; }
+  .cl-item-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+  .cl-item-detail {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.55;
+  }
+  .cl-item-detail ul {
+    margin: 4px 0 0 0;
+    padding-left: 16px;
+  }
+  .cl-item-detail li { margin-bottom: 2px; }
+  .cl-tag {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-right: 4px;
+    vertical-align: middle;
+    background: var(--surface-3);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+  .cl-tag.feat  { background:#e7f5ff; color:#1971c2; border-color:#a5d8ff; }
+  .cl-tag.fix   { background:#fff3bf; color:#805900; border-color:#ffd43b; }
+  .cl-tag.ux    { background:#f3faf4; color:#2f7a45; border-color:#8ce99a; }
+  .cl-tag.style { background:#f8f0ff; color:#7c3aed; border-color:#d0bfff; }
+  .dark .cl-tag.feat  { background:#1a3a52; color:#74c0fc; border-color:#2b5e80; }
+  .dark .cl-tag.fix   { background:#3d3000; color:#ffd43b; border-color:#664e00; }
+  .dark .cl-tag.ux    { background:#0d2e16; color:#51cf66; border-color:#1a5e2e; }
+  .dark .cl-tag.style { background:#1e0f40; color:#c08aff; border-color:#4a2a80; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="changelog-page">
+  <h1>📋 변경 이력</h1>
+  <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
+
+  <!-- ── 2026-04-14 Phase 4 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-14</span>
+      <span class="cl-phase-badge phase-4">Phase 4</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🔔</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 브라우저 알림 기능 추가</div>
+          <div class="cl-item-detail">
+            APScheduler(1분 주기)로 15분 후 시작 일정을 감지하고, 클라이언트 1분 폴링으로 브라우저 Push 알림 표시.
+            <ul>
+              <li>중복 알림 방지 (당일 동일 이벤트 기준)</li>
+              <li>팀 공지 저장 시 전체 사용자 알림 발송 (작성자 제외)</li>
+              <li><code>Notification.requestPermission()</code> 자동 요청</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">📢</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 팀 공지 게시판 추가</div>
+          <div class="cl-item-detail">
+            Toast UI Editor 기반 팀 공지 작성/이력 조회 페이지 추가.
+            <ul>
+              <li>내비게이션에 '📢 팀 공지' 메뉴 추가</li>
+              <li>홈 화면 우측 상단에 최신 팀 공지 패널 표시 (작성자·날짜 포함)</li>
+              <li>이력 보기 페이지: 이전 공지 목록 + 뷰어</li>
+              <li>공지 저장 시 전체 팀원 브라우저 알림 발송</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🏠</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">ux</span> 홈 레이아웃 개선</div>
+          <div class="cl-item-detail">
+            예정 회의 + 팀 공지 2열 배치, 내 담당 일정(칸반) 전체 너비 확장.
+            <ul>
+              <li>팀 공지 패널 너비 40% 고정</li>
+              <li>예정 회의 항목 최대 5개로 제한</li>
+              <li>예정 회의 클릭 시 일정 편집 모달 오픈</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🔁</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> Phase 4 — 일정 고급 기능</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>일정 event_type 구분 (회의 / 개인 / 팀)</li>
+              <li>일정 반복 규칙: 매일·매주·매월 + 종료일 설정</li>
+              <li>반복 일정 자식 이벤트에서 부모 반복 규칙 표시 버그 수정</li>
+              <li>담당자 필수 입력 (* 표시) + 인라인 오류 메시지</li>
+              <li>캘린더 툴바 버튼 위치 조정</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🔍</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 프로젝트 관리 검색 → Ctrl+K 통합 검색으로 이전</div>
+          <div class="cl-item-detail">
+            프로젝트 관리 페이지 전용 검색창을 제거하고 헤더 전역 Ctrl+K 검색에 통합.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 2026-04-14 Phase 3 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-14</span>
+      <span class="cl-phase-badge phase-3">Phase 3</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">⚙️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> Phase 3 — 칸반·설정·UX 개선</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>칸반 카드 모달 공유 (일정 모달과 동일)</li>
+              <li>시간 멀티셀렉트 드롭다운 적용</li>
+              <li>완료 일정 숨기기 토글</li>
+              <li>사용자 개인 설정 (자동 새로고침 주기 등)</li>
+              <li>모달창 ESC 키 닫기 지원</li>
+              <li>칸반 드래그 드롭 영역 컬럼 전체로 확장</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">📊</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 간트 고급 기능</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>간트 바 좌우 드래그로 일정 이동</li>
+              <li>간트 바 세로 드래그로 프로젝트 간 이동</li>
+              <li>자동 완료 처리 + 기한 초과(D+N) 배지 표시</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🛡️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">fix</span> 관리자 페이지 및 프로필 드롭다운 개선</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>관리자 계정 보안 강화</li>
+              <li>가입 신청 카운트 뱃지 (프로필 + 드롭다운)</li>
+              <li>가입 신청 API 403 오류 수정</li>
+              <li>자동 새로고침 옵션 (3/4/5/10분, 기본 5분)</li>
+              <li>프로필 드롭다운 메뉴 순서 재정렬</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 2026-04-14 Phase 2 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-14</span>
+      <span class="cl-phase-badge phase-2">Phase 2</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🎨</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> Phase 2 — 뷰 필터, 시각 개선, 관리자 기능</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>캘린더/칸반 뷰 필터 (팀·담당자 기준)</li>
+              <li>시각적 개선: 우선순위 색상, 카드 디자인 정리</li>
+              <li>관리자 페이지: 사용자 관리, 팀 관리, 가입 승인</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🐛</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">fix</span> 1단계 긴급 버그 수정 및 UX 개선</div>
+          <div class="cl-item-detail">
+            테스트 후 수집된 버그 10개 수정 — 날짜 저장 오류, 모달 포커스, 칸반 상태 동기화 등.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 2026-04-13 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-13</span>
+      <span class="cl-phase-badge phase-1">Phase 1</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">📁</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 프로젝트 관리 페이지 완성</div>
+          <div class="cl-item-detail">
+            분할 패널 UI — 왼쪽 목록 + 오른쪽 편집 패널 구성.
+            <ul>
+              <li>생성/편집 폼 통합 (동일 필드)</li>
+              <li>프로젝트 편집 패널에 기간 날짜 지우기 버튼</li>
+              <li>미지정 일정 칸반 Backlog 자동 배치</li>
+              <li>미지정 일정 개별 완료/재개 기능</li>
+              <li>일정에 완료 처리/재개 버튼 추가</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">📦</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> PyInstaller onedir 배포 설정</div>
+          <div class="cl-item-detail">
+            <code>WhatUdoin.spec</code> 파일 추가 — 소스 없이 단일 폴더로 배포 가능.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 2026-04-12 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-12</span>
+      <span class="cl-phase-badge phase-init">초기 개발</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🏠</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 홈 화면 대시보드 구현</div>
+          <div class="cl-item-detail">
+            캘린더에서 홈 화면 분리, 인사말·진행률·예정 회의·내 담당 일정 칸반 표시.
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🔎</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 헤더 전역 검색바 추가 (Ctrl+K)</div>
+          <div class="cl-item-detail">
+            GitHub 스타일 Ctrl+K 단축키로 일정·프로젝트·회의록 통합 검색.
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">📝</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 회의록 기능 강화</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>이미지 파일 업로드 분리 (별도 엔드포인트)</li>
+              <li>목록 전체 보기 버튼 + 제목 검색</li>
+              <li>작성자 필터 + 칼럼 레이아웃 개선</li>
+              <li>캘린더 일정 연결 표시</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">📅</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 캘린더 기능 개선</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>ISO 주차 표시</li>
+              <li>타임존 드리프트 버그 수정</li>
+              <li>UI 상태 localStorage 영속화 (뷰, 날짜 위치)</li>
+              <li>프로젝트 간트 접기/펼치기 전체 버튼</li>
+              <li>간트 타임라인 휠 스크롤, 줌 슬라이더</li>
+              <li>간트 트리 구조 전환 (프로젝트별 접기)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 2026-04-11 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-11</span>
+      <span class="cl-phase-badge phase-init">초기 개발</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🌙</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 다크 테마 + 프로필 드롭다운 추가</div>
+          <div class="cl-item-detail">
+            전체 페이지 다크 테마 지원 (칸반·프로젝트 포함), 프로필 드롭다운에 테마 토글 스위치.
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🗂️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 칸반 보드 추가</div>
+          <div class="cl-item-detail">
+            일정 상태(예정·진행·완료)별 칸반 보드 뷰 + 카드 상세 모달 + 우선순위 기능.
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">📐</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 프로젝트 간트 차트 초기 구현</div>
+          <div class="cl-item-detail">
+            타임라인 기반 간트 차트, 팀 컬럼, 줌 슬라이더, 트리 구조 접기 기능.
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🪟</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">ux</span> 캘린더 레이아웃 및 뷰 개선</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>캘린더 full-width 레이아웃 + 내비게이션 이모티콘</li>
+              <li>2주 뷰 추가 (월/2주/주/일)</li>
+              <li>주/일 뷰 휠 동작 개선 + all-day sticky 고정</li>
+              <li>일정 추가 모달 2열 레이아웃</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🔧</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag style">style</span> 일정 등록/수정 모달 공유 모듈 분리</div>
+          <div class="cl-item-detail">
+            <code>event-modal.js</code>로 분리 — 캘린더·칸반·홈에서 동일 모달 재사용.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 2026-04-10 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-10</span>
+      <span class="cl-phase-badge phase-init">MVP</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🚀</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> WhatUDoin MVP 초기 구현</div>
+          <div class="cl-item-detail">
+            FastAPI + SQLite + FullCalendar 기반 인트라넷 일정 관리 서비스 최초 구현.
+            <ul>
+              <li>일정 CRUD (캘린더 뷰)</li>
+              <li>AI 자연어 파싱 (Ollama 연동)</li>
+              <li>로그인·사용자 등록·팀 관리</li>
+              <li>일정 등록 날짜 선택 UX + 시간 프리셋 버튼</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}
