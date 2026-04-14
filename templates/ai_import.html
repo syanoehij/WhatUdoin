@@ -39,6 +39,14 @@
 <script>
 let parsedEvents = [];
 
+// 자동 새로고침 차단: AI 파싱 진행 중이거나 결과 확인 중이면 스킵
+window._blockAutoRefresh = () => {
+  const loading = document.getElementById('loading');
+  const result  = document.getElementById('result-section');
+  return (loading && !loading.classList.contains('hidden')) ||
+         (result  && !result.classList.contains('hidden'));
+};
+
 async function loadModels() {
   const sel = document.getElementById('model-select');
   const statusEl = document.getElementById('model-status');

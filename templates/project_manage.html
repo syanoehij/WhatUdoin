@@ -523,6 +523,14 @@ let filter    = 'active';   // 'active' | 'closed'
 let selIdx    = null;       // 현재 선택된 프로젝트 인덱스
 let selName   = null;       // 선택 유지를 위한 이름
 
+// 자동 새로고침 차단: 생성/편집 패널이 열려있으면 스킵
+window._blockAutoRefresh = () => {
+  const create = document.getElementById('pm-create-panel');
+  const edit   = document.getElementById('pm-edit-panel');
+  return (create && create.classList.contains('visible')) ||
+         (edit   && edit.classList.contains('visible'));
+};
+
 /* ── 데이터 로드 ── */
 async function loadProjectList() {
   const res = await fetch('/api/manage/projects', { cache: 'no-store' });

@@ -91,6 +91,14 @@ let noticeEditor    = null;
 let _noticeDirty    = false;
 let _noticeAutoSave = null;
 
+// 자동 새로고침 훅: dirty 상태면 저장 후 reload
+window._autoSaveAndRefresh = async () => {
+  if (IS_EDITOR && _noticeDirty) {
+    await saveNotice(true);
+  }
+  location.reload();
+};
+
 // 새로고침/이탈 방지
 window.addEventListener('beforeunload', (e) => {
   if (IS_EDITOR && _noticeDirty) {

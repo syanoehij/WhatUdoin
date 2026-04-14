@@ -193,6 +193,14 @@ function releaseLock() {
 let _meetingDirty = false;
 let _meetingAutoSave = null;
 
+// 자동 새로고침 훅: dirty 상태면 저장 후 reload, 아니면 그냥 reload
+window._autoSaveAndRefresh = async () => {
+  if (IS_EDITOR && !LOCKED_BY && _meetingDirty) {
+    await saveMeeting();
+  }
+  location.reload();
+};
+
 // 새로고침/이탈 방지 (편집 중 변경사항 있을 때)
 window.addEventListener('beforeunload', (e) => {
   releaseLock();
