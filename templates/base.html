@@ -730,7 +730,8 @@
   (function() {
     if (!CURRENT_USER) return;
 
-    let _notifPrevCount = 0;
+    // sessionStorage로 새로고침 후에도 이전 카운트 유지 (자동새로고침 중복 발화 방지)
+    let _notifPrevCount = parseInt(sessionStorage.getItem('notif_prev_count') || '0', 10);
 
     // 브라우저 알림 (허용된 경우 보조 수단으로만 사용)
     if ('Notification' in window && Notification.permission === 'default') {
@@ -756,11 +757,12 @@
             badge.classList.add('hidden');
           }
         }
-        // 이전보다 알림이 늘었으면 브라우저 알림 (페이지 로드 첫 폴링 포함)
+        // 이전보다 알림이 늘었으면 브라우저 알림
         if (count > _notifPrevCount) {
           _showBrowserNotif(`새 알림 ${count - _notifPrevCount}건이 있습니다.`);
         }
         _notifPrevCount = count;
+        sessionStorage.setItem('notif_prev_count', count);
       } catch {}
     }
 
@@ -833,6 +835,7 @@
         const badge = document.getElementById('notif-badge');
         if (badge) badge.classList.add('hidden');
         _notifPrevCount = 0;
+        sessionStorage.setItem('notif_prev_count', '0');
         const list = document.getElementById('notif-list');
         if (list) list.innerHTML = '<div class="notif-empty">알림이 없습니다.</div>';
         // 드롭다운 닫기
