@@ -222,8 +222,18 @@
 {% block scripts %}
 <script>
 const PROJECT_COLORS = ['#6c5ce7','#00b894','#0984e3','#e17055','#fdcb6e','#fd79a8','#00cec9','#a29bfe'];
+let _storedProjColors = {};
+
+async function loadProjColors() {
+  try {
+    const r = await fetch('/api/project-colors');
+    if (r.ok) _storedProjColors = await r.json();
+  } catch {}
+}
+
 function projectColor(name) {
   if (!name) return '#b2bec3';
+  if (_storedProjColors[name]) return _storedProjColors[name];
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
   return PROJECT_COLORS[Math.abs(h) % PROJECT_COLORS.length];
@@ -437,13 +447,15 @@ window.onKDetailSaved = window.onEventSaved;
 
 // ── 초기화 ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  if (CURRENT_USER) {
-    document.getElementById('view-user').classList.remove('hidden');
-    loadUser();
-  } else {
-    document.getElementById('view-guest').classList.remove('hidden');
-    loadGuest();
-  }
+  loadProjColors().then(() => {
+    if (CURRENT_USER) {
+      document.getElementById('view-user').classList.remove('hidden');
+      loadUser();
+    } else {
+      document.getElementById('view-guest').classList.remove('hidden');
+      loadGuest();
+    }
+  });
 });
 
 window.__pageSearch = {

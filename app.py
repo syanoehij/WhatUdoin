@@ -781,6 +781,12 @@ async def manage_project_memo(name: str, request: Request):
     return {"ok": True}
 
 
+@app.get("/api/project-colors")
+def project_colors_api():
+    """프로젝트명 → 색상 딕셔너리 반환 (색상이 설정된 항목만)"""
+    return db.get_project_colors()
+
+
 @app.patch("/api/manage/projects/{name:path}/color")
 async def manage_project_color(name: str, request: Request):
     _require_editor(request)

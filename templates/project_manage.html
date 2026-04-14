@@ -462,9 +462,13 @@
           <label>색상</label>
           <div class="pm-color-row">
             <input type="color" class="pm-color-swatch" id="ed-color" value="#4a90d9"
-                   oninput="syncEditPresets(this.value)" />
+                   oninput="syncEditPresets(this.value); _edColorAuto=false; _updateEdColorReset();" />
             <div class="pm-color-presets" id="ed-presets"></div>
+            <button type="button" id="ed-color-reset-btn" class="pm-btn"
+                    style="font-size:0.76rem;padding:3px 10px;white-space:nowrap;flex-shrink:0;"
+                    onclick="resetEdColor()">색상 초기화</button>
           </div>
+          <div id="ed-color-auto-label" style="display:none;font-size:0.78rem;color:var(--text-muted);margin-top:4px;">자동 배정됩니다</div>
         </div>
         <div class="pm-field">
           <label>일정 기간 <span style="color:var(--text-faint);font-weight:400;">(설정 시 하위 일정 범위 대신 이 날짜로 표시)</span></label>
@@ -692,11 +696,13 @@ function showEditPanel(idx) {
 
   document.getElementById('ed-subtitle').textContent = p.name;
   document.getElementById('ed-name').value  = p.name;
+  _edColorAuto = !p.color;
   document.getElementById('ed-color').value = p.color || '#4a90d9';
   document.getElementById('ed-start').value = p.start_date || '';
   document.getElementById('ed-end').value   = p.end_date   || '';
   document.getElementById('ed-memo').value  = p.memo || '';
   renderEditPresets(p.color || '#4a90d9');
+  _updateEdColorReset();
 
   document.getElementById('pm-edit-panel').classList.add('visible');
   setTimeout(() => document.getElementById('ed-name').focus(), 50);
@@ -708,10 +714,35 @@ function hideEditPanel() {
   else document.getElementById('pm-no-select').style.display = '';
 }
 
+let _edColorAuto = false;
+
+function resetEdColor() {
+  _edColorAuto = true;
+  _updateEdColorReset();
+}
+function _updateEdColorReset() {
+  const swatch = document.getElementById('ed-color');
+  const label  = document.getElementById('ed-color-auto-label');
+  const btn    = document.getElementById('ed-color-reset-btn');
+  if (_edColorAuto) {
+    swatch.style.opacity = '0.3';
+    swatch.style.pointerEvents = 'none';
+    label.style.display = 'block';
+    btn.textContent = '색상 직접 설정';
+    btn.onclick = () => { _edColorAuto = false; _updateEdColorReset(); };
+  } else {
+    swatch.style.opacity = '';
+    swatch.style.pointerEvents = '';
+    label.style.display = 'none';
+    btn.textContent = '색상 초기화';
+    btn.onclick = resetEdColor;
+  }
+}
+
 async function saveEdit() {
   const p       = projects[selIdx];
   const newName = document.getElementById('ed-name').value.trim();
-  const color   = document.getElementById('ed-color').value;
+  const color   = _edColorAuto ? '' : document.getElementById('ed-color').value;
   const start   = document.getElementById('ed-start').value || null;
   const end     = document.getElementById('ed-end').value   || null;
   const memo    = document.getElementById('ed-memo').value.trim() || null;
@@ -890,8 +921,10 @@ function renderEditPresets(selected) {
   `).join('');
 }
 function pickEditPreset(color) {
+  _edColorAuto = false;
   document.getElementById('ed-color').value = color;
   renderEditPresets(color);
+  _updateEdColorReset();
 }
 function syncEditPresets(color) {
   renderEditPresets(PRESET_COLORS.includes(color) ? color : '');

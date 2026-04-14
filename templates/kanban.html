@@ -251,8 +251,18 @@ const PROJECT_COLORS = [
   '#d63031','#27ae60',
 ];
 
+let _storedProjColors = {};
+
+async function loadProjColors() {
+  try {
+    const r = await fetch('/api/project-colors');
+    if (r.ok) _storedProjColors = await r.json();
+  } catch {}
+}
+
 function projectColor(name) {
   if (!name) return '#b2bec3';
+  if (_storedProjColors[name]) return _storedProjColors[name];
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
   return PROJECT_COLORS[Math.abs(h) % PROJECT_COLORS.length];
@@ -444,7 +454,7 @@ window.onEventSaved   = loadKanban;
 window.onKDetailSaved = loadKanban;
 
 // 초기 로드
-loadKanban();
+loadProjColors().then(() => loadKanban());
 
 // ── 전역 검색 연결 ──────────────────────────────────────
 window.__pageSearch = {
