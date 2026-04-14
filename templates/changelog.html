@@ -124,6 +124,46 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-14 추가 기능 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-14</span>
+      <span class="cl-phase-badge phase-4">추가</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🔒</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 회의록 단독 편집 잠금</div>
+          <div class="cl-item-detail">
+            누군가 회의록을 편집 중이면 다른 사용자는 뷰어 모드로만 접근 가능.
+            <ul>
+              <li>편집 시작 시 잠금 획득, 30초 heartbeat로 유지</li>
+              <li>저장 또는 페이지 이탈 시 잠금 자동 해제</li>
+              <li>5분간 heartbeat 없으면 잠금 자동 만료</li>
+              <li>잠금 중 접근 시 🔒 배너 + "OOO님이 편집 중" + 새로고침 버튼 표시</li>
+              <li>저장/삭제/AI 버튼 숨김, 내용은 읽기 전용 뷰어로 표시</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">📋</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span> 변경 이력 페이지 추가</div>
+          <div class="cl-item-detail">
+            프로필 드롭다운 → 관리자 페이지 아래에 <strong>📋 변경 이력</strong> 링크 추가.
+            MVP부터 현재까지 날짜·단계별로 그룹화된 개발 이력 페이지 (<code>/changelog</code>).
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ── 2026-04-14 Phase 4 ── -->
   <div class="cl-group">
     <div class="cl-group-header">
