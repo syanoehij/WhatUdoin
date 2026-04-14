@@ -124,6 +124,49 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-15 알림 개선 (버그 수정 + 저장 연동) ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-15</span>
+      <span class="cl-phase-badge phase-4">3차 19단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🔔</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">수정</span>브라우저 알림 미발화 버그 수정</div>
+          <div class="cl-item-detail">초기값 오류로 인해 브라우저 알림이 전혀 울리지 않던 문제를 수정했습니다. <code>sessionStorage</code>에 마지막 알림 카운트를 저장해 자동 새로고침 시 중복 발화도 방지합니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">💾</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">신규</span>에디터 저장 시 알림 즉시 체크</div>
+          <div class="cl-item-detail">메모장·체크 에디터에서 저장 버튼을 누르면 1분 폴링을 기다리지 않고 즉시 알림을 확인합니다. 작성 중 밀린 알림이 저장 순간에 발화됩니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-15 헤더 sticky + 간격 통일 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-15</span>
+      <span class="cl-phase-badge phase-4">3차 18단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">📌</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">개선</span>헤더 스크롤 고정 및 간격 통일</div>
+          <div class="cl-item-detail">스크롤해도 헤더가 항상 상단에 고정(<code>position: sticky</code>)됩니다. ＋ 버튼을 <code>header-right</code> 안으로 이동해 ＋·🔔·프로필 세 버튼의 간격(gap 8px)을 통일했습니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-15 헤더 버튼 높이 통일 ── -->
   <div class="cl-group">
     <div class="cl-group-header">
