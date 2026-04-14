@@ -52,6 +52,13 @@
       </div>
     </div>
 
+    {% if user %}
+    <button class="header-add-btn" onclick="openModal()" title="일정 추가">
+      <span class="header-add-icon">＋</span>
+      <span class="header-add-label">일정</span>
+    </button>
+    {% endif %}
+
     <div class="header-right">
       {% if user %}
         <div class="profile-menu" id="profile-menu">
