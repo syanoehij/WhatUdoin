@@ -816,20 +816,33 @@ def create_notification_for_all(type_: str, message: str, event_id: int = None, 
             )
 
 
+def get_notification_count(user_name: str) -> int:
+    """미읽은 알림 수 반환 (읽음 처리 없음)"""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as cnt FROM notifications WHERE user_name = ? AND is_read = 0",
+            (user_name,)
+        ).fetchone()
+    return row["cnt"] if row else 0
+
+
 def get_pending_notifications(user_name: str) -> list[dict]:
-    """미읽은 알림 반환 후 읽음 처리"""
+    """미읽은 알림 반환 (읽음 처리 없음)"""
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM notifications WHERE user_name = ? AND is_read = 0 ORDER BY id ASC",
+            "SELECT * FROM notifications WHERE user_name = ? AND is_read = 0 ORDER BY id DESC",
             (user_name,)
         ).fetchall()
-        if rows:
-            ids = [r["id"] for r in rows]
-            conn.execute(
-                f"UPDATE notifications SET is_read = 1 WHERE id IN ({','.join('?'*len(ids))})",
-                ids
-            )
     return [dict(r) for r in rows]
+
+
+def mark_all_notifications_read(user_name: str):
+    """모든 미읽은 알림을 읽음 처리"""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE notifications SET is_read = 1 WHERE user_name = ? AND is_read = 0",
+            (user_name,)
+        )
 
 
 def check_upcoming_event_alarms():

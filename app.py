@@ -341,12 +341,29 @@ async def api_save_notice(request: Request):
 
 # ── 알림 API ─────────────────────────────────────────────
 
+@app.get("/api/notifications/count")
+def get_notification_count(request: Request):
+    user = auth.get_current_user(request)
+    if not user:
+        return {"count": 0}
+    return {"count": db.get_notification_count(user["name"])}
+
+
 @app.get("/api/notifications/pending")
 def get_pending_notifications(request: Request):
     user = auth.get_current_user(request)
     if not user:
         return []
     return db.get_pending_notifications(user["name"])
+
+
+@app.post("/api/notifications/read-all")
+def mark_all_notifications_read(request: Request):
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401)
+    db.mark_all_notifications_read(user["name"])
+    return {"ok": True}
 
 
 # ── 인증 API ────────────────────────────────────────────

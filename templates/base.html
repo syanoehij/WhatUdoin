@@ -18,6 +18,69 @@
 
   <link rel="stylesheet" href="/static/css/style.css?v={{ range(1000,9999) | random }}" />
   {% block extra_head %}{% endblock %}
+  <style>
+  /* ── 알림 벨 & 드롭다운 ── */
+  .notif-bell-wrap { position: relative; }
+  .notif-bell-btn {
+    position: relative;
+    background: none; border: none; cursor: pointer;
+    font-size: 1.1rem; padding: 5px 8px;
+    border-radius: 8px; color: var(--text);
+    display: flex; align-items: center;
+    transition: background 0.15s;
+  }
+  .notif-bell-btn:hover { background: rgba(0,0,0,0.06); }
+  .dark .notif-bell-btn:hover { background: rgba(255,255,255,0.08); }
+  .notif-badge {
+    position: absolute; top: 1px; right: 1px;
+    min-width: 16px; height: 16px;
+    background: #e74c3c; color: #fff;
+    font-size: 0.62rem; font-weight: 700;
+    border-radius: 8px; padding: 0 3px;
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1; pointer-events: none;
+  }
+  .notif-dropdown {
+    position: absolute; top: calc(100% + 6px); right: 0;
+    width: 300px; max-height: 400px;
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #e0e0e0);
+    border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.14);
+    z-index: 2000; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .notif-dd-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 15px;
+    border-bottom: 1px solid var(--border, #e0e0e0);
+    flex-shrink: 0;
+  }
+  .notif-dd-title { font-size: 0.88rem; font-weight: 700; color: var(--text, #222); }
+  .notif-read-all-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 0.76rem; color: var(--accent, #6c5ce7);
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .notif-read-all-btn:hover { background: rgba(0,0,0,0.05); }
+  .notif-list { overflow-y: auto; flex: 1; }
+  .notif-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 11px 15px;
+    border-bottom: 1px solid var(--border, #f0f0f0);
+    transition: background 0.1s;
+  }
+  .notif-item:last-child { border-bottom: none; }
+  .notif-item:hover { background: rgba(0,0,0,0.03); }
+  .dark .notif-item:hover { background: rgba(255,255,255,0.05); }
+  .notif-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+  .notif-content { flex: 1; min-width: 0; }
+  .notif-msg { font-size: 0.84rem; color: var(--text, #222); line-height: 1.45; }
+  .notif-time { font-size: 0.74rem; color: var(--text-faint, #999); margin-top: 3px; }
+  .notif-empty {
+    padding: 28px 16px; text-align: center;
+    font-size: 0.84rem; color: var(--text-faint, #aaa);
+  }
+  </style>
   <script>
     const CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id, 'name': user.name} | tojson if user else 'null' }};
     // 다크 테마 깜빡임 방지: 렌더링 전에 적용
@@ -61,6 +124,23 @@
 
     <div class="header-right">
       {% if user %}
+        <!-- ── 알림 벨 ── -->
+        <div class="notif-bell-wrap" id="notif-bell-wrap">
+          <button class="notif-bell-btn" id="notif-bell-btn"
+                  onclick="toggleNotifDropdown()" title="알림">
+            🔔
+            <span class="notif-badge hidden" id="notif-badge"></span>
+          </button>
+          <div class="notif-dropdown hidden" id="notif-dropdown">
+            <div class="notif-dd-header">
+              <span class="notif-dd-title">알림</span>
+              <button class="notif-read-all-btn" onclick="markAllNotifsRead()">전체 읽음</button>
+            </div>
+            <div class="notif-list" id="notif-list">
+              <div class="notif-empty">알림이 없습니다.</div>
+            </div>
+          </div>
+        </div>
         <div class="profile-menu" id="profile-menu">
           <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu()">
             {{ user.name }}
@@ -642,35 +722,134 @@
     }
   </script>
 
-  <!-- ── 브라우저 알림 폴링 ── -->
+  <!-- ── 앱 내 알림 시스템 ── -->
   <script>
   (function() {
     if (!CURRENT_USER) return;
 
-    // 브라우저 알림 권한 요청
+    let _notifPrevCount = -1;
+
+    // 브라우저 알림 (허용된 경우 보조 수단으로만 사용)
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
-
-    function showBrowserNotification(msg, type) {
+    function _showBrowserNotif(msg) {
       if (!('Notification' in window) || Notification.permission !== 'granted') return;
-      const icons = { notice: '📢', assigned: '📌', upcoming: '⏰' };
-      const icon = icons[type] || '🔔';
       new Notification('WhatUDoin', { body: msg, icon: '/static/favicon.ico' });
     }
 
-    async function pollNotifications() {
+    // 뱃지 업데이트 (읽음 처리 없음)
+    async function _updateBadge() {
+      try {
+        const res = await fetch('/api/notifications/count');
+        if (!res.ok) return;
+        const { count } = await res.json();
+        const badge = document.getElementById('notif-badge');
+        if (badge) {
+          if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : count;
+            badge.classList.remove('hidden');
+          } else {
+            badge.classList.add('hidden');
+          }
+        }
+        // 새 알림이 추가됐으면 브라우저 알림 시도
+        if (_notifPrevCount >= 0 && count > _notifPrevCount) {
+          _showBrowserNotif(`새 알림 ${count - _notifPrevCount}건이 있습니다.`);
+        }
+        _notifPrevCount = count;
+      } catch {}
+    }
+
+    // 드롭다운 열기: 알림 목록 불러오기 (읽음 처리 없음, 단지 표시만)
+    async function _loadNotifList() {
       try {
         const res = await fetch('/api/notifications/pending');
         if (!res.ok) return;
         const items = await res.json();
-        items.forEach(n => showBrowserNotification(n.message, n.type));
+        _renderNotifList(items);
       } catch {}
     }
 
-    // 페이지 로드 시 즉시 1회 + 이후 1분마다
-    pollNotifications();
-    setInterval(pollNotifications, 60000);
+    function _renderNotifList(items) {
+      const list = document.getElementById('notif-list');
+      if (!list) return;
+      if (!items.length) {
+        list.innerHTML = '<div class="notif-empty">알림이 없습니다.</div>';
+        return;
+      }
+      const icons = { notice: '📢', assigned: '📌', upcoming: '⏰' };
+      list.innerHTML = items.map(n => `
+        <div class="notif-item">
+          <span class="notif-icon">${icons[n.type] || '🔔'}</span>
+          <div class="notif-content">
+            <div class="notif-msg">${_escHtml(n.message)}</div>
+            <div class="notif-time">${_timeAgo(n.created_at)}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function _escHtml(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function _timeAgo(dateStr) {
+      if (!dateStr) return '';
+      const now = new Date();
+      const past = new Date(dateStr.replace(' ', 'T'));
+      const diffMs = now - past;
+      const diffMin = Math.floor(diffMs / 60000);
+      if (diffMin < 1) return '방금';
+      if (diffMin < 60) return `${diffMin}분 전`;
+      const diffH = Math.floor(diffMin / 60);
+      if (diffH < 24) return `${diffH}시간 전`;
+      return `${Math.floor(diffH / 24)}일 전`;
+    }
+
+    // 전역: 드롭다운 토글
+    window.toggleNotifDropdown = async function() {
+      const dd   = document.getElementById('notif-dropdown');
+      const wrap = document.getElementById('notif-bell-wrap');
+      if (!dd) return;
+      const isOpen = !dd.classList.contains('hidden');
+      if (isOpen) {
+        dd.classList.add('hidden');
+        wrap.classList.remove('open');
+      } else {
+        dd.classList.remove('hidden');
+        wrap.classList.add('open');
+        await _loadNotifList();
+      }
+    };
+
+    // 전역: 전체 읽음
+    window.markAllNotifsRead = async function() {
+      try {
+        await fetch('/api/notifications/read-all', { method: 'POST' });
+        const badge = document.getElementById('notif-badge');
+        if (badge) badge.classList.add('hidden');
+        _notifPrevCount = 0;
+        const list = document.getElementById('notif-list');
+        if (list) list.innerHTML = '<div class="notif-empty">알림이 없습니다.</div>';
+        // 드롭다운 닫기
+        document.getElementById('notif-dropdown')?.classList.add('hidden');
+        document.getElementById('notif-bell-wrap')?.classList.remove('open');
+      } catch {}
+    };
+
+    // 드롭다운 외부 클릭 시 닫기
+    document.addEventListener('click', function(e) {
+      const wrap = document.getElementById('notif-bell-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        document.getElementById('notif-dropdown')?.classList.add('hidden');
+        wrap.classList.remove('open');
+      }
+    });
+
+    // 초기 1회 + 1분 간격 폴링
+    _updateBadge();
+    setInterval(_updateBadge, 60000);
   })();
   </script>
 </body>
