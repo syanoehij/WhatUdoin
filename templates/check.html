@@ -505,6 +505,8 @@ let _autoSaveTimer      = null;
 let _editMode           = false; // true = 편집기 모드, false = 뷰어 모드
 let _lockedByOther      = false; // 다른 사람이 편집 중
 let _heartbeatInterval  = null;  // 잠금 heartbeat 타이머
+let _pollTimer          = null;  // 뷰어 실시간 동기화 폴링
+let _pollUpdatedAt      = null;  // 마지막으로 확인한 updated_at
 
 // 자동 새로고침 훅: 편집 중 dirty면 저장 후 reload
 window._autoSaveAndRefresh = async () => {
@@ -662,9 +664,11 @@ async function openChecklist(id, forceEdit = false) {
   setDirty(false);
 
   if (forceEdit && IS_EDITOR && !_lockedByOther) {
+    _stopPoll();
     _showEditorMode();
   } else {
     _showViewerMode();
+    _startPoll(id);
   }
 }
 
@@ -743,6 +747,7 @@ function _showViewerMode() {
 
 // ── 편집 모드로 전환 ──────────────────────────────────────
 async function _showEditorMode() {
+  _stopPoll(); // 편집 중에는 폴링 중단
   // 잠금 획득
   const lockRes = await fetch(`/api/checklists/${_curId}/lock`, { method: 'POST' });
   if (!lockRes.ok) {
@@ -775,6 +780,44 @@ async function _showEditorMode() {
 
 function _stopHeartbeat() {
   if (_heartbeatInterval) { clearInterval(_heartbeatInterval); _heartbeatInterval = null; }
+}
+
+// ── 뷰어 실시간 동기화 폴링 ───────────────────────────────
+function _startPoll(id) {
+  _stopPoll();
+  _pollUpdatedAt = _curItem?.updated_at || null;
+  _pollTimer = setInterval(async () => {
+    if (_editMode || !_curId || _curId !== id) { _stopPoll(); return; }
+    try {
+      const res = await fetch(`/api/checklists/${_curId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.updated_at === _pollUpdatedAt) return; // 변경 없음
+      _pollUpdatedAt = data.updated_at;
+      _curItem = data;
+
+      // 잠금 상태도 재확인
+      const lockRes = await fetch(`/api/checklists/${_curId}/lock`);
+      const lockData = lockRes.ok ? await lockRes.json() : { locked_by: null };
+      _setLockState(lockData.locked_by);
+
+      // 목록 updated_at 갱신
+      const idx = _allChecklists.findIndex(c => c.id === _curId);
+      if (idx >= 0) _allChecklists[idx] = { ..._allChecklists[idx], updated_at: data.updated_at };
+      renderList();
+      _updateMeta();
+
+      // 잠금 해제됐거나 잠금 없으면 뷰어 갱신
+      if (!_lockedByOther) {
+        document.getElementById('ck-viewer-wrap').style.display = '';
+        renderViewer(data.content);
+      }
+    } catch {}
+  }, 10000); // 10초마다
+}
+
+function _stopPoll() {
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
 }
 
 function switchToEdit() {
@@ -951,6 +994,7 @@ async function saveContent(auto = false) {
       document.getElementById('ck-save-btn').style.display    = 'none';
     }
     renderViewer(_curItem.content);
+    _startPoll(_curId); // 뷰어 복귀 후 폴링 재시작
   }
 }
 
