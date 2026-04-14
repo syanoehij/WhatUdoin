@@ -853,6 +853,9 @@
       }
     });
 
+    // 저장 등 외부에서 즉시 알림 체크 가능하도록 전역 노출
+    window._checkNotifications = _updateBadge;
+
     // 초기 1회 + 1분 간격 폴링
     _updateBadge();
     setInterval(_updateBadge, 60000);

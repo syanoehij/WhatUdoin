@@ -295,6 +295,8 @@ async function saveContent(auto = false) {
     setDirty(false);
     clearInterval(_heartbeat);
     await fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'DELETE' });
+    // 저장 시점에 알림 즉시 체크
+    if (typeof window._checkNotifications === 'function') window._checkNotifications();
 
     const toast = document.getElementById('cke-save-toast');
     toast.textContent = auto ? '자동 저장되었습니다.' : '저장되었습니다.';
