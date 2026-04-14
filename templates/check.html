@@ -527,8 +527,9 @@ function projColor(name) {
 document.addEventListener('DOMContentLoaded', async () => {
   await loadAll();
   renderProjList();
-  // 마지막 선택 프로젝트 복원
-  const savedProj = localStorage.getItem('ck_last_proj');
+  // URL ?proj= 파라미터 우선, 없으면 localStorage 복원
+  const urlProj  = new URLSearchParams(location.search).get('proj');
+  const savedProj = urlProj !== null ? urlProj : localStorage.getItem('ck_last_proj');
   if (savedProj !== null && savedProj !== '') {
     const allProjNames = [
       ...ALL_PROJECTS.map(p => p.name),
@@ -537,7 +538,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (allProjNames.includes(savedProj)) {
       selectProject(savedProj);
     }
-    // 없으면 전체 선택 상태 유지 (기본값)
   }
 });
 
@@ -956,9 +956,8 @@ async function createChecklist() {
   if (!res.ok) { alert('생성 실패'); return; }
   const { id } = await res.json();
   closeNewForm();
-  await loadAll();
-  renderProjList();
-  openChecklist(id, true); // 새 항목은 편집 모드로 열기
+  // 새 항목은 전체화면 에디터로 이동
+  window.location.href = `/check/${id}/edit`;
 }
 
 // ── 이름 변경 ─────────────────────────────────────────────

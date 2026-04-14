@@ -200,6 +200,24 @@ def check_page(request: Request):
     return templates.TemplateResponse(request, "check.html", _ctx(request, projects=projects))
 
 
+@app.get("/check/{checklist_id}/edit", response_class=HTMLResponse)
+def check_editor_page(request: Request, checklist_id: int):
+    user = auth.get_current_user(request)
+    if not user or user.get("role") not in ("editor", "admin"):
+        return RedirectResponse("/check")
+    item = db.get_checklist(checklist_id)
+    if not item:
+        return RedirectResponse("/check")
+    all_projs = db.get_all_projects_with_events()
+    projects = [p for p in all_projs if p.get("is_active", 1)]
+    lock = db.get_checklist_lock(checklist_id)
+    locked_by = lock["locked_by"] if lock else None
+    return templates.TemplateResponse(
+        request, "check_editor.html",
+        _ctx(request, checklist=item, locked_by=locked_by, projects=projects)
+    )
+
+
 # ── 체크리스트 API ────────────────────────────────────────────
 
 @app.get("/api/checklists")

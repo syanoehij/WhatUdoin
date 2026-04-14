@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+{% block title %}{{ checklist.title }} — 체크리스트 편집{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css" />
+<script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
+<style>
+  .lock-banner {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff8e1; border: 1px solid #ffe082;
+    border-radius: 8px; padding: 10px 16px; margin: 12px 16px 0;
+    font-size: 0.88rem; color: #7a5800;
+  }
+  .dark .lock-banner { background: #3d2f00; border-color: #7a6000; color: #ffd166; }
+  .lock-banner-icon { font-size: 1.1rem; flex-shrink: 0; }
+  .lock-banner-refresh {
+    margin-left: auto; flex-shrink: 0;
+    background: none; border: 1px solid #ffe082; border-radius: 5px;
+    padding: 3px 10px; font-size: 0.8rem; cursor: pointer; color: inherit;
+  }
+  .lock-banner-refresh:hover { background: rgba(0,0,0,0.05); }
+
+  /* 헤더 내 제목/프로젝트 */
+  .ck-edit-meta {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  #ck-edit-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    outline: none;
+    padding: 3px 4px;
+    transition: border-color 0.15s;
+  }
+  #ck-edit-title:focus { border-bottom-color: var(--accent); }
+  #ck-edit-project {
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  .ck-dirty-dot {
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .ck-dirty-dot.dirty { color: var(--accent); }
+
+  /* editor-page 안에서 editor 전체 차지 */
+  #cke-editor-container {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #cke-editor-container .toastui-editor-defaultUI {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+  }
+  #cke-editor-container .toastui-editor-main {
+    flex: 1 !important;
+    overflow-y: auto !important;
+  }
+  #cke-editor-container .toastui-editor-ww-container,
+  #cke-editor-container .toastui-editor-md-container {
+    flex: 1 !important;
+    overflow-y: auto !important;
+  }
+
+  #cke-save-toast {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    background: var(--accent);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.88rem; font-weight: 600;
+    display: none; z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="editor-page">
+
+  {% if locked_by %}
+  <div class="lock-banner" id="lock-banner">
+    <span class="lock-banner-icon">🔒</span>
+    <span><strong>{{ locked_by }}</strong>님이 이미 편집 중입니다.</span>
+    <button class="lock-banner-refresh" onclick="location.reload()">새로고침</button>
+  </div>
+  {% endif %}
+
+  <!-- ── 헤더 ── -->
+  <div class="editor-header">
+    <a id="btn-back" href="/check" class="btn btn-sm">← 목록</a>
+
+    <div class="ck-edit-meta">
+      <input type="text" id="ck-edit-title"
+             value="{{ checklist.title | e }}"
+             placeholder="제목을 입력하세요"
+             {% if locked_by %}disabled{% endif %} />
+      <select id="ck-edit-project" {% if locked_by %}disabled{% endif %}>
+        <option value="">프로젝트 없음</option>
+        {% for p in projects %}
+        <option value="{{ p.name }}" {% if checklist.project == p.name %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+        {% if checklist.project and checklist.project not in projects | map(attribute='name') | list %}
+        <option value="{{ checklist.project }}" selected>{{ checklist.project }}</option>
+        {% endif %}
+      </select>
+      <span class="ck-dirty-dot" id="cke-dirty-dot"></span>
+    </div>
+
+    <div class="btn-group">
+      {% if not locked_by %}
+      <button class="btn btn-sm btn-danger" onclick="deleteChecklist()">삭제</button>
+      <button class="btn btn-sm btn-primary" onclick="saveContent()">저장</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── 에디터 본문 ── -->
+  <div class="editor-body">
+    <div class="editor-main">
+      {% if not locked_by %}
+      <div id="cke-editor-container"></div>
+      {% else %}
+      <!-- 잠금 상태: 뷰어만 표시 -->
+      <div id="cke-viewer-wrap" style="padding:24px; overflow-y:auto; flex:1;"></div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<div id="cke-save-toast">저장되었습니다.</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CKE_ID       = {{ checklist.id }};
+const CKE_LOCKED   = {{ 'true' if locked_by else 'false' }};
+const INITIAL_MD   = {{ checklist.content | tojson | safe }};
+const INITIAL_TITLE   = {{ checklist.title | tojson | safe }};
+const INITIAL_PROJECT = {{ (checklist.project or '') | tojson | safe }};
+
+let _ckeEditor     = null;
+let _dirty         = false;
+let _autoSaveTimer = null;
+let _heartbeat     = null;
+
+// ── 자동 새로고침 훅 ──────────────────────────────────────
+window._autoSaveAndRefresh = async () => {
+  if (!CKE_LOCKED && _dirty) { await saveContent(true); }
+  location.reload();
+};
+
+// ── 이탈 방지 / 잠금 해제 ──────────────────────────────
+window.addEventListener('beforeunload', () => {
+  if (!CKE_LOCKED) {
+    fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'DELETE', keepalive: true });
+  }
+});
+
+// ── 뒤로가기 URL: localStorage에서 마지막 프로젝트 복원 ──
+document.addEventListener('DOMContentLoaded', () => {
+  const lastProj = localStorage.getItem('ck_last_proj');
+  const backBtn  = document.getElementById('btn-back');
+  if (lastProj) {
+    backBtn.href = `/check?proj=${encodeURIComponent(lastProj)}`;
+  }
+
+  if (CKE_LOCKED) {
+    // 잠금 상태: 뷰어로만 표시
+    const viewEl = document.getElementById('cke-viewer-wrap');
+    if (viewEl) {
+      toastui.Editor.factory({
+        el: viewEl,
+        viewer: true,
+        initialValue: INITIAL_MD || '',
+        usageStatistics: false,
+      });
+    }
+    return;
+  }
+
+  // 잠금 획득
+  fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'POST' })
+    .then(r => {
+      if (!r.ok) {
+        alert('편집 잠금을 획득하지 못했습니다. 다른 사람이 편집 중입니다.');
+        window.location.href = '/check';
+        return;
+      }
+      initEditor();
+      // Heartbeat 2분마다
+      _heartbeat = setInterval(() => {
+        fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'PUT' });
+      }, 120000);
+    });
+});
+
+function initEditor() {
+  const container = document.getElementById('cke-editor-container');
+  _ckeEditor = new toastui.Editor({
+    el: container,
+    height: '100%',
+    initialEditType: 'wysiwyg',
+    initialValue: INITIAL_MD || '',
+    previewStyle: 'tab',
+    usageStatistics: false,
+    toolbarItems: [
+      ['heading', 'bold', 'italic', 'strike'],
+      ['hr', 'quote'],
+      ['ul', 'ol', 'task'],
+      ['table', 'image', 'link'],
+      ['code', 'codeblock'],
+    ],
+    events: {
+      change: () => setDirty(true),
+    },
+    hooks: {
+      addImageBlobHook: async (blob, callback) => {
+        const form = new FormData();
+        form.append('file', blob, blob.name || 'image.png');
+        try {
+          const res = await fetch('/api/upload/image', { method: 'POST', body: form });
+          if (!res.ok) throw new Error('upload failed');
+          const { url } = await res.json();
+          callback(url, '');
+        } catch {
+          alert('이미지 업로드에 실패했습니다.');
+        }
+      },
+    },
+  });
+}
+
+function setDirty(val) {
+  _dirty = val;
+  const dot = document.getElementById('cke-dirty-dot');
+  if (dot) {
+    dot.textContent = val ? '● 저장 안 됨' : '';
+    dot.className   = 'ck-dirty-dot' + (val ? ' dirty' : '');
+  }
+  if (val) {
+    clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(() => { if (_dirty) saveContent(true); }, 120000); // 2분 자동저장
+  }
+}
+
+async function saveContent(auto = false) {
+  if (!_ckeEditor) return;
+  const title   = document.getElementById('ck-edit-title').value.trim();
+  const project = document.getElementById('ck-edit-project').value;
+  const content = _ckeEditor.getMarkdown();
+
+  if (!title) { alert('제목을 입력하세요.'); return; }
+
+  // 제목/프로젝트 변경 사항 저장
+  await fetch(`/api/checklists/${CKE_ID}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, project }),
+  });
+
+  // 내용 저장
+  const res = await fetch(`/api/checklists/${CKE_ID}/content`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+
+  if (res.ok) {
+    setDirty(false);
+    clearInterval(_heartbeat);
+    await fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'DELETE' });
+
+    const toast = document.getElementById('cke-save-toast');
+    toast.textContent = auto ? '자동 저장되었습니다.' : '저장되었습니다.';
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 2000);
+
+    if (!auto) {
+      // 수동 저장 시 목록으로 복귀
+      const lastProj = localStorage.getItem('ck_last_proj');
+      window.location.href = lastProj ? `/check?proj=${encodeURIComponent(lastProj)}` : '/check';
+    } else {
+      // 자동 저장 후 잠금 재획득
+      await fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'POST' });
+      _heartbeat = setInterval(() => {
+        fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'PUT' });
+      }, 120000);
+    }
+  }
+}
+
+async function deleteChecklist() {
+  if (!confirm('이 체크리스트를 삭제하시겠습니까?')) return;
+  await fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'DELETE' });
+  const res = await fetch(`/api/checklists/${CKE_ID}`, { method: 'DELETE' });
+  if (res.ok) {
+    const lastProj = localStorage.getItem('ck_last_proj');
+    window.location.href = lastProj ? `/check?proj=${encodeURIComponent(lastProj)}` : '/check';
+  } else {
+    alert('삭제 실패');
+  }
+}
+</script>
+{% endblock %}
