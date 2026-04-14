@@ -559,8 +559,11 @@ function projColor(name) {
 document.addEventListener('DOMContentLoaded', async () => {
   await loadAll();
   renderProjList();
-  // URL ?proj= 파라미터 우선, 없으면 localStorage 복원
-  const urlProj  = new URLSearchParams(location.search).get('proj');
+
+  const params = new URLSearchParams(location.search);
+
+  // ?proj= 파라미터 우선, 없으면 localStorage 복원
+  const urlProj   = params.get('proj');
   const savedProj = urlProj !== null ? urlProj : localStorage.getItem('ck_last_proj');
   if (savedProj !== null && savedProj !== '') {
     const allProjNames = [
@@ -570,6 +573,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (allProjNames.includes(savedProj)) {
       selectProject(savedProj);
     }
+  }
+
+  // ?id= 파라미터가 있으면 해당 항목 자동 오픈
+  const urlId = parseInt(params.get('id'), 10);
+  if (urlId && _allChecklists.find(c => c.id === urlId)) {
+    openChecklist(urlId);
   }
 });
 
@@ -666,6 +675,10 @@ async function openChecklist(id, forceEdit = false) {
   }
 
   _curId = id;
+  // URL에 id 반영 (공유 가능한 링크)
+  const urlParams = new URLSearchParams(location.search);
+  urlParams.set('id', id);
+  history.replaceState(null, '', `/check?${urlParams.toString()}`);
   renderList();
 
   const [itemRes, lockRes] = await Promise.all([
