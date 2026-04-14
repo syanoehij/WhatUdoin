@@ -212,10 +212,16 @@ function initMeetingEditor() {
 
   if (!IS_EDITOR || LOCKED_BY) return;
 
-  // 팀/개인 문서 토글 레이블 동기화
+  // 팀/개인 문서 토글 레이블 동기화 + URL 파라미터 초기화
   const chkTeamDoc = document.getElementById('chk-team-doc');
   const lblDocType = document.getElementById('doc-type-label');
   if (chkTeamDoc && lblDocType) {
+    // 신규 문서일 때만 URL 파라미터로 팀/개인 결정
+    if (!MEETING_ID) {
+      const isPersonal = new URLSearchParams(location.search).get('personal') === '1';
+      chkTeamDoc.checked = !isPersonal;
+      lblDocType.textContent = chkTeamDoc.checked ? '팀 문서' : '개인 문서';
+    }
     chkTeamDoc.addEventListener('change', () => {
       lblDocType.textContent = chkTeamDoc.checked ? '팀 문서' : '개인 문서';
     });
@@ -336,7 +342,9 @@ function getMeetingContent() {
   return IS_EDITOR ? editor.getMarkdown().trim() : '';
 }
 
+let _saveCooldown = false;
 async function saveMeeting() {
+  if (_saveCooldown) return;
   const raw   = getMeetingContent();
   const lines = raw.split('\n');
   const title = lines[0].replace(/^#+\s*/, '').trim();
@@ -357,8 +365,26 @@ async function saveMeeting() {
   if (res.ok) {
     const data = await res.json();
     clearInterval(lockHeartbeat); // heartbeat 중단 (서버에서도 잠금 해제됨)
-    if (!MEETING_ID) location.href = `/meetings/${data.id}`;
-    else alert('저장되었습니다.');
+    if (!MEETING_ID) {
+      location.href = `/meetings/${data.id}`;
+    } else {
+      // 저장 버튼 10초 쿨다운 (연속 저장 방지)
+      _saveCooldown = true;
+      const btn = document.querySelector('button[onclick="saveMeeting()"]');
+      const orig = btn ? btn.textContent : null;
+      if (btn) { btn.disabled = true; btn.textContent = `✓ 저장됨 (10s)`; }
+      let remaining = 10;
+      const countdown = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+          clearInterval(countdown);
+          _saveCooldown = false;
+          if (btn) { btn.textContent = orig; btn.disabled = false; }
+        } else {
+          if (btn) btn.textContent = `✓ 저장됨 (${remaining}s)`;
+        }
+      }, 1000);
+    }
   } else {
     const err = await res.json();
     alert(err.detail || '저장 실패');

@@ -84,7 +84,8 @@
       {% if user and user.role in ('editor', 'admin') %}
       <div style="display:flex;gap:8px;">
         <button class="btn btn-outline btn-sm" onclick="openWeeklyReportModal()">📊 주간 업무 작성(AI)</button>
-        <a href="/meetings/new" class="btn btn-primary btn-sm">+ 새 메모</a>
+        <a href="/meetings/new" class="btn btn-outline btn-sm">+ 새 회의록</a>
+        <a href="/meetings/new?personal=1" class="btn btn-primary btn-sm">+ 새 메모</a>
       </div>
       {% endif %}
     </div>
@@ -393,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
     el.innerHTML = `
       <p>등록된 메모가 없습니다.</p>
       {% if user and user.role in ('editor', 'admin') %}
-      <a href="/meetings/new" class="btn btn-primary" style="margin-top:12px">첫 메모 작성하기</a>
+      <a href="/meetings/new?personal=1" class="btn btn-primary" style="margin-top:12px">첫 메모 작성하기</a>
       {% endif %}
     `;
   }
