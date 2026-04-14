@@ -753,7 +753,7 @@ function _stopHeartbeat() {
 
 function switchToEdit() {
   if (!_curItem) return;
-  _showEditorMode();
+  window.location.href = `/check/${_curItem.id}/edit`;
 }
 
 function switchToViewer() {
