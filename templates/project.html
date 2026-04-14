@@ -377,7 +377,7 @@ function toggleGanttMyOnly() {
   const btn = document.getElementById('gantt-my-only-btn');
   if (btn) {
     btn.classList.toggle('active', _ganttMyOnly);
-    btn.textContent = _ganttMyOnly ? '팀 일정 보기' : '👤 내 일정만';
+    btn.textContent = _ganttMyOnly ? '👥 팀 일정 보기' : '👤 내 일정만';
     btn.title = _ganttMyOnly ? '전체 팀 일정 보기' : '내 담당 일정만 보기';
   }
   render();
