@@ -193,6 +193,14 @@ def init_db():
             )
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS meeting_locks (
+                meeting_id INTEGER PRIMARY KEY,
+                user_name  TEXT NOT NULL,
+                locked_at  TEXT NOT NULL
+            )
+        """)
+
         # ── 시드 데이터 ──
         if not conn.execute("SELECT 1 FROM teams LIMIT 1").fetchone():
             conn.execute("INSERT INTO teams (name) VALUES ('관리팀')")
@@ -1409,3 +1417,65 @@ def set_setting(key: str, value: str):
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, value)
         )
+
+
+# ── Meeting Locks ─────────────────────────────────────────
+
+LOCK_TIMEOUT_MINUTES = 5
+
+
+def acquire_meeting_lock(meeting_id: int, user_name: str) -> bool:
+    """잠금 획득. 이미 다른 사람이 유효한 잠금을 가지면 False 반환."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    threshold = (datetime.now(timezone.utc) - timedelta(minutes=LOCK_TIMEOUT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        existing = conn.execute(
+            "SELECT user_name FROM meeting_locks WHERE meeting_id = ? AND locked_at > ?",
+            (meeting_id, threshold)
+        ).fetchone()
+        if existing and existing["user_name"] != user_name:
+            return False
+        conn.execute(
+            "INSERT INTO meeting_locks (meeting_id, user_name, locked_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(meeting_id) DO UPDATE SET user_name = excluded.user_name, locked_at = excluded.locked_at",
+            (meeting_id, user_name, now)
+        )
+    return True
+
+
+def heartbeat_meeting_lock(meeting_id: int, user_name: str) -> bool:
+    """잠금 보유자가 heartbeat로 locked_at 갱신. 잠금 보유자가 아니면 False."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    threshold = (datetime.now(timezone.utc) - timedelta(minutes=LOCK_TIMEOUT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        existing = conn.execute(
+            "SELECT user_name FROM meeting_locks WHERE meeting_id = ? AND locked_at > ?",
+            (meeting_id, threshold)
+        ).fetchone()
+        if not existing or existing["user_name"] != user_name:
+            return False
+        conn.execute(
+            "UPDATE meeting_locks SET locked_at = ? WHERE meeting_id = ?",
+            (now, meeting_id)
+        )
+    return True
+
+
+def release_meeting_lock(meeting_id: int, user_name: str):
+    """잠금 해제 (본인 것만)."""
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM meeting_locks WHERE meeting_id = ? AND user_name = ?",
+            (meeting_id, user_name)
+        )
+
+
+def get_meeting_lock(meeting_id: int) -> dict | None:
+    """현재 유효한 잠금 반환. 없으면 None."""
+    threshold = (datetime.now(timezone.utc) - timedelta(minutes=LOCK_TIMEOUT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT user_name, locked_at FROM meeting_locks WHERE meeting_id = ? AND locked_at > ?",
+            (meeting_id, threshold)
+        ).fetchone()
+    return dict(row) if row else None

@@ -147,8 +147,13 @@ def meeting_detail_page(request: Request, meeting_id: int):
     if not meeting:
         raise HTTPException(status_code=404)
     events = db.get_events_by_meeting(meeting_id)
+    current_user = auth.get_current_user(request)
+    lock = db.get_meeting_lock(meeting_id)
+    locked_by = None
+    if lock and current_user and lock["user_name"] != current_user["name"]:
+        locked_by = lock["user_name"]
     return templates.TemplateResponse(request, "meeting_editor.html", _ctx(
-        request, meeting=meeting, meeting_events=events
+        request, meeting=meeting, meeting_events=events, locked_by=locked_by
     ))
 
 
@@ -911,7 +916,42 @@ async def update_meeting(meeting_id: int, request: Request):
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
     db.update_meeting(meeting_id, title, content, user["id"], meeting_date, is_team_doc)
+    # 저장 완료 시 잠금 해제
+    db.release_meeting_lock(meeting_id, user["name"])
     return {"ok": True}
+
+
+# ── 회의록 편집 잠금 ────────────────────────────────────────
+@app.post("/api/meetings/{meeting_id}/lock")
+def lock_meeting(meeting_id: int, request: Request):
+    user = _require_editor(request)
+    ok = db.acquire_meeting_lock(meeting_id, user["name"])
+    if not ok:
+        lock = db.get_meeting_lock(meeting_id)
+        locked_by = lock["user_name"] if lock else "알 수 없음"
+        raise HTTPException(status_code=423, detail=f"{locked_by}님이 편집 중입니다.")
+    return {"ok": True}
+
+
+@app.put("/api/meetings/{meeting_id}/lock")
+def heartbeat_meeting_lock(meeting_id: int, request: Request):
+    user = _require_editor(request)
+    db.heartbeat_meeting_lock(meeting_id, user["name"])
+    return {"ok": True}
+
+
+@app.delete("/api/meetings/{meeting_id}/lock")
+def unlock_meeting(meeting_id: int, request: Request):
+    user = auth.get_current_user(request)
+    if user:
+        db.release_meeting_lock(meeting_id, user["name"])
+    return {"ok": True}
+
+
+@app.get("/api/meetings/{meeting_id}/lock")
+def get_meeting_lock(meeting_id: int):
+    lock = db.get_meeting_lock(meeting_id)
+    return {"locked_by": lock["user_name"] if lock else None}
 
 
 @app.get("/api/meetings/calendar")

@@ -4,17 +4,42 @@
 {% block extra_head %}
 <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css" />
 <script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
+<style>
+  .lock-banner {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff8e1; border: 1px solid #ffe082;
+    border-radius: 8px; padding: 10px 16px; margin: 12px 16px 0;
+    font-size: 0.88rem; color: #7a5800;
+  }
+  .dark .lock-banner { background: #3d2f00; border-color: #7a6000; color: #ffd166; }
+  .lock-banner-icon { font-size: 1.1rem; flex-shrink: 0; }
+  .lock-banner-refresh {
+    margin-left: auto; flex-shrink: 0;
+    background: none; border: 1px solid #ffe082; border-radius: 5px;
+    padding: 3px 10px; font-size: 0.8rem; cursor: pointer; color: inherit;
+  }
+  .lock-banner-refresh:hover { background: rgba(0,0,0,0.05); }
+</style>
 {% endblock %}
 
 {% block content %}
 <div class="editor-page">
+
+  {% if locked_by %}
+  <!-- ── 잠금 배너 ── -->
+  <div class="lock-banner" id="lock-banner">
+    <span class="lock-banner-icon">🔒</span>
+    <span><strong>{{ locked_by }}</strong>님이 편집 중입니다. 저장된 내용만 볼 수 있습니다.</span>
+    <button class="lock-banner-refresh" onclick="location.reload()">새로고침</button>
+  </div>
+  {% endif %}
 
   <!-- ── 상단 헤더 ── -->
   <div class="editor-header">
     <a id="btn-back" href="/meetings" class="btn btn-sm">← 목록</a>
 
     <div class="meeting-date-wrap">
-      {% if user and user.role in ('editor', 'admin') %}
+      {% if user and user.role in ('editor', 'admin') and not locked_by %}
       <input type="date" id="meeting-date"
              value="{{ meeting.meeting_date or meeting.created_at[:10] if meeting else '' }}" />
       {% else %}
@@ -25,7 +50,7 @@
     </div>
 
     <div class="btn-group">
-      {% if user and user.role in ('editor', 'admin') %}
+      {% if user and user.role in ('editor', 'admin') and not locked_by %}
       <label class="doc-type-toggle" title="팀 문서면 캘린더에 노출됩니다">
         <input type="checkbox" id="chk-team-doc"
                {% if meeting and meeting.is_team_doc %}checked{% endif %} />
@@ -37,7 +62,7 @@
       {% if meeting %}
       <a href="/meetings/{{ meeting.id }}/history" class="btn btn-sm">수정 이력</a>
       {% endif %}
-      {% if user and user.role in ('editor', 'admin') %}
+      {% if user and user.role in ('editor', 'admin') and not locked_by %}
       <button id="btn-ai-toggle" class="btn btn-sm" onclick="toggleAiPanel()">{% if meeting_events %}일정 관리{% else %}일정 생성(AI){% endif %}</button>
       {% if meeting %}
       <button class="btn btn-sm btn-danger" onclick="deleteMeeting()">삭제</button>
@@ -52,7 +77,7 @@
 
     <!-- 왼쪽: 에디터 영역 -->
     <div class="editor-main" id="editor-main">
-      {% if user and user.role in ('editor', 'admin') %}
+      {% if user and user.role in ('editor', 'admin') and not locked_by %}
       <div id="editor-container"></div>
       {% else %}
       <div id="meeting-content-view" class="meeting-content-view markdown-body"></div>
@@ -66,12 +91,12 @@
     </div>
 
     <!-- 드래그 리사이저 -->
-    {% if user and user.role in ('editor', 'admin') %}
+    {% if user and user.role in ('editor', 'admin') and not locked_by %}
     <div class="editor-resizer" id="editor-resizer"></div>
     {% endif %}
 
     <!-- 오른쪽: AI 패널 (기본 숨김) -->
-    {% if user and user.role in ('editor', 'admin') %}
+    {% if user and user.role in ('editor', 'admin') and not locked_by %}
     <div class="ai-panel hidden" id="ai-panel">
 
       <!-- AI 패널 상단: 컨트롤 -->
@@ -117,6 +142,7 @@
 <script>
 const MEETING_ID     = {{ meeting.id if meeting else 'null' }};
 const IS_EDITOR      = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
+const LOCKED_BY      = {{ (locked_by | tojson) if locked_by else 'null' }};
 const INITIAL_MD     = {{ (('# ' + meeting.title + '\n\n' + (meeting.content or '')) if meeting else '') | tojson | safe }};
 const MEETING_EVENTS = {{ (meeting_events if meeting_events else []) | tojson | safe }};
 const KANBAN_STATUSES = [
@@ -138,6 +164,33 @@ let parsedEvents  = [];
 let linkedEvents  = MEETING_EVENTS.map(e => ({...e}));
 let editor        = null;
 let aiPanelOpen   = false;
+let lockHeartbeat = null;
+
+/* ── 편집 잠금 ───────────────────────────────────────── */
+async function acquireLock() {
+  if (!MEETING_ID || !IS_EDITOR || LOCKED_BY) return;
+  try {
+    const res = await fetch(`/api/meetings/${MEETING_ID}/lock`, { method: 'POST' });
+    if (res.status === 423) {
+      // 다른 사람이 잠금 보유 → 페이지 새로고침으로 뷰어 모드 전환
+      location.reload();
+      return;
+    }
+    // 잠금 성공 → 30초마다 heartbeat
+    lockHeartbeat = setInterval(() => {
+      fetch(`/api/meetings/${MEETING_ID}/lock`, { method: 'PUT' });
+    }, 30000);
+  } catch(e) { /* 잠금 실패해도 편집은 허용 */ }
+}
+
+function releaseLock() {
+  if (!MEETING_ID || !IS_EDITOR || LOCKED_BY) return;
+  clearInterval(lockHeartbeat);
+  // keepalive: 탭 닫힘/이탈에도 신뢰성 있게 전송
+  fetch(`/api/meetings/${MEETING_ID}/lock`, { method: 'DELETE', keepalive: true }).catch(() => {});
+}
+
+window.addEventListener('beforeunload', releaseLock);
 
 /* ── 초기화 ─────────────────────────────────────────── */
 function initMeetingEditor() {
@@ -149,7 +202,7 @@ function initMeetingEditor() {
     btnBack.textContent = '← 캘린더';
   }
 
-  if (!IS_EDITOR) return;
+  if (!IS_EDITOR || LOCKED_BY) return;
 
   // 팀/개인 문서 토글 레이블 동기화
   const chkTeamDoc = document.getElementById('chk-team-doc');
@@ -202,6 +255,9 @@ function initMeetingEditor() {
   // 연결된 일정 초기 렌더링 — 있으면 패널 자동 오픈
   renderLinkedEvents();
   if (linkedEvents.length) toggleAiPanel();
+
+  // 편집 잠금 획득 (기존 회의록일 때만)
+  if (MEETING_ID) acquireLock();
 
   // 리사이저 드래그
   const resizer   = document.getElementById('editor-resizer');
@@ -292,6 +348,7 @@ async function saveMeeting() {
 
   if (res.ok) {
     const data = await res.json();
+    clearInterval(lockHeartbeat); // heartbeat 중단 (서버에서도 잠금 해제됨)
     if (!MEETING_ID) location.href = `/meetings/${data.id}`;
     else alert('저장되었습니다.');
   } else {
