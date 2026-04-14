@@ -604,5 +604,37 @@
       }
     }
   </script>
+
+  <!-- ── 브라우저 알림 폴링 ── -->
+  <script>
+  (function() {
+    if (!CURRENT_USER) return;
+
+    // 브라우저 알림 권한 요청
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    function showBrowserNotification(msg, type) {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      const icons = { notice: '📢', assigned: '📌', upcoming: '⏰' };
+      const icon = icons[type] || '🔔';
+      new Notification('WhatUDoin', { body: msg, icon: '/static/favicon.ico' });
+    }
+
+    async function pollNotifications() {
+      try {
+        const res = await fetch('/api/notifications/pending');
+        if (!res.ok) return;
+        const items = await res.json();
+        items.forEach(n => showBrowserNotification(n.message, n.type));
+      } catch {}
+    }
+
+    // 페이지 로드 시 즉시 1회 + 이후 1분마다
+    pollNotifications();
+    setInterval(pollNotifications, 60000);
+  })();
+  </script>
 </body>
 </html>

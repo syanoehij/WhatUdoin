@@ -9,9 +9,12 @@ from fastapi import FastAPI, Request, HTTPException, Response, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import database as db
 import llm_parser
 import auth
+
+scheduler = AsyncIOScheduler()
 
 # ── 경로 해석 ─────────────────────────────────────────────
 # PyInstaller 번들: WHATUDOIN_BASE_DIR = sys._MEIPASS (읽기전용 자원)
@@ -28,11 +31,14 @@ MEETINGS_DIR.mkdir(exist_ok=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
-    # 저장된 Ollama URL 로드
     saved_url = db.get_setting("ollama_url")
     if saved_url:
         llm_parser.set_ollama_base_url(saved_url)
+    # APScheduler: 1분마다 15분 후 일정 알람 체크
+    scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)
+    scheduler.start()
     yield
+    scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="WhatUDoin", lifespan=lifespan)
@@ -187,7 +193,24 @@ async def api_save_notice(request: Request):
     data = await request.json()
     content = data.get("content", "")
     notice_id = db.save_notice(content, user["name"])
+    # 팀 공지 저장 시 전체 유저 알림 (작성자 제외)
+    preview = content.replace("#", "").strip()[:40]
+    db.create_notification_for_all(
+        "notice",
+        f"📢 팀 공지 업데이트: {preview}…" if len(content) > 40 else f"📢 팀 공지 업데이트: {preview}",
+        exclude_user=user["name"]
+    )
     return {"id": notice_id}
+
+
+# ── 알림 API ─────────────────────────────────────────────
+
+@app.get("/api/notifications/pending")
+def get_pending_notifications(request: Request):
+    user = auth.get_current_user(request)
+    if not user:
+        return []
+    return db.get_pending_notifications(user["name"])
 
 
 # ── 인증 API ────────────────────────────────────────────
@@ -486,6 +509,11 @@ async def create_event(request: Request):
     data["created_by"] = str(user["id"])
     data["team_id"] = user.get("team_id")
     event_id = db.create_event(data)
+    # 담당자 지정 알림 (등록자 본인 제외)
+    assignees = [a.strip() for a in (data.get("assignee") or "").split(",") if a.strip()]
+    for name in assignees:
+        if name != user["name"]:
+            db.create_notification(name, "assigned", f"📌 일정 담당자로 지정됨: {data.get('title','')}", event_id)
     return {"id": event_id}
 
 

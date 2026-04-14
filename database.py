@@ -180,6 +180,18 @@ def init_db():
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # ── notifications ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_name TEXT NOT NULL,
+                type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                event_id INTEGER,
+                is_read INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
         # ── 시드 데이터 ──
         if not conn.execute("SELECT 1 FROM teams LIMIT 1").fetchone():
@@ -755,6 +767,81 @@ def get_upcoming_meetings(assignee_name: str = None, limit: int = 7) -> list[dic
                 (today, limit)
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+def create_notification(user_name: str, type_: str, message: str, event_id: int = None):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO notifications (user_name, type, message, event_id) VALUES (?,?,?,?)",
+            (user_name, type_, message, event_id)
+        )
+
+
+def create_notification_for_all(type_: str, message: str, event_id: int = None, exclude_user: str = None):
+    """모든 활성 유저에게 알림 생성 (exclude_user 제외)"""
+    with get_conn() as conn:
+        users = conn.execute(
+            "SELECT name FROM users WHERE is_active = 1"
+        ).fetchall()
+        for u in users:
+            if exclude_user and u["name"] == exclude_user:
+                continue
+            conn.execute(
+                "INSERT INTO notifications (user_name, type, message, event_id) VALUES (?,?,?,?)",
+                (u["name"], type_, message, event_id)
+            )
+
+
+def get_pending_notifications(user_name: str) -> list[dict]:
+    """미읽은 알림 반환 후 읽음 처리"""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM notifications WHERE user_name = ? AND is_read = 0 ORDER BY id ASC",
+            (user_name,)
+        ).fetchall()
+        if rows:
+            ids = [r["id"] for r in rows]
+            conn.execute(
+                f"UPDATE notifications SET is_read = 1 WHERE id IN ({','.join('?'*len(ids))})",
+                ids
+            )
+    return [dict(r) for r in rows]
+
+
+def check_upcoming_event_alarms():
+    """15분 후 시작하는 일정/회의에 대한 알림 생성 (APScheduler에서 호출)"""
+    now = datetime.now()
+    window_start = (now + timedelta(minutes=14)).strftime("%Y-%m-%dT%H:%M")
+    window_end   = (now + timedelta(minutes=16)).strftime("%Y-%m-%dT%H:%M")
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT id, title, start_datetime, assignee, event_type
+               FROM events
+               WHERE (is_active IS NULL OR is_active = 1)
+               AND start_datetime BETWEEN ? AND ?
+               AND recurrence_parent_id IS NULL""",
+            (window_start, window_end)
+        ).fetchall()
+        for row in rows:
+            if not row["assignee"]:
+                continue
+            label = "회의" if row["event_type"] == "meeting" else "일정"
+            time_str = row["start_datetime"][11:16] if row["start_datetime"] else ""
+            message = f"15분 후 {label} 시작: {row['title']} ({time_str})"
+            assignees = [a.strip() for a in row["assignee"].split(",") if a.strip()]
+            for name in assignees:
+                # 중복 방지: 같은 event_id + user_name 조합이 오늘 이미 있으면 스킵
+                exists = conn.execute(
+                    """SELECT 1 FROM notifications
+                       WHERE event_id = ? AND user_name = ? AND type = 'upcoming'
+                       AND created_at >= date('now')""",
+                    (row["id"], name)
+                ).fetchone()
+                if not exists:
+                    conn.execute(
+                        "INSERT INTO notifications (user_name, type, message, event_id) VALUES (?,?,?,?)",
+                        (name, "upcoming", message, row["id"])
+                    )
 
 
 def get_latest_notice() -> dict | None:
