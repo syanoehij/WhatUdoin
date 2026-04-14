@@ -192,6 +192,14 @@ function releaseLock() {
 
 window.addEventListener('beforeunload', releaseLock);
 
+/* ── Ctrl+S 저장 단축키 ──────────────────────────────── */
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    if (IS_EDITOR && !LOCKED_BY) saveMeeting();
+  }
+});
+
 /* ── 초기화 ─────────────────────────────────────────── */
 function initMeetingEditor() {
   // 뒤로가기 버튼

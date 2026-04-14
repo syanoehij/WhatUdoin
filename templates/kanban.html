@@ -296,8 +296,10 @@ async function loadKanban() {
   const projSel = document.getElementById('project-filter');
   const prevProj = projSel.value;
   const projects = [...new Set(allEvents.map(e => e.project).filter(Boolean))].sort();
+  const hasUnassigned = allEvents.some(e => !e.project);
   projSel.innerHTML = '<option value="">전체</option>' +
-    projects.map(p => `<option value="${esc(p)}"${p === prevProj ? ' selected' : ''}>${esc(p)}</option>`).join('');
+    projects.map(p => `<option value="${esc(p)}"${p === prevProj ? ' selected' : ''}>${esc(p)}</option>`).join('') +
+    (hasUnassigned ? `<option value="__unassigned__"${'__unassigned__' === prevProj ? ' selected' : ''}>미지정</option>` : '');
 
   renderBoard();
 }
@@ -306,7 +308,9 @@ function renderBoard() {
   const projFilter = document.getElementById('project-filter').value;
 
   let filtered = allEvents;
-  if (projFilter) {
+  if (projFilter === '__unassigned__') {
+    filtered = filtered.filter(e => !e.project);
+  } else if (projFilter) {
     filtered = filtered.filter(e => e.project === projFilter);
   }
   if (_kanbanMyOnly && CURRENT_USER) {

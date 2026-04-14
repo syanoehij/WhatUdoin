@@ -206,7 +206,12 @@
   </div>
 
   <!-- 하단: 내 담당 일정 — 전체 너비 -->
-  <div class="home-section-title">내 담당 일정</div>
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+    <div class="home-section-title" style="margin-bottom:0;">내 담당 일정</div>
+    {% if user and user.role in ('editor', 'admin') %}
+    <button class="btn btn-sm btn-primary" onclick="openModal()">+ 일정 추가</button>
+    {% endif %}
+  </div>
   <div class="kanban-board" id="user-board"></div>
 
 </div>
