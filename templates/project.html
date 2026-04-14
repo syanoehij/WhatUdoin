@@ -819,6 +819,7 @@ function render() {
                   ev.title,
                   fmtDate(evStart) + (evEnd && evEnd.getTime() !== evStart.getTime() ? ' ~ ' + fmtDate(evEnd) : ''),
                   ev.assignee ? '담당: ' + ev.assignee : '',
+                  ev.description ? ev.description : '',
                   evOverdue ? '⚠ 기한 초과' : '',
                 ].filter(Boolean).join('\n');
                 if (CURRENT_USER) {

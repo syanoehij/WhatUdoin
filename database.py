@@ -866,6 +866,10 @@ def save_notice(content: str, created_by: str) -> int:
             "INSERT INTO team_notices (content, created_by) VALUES (?, ?)",
             (content, created_by)
         )
+        # 30일 이전 이력 자동 삭제
+        conn.execute(
+            "DELETE FROM team_notices WHERE created_at < datetime('now', '-30 days')"
+        )
     return cur.lastrowid
 
 

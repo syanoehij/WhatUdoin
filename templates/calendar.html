@@ -329,13 +329,13 @@ function showDetail(fcEvent) {
   ];
 
   if (p.source === 'ai_parsed' && p.meeting_id) {
-    rows.push(['회의록', `<a href="/meetings/${p.meeting_id}" class="link">원본 회의록 보기</a>`]);
+    rows.push(['메모장', `<a href="/meetings/${p.meeting_id}" class="link">원본 메모 보기</a>`]);
   }
 
   document.getElementById('detail-body').innerHTML = rows.map(([label, val]) => `
     <div class="detail-row">
       <span class="detail-label">${label}</span>
-      <span class="detail-val">${label === '회의록' ? val : esc(val)}</span>
+      <span class="detail-val">${label === '메모장' ? val : esc(val)}</span>
     </div>
   `).join('');
 

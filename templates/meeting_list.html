@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}WhatUDoin — 회의록{% endblock %}
+{% block title %}WhatUDoin — 메모장{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -39,7 +39,7 @@
         </select>
       </div>
       <p class="text-muted" style="font-size:12px;margin-bottom:16px;">
-        기준 날짜 이전 7일(지난 주)과 이후 6일(이번 주)의 일정을 바탕으로 보고서를 작성 후 회의록 편집기로 이동합니다.
+        기준 날짜 이전 7일(지난 주)과 이후 6일(이번 주)의 일정을 바탕으로 보고서를 작성 후 메모장 편집기로 이동합니다.
       </p>
       <div class="modal-actions">
         <div></div>
@@ -63,7 +63,7 @@
   <!-- ── 왼쪽: 월 네비게이터 ── -->
   <aside class="month-nav">
     <div class="month-nav-header">
-      <span class="page-title" style="font-size:1rem;font-weight:700;">📋 회의록</span>
+      <span class="page-title" style="font-size:1rem;font-weight:700;">📋 메모장</span>
     </div>
     <!-- 작성자 필터 -->
     <div class="author-filter-section" id="author-filter-section">
@@ -74,7 +74,7 @@
     </div>
   </aside>
 
-  <!-- ── 오른쪽: 회의록 리스트 ── -->
+  <!-- ── 오른쪽: 메모장 리스트 ── -->
   <div class="meetings-content">
     <div class="meetings-content-header" id="meetings-header">
       <div style="display:flex;align-items:center;gap:10px;">
@@ -84,7 +84,7 @@
       {% if user and user.role in ('editor', 'admin') %}
       <div style="display:flex;gap:8px;">
         <button class="btn btn-outline btn-sm" onclick="openWeeklyReportModal()">📊 주간 업무 작성(AI)</button>
-        <a href="/meetings/new" class="btn btn-primary btn-sm">+ 새 회의록</a>
+        <a href="/meetings/new" class="btn btn-primary btn-sm">+ 새 메모</a>
       </div>
       {% endif %}
     </div>
@@ -103,7 +103,7 @@
     </table>
 
     <div class="empty-state hidden" id="meetings-empty">
-      <p>해당 월에 등록된 회의록이 없습니다.</p>
+      <p>해당 월에 등록된 메모가 없습니다.</p>
     </div>
   </div>
 </div>
@@ -131,7 +131,8 @@ function getFiltered() {
     const q = searchQuery.toLowerCase();
     list = list.filter(m =>
       (m.title || '').toLowerCase().includes(q) ||
-      (m.content || '').toLowerCase().includes(q)
+      (m.content || '').toLowerCase().includes(q) ||
+      (m.author_name || '').toLowerCase().includes(q)
     );
   }
   return list;
@@ -254,7 +255,7 @@ function renderAllList(filtered) {
     tbody.innerHTML = '';
     document.getElementById('meetings-table').style.display = 'none';
     empty.classList.remove('hidden');
-    empty.querySelector('p').textContent = searchQuery ? '검색 결과가 없습니다.' : '등록된 회의록이 없습니다.';
+    empty.querySelector('p').textContent = searchQuery ? '검색 결과가 없습니다.' : '등록된 메모가 없습니다.';
     return;
   }
 
@@ -278,7 +279,7 @@ function renderMeetingList(ym, byMonth) {
     tbody.innerHTML = '';
     document.getElementById('meetings-table').style.display = 'none';
     empty.classList.remove('hidden');
-    empty.querySelector('p').textContent = '해당 월에 등록된 회의록이 없습니다.';
+    empty.querySelector('p').textContent = '해당 월에 등록된 메모가 없습니다.';
     return;
   }
 
@@ -355,7 +356,7 @@ function applySearch(q) {
 
 window.__pageSearch = {
   enabled: true,
-  placeholder: '회의록 제목·내용 검색…',
+  placeholder: '메모 제목·내용·작성자 검색…',
   onSearch: applySearch,
 };
 
@@ -364,7 +365,7 @@ function showEmpty() {
   document.getElementById('meetings-table').style.display = 'none';
   const el = document.getElementById('meetings-empty');
   el.classList.remove('hidden');
-  el.querySelector('p').textContent = '등록된 회의록이 없습니다.';
+  el.querySelector('p').textContent = '등록된 메모가 없습니다.';
 }
 
 function escHtml(s) {
@@ -390,9 +391,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const el = document.getElementById('meetings-empty');
     el.classList.remove('hidden');
     el.innerHTML = `
-      <p>등록된 회의록이 없습니다.</p>
+      <p>등록된 메모가 없습니다.</p>
       {% if user and user.role in ('editor', 'admin') %}
-      <a href="/meetings/new" class="btn btn-primary" style="margin-top:12px">첫 회의록 작성하기</a>
+      <a href="/meetings/new" class="btn btn-primary" style="margin-top:12px">첫 메모 작성하기</a>
       {% endif %}
     `;
   }
