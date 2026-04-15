@@ -124,11 +124,50 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-16 간트 차트 UX 개선 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-16</span>
+      <span class="cl-phase-badge phase-4">4차 3단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🖱️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>간트 — 마우스 휠로 날짜 좌우 이동</div>
+          <div class="cl-item-detail">타임라인 및 날짜 헤더 영역에서 마우스 휠을 돌리면 날짜가 부드럽게 이동합니다. 픽셀 누적값을 일수로 환산해 viewStart를 조정하는 방식으로, 왼쪽 패널(팀·일정)에서는 기존 페이지 수직 스크롤이 유지됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">◀▶</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>간트 — ◀/▶ 버튼 이동 단위 화면 일수의 10%로 변경</div>
+          <div class="cl-item-detail">이전/다음 버튼을 눌렀을 때 이동 단위가 고정값(7일 등) 대신 현재 화면에 보이는 일수의 10%로 자동 계산됩니다. 21일 뷰는 2일, 90일 뷰는 9일 이동합니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">⚠️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>간트 — 기한 초과 일정 빨간 빗살 + 두꺼운 테두리 강조</div>
+          <div class="cl-item-detail">기한이 지난 일정 바에 선명한 빨간 대각선 빗살(불투명)과 3px 빨간 외곽선이 표시됩니다. 어두운 색상의 바에서도 명확히 구분됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">✅</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>간트 — 완료 일정 회색 빗살 + 테두리 표시</div>
+          <div class="cl-item-detail">완료(Done) 상태 일정 바에 회색 대각선 빗살과 3px 회색 외곽선이 표시됩니다. 진행 중 일정과 시각적으로 구분되며, 기한 초과와 동시에 해당하면 초과(빨강) 표시가 우선됩니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-15 메모장 다수 개선 ── -->
   <div class="cl-group">
     <div class="cl-group-header">
       <span class="cl-date">2026-04-15</span>
-      <span class="cl-phase-badge phase-4">3차 27단계</span>
+      <span class="cl-phase-badge phase-4">4차 2단계</span>
       <div class="cl-rule"></div>
     </div>
     <div class="cl-items">
@@ -181,7 +220,7 @@
   <div class="cl-group">
     <div class="cl-group-header">
       <span class="cl-date">2026-04-15</span>
-      <span class="cl-phase-badge phase-4">3차 26단계</span>
+      <span class="cl-phase-badge phase-4">4차 1단계</span>
       <div class="cl-rule"></div>
     </div>
     <div class="cl-items">

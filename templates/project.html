@@ -290,6 +290,27 @@ main { padding: 0; }
   padding: 80px 40px; text-align: center;
   color: var(--text-faint); font-size: 0.95rem; line-height: 1.8;
 }
+/* ── 기한 초과 빗살 (빨간) ────────────────────────────── */
+.gantt-bar.overdue {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0px, transparent 5px,
+    rgba(255, 30, 30, 0.95) 5px, rgba(255, 30, 30, 0.95) 9px
+  );
+  outline: 3px solid rgba(220, 0, 0, 0.9);
+  outline-offset: -1px;
+}
+/* ── 완료 빗살 (회색) ──────────────────────────────────── */
+.gantt-bar.ev-done {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0px, transparent 5px,
+    rgba(160, 160, 160, 0.85) 5px, rgba(160, 160, 160, 0.85) 9px
+  );
+  outline: 3px solid rgba(130, 130, 130, 0.85);
+  outline-offset: -1px;
+  opacity: 0.8;
+}
 </style>
 {% endblock %}
 
@@ -331,7 +352,7 @@ main { padding: 0; }
 <!-- ── 간트 영역 ──────────────────────────────────────── -->
 <div class="gantt-outer">
   <!-- 페이지 sticky 헤더 (팀/이름 사이드바 헤더 + 날짜 헤더) -->
-  <div class="gantt-sticky-header">
+  <div class="gantt-sticky-header" id="gantt-sticky-header">
     <div class="gantt-col-header" style="width:60px;min-width:60px;">팀</div>
     <div class="gantt-col-header" style="width:220px;min-width:220px;justify-content:flex-start;padding:0 12px;">프로젝트 / 일정</div>
     <div class="gantt-header-clip" id="gantt-header-clip">
@@ -498,11 +519,7 @@ function navToday() {
   saveProjectState(); render(); requestAnimationFrame(scrollToToday);
 }
 function navStep() {
-  if (daysShown >= 180) return 30;
-  if (daysShown >= 60)  return 14;
-  if (daysShown >= 21)  return 7;
-  if (daysShown >= 7)   return 3;
-  return 1;
+  return Math.max(1, Math.round(daysShown * 0.1));
 }
 function navPrev() { viewStart = addDays(viewStart, -navStep()); saveProjectState(); render(); }
 function navNext() { viewStart = addDays(viewStart, navStep()); saveProjectState(); render(); }
@@ -803,18 +820,22 @@ function render() {
                 const barT = Math.floor((ROW_H - BAR_H) / 2);
 
                 const bar = document.createElement('div');
-                // 기한 초과 여부 판단
+                // 완료 여부
+                const evDone = ev.kanban_status === 'done' || ev.is_active === 0;
+                // 기한 초과 여부 판단 (완료 제외)
                 const evOverdue = (() => {
-                  if (ev.kanban_status === 'done') return false;
+                  if (evDone) return false;
                   const endStr = ev.end_datetime || ev.start_datetime;
                   if (!endStr) return false;
                   const endD = new Date(endStr.slice(0, 10));
                   const todD = today();
                   return endD < todD;
                 })();
-                bar.className = 'gantt-bar' + (evOverdue ? ' overdue' : '');
+                bar.className = 'gantt-bar' +
+                  (evOverdue ? ' overdue' : '') +
+                  (evDone && !evOverdue ? ' ev-done' : '');
                 bar.style.cssText =
-                  `left:${barL}px;width:${barW}px;top:${barT}px;height:${BAR_H}px;background:${color}`;
+                  `left:${barL}px;width:${barW}px;top:${barT}px;height:${BAR_H}px;background-color:${color}`;
                 bar.textContent = (evOverdue ? '⚠ ' : '') + ev.title;
                 bar.title = [
                   ev.title,
@@ -867,11 +888,33 @@ document.getElementById('gantt-timeline').addEventListener('scroll', function ()
   document.getElementById('gantt-header-clip').scrollLeft = this.scrollLeft;
 });
 
-// ── 마우스 휠로 상하 스크롤 ──────────────────────────────
-document.querySelector('.gantt-scroll').addEventListener('wheel', (e) => {
+// ── 마우스 휠 → 날짜 이동 ────────────────────────────────
+// gantt-inner 너비 = 컨테이너 너비이므로 DOM scrollLeft 방식은 무의미.
+// 픽셀 누적 → 일수 환산 후 viewStart 이동 + render() 재호출 방식으로 구현.
+const _tlEl = document.getElementById('gantt-timeline');
+let _tlWheelAccum = 0; // 누적 픽셀
+
+function _tlDoWheelScroll(e) {
   e.preventDefault();
-  document.getElementById('gantt-timeline').scrollTop += e.deltaY;
-}, { passive: false });
+  _tlWheelAccum += e.deltaY;
+  const dayPx = getDayPx();
+  if (dayPx <= 0) return;
+  const daysDelta = Math.trunc(_tlWheelAccum / dayPx);
+  if (daysDelta !== 0) {
+    viewStart = addDays(viewStart, daysDelta);
+    _tlWheelAccum -= daysDelta * dayPx; // 나머지 보존
+    saveProjectState();
+    render();
+  }
+}
+
+// 타임라인 영역: 휠 → 날짜 이동
+_tlEl.addEventListener('wheel', _tlDoWheelScroll, { passive: false });
+
+// 날짜 헤더(sticky 헤더 전체): 휠 → 날짜 이동
+document.getElementById('gantt-sticky-header').addEventListener('wheel', _tlDoWheelScroll, { passive: false });
+
+// 팀/프로젝트/일정 영역 (왼쪽 패널): 기본 페이지 스크롤 유지 (preventDefault 없음)
 
 // ── 반응형 재렌더 ─────────────────────────────────────────
 let _resizePending = false;
