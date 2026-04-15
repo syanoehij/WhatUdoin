@@ -327,6 +327,7 @@
               <div class="profile-dropdown-name">{{ user.name }}</div>
               <div class="profile-dropdown-role">{% if user.role == 'admin' %}관리자{% else %}에디터{% endif %}</div>
             </div>
+            <a href="/trash" class="profile-dropdown-item" onclick="closeProfileMenu()">🗑️ 휴지통</a>
             <button class="profile-dropdown-item" onclick="closeProfileMenu(); openUserSettings()">⚙️ 설정</button>
             <div class="profile-dropdown-item theme-row">
               <span class="theme-label-text">🌙 다크 테마</span>

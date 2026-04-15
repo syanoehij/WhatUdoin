@@ -59,6 +59,24 @@
   }
   .ck-dirty-dot.dirty { color: var(--accent); }
 
+  #leave-confirm-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.4);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+  }
+  #leave-confirm-box {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px 28px;
+    max-width: 380px; width: 90%;
+    box-shadow: 0 4px 24px rgba(0,0,0,.2);
+  }
+  #leave-confirm-box h3 { margin: 0 0 10px; font-size: 1rem; }
+  #leave-confirm-box p  { margin: 0 0 20px; font-size: 0.88rem; color: var(--text-muted); }
+  #leave-confirm-box .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
   /* editor-page 안에서 editor 전체 차지 */
   #cke-editor-container {
     flex: 1;
@@ -112,7 +130,7 @@
 
   <!-- ── 헤더 ── -->
   <div class="editor-header">
-    <a id="btn-back" href="/check" class="btn btn-sm" onclick="return confirmLeave(event, this)">← 목록</a>
+    <a id="btn-back" href="/check" class="btn btn-sm">← 목록</a>
 
     <div class="ck-edit-meta">
       <input type="text" id="ck-edit-title"
@@ -132,9 +150,14 @@
     </div>
 
     <div class="btn-group">
+      {% if checklist.id %}
+      <a href="/check/{{ checklist.id }}/history" class="btn btn-sm">수정 이력</a>
+      {% endif %}
       {% if not locked_by %}
+      {% if checklist.id %}
       <button class="btn btn-sm btn-danger" onclick="deleteChecklist()">삭제</button>
-      <button class="btn btn-sm btn-primary" onclick="saveContent()">저장</button>
+      {% endif %}
+      <button class="btn btn-sm btn-primary" id="cke-save-btn" onclick="saveContent()">저장</button>
       {% endif %}
     </div>
   </div>
@@ -154,52 +177,101 @@
 </div>
 
 <div id="cke-save-toast">저장되었습니다.</div>
+
+<!-- ── 이탈 확인 모달 ── -->
+<div id="leave-confirm-overlay" style="display:none">
+  <div id="leave-confirm-box">
+    <h3 id="leave-confirm-title">저장하지 않은 변경사항이 있습니다</h3>
+    <p id="leave-confirm-desc">저장하지 않고 목록으로 이동하면 변경사항이 사라집니다.</p>
+    <div class="modal-actions">
+      <button class="btn" onclick="leaveWithoutSave()">저장 안하고 나가기</button>
+      <button class="btn btn-primary" onclick="saveAndLeave()">저장하고 나가기</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-const CKE_ID       = {{ checklist.id }};
+const CKE_ID       = {{ checklist.id if checklist.id else 'null' }};
 const CKE_LOCKED   = {{ 'true' if locked_by else 'false' }};
 const INITIAL_MD   = {{ checklist.content | tojson | safe }};
 const INITIAL_TITLE   = {{ checklist.title | tojson | safe }};
 const INITIAL_PROJECT = {{ (checklist.project or '') | tojson | safe }};
+const CKE_IS_NEW   = (CKE_ID === null);  // 새 항목 여부
 
 let _ckeEditor     = null;
 let _dirty         = false;
+let _saved         = false;
+let _saveCooldown  = false;
 let _autoSaveTimer = null;
 let _heartbeat     = null;
 
 // ── 자동 새로고침 훅 ──────────────────────────────────────
 window._autoSaveAndRefresh = async () => {
-  if (!CKE_LOCKED && _dirty) { await saveContent(true); }
+  if (!CKE_LOCKED && _dirty && !CKE_IS_NEW) { await saveContent(true); }
   location.reload();
 };
 
 // ── 이탈 방지 / 잠금 해제 ──────────────────────────────
-window.addEventListener('beforeunload', () => {
-  if (!CKE_LOCKED) {
+window.addEventListener('beforeunload', (e) => {
+  if (!CKE_IS_NEW && !CKE_LOCKED) {
     fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'DELETE', keepalive: true });
+  }
+  // dirty 상태면 브라우저 이탈 경고 (사이드바 등 다른 메뉴 클릭 시)
+  if (_dirty && !CKE_IS_NEW) {
+    e.preventDefault();
+    e.returnValue = '';
   }
 });
 
-// ── 목록 버튼 dirty 확인 ──────────────────────────────────
-function confirmLeave(e, el) {
-  if (!_dirty) return true;
-  e.preventDefault();
-  const save = confirm('저장되지 않은 내용이 있습니다.\n[확인] 저장하고 이동  [취소] 저장 안 하고 이동');
-  if (save) {
-    saveContent().then(() => { window.location.href = el.href; });
-  } else {
-    setDirty(false);
-    window.location.href = el.href;
+// ── Ctrl+S 단축키 ─────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    if (!CKE_LOCKED) saveContent();
   }
-  return false;
+});
+
+// ── 목록 버튼 이탈 확인 (커스텀 모달) ────────────────────
+let _leaveTarget = '/check';
+
+function handleBackClick(e) {
+  _leaveTarget = document.getElementById('btn-back').href;
+  if (CKE_IS_NEW && !_saved) {
+    e.preventDefault();
+    document.getElementById('leave-confirm-title').textContent = '항목이 저장되지 않았습니다';
+    document.getElementById('leave-confirm-desc').textContent = '저장하지 않으면 작성 내용이 사라집니다.';
+    document.getElementById('leave-confirm-overlay').style.display = 'flex';
+    return;
+  }
+  if (!_dirty) return;
+  e.preventDefault();
+  document.getElementById('leave-confirm-title').textContent = '저장하지 않은 변경사항이 있습니다';
+  document.getElementById('leave-confirm-desc').textContent = '저장하지 않고 목록으로 이동하면 변경사항이 사라집니다.';
+  document.getElementById('leave-confirm-overlay').style.display = 'flex';
 }
 
-// ── 뒤로가기 URL: localStorage에서 마지막 항목 id 포함 복원 ──
+function leaveWithoutSave() {
+  document.getElementById('leave-confirm-overlay').style.display = 'none';
+  setDirty(false); // beforeunload 경고 방지
+  window.location.href = _leaveTarget;
+}
+
+async function saveAndLeave() {
+  document.getElementById('leave-confirm-overlay').style.display = 'none';
+  await saveContent();
+  if (_saved || !CKE_IS_NEW) {
+    setDirty(false);
+    window.location.href = _leaveTarget;
+  }
+}
+
+// ── 초기화 ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   const backBtn = document.getElementById('btn-back');
-  backBtn.href = `/check?id=${CKE_ID}`;
+  backBtn.href = CKE_IS_NEW ? '/check' : `/check?id=${CKE_ID}`;
+  backBtn.addEventListener('click', handleBackClick);
 
   if (CKE_LOCKED) {
     // 잠금 상태: 뷰어로만 표시
@@ -215,7 +287,13 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // 잠금 획득
+  if (CKE_IS_NEW) {
+    // 새 항목: 잠금 없이 바로 에디터 초기화
+    initEditor();
+    return;
+  }
+
+  // 기존 항목: 잠금 획득
   fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'POST' })
     .then(r => {
       if (!r.ok) {
@@ -274,7 +352,7 @@ function setDirty(val) {
     dot.textContent = val ? '● 저장 안 됨' : '';
     dot.className   = 'ck-dirty-dot' + (val ? ' dirty' : '');
   }
-  if (val) {
+  if (val && !CKE_IS_NEW) {
     clearTimeout(_autoSaveTimer);
     _autoSaveTimer = setTimeout(() => { if (_dirty) saveContent(true); }, 120000); // 2분 자동저장
   }
@@ -282,31 +360,52 @@ function setDirty(val) {
 
 async function saveContent(auto = false) {
   if (!_ckeEditor) return;
+  if (_saveCooldown && !auto) return; // 10초 쿨다운 중 (자동저장은 통과)
+
   const title   = document.getElementById('ck-edit-title').value.trim();
   const project = document.getElementById('ck-edit-project').value;
   const content = _ckeEditor.getMarkdown();
 
   if (!title) { alert('제목을 입력하세요.'); return; }
 
-  // 제목/프로젝트 변경 사항 저장
+  // ── 새 항목: POST로 생성 후 편집 페이지로 이동 ──────────
+  if (CKE_IS_NEW) {
+    const res = await fetch('/api/checklists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, project, content }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      _saved = true;
+      setDirty(false);
+      window.location.href = `/check/${data.id}/edit`;
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert(err.detail || '저장 실패');
+    }
+    return;
+  }
+
+  // ── 기존 항목: PATCH로 업데이트 ────────────────────────
+  // 제목/프로젝트 저장
   await fetch(`/api/checklists/${CKE_ID}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, project }),
   });
 
-  // 내용 저장
+  // 내용 저장 (수동 저장 시에만 이력 보관)
   const res = await fetch(`/api/checklists/${CKE_ID}/content`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, save_history: !auto }),
   });
 
   if (res.ok) {
     setDirty(false);
-    clearInterval(_heartbeat);
-    await fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'DELETE' });
-    // 저장 시점에 알림 즉시 체크
+    _saved = true;
+    clearTimeout(_autoSaveTimer);
     if (typeof window._checkNotifications === 'function') window._checkNotifications();
 
     const toast = document.getElementById('cke-save-toast');
@@ -314,15 +413,22 @@ async function saveContent(auto = false) {
     toast.style.display = 'block';
     setTimeout(() => { toast.style.display = 'none'; }, 2000);
 
+    // 수동 저장 시 10초 쿨다운
     if (!auto) {
-      // 수동 저장 후 현재 항목 유지 (리스트로 가지 않음)
-      window.location.href = `/check?id=${CKE_ID}`;
-    } else {
-      // 자동 저장 후 잠금 재획득
-      await fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'POST' });
-      _heartbeat = setInterval(() => {
-        fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'PUT' });
-      }, 120000);
+      _saveCooldown = true;
+      const btn = document.getElementById('cke-save-btn');
+      if (btn) { btn.disabled = true; btn.textContent = '✓ 저장됨 (10s)'; }
+      let remaining = 10;
+      const countdown = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+          clearInterval(countdown);
+          _saveCooldown = false;
+          if (btn) { btn.textContent = '저장'; btn.disabled = false; }
+        } else {
+          if (btn) btn.textContent = `✓ 저장됨 (${remaining}s)`;
+        }
+      }, 1000);
     }
   }
 }
@@ -332,6 +438,7 @@ async function deleteChecklist() {
   await fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'DELETE' });
   const res = await fetch(`/api/checklists/${CKE_ID}`, { method: 'DELETE' });
   if (res.ok) {
+    setDirty(false); // beforeunload 경고 방지
     const lastProj = localStorage.getItem('ck_last_proj');
     window.location.href = lastProj ? `/check?proj=${encodeURIComponent(lastProj)}` : '/check';
   } else {

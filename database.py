@@ -1772,23 +1772,24 @@ def update_checklist(checklist_id: int, title: str, project: str):
         )
 
 
-def update_checklist_content(checklist_id: int, content: str, edited_by: str = ''):
+def update_checklist_content(checklist_id: int, content: str, edited_by: str = '', save_history: bool = True):
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     with get_conn() as conn:
-        current = conn.execute(
-            "SELECT content FROM checklists WHERE id = ?", (checklist_id,)
-        ).fetchone()
-        if current:
-            conn.execute(
-                "INSERT INTO checklist_histories (checklist_id, content, edited_by) VALUES (?, ?, ?)",
-                (checklist_id, current["content"], edited_by)
-            )
-            # 최근 3개만 유지
-            conn.execute(
-                "DELETE FROM checklist_histories WHERE checklist_id = ? AND id NOT IN "
-                "(SELECT id FROM checklist_histories WHERE checklist_id = ? ORDER BY id DESC LIMIT 3)",
-                (checklist_id, checklist_id)
-            )
+        if save_history:
+            current = conn.execute(
+                "SELECT content FROM checklists WHERE id = ?", (checklist_id,)
+            ).fetchone()
+            if current:
+                conn.execute(
+                    "INSERT INTO checklist_histories (checklist_id, content, edited_by) VALUES (?, ?, ?)",
+                    (checklist_id, current["content"], edited_by)
+                )
+                # 최근 3개만 유지
+                conn.execute(
+                    "DELETE FROM checklist_histories WHERE checklist_id = ? AND id NOT IN "
+                    "(SELECT id FROM checklist_histories WHERE checklist_id = ? ORDER BY id DESC LIMIT 3)",
+                    (checklist_id, checklist_id)
+                )
         conn.execute(
             "UPDATE checklists SET content = ?, updated_at = ? WHERE id = ?",
             (content, now, checklist_id)

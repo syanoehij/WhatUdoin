@@ -206,6 +206,20 @@ def check_page(request: Request):
     return templates.TemplateResponse(request, "check.html", _ctx(request, projects=projects))
 
 
+@app.get("/check/new/edit", response_class=HTMLResponse)
+def check_new_page(request: Request, proj: str = ""):
+    user = auth.get_current_user(request)
+    if not user or user.get("role") not in ("editor", "admin"):
+        return RedirectResponse("/check")
+    all_projs = db.get_all_projects_with_events()
+    projects = [p for p in all_projs if p.get("is_active", 1)]
+    return templates.TemplateResponse(
+        request, "check_editor.html",
+        _ctx(request, checklist={"id": None, "title": "", "project": proj, "content": ""},
+             locked_by=None, projects=projects, is_new=True)
+    )
+
+
 @app.get("/check/{checklist_id}/edit", response_class=HTMLResponse)
 def check_editor_page(request: Request, checklist_id: int):
     user = auth.get_current_user(request)
@@ -221,6 +235,18 @@ def check_editor_page(request: Request, checklist_id: int):
     return templates.TemplateResponse(
         request, "check_editor.html",
         _ctx(request, checklist=item, locked_by=locked_by, projects=projects)
+    )
+
+
+@app.get("/check/{checklist_id}/history", response_class=HTMLResponse)
+def check_history_page(request: Request, checklist_id: int):
+    item = db.get_checklist(checklist_id)
+    if not item:
+        return RedirectResponse("/check")
+    histories = db.get_checklist_histories(checklist_id)
+    return templates.TemplateResponse(
+        request, "check_history.html",
+        _ctx(request, checklist=item, histories=histories)
     )
 
 
@@ -275,7 +301,8 @@ async def update_checklist_content(checklist_id: int, request: Request):
         raise HTTPException(status_code=404)
     data = await request.json()
     content = data.get("content", "")
-    db.update_checklist_content(checklist_id, content, user["name"])
+    save_history = data.get("save_history", True)
+    db.update_checklist_content(checklist_id, content, user["name"], save_history=save_history)
     return {"ok": True}
 
 

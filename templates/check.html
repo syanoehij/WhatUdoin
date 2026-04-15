@@ -498,7 +498,6 @@
         <span class="ck-save-indicator" id="ck-dirty-indicator"></span>
         {% if user and user.role in ('editor', 'admin') %}
         <!-- 뷰어 모드 전용 버튼 -->
-        <button class="btn btn-sm" id="ck-hist-btn" onclick="showHistoryModal()" style="display:none;" title="편집 이력">이력</button>
         <button class="btn btn-sm btn-primary" id="ck-edit-btn" onclick="switchToEdit()" style="display:none;">편집</button>
         <!-- 편집 모드 전용 버튼 -->
         <button class="btn btn-sm" id="ck-rename-btn" onclick="toggleRenameForm()" style="display:none;">이름 변경</button>
@@ -804,12 +803,10 @@ function _setLockState(lockedBy) {
     // 뷰어는 _showViewerMode()에서 표시
   }
 
-  // 편집/이력 버튼 가시성
+  // 편집 버튼 가시성
   if (IS_EDITOR) {
     const editBtn = document.getElementById('ck-edit-btn');
-    const histBtn = document.getElementById('ck-hist-btn');
     if (editBtn) editBtn.style.display = _lockedByOther ? 'none' : '';
-    if (histBtn) histBtn.style.display = _lockedByOther ? 'none' : '';
   }
 }
 
@@ -852,7 +849,6 @@ function _showViewerMode() {
 
   // 버튼 가시성
   if (IS_EDITOR) {
-    document.getElementById('ck-hist-btn').style.display    = _lockedByOther ? 'none' : '';
     document.getElementById('ck-edit-btn').style.display    = _lockedByOther ? 'none' : '';
     document.getElementById('ck-rename-btn').style.display  = 'none';
     document.getElementById('ck-viewer-btn').style.display  = 'none';
@@ -879,7 +875,6 @@ async function _showEditorMode() {
   document.getElementById('ck-editor-wrap').style.display = '';
 
   // 버튼 가시성
-  document.getElementById('ck-hist-btn').style.display    = 'none';
   document.getElementById('ck-edit-btn').style.display    = 'none';
   document.getElementById('ck-rename-btn').style.display  = '';
   document.getElementById('ck-viewer-btn').style.display  = '';
@@ -996,8 +991,7 @@ function _stopCountdown() {
 
 function switchToEdit() {
   if (!_curItem) return;
-  _stopPoll();
-  _showEditorMode();
+  window.location.href = `/check/${_curItem.id}/edit`;
 }
 
 function switchToViewer() {
@@ -1114,7 +1108,7 @@ async function toggleCheckbox(index, checked, mdContent) {
   const res = await fetch(`/api/checklists/${_curId}/content`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content: newMd }),
+    body: JSON.stringify({ content: newMd, save_history: false }),
   });
   if (res.ok) {
     // 내용 갱신
@@ -1194,7 +1188,6 @@ async function saveContent(auto = false) {
     document.getElementById('ck-viewer-wrap').style.display = '';
     if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
     if (IS_EDITOR) {
-      document.getElementById('ck-hist-btn').style.display    = '';
       document.getElementById('ck-edit-btn').style.display    = '';
       document.getElementById('ck-rename-btn').style.display  = 'none';
       document.getElementById('ck-viewer-btn').style.display  = 'none';
@@ -1206,29 +1199,10 @@ async function saveContent(auto = false) {
 }
 
 // ── 새 항목 ───────────────────────────────────────────────
-async function openNewForm() {
-  // dirty 상태이면 확인
-  if (_dirty && _editMode) {
-    const choice = confirm('저장되지 않은 내용이 있습니다.\n[확인] 저장하고 이동  [취소] 저장 안 하고 이동');
-    if (choice) { await saveContent(); }
-    else { setDirty(false); }
-  }
-
-  // 현재 프로젝트 필터를 기본값으로 새 항목 생성
-  const project = _curProj || '';
-  const res = await fetch('/api/checklists', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: '(새 항목)', project, content: '' }),
-  });
-  if (!res.ok) { alert('생성 실패'); return; }
-  const { id } = await res.json();
-
-  // 목록 새로고침 후 인라인 에디터로 즉시 열기
-  await loadAll();
-  renderProjList();
-  _isNewItem = true;
-  await openChecklist(id, true);
+function openNewForm() {
+  // 현재 프로젝트 필터를 쿼리로 전달해서 편집기에서 기본값 설정
+  const proj = _curProj || '';
+  window.location.href = `/check/new/edit${proj ? '?proj=' + encodeURIComponent(proj) : ''}`;
 }
 
 // ── 이름 변경 ─────────────────────────────────────────────

@@ -361,6 +361,45 @@
     </div>
   </div>
 
+  <!-- ── 2026-04-16 체크 편집기 전면 개선 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-16</span>
+      <span class="cl-phase-badge phase-4">4차 7단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">📝</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag new">신규</span>체크 편집기 — 메모장 방식 전체 화면 모드</div>
+          <div class="cl-item-detail">체크 항목 편집을 메모장과 동일한 전체 화면 에디터(<code>/check/{id}/edit</code>)로 전환합니다. 저장 후 목록으로 이동하지 않고 편집기에 머뭅니다. 저장 버튼은 10초 쿨다운으로 연속 저장을 방지하며, Ctrl+S 단축키를 지원합니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">📋</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag new">신규</span>체크 항목 수정 이력 페이지</div>
+          <div class="cl-item-detail">편집기 헤더에 '수정 이력' 버튼을 추가합니다. 최근 3개의 저장 이력을 별도 페이지(<code>/check/{id}/history</code>)에서 확인하고 이전 버전으로 복원할 수 있습니다. 이력은 수동 저장 시에만 기록되며, 체크박스 토글·자동 저장은 이력을 남기지 않습니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">✨</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag new">신규</span>체크 새 항목 — 저장 시 생성 패턴</div>
+          <div class="cl-item-detail">'+ 새 항목' 클릭 시 임시 이름 없이 바로 편집기로 진입합니다. 제목을 입력하고 저장 버튼을 누를 때 비로소 항목이 생성됩니다. 메모장의 신규 문서 작성 방식과 동일합니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🚪</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">개선</span>체크 편집기 — 이탈 확인 모달</div>
+          <div class="cl-item-detail">저장되지 않은 변경사항이 있을 때 '← 목록' 버튼 클릭 시 커스텀 모달이 표시됩니다(메모장과 동일). 사이드바 등 다른 메뉴 클릭 시에는 브라우저 기본 이탈 경고가 발동됩니다. 뷰어 상태에서는 '수정 이력' 버튼이 숨겨집니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-15 캘린더 드래그로 일정 생성 ── -->
   <div class="cl-group">
     <div class="cl-group-header">
