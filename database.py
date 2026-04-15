@@ -217,6 +217,21 @@ def init_db():
             );
         """)
 
+        # ── links ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                scope TEXT NOT NULL DEFAULT 'personal',
+                team_id INTEGER,
+                created_by TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (team_id) REFERENCES teams(id)
+            )
+        """)
+
         # ── 시드 데이터 ──
         if not conn.execute("SELECT 1 FROM teams LIMIT 1").fetchone():
             conn.execute("INSERT INTO teams (name) VALUES ('관리팀')")
@@ -1704,3 +1719,45 @@ def get_checklist_lock(checklist_id: int) -> dict | None:
             (checklist_id, threshold)
         ).fetchone()
     return dict(row) if row else None
+
+
+# ── Links ────────────────────────────────────────────────
+
+def get_links(user_name: str, team_id):
+    """개인 링크(본인) + 팀 링크(소속 팀) 반환"""
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT id, title, url, description, scope, team_id, created_by, created_at
+            FROM links
+            WHERE (scope = 'personal' AND created_by = ?)
+               OR (scope = 'team' AND team_id = ?)
+            ORDER BY scope DESC, created_at ASC
+        """, (user_name, team_id)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_link(title: str, url: str, description: str, scope: str, team_id, created_by: str) -> int:
+    with get_conn() as conn:
+        cur = conn.execute("""
+            INSERT INTO links (title, url, description, scope, team_id, created_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (title, url, description, scope, team_id, created_by))
+        return cur.lastrowid
+
+
+def update_link(link_id: int, title: str, url: str, description: str, user_name: str) -> bool:
+    with get_conn() as conn:
+        cur = conn.execute("""
+            UPDATE links SET title=?, url=?, description=?
+            WHERE id=? AND created_by=?
+        """, (title, url, description, link_id, user_name))
+        return cur.rowcount > 0
+
+
+def delete_link(link_id: int, user_name: str, role: str) -> bool:
+    with get_conn() as conn:
+        if role == 'admin':
+            cur = conn.execute("DELETE FROM links WHERE id=?", (link_id,))
+        else:
+            cur = conn.execute("DELETE FROM links WHERE id=? AND created_by=?", (link_id, user_name))
+        return cur.rowcount > 0

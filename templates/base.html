@@ -18,6 +18,134 @@
   <link rel="stylesheet" href="/static/css/style.css?v={{ range(1000,9999) | random }}" />
   {% block extra_head %}{% endblock %}
   <style>
+  /* ── 링크 버튼 & 드롭다운 ── */
+  .links-wrap { position: relative; }
+  .links-btn {
+    display: flex; align-items: center; justify-content: center;
+    height: 32px; width: 36px;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: #fff; border-radius: 8px;
+    cursor: pointer; flex-shrink: 0;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .links-btn:hover { background: rgba(255,255,255,0.28); border-color: rgba(255,255,255,0.5); }
+  .links-dropdown {
+    position: absolute; top: calc(100% + 6px); right: 0;
+    width: 340px;
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #e0e0e0);
+    border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.14);
+    z-index: 2000; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .links-dd-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--border, #e0e0e0);
+    flex-shrink: 0;
+  }
+  .links-tabs { display: flex; gap: 4px; }
+  .links-tab {
+    padding: 3px 12px; border-radius: 20px; border: 1px solid var(--border, #e0e0e0);
+    font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    background: none; color: var(--text-muted, #888);
+    transition: background 0.12s, color 0.12s;
+  }
+  .links-tab.active {
+    background: var(--accent, #6c5ce7); color: #fff; border-color: var(--accent, #6c5ce7);
+  }
+  .links-add-open-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 1.1rem; font-weight: 400; color: var(--accent, #6c5ce7);
+    padding: 0 4px; line-height: 1; border-radius: 4px;
+    transition: background 0.1s;
+  }
+  .links-add-open-btn:hover { background: rgba(0,0,0,0.06); }
+  .links-list { overflow-y: auto; max-height: 280px; }
+  .links-empty {
+    padding: 24px 16px; text-align: center;
+    font-size: 0.83rem; color: var(--text-faint, #aaa);
+  }
+  .links-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border, #f0f0f0);
+    transition: background 0.1s;
+  }
+  .links-item:last-child { border-bottom: none; }
+  .links-item:hover { background: rgba(0,0,0,0.03); }
+  .dark .links-item:hover { background: rgba(255,255,255,0.05); }
+  .links-item-icon {
+    flex-shrink: 0; width: 26px; height: 26px;
+    background: var(--surface-2, #f5f5f5);
+    border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; color: var(--text-faint, #aaa);
+    overflow: hidden;
+  }
+  .links-item-icon img { width: 16px; height: 16px; border-radius: 3px; }
+  .links-item-body { flex: 1; min-width: 0; }
+  .links-item-title {
+    font-size: 0.84rem; font-weight: 600;
+    color: var(--accent, #6c5ce7);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    cursor: pointer; text-decoration: none; display: block;
+  }
+  .links-item-title:hover { text-decoration: underline; }
+  .links-item-desc {
+    font-size: 0.73rem; color: var(--text-faint, #aaa);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .links-item-scope {
+    font-size: 0.65rem; padding: 1px 5px; border-radius: 3px;
+    font-weight: 600; flex-shrink: 0;
+    background: var(--surface-2, #f0f0f0); color: var(--text-muted, #888);
+  }
+  .links-item-scope.team { background: #e7f5ff; color: #1971c2; }
+  .dark .links-item-scope.team { background: #1a3a52; color: #74c0fc; }
+  .links-item-actions { display: flex; gap: 3px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
+  .links-item:hover .links-item-actions { opacity: 1; }
+  .links-action-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 0.78rem; padding: 3px 5px; border-radius: 4px; color: var(--text-muted, #888);
+    transition: background 0.1s, color 0.1s;
+  }
+  .links-action-btn:hover { background: rgba(0,0,0,0.07); color: var(--text, #222); }
+  .links-action-btn.del:hover { background: #ffeeee; color: #c0392b; }
+  .links-form {
+    padding: 12px 14px;
+    border-top: 1px solid var(--border, #e0e0e0);
+    display: flex; flex-direction: column; gap: 7px;
+    background: var(--surface-2, #f8f8f8);
+  }
+  .links-input {
+    width: 100%; box-sizing: border-box;
+    padding: 7px 10px; border-radius: 7px;
+    border: 1px solid var(--border, #ddd);
+    background: var(--surface, #fff); color: var(--text, #222);
+    font-size: 0.83rem; font-family: inherit;
+    transition: border-color 0.15s;
+  }
+  .links-input:focus { outline: none; border-color: var(--accent, #6c5ce7); }
+  .links-form-scope { display: flex; gap: 16px; padding: 2px 2px; }
+  .links-radio { font-size: 0.82rem; color: var(--text, #222); cursor: pointer; display: flex; align-items: center; gap: 5px; }
+  .links-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .links-form-save {
+    padding: 6px 16px; border-radius: 7px; border: none;
+    background: var(--accent, #6c5ce7); color: #fff;
+    font-size: 0.82rem; font-weight: 600; cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .links-form-save:hover { opacity: 0.88; }
+  .links-form-cancel {
+    padding: 6px 12px; border-radius: 7px;
+    border: 1px solid var(--border, #ddd);
+    background: none; color: var(--text-muted, #888);
+    font-size: 0.82rem; cursor: pointer;
+    transition: background 0.1s;
+  }
+  .links-form-cancel:hover { background: rgba(0,0,0,0.05); }
+
   /* ── 알림 벨 & 드롭다운 ── */
   .notif-bell-wrap { position: relative; }
   .notif-bell-btn {
@@ -126,6 +254,51 @@
         <button class="header-add-btn" onclick="openModal()" title="일정 추가">
           <span class="header-add-icon">＋</span>
         </button>
+        <!-- ── 링크 ── -->
+        <div class="links-wrap" id="links-wrap">
+          <button class="links-btn" id="links-btn"
+                  onclick="toggleLinksDropdown()" title="업무 링크">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+          </button>
+          <div class="links-dropdown hidden" id="links-dropdown">
+            <div class="links-dd-header">
+              <div class="links-tabs">
+                <button class="links-tab active" id="links-tab-personal"
+                        onclick="switchLinksTab('personal')">개인</button>
+                <button class="links-tab" id="links-tab-team"
+                        onclick="switchLinksTab('team')">팀</button>
+              </div>
+              <button class="links-add-open-btn" onclick="showLinkForm()" title="링크 추가">＋</button>
+            </div>
+            <div class="links-list" id="links-list">
+              <div class="links-empty" id="links-empty">링크가 없습니다.</div>
+            </div>
+            <!-- 추가/수정 폼 -->
+            <div class="links-form hidden" id="links-form">
+              <input type="text" id="link-f-title" class="links-input" placeholder="제목 *" autocomplete="off" />
+              <input type="url"  id="link-f-url"   class="links-input" placeholder="https://… *" autocomplete="off" />
+              <input type="text" id="link-f-desc"  class="links-input" placeholder="설명 (선택)" autocomplete="off" />
+              <div class="links-form-scope">
+                <label class="links-radio">
+                  <input type="radio" name="link-scope" value="personal" checked> 개인
+                </label>
+                <label class="links-radio">
+                  <input type="radio" name="link-scope" value="team"> 팀
+                </label>
+              </div>
+              <input type="hidden" id="link-f-id" value="" />
+              <div class="links-form-actions">
+                <button class="links-form-save" onclick="saveLink()">저장</button>
+                <button class="links-form-cancel" onclick="hideLinkForm()">취소</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <!-- ── 알림 벨 ── -->
         <div class="notif-bell-wrap" id="notif-bell-wrap">
           <button class="notif-bell-btn" id="notif-bell-btn"
@@ -860,5 +1033,155 @@
     setInterval(_updateBadge, 60000);
   })();
   </script>
+
+  {% if user %}
+  <script>
+  // ── 링크 기능 ──────────────────────────────────────────
+  (function() {
+    let _linksData = [];   // 전체 링크 캐시
+    let _linksTab  = localStorage.getItem('links_tab') || 'personal';  // 현재 탭 (localStorage 복원)
+
+    // ── 드롭다운 열기/닫기 ──
+    window.toggleLinksDropdown = async function() {
+      const dd = document.getElementById('links-dropdown');
+      if (dd.classList.contains('hidden')) {
+        dd.classList.remove('hidden');
+        hideLinkForm();
+        // 저장된 탭 상태 복원
+        document.getElementById('links-tab-personal').classList.toggle('active', _linksTab === 'personal');
+        document.getElementById('links-tab-team').classList.toggle('active', _linksTab === 'team');
+        await _loadLinks();
+      } else {
+        dd.classList.add('hidden');
+      }
+    };
+
+    // 드롭다운 외부 클릭 시 닫기
+    document.addEventListener('click', function(e) {
+      const wrap = document.getElementById('links-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        document.getElementById('links-dropdown').classList.add('hidden');
+      }
+    });
+
+    // ── 탭 전환 ──
+    window.switchLinksTab = function(tab) {
+      _linksTab = tab;
+      localStorage.setItem('links_tab', tab);
+      document.getElementById('links-tab-personal').classList.toggle('active', tab === 'personal');
+      document.getElementById('links-tab-team').classList.toggle('active', tab === 'team');
+      _renderLinks();
+    };
+
+    // ── 링크 데이터 로드 ──
+    async function _loadLinks() {
+      const res = await fetch('/api/links');
+      _linksData = res.ok ? await res.json() : [];
+      _renderLinks();
+    }
+
+    // ── 링크 목록 렌더링 ──
+    function _renderLinks() {
+      const list  = document.getElementById('links-list');
+      const empty = document.getElementById('links-empty');
+      const filtered = _linksData.filter(l => l.scope === _linksTab);
+      list.innerHTML = '';
+      if (filtered.length === 0) {
+        const e = document.createElement('div');
+        e.className = 'links-empty';
+        e.textContent = _linksTab === 'personal' ? '개인 링크가 없습니다.' : '팀 링크가 없습니다.';
+        list.appendChild(e);
+        return;
+      }
+      filtered.forEach(link => {
+        const item = document.createElement('div');
+        item.className = 'links-item';
+        const domain = _getDomain(link.url);
+        const faviconUrl = domain ? `https://www.google.com/s2/favicons?sz=32&domain=${domain}` : null;
+        const isMine = (link.created_by === '{{ user.name }}');
+        item.innerHTML = `
+          <div class="links-item-icon">
+            ${faviconUrl ? `<img src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : '🔗'}
+          </div>
+          <div class="links-item-body">
+            <a class="links-item-title" href="${_esc(link.url)}" target="_blank" rel="noopener"
+               onclick="event.stopPropagation()">${_esc(link.title)}</a>
+            ${link.description ? `<div class="links-item-desc">${_esc(link.description)}</div>` : ''}
+          </div>
+          ${link.scope === 'team' ? '<span class="links-item-scope team">팀</span>' : ''}
+          ${isMine ? `
+          <div class="links-item-actions">
+            <button class="links-action-btn" onclick="_editLink(${link.id})" title="수정">✏️</button>
+            <button class="links-action-btn del" onclick="_deleteLink(${link.id})" title="삭제">🗑</button>
+          </div>` : ''}
+        `;
+        list.appendChild(item);
+      });
+    }
+
+    function _getDomain(url) {
+      try { return new URL(url).hostname; } catch { return null; }
+    }
+    function _esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── 폼 표시/숨기기 ──
+    window.showLinkForm = function(link) {
+      const form = document.getElementById('links-form');
+      form.classList.remove('hidden');
+      document.getElementById('link-f-id').value    = link ? link.id : '';
+      document.getElementById('link-f-title').value = link ? link.title : '';
+      document.getElementById('link-f-url').value   = link ? link.url : '';
+      document.getElementById('link-f-desc').value  = link ? (link.description || '') : '';
+      // scope 라디오
+      document.querySelectorAll('input[name="link-scope"]').forEach(r => {
+        r.checked = r.value === (link ? link.scope : 'personal');
+      });
+      document.getElementById('link-f-title').focus();
+    };
+    window.hideLinkForm = function() {
+      document.getElementById('links-form').classList.add('hidden');
+      document.getElementById('link-f-id').value = '';
+    };
+
+    // ── 저장 (생성/수정) ──
+    window.saveLink = async function() {
+      const id    = document.getElementById('link-f-id').value;
+      const title = document.getElementById('link-f-title').value.trim();
+      const url   = document.getElementById('link-f-url').value.trim();
+      const desc  = document.getElementById('link-f-desc').value.trim();
+      const scope = document.querySelector('input[name="link-scope"]:checked')?.value || 'personal';
+      if (!title) { document.getElementById('link-f-title').focus(); return; }
+      if (!url)   { document.getElementById('link-f-url').focus(); return; }
+      const body = JSON.stringify({ title, url, description: desc, scope });
+      const res = id
+        ? await fetch(`/api/links/${id}`, { method: 'PUT',    headers: {'Content-Type':'application/json'}, body })
+        : await fetch('/api/links',        { method: 'POST',   headers: {'Content-Type':'application/json'}, body });
+      if (res.ok) {
+        hideLinkForm();
+        await _loadLinks();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || '저장 실패');
+      }
+    };
+
+    // ── 수정 ──
+    window._editLink = function(id) {
+      const link = _linksData.find(l => l.id === id);
+      if (link) showLinkForm(link);
+    };
+
+    // ── 삭제 ──
+    window._deleteLink = async function(id) {
+      if (!confirm('이 링크를 삭제하시겠습니까?')) return;
+      const res = await fetch(`/api/links/${id}`, { method: 'DELETE' });
+      if (res.ok) await _loadLinks();
+      else alert('삭제 실패');
+    };
+  })();
+  </script>
+  {% endif %}
 </body>
 </html>

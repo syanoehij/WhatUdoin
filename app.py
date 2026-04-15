@@ -1055,6 +1055,57 @@ def list_members():
     return [u["name"] for u in users if u.get("is_active") and u.get("role") != "admin"]
 
 
+# ── 링크 API ─────────────────────────────────────────────
+
+@app.get("/api/links")
+def api_get_links(request: Request):
+    user = auth.get_current_user(request)
+    if not user:
+        return []
+    return db.get_links(user["name"], user.get("team_id"))
+
+
+@app.post("/api/links")
+async def api_create_link(request: Request):
+    user = _require_editor(request)
+    data = await request.json()
+    title = (data.get("title") or "").strip()
+    url   = (data.get("url")   or "").strip()
+    desc  = (data.get("description") or "").strip()
+    scope = data.get("scope", "personal")
+    if not title or not url:
+        raise HTTPException(status_code=400, detail="title과 url은 필수입니다.")
+    if scope not in ("personal", "team"):
+        scope = "personal"
+    team_id = user.get("team_id") if scope == "team" else None
+    link_id = db.create_link(title, url, desc, scope, team_id, user["name"])
+    return {"id": link_id}
+
+
+@app.put("/api/links/{link_id}")
+async def api_update_link(link_id: int, request: Request):
+    user = _require_editor(request)
+    data = await request.json()
+    title = (data.get("title") or "").strip()
+    url   = (data.get("url")   or "").strip()
+    desc  = (data.get("description") or "").strip()
+    if not title or not url:
+        raise HTTPException(status_code=400, detail="title과 url은 필수입니다.")
+    ok = db.update_link(link_id, title, url, desc, user["name"])
+    if not ok:
+        raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
+    return {"ok": True}
+
+
+@app.delete("/api/links/{link_id}")
+def api_delete_link(link_id: int, request: Request):
+    user = _require_editor(request)
+    ok = db.delete_link(link_id, user["name"], user.get("role", "editor"))
+    if not ok:
+        raise HTTPException(status_code=403, detail="삭제 권한이 없습니다.")
+    return {"ok": True}
+
+
 # ── 회의록 API ───────────────────────────────────────────
 
 @app.get("/api/meetings")
