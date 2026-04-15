@@ -184,7 +184,7 @@ function initDatePicker() {
 }
 
 // ── 모달 열기/닫기 ────────────────────────────────────────
-function openModal(dateStr = '', eventData = null) {
+function openModal(dateStr = '', eventData = null, dragOpts = null) {
   if (!CURRENT_USER) { openLoginModal(); return; }
 
   const today = dateStr || getToday();
@@ -217,6 +217,30 @@ function openModal(dateStr = '', eventData = null) {
   document.getElementById('btn-delete').classList.add('hidden');
   document.getElementById('modal-title').textContent = '일정 추가';
   toggleAllDay();
+
+  // 드래그 선택 구간 반영 (드래그-투-크리에이트)
+  if (dragOpts && !eventData) {
+    const { startStr, endStr, allDay } = dragOpts;
+    if (allDay) {
+      // FullCalendar all-day endStr은 exclusive — 하루 빼서 실제 종료일 계산
+      const endExcl = endStr ? new Date(endStr) : null;
+      if (endExcl) endExcl.setDate(endExcl.getDate() - 1);
+      const endDate = endExcl ? endExcl.toISOString().slice(0, 10) : today;
+      _fpInstance.setDate([today, endDate], true);
+      document.getElementById('f-end-date').value = endDate;
+      document.getElementById('f-allday').checked = true;
+      toggleAllDay();
+    } else if (endStr) {
+      // 시간 단위 드래그: 날짜·시간 분리 적용
+      const endDatePart  = endStr.slice(0, 10);
+      const endTimePart  = endStr.slice(11, 16);   // "HH:MM"
+      const startTimePart = startStr ? startStr.slice(11, 16) : '';
+      _fpInstance.setDate([today, endDatePart], true);
+      document.getElementById('f-end-date').value = endDatePart;
+      if (startTimePart) document.getElementById('f-start-time').value = startTimePart;
+      if (endTimePart)   document.getElementById('f-end-time').value   = endTimePart;
+    }
+  }
 
   if (eventData) {
     document.getElementById('modal-title').textContent = '일정 수정';

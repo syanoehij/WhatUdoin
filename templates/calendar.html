@@ -245,6 +245,13 @@ document.addEventListener('DOMContentLoaded', () => {
       { url: '/api/meetings/calendar', color: '#00b894', textColor: 'white', editable: false },
     ],
     editable: !!(CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor')),
+    selectable: !!(CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor')),
+    selectMirror: true,
+    select(info) {
+      if (!CURRENT_USER) { calendar.unselect(); return; }
+      const startDate = info.startStr.slice(0, 10);
+      openModal(startDate, null, { startStr: info.startStr, endStr: info.endStr, allDay: info.allDay });
+    },
     eventAllow(dropInfo, draggedEvent) {
       // 회의록 이벤트는 드래그 불가
       if (draggedEvent.extendedProps.type === 'meeting') return false;
