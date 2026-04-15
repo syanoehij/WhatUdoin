@@ -5,6 +5,48 @@
 <link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
 <script src="/static/lib/toastui-editor-all.min.js"></script>
 <style>
+  /* 이미지 리사이즈 툴바 */
+  #img-resize-toolbar {
+    position: fixed;
+    display: none;
+    align-items: center;
+    gap: 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    z-index: 9999;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    font-size: 0.8rem;
+  }
+  #img-resize-toolbar button {
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface-3);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.78rem;
+  }
+  #img-resize-toolbar button:hover { background: var(--accent); color: #fff; }
+  /* 이탈 확인 다이얼로그 */
+  #leave-confirm-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.4);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+  }
+  #leave-confirm-box {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px 28px;
+    max-width: 380px; width: 90%;
+    box-shadow: 0 4px 24px rgba(0,0,0,.2);
+  }
+  #leave-confirm-box h3 { margin: 0 0 10px; font-size: 1rem; }
+  #leave-confirm-box p  { margin: 0 0 20px; font-size: 0.88rem; color: var(--text-muted); }
+  #leave-confirm-box .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
   .lock-banner {
     display: flex; align-items: center; gap: 10px;
     background: #fff8e1; border: 1px solid #ffe082;
@@ -36,7 +78,7 @@
 
   <!-- ── 상단 헤더 ── -->
   <div class="editor-header">
-    <a id="btn-back" href="/meetings" class="btn btn-sm">← 목록</a>
+    <a id="btn-back" href="/meetings" class="btn btn-sm" onclick="handleBackClick(event)">← 목록</a>
 
     <div class="meeting-date-wrap">
       {% if user and user.role in ('editor', 'admin') and not locked_by %}
@@ -134,6 +176,28 @@
   </div><!-- /editor-body -->
 <!-- 자동완성 공유 드롭다운 -->
 <ul id="editor-ac-dd" class="ac-dropdown hidden" style="position:fixed;z-index:9999;"></ul>
+
+<!-- 이미지 리사이즈 툴바 -->
+<div id="img-resize-toolbar">
+  <span style="color:var(--text-muted);margin-right:2px">크기:</span>
+  <button onclick="setImgWidth(25)">25%</button>
+  <button onclick="setImgWidth(50)">50%</button>
+  <button onclick="setImgWidth(75)">75%</button>
+  <button onclick="setImgWidth(100)">100%</button>
+  <button onclick="setImgWidth(null)">원본</button>
+</div>
+
+<!-- 이탈 확인 다이얼로그 -->
+<div id="leave-confirm-overlay" style="display:none">
+  <div id="leave-confirm-box">
+    <h3>저장하지 않은 변경사항이 있습니다</h3>
+    <p>저장하지 않고 목록으로 이동하면 변경사항이 사라집니다.</p>
+    <div class="modal-actions">
+      <button class="btn" onclick="leaveWithoutSave()">저장 안하고 나가기</button>
+      <button class="btn btn-primary" onclick="saveAndLeave()">저장하고 나가기</button>
+    </div>
+  </div>
+</div>
 
 </div><!-- /editor-page -->
 {% endblock %}
@@ -296,6 +360,9 @@ function initMeetingEditor() {
     },
   });
 
+  // 이미지 리사이즈 — 에디터 렌더 후 클릭 리스너 등록
+  setTimeout(() => initImageResize(), 300);
+
   // 연결된 일정 초기 렌더링 — 있으면 패널 자동 오픈
   renderLinkedEvents();
   if (linkedEvents.length) toggleAiPanel();
@@ -365,6 +432,92 @@ function toggleAiPanel() {
   btnAi.classList.toggle('active', aiPanelOpen);
   // 에디터 리사이즈 트리거
   if (editor) editor.resize?.();
+}
+
+/* ── 이미지 리사이즈 ──────────────────────────────────── */
+let _activeEditorImg = null;
+
+function initImageResize() {
+  const container = document.querySelector('.toastui-editor-contents');
+  if (!container) return;
+
+  container.addEventListener('click', e => {
+    if (e.target.tagName === 'IMG') {
+      _activeEditorImg = e.target;
+      const r = e.target.getBoundingClientRect();
+      const tb = document.getElementById('img-resize-toolbar');
+      tb.style.top  = (r.bottom + window.scrollY + 6) + 'px';
+      tb.style.left = Math.max(4, r.left) + 'px';
+      tb.style.display = 'flex';
+    } else {
+      document.getElementById('img-resize-toolbar').style.display = 'none';
+      _activeEditorImg = null;
+    }
+  });
+
+  // 스크롤 시 툴바 숨기기
+  container.addEventListener('scroll', () => {
+    document.getElementById('img-resize-toolbar').style.display = 'none';
+  }, { passive: true });
+}
+
+function setImgWidth(pct) {
+  if (!_activeEditorImg || !editor) return;
+  const src = _activeEditorImg.getAttribute('src');
+  if (!src) return;
+
+  const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let md = editor.getMarkdown();
+
+  if (pct === null) {
+    // HTML img → 마크다운 이미지로 되돌리기
+    md = md.replace(
+      new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
+      m => { const a = m.match(/alt="([^"]*)"/); return `![${a ? a[1] : ''}](${src})`; }
+    );
+  } else {
+    // 마크다운 이미지 또는 기존 HTML img → 크기 지정 HTML img로 교체
+    md = md
+      .replace(
+        new RegExp(`!\\[([^\\]]*)\\]\\(${escapedSrc}\\)`, 'g'),
+        (_, alt) => `<img src="${src}" alt="${alt}" style="width:${pct}%">`
+      )
+      .replace(
+        new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
+        m => { const a = m.match(/alt="([^"]*)"/); return `<img src="${src}" alt="${a ? a[1] : ''}" style="width:${pct}%">`; }
+      );
+  }
+  editor.setMarkdown(md);
+  document.getElementById('img-resize-toolbar').style.display = 'none';
+  _activeEditorImg = null;
+  _meetingDirty = true;
+}
+
+/* ── 목록 이탈 확인 ───────────────────────────────────── */
+let _leaveTarget = '/meetings';
+
+function handleBackClick(e) {
+  if (!IS_EDITOR || !_meetingDirty) return; // dirty 없으면 그냥 이동
+  e.preventDefault();
+  _leaveTarget = document.getElementById('btn-back').href;
+  document.getElementById('leave-confirm-overlay').style.display = 'flex';
+}
+
+function leaveWithoutSave() {
+  _meetingDirty = false; // beforeunload 방지
+  releaseLock();
+  location.href = _leaveTarget;
+}
+
+async function saveAndLeave() {
+  document.getElementById('leave-confirm-overlay').style.display = 'none';
+  await saveMeeting();
+  // saveMeeting이 신규 문서면 redirect하므로, 기존 문서일 경우에만 이동
+  if (MEETING_ID) {
+    _meetingDirty = false;
+    releaseLock();
+    location.href = _leaveTarget;
+  }
 }
 
 /* ── 저장 / 삭제 ─────────────────────────────────────── */

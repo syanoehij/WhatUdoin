@@ -126,6 +126,10 @@ def project_manage_page(request: Request):
 @app.get("/meetings", response_class=HTMLResponse)
 def meetings_page(request: Request):
     meetings = db.get_all_meetings()
+    user = auth.get_current_user(request)
+    # 비로그인 시 개인 문서 노출 금지
+    if not user:
+        meetings = [m for m in meetings if m.get("is_team_doc", 1)]
     teams    = db.get_all_teams()
     return templates.TemplateResponse(request, "meeting_list.html", _ctx(
         request, meetings=meetings, teams=teams,
@@ -1180,6 +1184,15 @@ def delete_meeting(meeting_id: int, request: Request):
 @app.get("/api/meetings/{meeting_id}/histories")
 def meeting_histories(meeting_id: int):
     return db.get_meeting_histories(meeting_id)
+
+
+@app.post("/api/meetings/{meeting_id}/histories/{history_id}/restore")
+def restore_meeting_history(meeting_id: int, history_id: int, request: Request):
+    user = _require_editor(request)
+    ok = db.restore_meeting_from_history(meeting_id, history_id, user["id"])
+    if not ok:
+        raise HTTPException(status_code=404, detail="이력을 찾을 수 없습니다.")
+    return {"ok": True}
 
 
 @app.get("/api/meetings/{meeting_id}/events")

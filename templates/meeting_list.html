@@ -322,6 +322,7 @@ function renderRow(m, showYear) {
 // ── 월/전체 선택 ─────────────────────────────────────────
 function selectMonth(ym) {
   selectedYM = ym;
+  localStorage.setItem('meeting_ym', ym);
   const { byMonth, byYear, filtered } = buildGroups();
   renderMonthNav(byMonth, byYear, filtered);
   if (ym === '__all__') {
@@ -392,13 +393,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // localStorage에서 선택 월 복원
+  const savedYM = localStorage.getItem('meeting_ym');
+  if (savedYM) selectedYM = savedYM;
+
   renderAuthorFilter();
   const { byMonth, byYear, filtered } = buildGroups();
   const allYMs = Object.keys(byMonth).sort().reverse();
   if (allYMs.length) {
-    selectedYM = allYMs[0];
+    // 저장된 월이 실제 존재하면 유지, 없으면 최신 월로 초기화
+    if (!selectedYM || (selectedYM !== '__all__' && !byMonth[selectedYM])) {
+      selectedYM = allYMs[0];
+    }
     renderMonthNav(byMonth, byYear, filtered);
-    renderMeetingList(selectedYM, byMonth);
+    if (selectedYM === '__all__') renderAllList(filtered);
+    else renderMeetingList(selectedYM, byMonth);
   } else {
     renderMonthNav(byMonth, byYear, filtered);
     document.getElementById('meetings-header').style.display = 'none';

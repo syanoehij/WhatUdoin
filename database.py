@@ -1365,6 +1365,12 @@ def update_meeting(meeting_id: int, title: str, content: str, edited_by: int, me
                 "INSERT INTO meeting_histories (meeting_id, content, edited_by) VALUES (?, ?, ?)",
                 (meeting_id, current["content"], edited_by)
             )
+            # 최근 3개만 유지
+            conn.execute(
+                "DELETE FROM meeting_histories WHERE meeting_id = ? AND id NOT IN "
+                "(SELECT id FROM meeting_histories WHERE meeting_id = ? ORDER BY id DESC LIMIT 3)",
+                (meeting_id, meeting_id)
+            )
         conn.execute(
             "UPDATE meetings SET title = ?, content = ?, meeting_date = ?, is_team_doc = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (title, content, meeting_date, is_team_doc, meeting_id)
@@ -1385,10 +1391,40 @@ def get_meeting_histories(meeting_id: int):
                FROM meeting_histories mh
                LEFT JOIN users u ON mh.edited_by = u.id
                WHERE mh.meeting_id = ?
-               ORDER BY mh.edited_at DESC""",
+               ORDER BY mh.edited_at DESC
+               LIMIT 3""",
             (meeting_id,)
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def restore_meeting_from_history(meeting_id: int, history_id: int, restored_by: int) -> bool:
+    with get_conn() as conn:
+        hist = conn.execute(
+            "SELECT * FROM meeting_histories WHERE id = ? AND meeting_id = ?",
+            (history_id, meeting_id)
+        ).fetchone()
+        if not hist:
+            return False
+        # 현재 내용을 이력에 저장
+        current = conn.execute("SELECT content FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+        if current:
+            conn.execute(
+                "INSERT INTO meeting_histories (meeting_id, content, edited_by) VALUES (?, ?, ?)",
+                (meeting_id, current["content"], restored_by)
+            )
+        # 이력 내용으로 복원
+        conn.execute(
+            "UPDATE meetings SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (hist["content"], meeting_id)
+        )
+        # 최근 3개만 유지
+        conn.execute(
+            "DELETE FROM meeting_histories WHERE meeting_id = ? AND id NOT IN "
+            "(SELECT id FROM meeting_histories WHERE meeting_id = ? ORDER BY id DESC LIMIT 3)",
+            (meeting_id, meeting_id)
+        )
+        return True
 
 
 def get_events_by_meeting(meeting_id: int):

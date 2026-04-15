@@ -195,13 +195,19 @@ def generate_weekly_report(past_events: list[dict], future_events: list[dict], b
             for e in sorted(events, key=lambda x: x.get("start_datetime") or ""):
                 date_str = (e.get("start_datetime") or "")[:10]
                 title    = e.get("title") or "제목없음"
+                desc     = (e.get("description") or "").strip()
                 period   = e.get("_period")
                 if period == "past":
                     status = "완료"
                 else:
                     m2, d2 = date_str[5:7].lstrip("0") or "0", date_str[8:10].lstrip("0") or "0"
                     status = f"예정: {m2}/{d2}"
-                lines.append(f"  - {title} ({status})")
+                line = f"  - {title} ({status})"
+                if desc:
+                    # 내용이 너무 길면 100자로 자름
+                    short_desc = desc[:100] + ("…" if len(desc) > 100 else "")
+                    line += f" — {short_desc}"
+                lines.append(line)
         return "\n".join(lines)
 
     prompt = f"""아래는 {base_date} 기준 ±1주 일정 데이터입니다.
