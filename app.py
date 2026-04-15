@@ -36,6 +36,8 @@ async def lifespan(app: FastAPI):
         llm_parser.set_ollama_base_url(saved_url)
     # APScheduler: 1분마다 15분 후 일정 알람 체크
     scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)
+    # APScheduler: 매일 새벽 3시 휴지통 30일 초과 항목 정리
+    scheduler.add_job(db.cleanup_old_trash, "cron", hour=3, minute=0)
     scheduler.start()
     yield
     scheduler.shutdown(wait=False)
@@ -284,7 +286,7 @@ def delete_checklist(checklist_id: int, request: Request):
     if not item:
         raise HTTPException(status_code=404)
     db.release_checklist_lock(checklist_id, user["name"])
-    db.delete_checklist(checklist_id)
+    db.delete_checklist(checklist_id, deleted_by=user["name"], team_id=user.get("team_id"))
     return {"ok": True}
 
 
@@ -730,7 +732,7 @@ def delete_event(event_id: int, request: Request, delete_mode: str = "this"):
         raise HTTPException(status_code=404, detail="Event not found")
     if not auth.can_edit_event(user, event):
         raise HTTPException(status_code=403, detail="다른 팀의 일정은 삭제할 수 없습니다.")
-    db.delete_event(event_id, delete_mode)
+    db.delete_event(event_id, delete_mode, deleted_by=user["name"], team_id=user.get("team_id"))
     return {"ok": True}
 
 
@@ -877,12 +879,23 @@ def check_conflicts(start: str, end: str = None, team_id: int = None, exclude_id
 
 @app.get("/api/projects")
 def list_projects():
-    return db.get_projects()
+    return [p["name"] for p in db.get_unified_project_list()]
 
 
 @app.get("/api/project-timeline")
 def project_timeline(team_id: int = None):
     return db.get_project_timeline(team_id)
+
+
+# ── 통합 프로젝트 목록 API ──────────────────────────────────
+
+@app.get("/api/project-list")
+def api_project_list(request: Request):
+    """모든 페이지에서 공통으로 사용하는 통합 프로젝트 목록.
+    projects 테이블 + events.project + checklists.project 합산, [{name, color, is_active, id}]
+    """
+    _require_editor(request)
+    return db.get_unified_project_list()
 
 
 # ── 프로젝트 관리 API ────────────────────────────────────
@@ -965,14 +978,14 @@ async def manage_project_dates(name: str, request: Request):
 
 @app.delete("/api/manage/projects/{name:path}")
 async def manage_delete_project(name: str, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     data = {}
     try:
         data = await request.json()
     except Exception:
         pass
     delete_events = data.get("delete_events", False)
-    db.delete_project(name, delete_events)
+    db.delete_project(name, delete_events, deleted_by=user["name"], team_id=user.get("team_id"))
     return {"ok": True}
 
 
@@ -1041,11 +1054,11 @@ async def manage_event_kanban_hidden(event_id: int, request: Request):
 
 @app.delete("/api/manage/events/{event_id}")
 def manage_delete_event(event_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     event = db.get_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    db.delete_event(event_id)
+    db.delete_event(event_id, deleted_by=user["name"], team_id=user.get("team_id"))
     return {"ok": True}
 
 
@@ -1223,12 +1236,11 @@ def _delete_meeting_images(content: str):
 
 @app.delete("/api/meetings/{meeting_id}")
 def delete_meeting(meeting_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     meeting = db.get_meeting(meeting_id)
     if not meeting:
         raise HTTPException(status_code=404)
-    _delete_meeting_images(meeting.get("content", ""))
-    db.delete_meeting(meeting_id)
+    db.delete_meeting(meeting_id, deleted_by=user["name"])
     return {"ok": True}
 
 
@@ -1342,6 +1354,32 @@ async def ai_weekly_report(request: Request):
         "past_start":   past_start,
         "future_end":   future_end,
     }
+
+
+# ── 휴지통 ──────────────────────────────────────────────
+
+@app.get("/trash", response_class=HTMLResponse)
+def trash_page(request: Request):
+    user = _require_editor(request)
+    return templates.TemplateResponse(request, "trash.html", _ctx(request))
+
+
+@app.get("/api/trash")
+def api_get_trash(request: Request):
+    user = _require_editor(request)
+    team_id = user.get("team_id")
+    return db.get_trash_items(team_id)
+
+
+@app.post("/api/trash/{item_type}/{item_id}/restore")
+def api_restore_trash(item_type: str, item_id: int, request: Request):
+    _require_editor(request)
+    if item_type not in ("event", "meeting", "checklist", "project"):
+        raise HTTPException(status_code=400, detail="잘못된 항목 타입입니다.")
+    ok = db.restore_trash_item(item_type, item_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="항목을 찾을 수 없습니다.")
+    return {"ok": True}
 
 
 if __name__ == "__main__":

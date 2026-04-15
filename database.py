@@ -164,6 +164,37 @@ def init_db():
         _migrate(conn, "meetings", [
             ("meeting_date", "TEXT"),
         ])
+        # ── 휴지통 soft-delete 컬럼 마이그레이션 ──
+        _migrate(conn, "events", [
+            ("deleted_at", "TEXT DEFAULT NULL"),
+            ("deleted_by", "TEXT DEFAULT NULL"),
+        ])
+        _migrate(conn, "meetings", [
+            ("deleted_at", "TEXT DEFAULT NULL"),
+            ("deleted_by", "TEXT DEFAULT NULL"),
+        ])
+        _migrate(conn, "checklists", [
+            ("deleted_at", "TEXT DEFAULT NULL"),
+            ("deleted_by", "TEXT DEFAULT NULL"),
+            ("team_id",    "INTEGER DEFAULT NULL"),
+        ])
+        _migrate(conn, "projects", [
+            ("deleted_at", "TEXT DEFAULT NULL"),
+            ("deleted_by", "TEXT DEFAULT NULL"),
+            ("team_id",    "INTEGER DEFAULT NULL"),
+        ])
+        # 삭제된 프로젝트를 참조하는 활성 체크리스트/이벤트의 project 필드 정리
+        # (프로젝트 삭제 시 체크리스트 이동 로직 추가 이전 데이터 호환)
+        conn.execute("""
+            UPDATE checklists SET project = ''
+            WHERE project != '' AND deleted_at IS NULL
+              AND project IN (SELECT name FROM projects WHERE deleted_at IS NOT NULL)
+        """)
+        conn.execute("""
+            UPDATE events SET project = NULL
+            WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL
+              AND project IN (SELECT name FROM projects WHERE deleted_at IS NOT NULL)
+        """)
         # ── settings ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -372,7 +403,13 @@ def get_conn():
 
 def get_all_events():
     with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM events ORDER BY start_datetime").fetchall()
+        rows = conn.execute(
+            """SELECT * FROM events
+               WHERE deleted_at IS NULL
+                 AND (project IS NULL OR project = ''
+                      OR project NOT IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))
+               ORDER BY start_datetime"""
+        ).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -597,13 +634,15 @@ def update_event_datetime(event_id: int, start_datetime: str, end_datetime: str 
         )
 
 
-def delete_event(event_id: int, delete_mode: str = 'this'):
+def delete_event(event_id: int, delete_mode: str = 'this', deleted_by: str = None, team_id: int = None):
     """
+    soft-delete 방식으로 이벤트 휴지통 이동.
     delete_mode:
-      'this'      - 이것만 삭제 (자식이면 이 인스턴스만, 부모면 부모+모든자식)
-      'all'       - 부모 + 모든 자식 삭제
-      'from_here' - 이 이벤트 날짜 이후(포함) 삭제, 부모 series 단축
+      'this'      - 이것만 (자식이면 이 인스턴스만, 부모면 부모+모든자식 soft-delete)
+      'all'       - 부모 + 모든 자식 soft-delete
+      'from_here' - 이 이벤트 날짜 이후(포함) hard-delete (series 조각 정리)
     """
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
         if not row:
@@ -612,31 +651,37 @@ def delete_event(event_id: int, delete_mode: str = 'this'):
         parent_id = row.get("recurrence_parent_id") or event_id
 
         if delete_mode == 'all':
-            conn.execute("DELETE FROM events WHERE id = ? OR recurrence_parent_id = ?", (parent_id, parent_id))
+            conn.execute(
+                "UPDATE events SET deleted_at = ?, deleted_by = ? WHERE id = ? OR recurrence_parent_id = ?",
+                (now, deleted_by, parent_id, parent_id)
+            )
         elif delete_mode == 'from_here':
+            # 반복 series 조각 정리는 hard-delete 유지
             from datetime import date as _date, timedelta as _td
             this_start = row["start_datetime"][:10]
             day_before = (_date.fromisoformat(this_start) - _td(days=1)).isoformat()
-            # 부모 series 종료일 단축
             conn.execute(
                 "UPDATE events SET recurrence_end = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (day_before, parent_id)
             )
-            # 이 이벤트 이후(포함) 자식 삭제
             conn.execute(
                 "DELETE FROM events WHERE recurrence_parent_id = ? AND start_datetime >= ?",
                 (parent_id, this_start + 'T00:00')
             )
-            # 이 이벤트 자신도 삭제 (자식인 경우)
             if row.get("recurrence_parent_id"):
                 conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
         else:  # 'this'
             if row.get("recurrence_parent_id"):
-                # 자식 인스턴스만 삭제
-                conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+                conn.execute(
+                    "UPDATE events SET deleted_at = ?, deleted_by = ? WHERE id = ?",
+                    (now, deleted_by, event_id)
+                )
             else:
-                # 부모 삭제 → 자식도 전부 삭제
-                conn.execute("DELETE FROM events WHERE id = ? OR recurrence_parent_id = ?", (event_id, event_id))
+                # 부모 삭제 → 자식도 soft-delete
+                conn.execute(
+                    "UPDATE events SET deleted_at = ?, deleted_by = ? WHERE id = ? OR recurrence_parent_id = ?",
+                    (now, deleted_by, event_id, event_id)
+                )
 
 
 def get_kanban_events(team_id: int = None) -> list[dict]:
@@ -659,6 +704,7 @@ def get_kanban_events(team_id: int = None) -> list[dict]:
         AND (e.done_at IS NULL OR e.done_at > datetime('now', '-7 days'))
         AND (e.event_type IS NULL OR e.event_type = 'schedule')
         AND e.recurrence_parent_id IS NULL
+        AND e.deleted_at IS NULL
     """
     with get_conn() as conn:
         if team_id:
@@ -706,7 +752,7 @@ def get_project_timeline(team_id: int = None) -> list[dict]:
             rows = conn.execute(
                 """SELECT e.*, t.name as team_name
                    FROM events e LEFT JOIN teams t ON e.team_id = t.id
-                   WHERE e.team_id = ?
+                   WHERE e.team_id = ? AND e.deleted_at IS NULL
                    ORDER BY e.start_datetime""",
                 (team_id,)
             ).fetchall()
@@ -714,11 +760,12 @@ def get_project_timeline(team_id: int = None) -> list[dict]:
             rows = conn.execute(
                 """SELECT e.*, t.name as team_name
                    FROM events e LEFT JOIN teams t ON e.team_id = t.id
+                   WHERE e.deleted_at IS NULL
                    ORDER BY e.start_datetime"""
             ).fetchall()
         # projects 테이블에서 메타 조회
         proj_meta_rows = conn.execute(
-            "SELECT name, color, start_date, end_date, is_active FROM projects"
+            "SELECT name, color, start_date, end_date, is_active FROM projects WHERE deleted_at IS NULL"
         ).fetchall()
     proj_meta = {r["name"]: dict(r) for r in proj_meta_rows}
     # 비활성(종료) 프로젝트 이름 집합
@@ -782,6 +829,7 @@ def get_upcoming_meetings(assignee_name: str = None, limit: int = 7) -> list[dic
                 """SELECT * FROM events
                    WHERE event_type = 'meeting'
                    AND (is_active IS NULL OR is_active = 1)
+                   AND deleted_at IS NULL
                    AND start_datetime >= ?
                    AND (assignee LIKE ? OR assignee LIKE ? OR assignee LIKE ? OR assignee = ?)
                    ORDER BY start_datetime
@@ -800,6 +848,7 @@ def get_upcoming_meetings(assignee_name: str = None, limit: int = 7) -> list[dic
                 """SELECT * FROM events
                    WHERE event_type = 'meeting'
                    AND (is_active IS NULL OR is_active = 1)
+                   AND deleted_at IS NULL
                    AND start_datetime >= ?
                    ORDER BY start_datetime
                    LIMIT ?""",
@@ -870,6 +919,7 @@ def check_upcoming_event_alarms():
             """SELECT id, title, start_datetime, assignee, event_type, created_by
                FROM events
                WHERE (is_active IS NULL OR is_active = 1)
+               AND deleted_at IS NULL
                AND start_datetime BETWEEN ? AND ?
                AND recurrence_parent_id IS NULL""",
             (window_start, window_end)
@@ -942,26 +992,76 @@ def get_notice_history(limit: int = 100) -> list[dict]:
 def get_projects() -> list[str]:
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' ORDER BY project"
+            "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL ORDER BY project"
         ).fetchall()
     return [row[0] for row in rows]
+
+
+def get_unified_project_list(active_only: bool = True) -> list[dict]:
+    """모든 페이지에서 일관되게 사용할 통합 프로젝트 목록.
+
+    projects 테이블(삭제 안 된 것) + events.project + checklists.project 를 합산하여
+    [{name, color, is_active, id}] 형태로 반환. 이름 기준 중복 제거 후 이름순 정렬.
+    active_only=True(기본값)이면 is_active=1인 항목만 반환.
+    """
+    with get_conn() as conn:
+        # 1. projects 테이블 (삭제 안 된 것)
+        proj_rows = conn.execute(
+            "SELECT id, name, color, is_active FROM projects WHERE deleted_at IS NULL"
+        ).fetchall()
+        # 2. events.project 에서 프로젝트 이름 수집 (삭제 안 된 것)
+        ev_proj_rows = conn.execute(
+            "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
+        ).fetchall()
+        # 3. checklists.project 에서 프로젝트 이름 수집 (삭제 안 된 것)
+        ck_proj_rows = conn.execute(
+            "SELECT DISTINCT project FROM checklists WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
+        ).fetchall()
+
+    proj_map: dict[str, dict] = {}
+    for r in proj_rows:
+        proj_map[r["name"]] = {
+            "id": r["id"],
+            "name": r["name"],
+            "color": r["color"],
+            "is_active": r["is_active"] if r["is_active"] is not None else 1,
+        }
+
+    # events/checklists 에만 있는 프로젝트 이름도 포함 (orphan — is_active 기본 1)
+    for rows in (ev_proj_rows, ck_proj_rows):
+        for r in rows:
+            name = r[0]
+            if name and name not in proj_map:
+                proj_map[name] = {"id": None, "name": name, "color": None, "is_active": 1}
+
+    result = sorted(proj_map.values(), key=lambda x: x["name"])
+    if active_only:
+        result = [p for p in result if p.get("is_active", 1)]
+    return result
 
 
 # ── Project Management ───────────────────────────────────
 
 def get_all_projects_with_events() -> list[dict]:
-    """프로젝트 목록 + 각 프로젝트의 일정 반환 (projects 테이블 + events.project 합산)"""
+    """프로젝트 목록 + 각 프로젝트의 일정 반환 (projects 테이블 + events.project + checklists.project 합산)"""
     with get_conn() as conn:
-        # projects 테이블의 프로젝트
-        proj_rows = conn.execute("SELECT * FROM projects ORDER BY is_active DESC, name").fetchall()
+        # projects 테이블의 프로젝트 (삭제되지 않은 것만)
+        proj_rows = conn.execute(
+            "SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY is_active DESC, name"
+        ).fetchall()
         # events에서 project 이름 목록 (projects 테이블에 없는 것도 포함)
         ev_proj_rows = conn.execute(
-            "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != ''"
+            "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
         ).fetchall()
-        # 이벤트들
+        # checklists에서 project 이름 목록 (projects 테이블에도 events에도 없는 것 보완)
+        ck_proj_rows = conn.execute(
+            "SELECT DISTINCT project FROM checklists WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
+        ).fetchall()
+        # 이벤트들 (삭제되지 않은 것만)
         ev_rows = conn.execute(
             """SELECT e.*, t.name as team_name
                FROM events e LEFT JOIN teams t ON e.team_id = t.id
+               WHERE e.deleted_at IS NULL
                ORDER BY e.start_datetime"""
         ).fetchall()
 
@@ -976,10 +1076,10 @@ def get_all_projects_with_events() -> list[dict]:
             "events": [],
         }
 
-    # events.project에만 있는 프로젝트도 추가
-    for r in ev_proj_rows:
-        name = r["project"]
-        if name not in proj_map:
+    # events.project / checklists.project에만 있는 orphan 프로젝트도 추가
+    for r in (*ev_proj_rows, *ck_proj_rows):
+        name = r[0]
+        if name and name not in proj_map:
             proj_map[name] = {"id": None, "name": name, "color": None,
                               "start_date": None, "end_date": None, "is_active": 1,
                               "memo": None, "events": []}
@@ -1026,13 +1126,27 @@ def rename_project(old_name: str, new_name: str):
         )
 
 
-def delete_project(name: str, delete_events: bool = False):
+def delete_project(name: str, delete_events: bool = False, deleted_by: str = None, team_id: int = None):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_conn() as conn:
         if delete_events:
-            conn.execute("DELETE FROM events WHERE project = ?", (name,))
+            # 프로젝트 소속 일정 soft-delete
+            conn.execute(
+                "UPDATE events SET deleted_at = ?, deleted_by = ? WHERE project = ? AND deleted_at IS NULL",
+                (now, deleted_by, name)
+            )
+            # 프로젝트 소속 체크리스트 soft-delete
+            conn.execute(
+                "UPDATE checklists SET deleted_at = ?, deleted_by = ?, team_id = ? WHERE project = ? AND deleted_at IS NULL",
+                (now, deleted_by, team_id, name)
+            )
         else:
             conn.execute("UPDATE events SET project = NULL WHERE project = ?", (name,))
-        conn.execute("DELETE FROM projects WHERE name = ?", (name,))
+            conn.execute("UPDATE checklists SET project = '' WHERE project = ?", (name,))
+        conn.execute(
+            "UPDATE projects SET deleted_at = ?, deleted_by = ?, team_id = ? WHERE name = ?",
+            (now, deleted_by, team_id, name)
+        )
 
 
 def update_event_active_status(event_id: int, is_active: int):
@@ -1343,6 +1457,7 @@ def get_all_meetings():
                FROM meetings m
                LEFT JOIN users u ON m.created_by = u.id
                LEFT JOIN teams t ON m.team_id = t.id
+               WHERE m.deleted_at IS NULL
                ORDER BY m.updated_at DESC"""
         ).fetchall()
     return [dict(r) for r in rows]
@@ -1392,11 +1507,13 @@ def update_meeting(meeting_id: int, title: str, content: str, edited_by: int, me
         )
 
 
-def delete_meeting(meeting_id: int):
+def delete_meeting(meeting_id: int, deleted_by: str = None):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_conn() as conn:
-        conn.execute("DELETE FROM meeting_histories WHERE meeting_id = ?", (meeting_id,))
-        conn.execute("UPDATE events SET meeting_id = NULL WHERE meeting_id = ?", (meeting_id,))
-        conn.execute("DELETE FROM meetings WHERE id = ?", (meeting_id,))
+        conn.execute(
+            "UPDATE meetings SET deleted_at = ?, deleted_by = ? WHERE id = ?",
+            (now, deleted_by, meeting_id)
+        )
 
 
 def get_meeting_histories(meeting_id: int):
@@ -1459,6 +1576,7 @@ def get_events_for_conflict_check() -> list[dict]:
                FROM events
                WHERE date(start_datetime) >= date('now', '-3 months')
                  AND date(start_datetime) <= date('now', '+12 months')
+                 AND deleted_at IS NULL
                ORDER BY start_datetime"""
         ).fetchall()
     return [dict(r) for r in rows]
@@ -1471,7 +1589,7 @@ def get_events_by_date_range(start_date: str, end_date: str, team_id: int = None
                 """SELECT e.*, t.name as team_name
                    FROM events e LEFT JOIN teams t ON e.team_id = t.id
                    WHERE date(e.start_datetime) >= ? AND date(e.start_datetime) <= ?
-                   AND e.team_id = ?
+                   AND e.team_id = ? AND e.deleted_at IS NULL
                    ORDER BY e.start_datetime""",
                 (start_date, end_date, team_id)
             ).fetchall()
@@ -1480,6 +1598,7 @@ def get_events_by_date_range(start_date: str, end_date: str, team_id: int = None
                 """SELECT e.*, t.name as team_name
                    FROM events e LEFT JOIN teams t ON e.team_id = t.id
                    WHERE date(e.start_datetime) >= ? AND date(e.start_datetime) <= ?
+                   AND e.deleted_at IS NULL
                    ORDER BY e.start_datetime""",
                 (start_date, end_date)
             ).fetchall()
@@ -1609,15 +1728,19 @@ def create_checklist(project: str, title: str, content: str, created_by: str) ->
 
 
 def get_checklists(project: str = None) -> list:
+    inactive_filter = """
+        AND (project IS NULL OR project = ''
+             OR project NOT IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))
+    """
     with get_conn() as conn:
         if project is not None:
             rows = conn.execute(
-                "SELECT id, project, title, created_by, created_at, updated_at FROM checklists WHERE project = ? ORDER BY updated_at DESC",
+                f"SELECT id, project, title, created_by, created_at, updated_at FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter} ORDER BY updated_at DESC",
                 (project,)
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT id, project, title, created_by, created_at, updated_at FROM checklists ORDER BY updated_at DESC"
+                f"SELECT id, project, title, created_by, created_at, updated_at FROM checklists WHERE deleted_at IS NULL {inactive_filter} ORDER BY updated_at DESC"
             ).fetchall()
     return [dict(r) for r in rows]
 
@@ -1648,16 +1771,20 @@ def update_checklist_content(checklist_id: int, content: str):
         )
 
 
-def delete_checklist(checklist_id: int):
+def delete_checklist(checklist_id: int, deleted_by: str = None, team_id: int = None):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_conn() as conn:
-        conn.execute("DELETE FROM checklists WHERE id = ?", (checklist_id,))
+        conn.execute(
+            "UPDATE checklists SET deleted_at = ?, deleted_by = ?, team_id = ? WHERE id = ?",
+            (now, deleted_by, team_id, checklist_id)
+        )
 
 
 def get_checklist_projects() -> list:
     """체크리스트에 사용된 프로젝트 목록 반환."""
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT DISTINCT project FROM checklists WHERE project != '' ORDER BY project"
+            "SELECT DISTINCT project FROM checklists WHERE project != '' AND deleted_at IS NULL ORDER BY project"
         ).fetchall()
     return [r[0] for r in rows]
 
@@ -1761,3 +1888,127 @@ def delete_link(link_id: int, user_name: str, role: str) -> bool:
         else:
             cur = conn.execute("DELETE FROM links WHERE id=? AND created_by=?", (link_id, user_name))
         return cur.rowcount > 0
+
+
+# ── Trash ────────────────────────────────────────────────
+
+def get_trash_items(team_id: int = None) -> dict:
+    """휴지통 아이템 반환 (같은 팀만 표시)"""
+    with get_conn() as conn:
+        if team_id:
+            ev_rows = conn.execute(
+                """SELECT id, title, project, description, deleted_at, deleted_by, team_id, start_datetime, end_datetime
+                   FROM events
+                   WHERE deleted_at IS NOT NULL AND team_id = ? AND recurrence_parent_id IS NULL
+                   ORDER BY deleted_at DESC""",
+                (team_id,)
+            ).fetchall()
+            mt_rows = conn.execute(
+                """SELECT id, title, content, NULL as project, deleted_at, deleted_by, team_id
+                   FROM meetings
+                   WHERE deleted_at IS NOT NULL AND team_id = ?
+                   ORDER BY deleted_at DESC""",
+                (team_id,)
+            ).fetchall()
+            cl_rows = conn.execute(
+                """SELECT id, title, content, project, deleted_at, deleted_by, team_id
+                   FROM checklists
+                   WHERE deleted_at IS NOT NULL AND team_id = ?
+                   ORDER BY deleted_at DESC""",
+                (team_id,)
+            ).fetchall()
+            pj_rows = conn.execute(
+                """SELECT id, name as title, NULL as project, deleted_at, deleted_by, team_id
+                   FROM projects
+                   WHERE deleted_at IS NOT NULL AND team_id = ?
+                   ORDER BY deleted_at DESC""",
+                (team_id,)
+            ).fetchall()
+        else:
+            ev_rows = conn.execute(
+                """SELECT id, title, project, description, deleted_at, deleted_by, team_id, start_datetime, end_datetime
+                   FROM events
+                   WHERE deleted_at IS NOT NULL AND recurrence_parent_id IS NULL
+                   ORDER BY deleted_at DESC"""
+            ).fetchall()
+            mt_rows = conn.execute(
+                """SELECT id, title, content, NULL as project, deleted_at, deleted_by, team_id
+                   FROM meetings
+                   WHERE deleted_at IS NOT NULL
+                   ORDER BY deleted_at DESC"""
+            ).fetchall()
+            cl_rows = conn.execute(
+                """SELECT id, title, content, project, deleted_at, deleted_by, team_id
+                   FROM checklists
+                   WHERE deleted_at IS NOT NULL
+                   ORDER BY deleted_at DESC"""
+            ).fetchall()
+            pj_rows = conn.execute(
+                """SELECT id, name as title, NULL as project, deleted_at, deleted_by, team_id
+                   FROM projects
+                   WHERE deleted_at IS NOT NULL
+                   ORDER BY deleted_at DESC"""
+            ).fetchall()
+    return {
+        "events":     [dict(r) for r in ev_rows],
+        "meetings":   [dict(r) for r in mt_rows],
+        "checklists": [dict(r) for r in cl_rows],
+        "projects":   [dict(r) for r in pj_rows],
+    }
+
+
+def restore_trash_item(item_type: str, item_id: int) -> bool:
+    """휴지통에서 복원 (deleted_at = NULL)"""
+    with get_conn() as conn:
+        if item_type == "event":
+            row = conn.execute("SELECT recurrence_parent_id FROM events WHERE id = ?", (item_id,)).fetchone()
+            if not row:
+                return False
+            # 부모 이벤트면 자식도 함께 복원
+            conn.execute(
+                "UPDATE events SET deleted_at = NULL, deleted_by = NULL WHERE id = ? OR recurrence_parent_id = ?",
+                (item_id, item_id)
+            )
+        elif item_type == "meeting":
+            conn.execute(
+                "UPDATE meetings SET deleted_at = NULL, deleted_by = NULL WHERE id = ?",
+                (item_id,)
+            )
+        elif item_type == "checklist":
+            conn.execute(
+                "UPDATE checklists SET deleted_at = NULL, deleted_by = NULL WHERE id = ?",
+                (item_id,)
+            )
+        elif item_type == "project":
+            row = conn.execute("SELECT name FROM projects WHERE id = ?", (item_id,)).fetchone()
+            if not row:
+                return False
+            proj_name = row["name"]
+            # 프로젝트 엔티티 복원
+            conn.execute(
+                "UPDATE projects SET deleted_at = NULL, deleted_by = NULL, team_id = NULL WHERE id = ?",
+                (item_id,)
+            )
+            # 연결된 삭제된 이벤트도 복원
+            conn.execute(
+                "UPDATE events SET deleted_at = NULL, deleted_by = NULL WHERE project = ? AND deleted_at IS NOT NULL",
+                (proj_name,)
+            )
+            # 연결된 삭제된 체크리스트도 복원
+            conn.execute(
+                "UPDATE checklists SET deleted_at = NULL, deleted_by = NULL WHERE project = ? AND deleted_at IS NOT NULL",
+                (proj_name,)
+            )
+        else:
+            return False
+    return True
+
+
+def cleanup_old_trash():
+    """30일 초과 휴지통 항목 영구 삭제 (APScheduler에서 호출)"""
+    threshold = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        conn.execute("DELETE FROM events WHERE deleted_at IS NOT NULL AND deleted_at < ?", (threshold,))
+        conn.execute("DELETE FROM meetings WHERE deleted_at IS NOT NULL AND deleted_at < ?", (threshold,))
+        conn.execute("DELETE FROM checklists WHERE deleted_at IS NOT NULL AND deleted_at < ?", (threshold,))
+        conn.execute("DELETE FROM projects WHERE deleted_at IS NOT NULL AND deleted_at < ?", (threshold,))

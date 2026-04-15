@@ -124,6 +124,52 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-16 프로젝트 일관성·휴지통 개선 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-16</span>
+      <span class="cl-phase-badge phase-4">4차 5단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🗂</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">수정</span>프로젝트 목록 — 페이지마다 달랐던 프로젝트 목록 통일</div>
+          <div class="cl-item-detail">캘린더·칸반은 이벤트에서 추출, 체크는 체크리스트에서 추출, 프로젝트 관리는 projects 테이블 기준으로 각각 달랐던 문제를 해결했습니다. <code>get_all_projects_with_events()</code>가 이제 events와 checklists를 모두 집계하며, 체크리스트에만 연결된 프로젝트(예: FW개발)도 프로젝트 관리 페이지에 표시됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🚫</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">수정</span>완료 프로젝트 — 프로젝트 관리 외 페이지에서 완전 숨김</div>
+          <div class="cl-item-detail">'완료' 처리된 프로젝트와 그 소속 일정·체크 항목이 캘린더·칸반·체크·간트에 더 이상 노출되지 않습니다. 프로젝트 관리 페이지의 '완료' 탭에서만 확인 가능합니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🗑️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag new">신규</span>휴지통 — 3단 레이아웃 재설계</div>
+          <div class="cl-item-detail">휴지통 페이지가 체크 페이지와 동일한 3단 구조(왼쪽: 카테고리, 가운데: 항목 목록, 오른쪽: 상세·복원)로 재설계됐습니다. 삭제된 프로젝트가 있을 때만 왼쪽 패널에 표시되며, 프로젝트 선택 시 가운데 패널에 복원 버튼이 나타납니다. 오른쪽 상세 패널에서 메모장·체크 항목의 원본 내용을 미리 볼 수 있습니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🔄</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag new">신규</span>휴지통 — 삭제된 프로젝트 일괄 복원</div>
+          <div class="cl-item-detail">삭제된 프로젝트를 복원하면 해당 프로젝트에 연결된 모든 일정과 체크 항목이 함께 복원됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🗂</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">수정</span>프로젝트 관리 — '프로젝트+하위 일정 및 체크 항목 삭제' 기능 확장</div>
+          <div class="cl-item-detail">기존 '프로젝트+일정 삭제' 버튼이 '프로젝트+하위 일정 및 체크 항목 삭제'로 이름이 변경되고, 체크 항목도 함께 휴지통으로 이동됩니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-16 업무 링크 관리 ── -->
   <div class="cl-group">
     <div class="cl-group-header">

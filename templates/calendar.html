@@ -179,13 +179,14 @@ function applyProjFilter() {
 function _populateProjFilter(evs) {
   const sel = document.getElementById('cal-proj-filter');
   const prev = sel.value;
-  const projects = [...new Set(evs
-    .map(e => e.extendedProps?.project)
-    .filter(p => p && p.trim()))
-  ].sort();
-  const hasUnassigned = evs.some(e => !e.extendedProps?.project);
+  // 실제 로드된 이벤트에 있는 프로젝트만 필터 옵션으로 표시 (calendar는 events 기반 뷰)
+  const projects = evs
+    ? [...new Set(evs.map(e => e.extendedProps?.project).filter(p => p && p.trim()))].sort()
+    : [];
+  const hasUnassigned = !evs || evs.some(e => !e.extendedProps?.project);
+  const esc = s => s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   sel.innerHTML = '<option value="">전체</option>' +
-    projects.map(p => `<option value="${p.replace(/"/g,'&quot;')}">${p}</option>`).join('') +
+    projects.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('') +
     (hasUnassigned ? '<option value="__unassigned__">미지정</option>' : '');
   if (prev) sel.value = prev;
 }

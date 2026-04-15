@@ -315,7 +315,7 @@ async function loadKanban() {
   const res = await fetch(url);
   allEvents = await res.json();
 
-  // 프로젝트 필터 목록 갱신
+  // 프로젝트 필터 목록 — 실제 로드된 이벤트에 있는 프로젝트만 표시 (events 기반 뷰이므로)
   const projSel = document.getElementById('project-filter');
   const prevProj = projSel.value;
   const projects = [...new Set(allEvents.map(e => e.project).filter(Boolean))].sort();

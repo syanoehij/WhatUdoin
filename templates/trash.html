@@ -1,0 +1,738 @@
+{% extends "base.html" %}
+{% block title %}휴지통 – WhatUDoin{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
+<script src="/static/lib/toastui-editor-all.min.js"></script>
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  main { max-width: none; padding: 0; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+
+  .tr-page {
+    display: flex;
+    height: calc(100vh - 50px);
+    overflow: hidden;
+  }
+
+  /* ── 왼쪽 패널 ── */
+  .tr-left {
+    width: 300px;
+    min-width: 260px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .tr-left-header {
+    padding: 12px 14px 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+  }
+  .tr-cat-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 0;
+  }
+  .tr-cat-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background 0.1s;
+  }
+  .tr-cat-item:hover { background: var(--surface-2); }
+  .tr-cat-item.active {
+    background: var(--accent-bg);
+    border-left-color: var(--accent);
+  }
+  .tr-cat-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,0.1);
+  }
+  .tr-cat-icon { font-size: 0.95rem; flex-shrink: 0; }
+  .tr-cat-label {
+    flex: 1;
+    font-size: 0.86rem;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tr-cat-cnt {
+    font-size: 0.72rem;
+    background: var(--surface-3);
+    padding: 1px 6px;
+    border-radius: 10px;
+    color: var(--text-faint);
+    flex-shrink: 0;
+    min-width: 18px;
+    text-align: center;
+  }
+  .tr-cat-item.active .tr-cat-cnt { background: var(--accent); color: #fff; }
+  .tr-cat-sep {
+    height: 1px;
+    background: var(--border-light);
+    margin: 4px 10px;
+  }
+
+  /* ── 가운데 패널 ── */
+  .tr-mid {
+    width: 300px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .tr-mid-header {
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tr-mid-title {
+    flex: 1;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tr-list {
+    flex: 1;
+    overflow-y: auto;
+  }
+  .tr-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    border-bottom: 1px solid var(--border-faint);
+    transition: background 0.1s;
+  }
+  .tr-item:hover { background: var(--surface-2); }
+  .tr-item.active {
+    background: var(--accent-bg);
+    border-left-color: var(--accent);
+  }
+  .tr-item-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 4px;
+  }
+  .tr-item-meta {
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .tr-type-badge {
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .tr-type-event     { background: #dbeafe; color: #1e40af; }
+  .tr-type-meeting   { background: #f3e8ff; color: #6d28d9; }
+  .tr-type-checklist { background: #dcfce7; color: #166534; }
+  .dark .tr-type-event     { background: #1e3a5f; color: #93c5fd; }
+  .dark .tr-type-meeting   { background: #3b1a5f; color: #c4b5fd; }
+  .dark .tr-type-checklist { background: #14532d; color: #86efac; }
+  .tr-expire-warn { color: #ef4444; font-weight: 600; }
+  .tr-proj-bar {
+    display: inline-block;
+    width: 3px; height: 12px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .tr-proj-restore-btn {
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: opacity 0.15s;
+  }
+  .tr-proj-restore-btn:hover { opacity: 0.85; }
+  .tr-deleted-proj-badge {
+    font-size: 0.65rem;
+    background: #fee2e2;
+    color: #991b1b;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .dark .tr-deleted-proj-badge { background: #450a0a; color: #fca5a5; }
+  .tr-empty {
+    padding: 28px 16px;
+    text-align: center;
+    font-size: 0.84rem;
+    color: var(--text-faint);
+  }
+
+  /* ── 오른쪽 패널 ── */
+  .tr-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .tr-placeholder {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    color: var(--text-faint);
+    font-size: 0.95rem;
+  }
+  .tr-placeholder-icon { font-size: 2.5rem; }
+  .tr-detail {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  .tr-detail-header {
+    padding: 12px 20px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .tr-detail-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tr-restore-btn {
+    padding: 6px 18px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: opacity 0.15s;
+  }
+  .tr-restore-btn:hover { opacity: 0.85; }
+  .tr-detail-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 28px;
+  }
+  .tr-detail-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 10px;
+    font-size: 0.88rem;
+    align-items: baseline;
+  }
+  .tr-detail-label {
+    width: 84px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    flex-shrink: 0;
+  }
+  .tr-detail-val { color: var(--text); }
+  .tr-expire-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .tr-expire-badge.ok     { background: #dcfce7; color: #166534; }
+  .tr-expire-badge.warn   { background: #fef9c3; color: #854d0e; }
+  .tr-expire-badge.danger { background: #fee2e2; color: #991b1b; }
+  .dark .tr-expire-badge.ok     { background: #14532d; color: #86efac; }
+  .dark .tr-expire-badge.warn   { background: #422006; color: #fde68a; }
+  .dark .tr-expire-badge.danger { background: #450a0a; color: #fca5a5; }
+  .tr-info-box {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: var(--surface-2);
+    border-radius: 8px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+  .tr-content-section {
+    margin-top: 20px;
+    border-top: 1px solid var(--border-light);
+    padding-top: 16px;
+  }
+  .tr-content-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 10px;
+  }
+  /* ToastUI 뷰어 다크모드 */
+  .dark .toastui-editor-contents { color: var(--text); }
+  .dark .toastui-editor-contents p { color: var(--text); }
+  .dark .toastui-editor-contents h1,
+  .dark .toastui-editor-contents h2,
+  .dark .toastui-editor-contents h3 { color: var(--text); border-color: var(--border); }
+  .dark .toastui-editor-contents blockquote { border-color: var(--accent); background: var(--surface-2); }
+  .dark .toastui-editor-contents code { background: var(--surface-3); color: var(--text); }
+  .dark .toastui-editor-contents pre { background: var(--surface-3); }
+  .dark .toastui-editor-contents table th { background: var(--surface-3); }
+  .dark .toastui-editor-contents table td,
+  .dark .toastui-editor-contents table th { border-color: var(--border); }
+  /* 일정 설명 */
+  .tr-event-desc {
+    font-size: 0.88rem;
+    color: var(--text);
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tr-page">
+
+  <!-- ── 왼쪽: 카테고리 ── -->
+  <div class="tr-left">
+    <div class="tr-left-header">휴지통</div>
+    <div class="tr-cat-list" id="tr-cat-list"></div>
+  </div>
+
+  <!-- ── 가운데: 항목 목록 ── -->
+  <div class="tr-mid">
+    <div class="tr-mid-header">
+      <span class="tr-mid-title" id="tr-mid-title">목록</span>
+      <button class="tr-proj-restore-btn" id="tr-proj-restore-btn" style="display:none;" onclick="doRestoreProject()">프로젝트 복원</button>
+    </div>
+    <div class="tr-list" id="tr-list">
+      <div class="tr-empty">카테고리를 선택하세요.</div>
+    </div>
+  </div>
+
+  <!-- ── 오른쪽: 상세 ── -->
+  <div class="tr-right">
+    <div class="tr-placeholder" id="tr-placeholder">
+      <div class="tr-placeholder-icon">🗑️</div>
+      <div>항목을 선택하면 상세 정보를 볼 수 있습니다.</div>
+    </div>
+    <div class="tr-detail" id="tr-detail">
+      <div class="tr-detail-header">
+        <span class="tr-detail-title" id="tr-detail-title"></span>
+        <button class="tr-restore-btn" onclick="doRestore()">복원</button>
+      </div>
+      <div class="tr-detail-body">
+        <div class="tr-detail-row">
+          <span class="tr-detail-label">종류</span>
+          <span class="tr-detail-val" id="tr-dv-type"></span>
+        </div>
+        <div class="tr-detail-row" id="tr-dv-proj-row">
+          <span class="tr-detail-label">프로젝트</span>
+          <span class="tr-detail-val" id="tr-dv-proj"></span>
+        </div>
+        <div class="tr-detail-row" id="tr-dv-date-row" style="display:none">
+          <span class="tr-detail-label">일정 날짜</span>
+          <span class="tr-detail-val" id="tr-dv-date"></span>
+        </div>
+        <div class="tr-detail-row">
+          <span class="tr-detail-label">삭제일시</span>
+          <span class="tr-detail-val" id="tr-dv-deleted-at"></span>
+        </div>
+        <div class="tr-detail-row">
+          <span class="tr-detail-label">삭제한 사람</span>
+          <span class="tr-detail-val" id="tr-dv-deleted-by"></span>
+        </div>
+        <div class="tr-detail-row">
+          <span class="tr-detail-label">남은 기간</span>
+          <span id="tr-dv-expire"></span>
+        </div>
+        <div class="tr-info-box">
+          휴지통 항목은 삭제 후 <strong>30일</strong>이 지나면 자동으로 영구 삭제됩니다.<br>
+          복원 버튼을 눌러 항목을 원래 위치로 되돌릴 수 있습니다.
+        </div>
+        <!-- 원본 내용 미리보기 -->
+        <div class="tr-content-section" id="tr-content-section" style="display:none;">
+          <div class="tr-content-label">원본 내용</div>
+          <div id="tr-content-viewer"></div>
+          <div id="tr-event-desc" class="tr-event-desc" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let _trashData   = { events: [], meetings: [], checklists: [] };
+let _projColors  = {};
+let _projList    = [];   // [{ name, color }]
+let _selectedCat = null;
+let _listItems   = [];   // 현재 가운데 패널 항목 배열
+let _selectedItem = null;
+
+const TYPE_LABEL = { event: '일정', meeting: '메모', checklist: '체크' };
+const TYPE_CLASS  = { event: 'tr-type-event', meeting: 'tr-type-meeting', checklist: 'tr-type-checklist' };
+
+async function loadTrash() {
+  const [trashRes, projRes] = await Promise.all([
+    fetch('/api/trash'),
+    fetch('/api/manage/projects'),
+  ]);
+  _trashData = await trashRes.json();
+  const allProjects = await projRes.json();
+
+  _projColors = {};
+  for (const p of allProjects) {
+    if (p.color) _projColors[p.name] = p.color;
+  }
+
+  // 삭제된 프로젝트 엔티티 이름 — 활성 카테고리 목록에서 제외
+  const deletedProjNames = new Set((_trashData.projects || []).map(p => p.title));
+
+  const seen = new Set();
+  _projList = [];
+  for (const p of allProjects) {
+    seen.add(p.name);
+    _projList.push({ name: p.name, color: p.color || '#aaaaaa' });
+  }
+  // trash items에만 있는 프로젝트 — 삭제된 프로젝트 엔티티와 같은 이름은 제외
+  for (const x of [..._trashData.events, ..._trashData.checklists]) {
+    if (x.project && x.project.trim() && !seen.has(x.project) && !deletedProjNames.has(x.project)) {
+      seen.add(x.project);
+      _projList.push({ name: x.project, color: '#aaaaaa' });
+    }
+  }
+  _projList.sort((a, b) => a.name.localeCompare(b.name));
+
+  renderCats();
+  if (_selectedCat) {
+    selectCat(_selectedCat);
+  }
+}
+
+// ── 왼쪽 카테고리 렌더링 ──
+function renderCats() {
+  const el = document.getElementById('tr-cat-list');
+  el.innerHTML = '';
+
+  const mtCnt = _trashData.meetings.length;
+  el.insertAdjacentHTML('beforeend', `
+    <div class="tr-cat-item${_selectedCat === 'meeting' ? ' active' : ''}" onclick="selectCat('meeting')">
+      <span class="tr-cat-icon">📝</span>
+      <span class="tr-cat-label">메모장</span>
+      <span class="tr-cat-cnt">${mtCnt}</span>
+    </div>
+  `);
+
+  // 삭제된 프로젝트 엔티티 (있을 때만)
+  if (_trashData.projects && _trashData.projects.length > 0) {
+    _trashData.projects.forEach((p, i) => {
+      const catId = 'deleted_proj:' + i;
+      el.insertAdjacentHTML('beforeend', `
+        <div class="tr-cat-item${_selectedCat === catId ? ' active' : ''}" onclick="selectDeletedProjCat(${i})">
+          <span class="tr-cat-icon">📁</span>
+          <span class="tr-cat-label">${escHtml(p.title)}</span>
+        </div>
+      `);
+    });
+  }
+
+  el.insertAdjacentHTML('beforeend', '<div class="tr-cat-sep"></div>');
+
+  // 미지정 (삭제된 항목 있을 때만)
+  const unsetCnt = countForProj('');
+  if (unsetCnt > 0) {
+    el.insertAdjacentHTML('beforeend', `
+      <div class="tr-cat-item${_selectedCat === 'unset' ? ' active' : ''}" onclick="selectCat('unset')">
+        <span class="tr-cat-dot" style="background:#aaaaaa;"></span>
+        <span class="tr-cat-label">미지정</span>
+        <span class="tr-cat-cnt">${unsetCnt}</span>
+      </div>
+    `);
+  }
+
+  // 프로젝트 — 삭제된 항목이 1개 이상인 것만 표시
+  _projList.forEach((p, i) => {
+    const cnt = countForProj(p.name);
+    if (cnt === 0) return;  // 삭제 항목 없으면 표시 안 함
+    const catId = 'proj:' + p.name;
+    el.insertAdjacentHTML('beforeend', `
+      <div class="tr-cat-item${_selectedCat === catId ? ' active' : ''}" onclick="selectProjCat(${i})">
+        <span class="tr-cat-dot" style="background:${escAttr(p.color)};"></span>
+        <span class="tr-cat-label">${escHtml(p.name)}</span>
+        <span class="tr-cat-cnt">${cnt}</span>
+      </div>
+    `);
+  });
+}
+
+function selectProjCat(i) {
+  if (_projList[i]) selectCat('proj:' + _projList[i].name);
+}
+
+function selectDeletedProjCat(i) {
+  if (_trashData.projects[i]) selectCat('deleted_proj:' + i);
+}
+
+function countForProj(projName) {
+  const evs = _trashData.events.filter(x => (x.project || '') === projName);
+  const cls = _trashData.checklists.filter(x => (x.project || '') === projName);
+  return evs.length + cls.length;
+}
+
+// ── 카테고리 선택 ──
+function selectCat(catId) {
+  _selectedCat = catId;
+  _selectedItem = null;
+  renderCats();
+  renderDetail(null);
+
+  const restoreBtn = document.getElementById('tr-proj-restore-btn');
+  restoreBtn.style.display = 'none';
+
+  let items = [];
+  let title = '';
+
+  if (catId === 'meeting') {
+    title = '메모장';
+    items = _trashData.meetings.map(x => ({ ...x, _type: 'meeting' }));
+
+  } else if (catId === 'unset') {
+    title = '미지정';
+    const evs = _trashData.events.filter(x => !(x.project || '').trim()).map(x => ({ ...x, _type: 'event' }));
+    const cls = _trashData.checklists.filter(x => !(x.project || '').trim()).map(x => ({ ...x, _type: 'checklist' }));
+    items = [...evs, ...cls];
+
+  } else if (catId.startsWith('proj:')) {
+    const pName = catId.slice(5);
+    title = pName;
+    const evs = _trashData.events.filter(x => x.project === pName).map(x => ({ ...x, _type: 'event' }));
+    const cls = _trashData.checklists.filter(x => x.project === pName).map(x => ({ ...x, _type: 'checklist' }));
+    items = [...evs, ...cls];
+
+  } else if (catId.startsWith('deleted_proj:')) {
+    const idx = parseInt(catId.slice(13));
+    const p = _trashData.projects[idx];
+    if (p) {
+      title = p.title;
+      // 복원 버튼 표시
+      restoreBtn.style.display = '';
+      restoreBtn.dataset.projId = p.id;
+      restoreBtn.dataset.projName = p.title;
+      // 연결된 삭제 항목도 표시
+      const evs = _trashData.events.filter(x => x.project === p.title).map(x => ({ ...x, _type: 'event' }));
+      const cls = _trashData.checklists.filter(x => x.project === p.title).map(x => ({ ...x, _type: 'checklist' }));
+      items = [...evs, ...cls];
+    }
+  }
+
+  items.sort((a, b) => (b.deleted_at || '').localeCompare(a.deleted_at || ''));
+  document.getElementById('tr-mid-title').textContent = title;
+  renderList(items);
+}
+
+// ── 가운데 목록 렌더링 ──
+function renderList(items) {
+  _listItems = items;
+  const el = document.getElementById('tr-list');
+
+  if (!items.length) {
+    el.innerHTML = '<div class="tr-empty">휴지통이 비어 있습니다.</div>';
+    return;
+  }
+
+  el.innerHTML = '';
+  items.forEach((item, idx) => {
+    const active = (_selectedItem && _selectedItem._type === item._type && _selectedItem.id === item.id) ? ' active' : '';
+    const daysLeft = getDaysLeft(item.deleted_at);
+    const expireStr = daysLeft <= 3 ? `<span class="tr-expire-warn">D-${daysLeft}</span>` : '';
+    const dateStr = item.start_datetime ? `<span>${fmtDate(item.start_datetime)}</span>` : '';
+
+    const projColor = (item.project && _projColors[item.project]) ? _projColors[item.project] : '#aaaaaa';
+    const projBar = item._type !== 'meeting' && item.project
+      ? `<span class="tr-proj-bar" style="background:${escAttr(projColor)};"></span><span>${escHtml(item.project)}</span>`
+      : '';
+
+    el.insertAdjacentHTML('beforeend', `
+      <div class="tr-item${active}" onclick="selectItem(${idx})">
+        <div class="tr-item-title">${escHtml(item.title)}</div>
+        <div class="tr-item-meta">
+          ${projBar}
+          ${dateStr}
+          ${expireStr}
+        </div>
+      </div>
+    `);
+  });
+}
+
+// ── 항목 선택 ──
+function selectItem(idx) {
+  const item = _listItems[idx];
+  if (!item) return;
+  _selectedItem = item;
+  renderList(_listItems);
+  renderDetail(item);
+}
+
+// ── 오른쪽 상세 렌더링 ──
+function renderDetail(item) {
+  const ph  = document.getElementById('tr-placeholder');
+  const det = document.getElementById('tr-detail');
+  if (!item) {
+    ph.style.display = '';
+    det.style.display = 'none';
+    return;
+  }
+  ph.style.display = 'none';
+  det.style.display = 'flex';
+
+  document.getElementById('tr-detail-title').textContent = item.title;
+  document.getElementById('tr-dv-type').innerHTML =
+    `<span class="tr-type-badge ${TYPE_CLASS[item._type]}">${TYPE_LABEL[item._type]}</span>`;
+
+  const projRow = document.getElementById('tr-dv-proj-row');
+  if (item._type !== 'meeting') {
+    projRow.style.display = '';
+    document.getElementById('tr-dv-proj').textContent = item.project || '미지정';
+  } else {
+    projRow.style.display = 'none';
+  }
+
+  const dateRow = document.getElementById('tr-dv-date-row');
+  if (item._type === 'event' && item.start_datetime) {
+    dateRow.style.display = '';
+    const end = item.end_datetime ? ` ~ ${fmtDate(item.end_datetime)}` : '';
+    document.getElementById('tr-dv-date').textContent = fmtDate(item.start_datetime) + end;
+  } else {
+    dateRow.style.display = 'none';
+  }
+
+  document.getElementById('tr-dv-deleted-at').textContent = fmtDatetime(item.deleted_at);
+  document.getElementById('tr-dv-deleted-by').textContent = item.deleted_by || '알 수 없음';
+
+  const daysLeft = getDaysLeft(item.deleted_at);
+  const cls = daysLeft <= 3 ? 'danger' : daysLeft <= 7 ? 'warn' : 'ok';
+  document.getElementById('tr-dv-expire').innerHTML =
+    `<span class="tr-expire-badge ${cls}">D-${daysLeft} (${daysLeft}일 남음)</span>`;
+
+  // 원본 내용 렌더링
+  const contentSection = document.getElementById('tr-content-section');
+  const contentViewer  = document.getElementById('tr-content-viewer');
+  const eventDesc      = document.getElementById('tr-event-desc');
+  contentViewer.style.display = 'none';
+  eventDesc.style.display = 'none';
+  contentSection.style.display = 'none';
+
+  if ((item._type === 'meeting' || item._type === 'checklist') && item.content) {
+    contentSection.style.display = '';
+    contentViewer.style.display = '';
+    contentViewer.innerHTML = '';
+    // ToastUI 뷰어로 마크다운 렌더링
+    if (window.toastui && window.toastui.Editor) {
+      toastui.Editor.factory({
+        el: contentViewer,
+        viewer: true,
+        initialValue: item.content || '',
+      });
+    } else {
+      contentViewer.textContent = item.content;
+    }
+  } else if (item._type === 'event' && item.description) {
+    contentSection.style.display = '';
+    eventDesc.style.display = '';
+    eventDesc.textContent = item.description;
+  }
+}
+
+// ── 프로젝트 전체 복원 ──
+async function doRestoreProject() {
+  const btn = document.getElementById('tr-proj-restore-btn');
+  const projId   = btn.dataset.projId;
+  const projName = btn.dataset.projName;
+  if (!projId) return;
+  if (!confirm(`"${projName}" 프로젝트와 연결된 모든 항목을 복원하시겠습니까?`)) return;
+  try {
+    const res = await fetch(`/api/trash/project/${projId}/restore`, { method: 'POST' });
+    if (!res.ok) { alert('복원 실패'); return; }
+    const prevCat = _selectedCat;
+    _selectedItem = null;
+    await loadTrash();
+    // 복원 후 해당 카테고리가 사라졌으면 초기화
+    renderDetail(null);
+  } catch(e) {
+    alert('오류 발생: ' + e.message);
+  }
+}
+
+// ── 개별 항목 복원 ──
+async function doRestore() {
+  if (!_selectedItem) return;
+  if (!confirm(`"${_selectedItem.title}" 을(를) 복원하시겠습니까?`)) return;
+  try {
+    const res = await fetch(`/api/trash/${_selectedItem._type}/${_selectedItem.id}/restore`, { method: 'POST' });
+    if (!res.ok) { alert('복원 실패'); return; }
+    const prevCat = _selectedCat;
+    _selectedItem = null;
+    await loadTrash();
+    if (prevCat) selectCat(prevCat);
+    renderDetail(null);
+  } catch(e) {
+    alert('오류 발생: ' + e.message);
+  }
+}
+
+// ── 유틸 ──
+function getDaysLeft(deletedAt) {
+  if (!deletedAt) return 30;
+  const expiry = new Date(new Date(deletedAt).getTime() + 30 * 24 * 60 * 60 * 1000);
+  return Math.max(0, Math.ceil((expiry - new Date()) / (1000 * 60 * 60 * 24)));
+}
+function fmtDate(s)     { return s ? s.slice(0, 10) : ''; }
+function fmtDatetime(s) { return s ? s.slice(0, 16).replace('T', ' ') : ''; }
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) { return String(s || '').replace(/"/g,'&quot;'); }
+
+loadTrash();
+</script>
+{% endblock %}
