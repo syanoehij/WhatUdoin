@@ -112,7 +112,7 @@
 
   <!-- ── 헤더 ── -->
   <div class="editor-header">
-    <a id="btn-back" href="/check" class="btn btn-sm">← 목록</a>
+    <a id="btn-back" href="/check" class="btn btn-sm" onclick="return confirmLeave(event, this)">← 목록</a>
 
     <div class="ck-edit-meta">
       <input type="text" id="ck-edit-title"
@@ -182,13 +182,24 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
-// ── 뒤로가기 URL: localStorage에서 마지막 프로젝트 복원 ──
-document.addEventListener('DOMContentLoaded', () => {
-  const lastProj = localStorage.getItem('ck_last_proj');
-  const backBtn  = document.getElementById('btn-back');
-  if (lastProj) {
-    backBtn.href = `/check?proj=${encodeURIComponent(lastProj)}`;
+// ── 목록 버튼 dirty 확인 ──────────────────────────────────
+function confirmLeave(e, el) {
+  if (!_dirty) return true;
+  e.preventDefault();
+  const save = confirm('저장되지 않은 내용이 있습니다.\n[확인] 저장하고 이동  [취소] 저장 안 하고 이동');
+  if (save) {
+    saveContent().then(() => { window.location.href = el.href; });
+  } else {
+    setDirty(false);
+    window.location.href = el.href;
   }
+  return false;
+}
+
+// ── 뒤로가기 URL: localStorage에서 마지막 항목 id 포함 복원 ──
+document.addEventListener('DOMContentLoaded', () => {
+  const backBtn = document.getElementById('btn-back');
+  backBtn.href = `/check?id=${CKE_ID}`;
 
   if (CKE_LOCKED) {
     // 잠금 상태: 뷰어로만 표시
@@ -304,9 +315,8 @@ async function saveContent(auto = false) {
     setTimeout(() => { toast.style.display = 'none'; }, 2000);
 
     if (!auto) {
-      // 수동 저장 시 목록으로 복귀
-      const lastProj = localStorage.getItem('ck_last_proj');
-      window.location.href = lastProj ? `/check?proj=${encodeURIComponent(lastProj)}` : '/check';
+      // 수동 저장 후 현재 항목 유지 (리스트로 가지 않음)
+      window.location.href = `/check?id=${CKE_ID}`;
     } else {
       // 자동 저장 후 잠금 재획득
       await fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'POST' });

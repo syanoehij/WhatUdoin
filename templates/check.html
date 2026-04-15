@@ -393,6 +393,63 @@
     z-index: 9999;
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
   }
+
+  /* ── 이력 모달 ── */
+  .ck-hist-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+  }
+  .ck-hist-backdrop.open { display: flex; }
+  .ck-hist-modal {
+    background: var(--surface);
+    border-radius: 12px;
+    width: 480px;
+    max-width: 96vw;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    overflow: hidden;
+  }
+  .ck-hist-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .ck-hist-close {
+    background: none; border: none;
+    font-size: 1.2rem; cursor: pointer;
+    color: var(--text-muted); line-height: 1;
+  }
+  .ck-hist-body { padding: 12px 0; }
+  .ck-hist-item {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border-faint);
+  }
+  .ck-hist-item:last-child { border-bottom: none; }
+  .ck-hist-meta {
+    font-size: 0.8rem; color: var(--text-faint);
+    margin-bottom: 6px;
+  }
+  .ck-hist-preview {
+    font-size: 0.83rem; color: var(--text-muted);
+    white-space: pre-wrap; max-height: 60px;
+    overflow: hidden; line-height: 1.5;
+    font-family: monospace;
+    margin-bottom: 8px;
+  }
+  .ck-hist-empty {
+    padding: 24px 20px;
+    text-align: center;
+    font-size: 0.88rem;
+    color: var(--text-faint);
+  }
 </style>
 {% endblock %}
 
@@ -420,25 +477,6 @@
       {% endif %}
     </div>
 
-    <!-- 새 항목 폼 -->
-    {% if user and user.role in ('editor', 'admin') %}
-    <div class="ck-new-form" id="ck-new-form">
-      <div class="ck-new-form-row">
-        <input type="text" id="ck-new-title" placeholder="제목을 입력하세요" onkeydown="if(event.key==='Enter')createChecklist()">
-        <select id="ck-new-project">
-          <option value="">프로젝트 없음</option>
-          {% for p in projects %}
-          <option value="{{ p.name }}">{{ p.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="ck-new-form-row">
-        <button class="btn btn-sm btn-primary" onclick="createChecklist()">추가</button>
-        <button class="btn btn-sm btn-ghost" onclick="closeNewForm()">취소</button>
-      </div>
-    </div>
-    {% endif %}
-
     <div class="ck-list" id="ck-list">
       <div class="ck-empty">불러오는 중…</div>
     </div>
@@ -460,6 +498,7 @@
         <span class="ck-save-indicator" id="ck-dirty-indicator"></span>
         {% if user and user.role in ('editor', 'admin') %}
         <!-- 뷰어 모드 전용 버튼 -->
+        <button class="btn btn-sm" id="ck-hist-btn" onclick="showHistoryModal()" style="display:none;" title="편집 이력">이력</button>
         <button class="btn btn-sm btn-primary" id="ck-edit-btn" onclick="switchToEdit()" style="display:none;">편집</button>
         <!-- 편집 모드 전용 버튼 -->
         <button class="btn btn-sm" id="ck-rename-btn" onclick="toggleRenameForm()" style="display:none;">이름 변경</button>
@@ -509,6 +548,19 @@
 </div>
 
 <div id="ck-save-toast">저장되었습니다.</div>
+
+<!-- ── 이력 모달 ── -->
+<div class="ck-hist-backdrop" id="ck-hist-backdrop" onclick="if(event.target===this)closeHistoryModal()">
+  <div class="ck-hist-modal">
+    <div class="ck-hist-header">
+      <span>편집 이력 (최대 3개)</span>
+      <button class="ck-hist-close" onclick="closeHistoryModal()">✕</button>
+    </div>
+    <div class="ck-hist-body" id="ck-hist-body">
+      <div class="ck-hist-empty">이력이 없습니다.</div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -529,6 +581,7 @@ let _lockedByOther      = false; // 다른 사람이 편집 중
 let _heartbeatInterval  = null;  // 잠금 heartbeat 타이머
 let _pollTimer          = null;  // 뷰어 실시간 동기화 폴링
 let _pollUpdatedAt      = null;  // 마지막으로 확인한 updated_at
+let _isNewItem          = false; // 방금 새로 생성된 항목 여부
 
 // 자동 새로고침 훅: 편집 중 dirty면 저장 후 reload
 window._autoSaveAndRefresh = async () => {
@@ -575,10 +628,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // ?id= 파라미터가 있으면 해당 항목 자동 오픈
-  const urlId = parseInt(params.get('id'), 10);
-  if (urlId && _allChecklists.find(c => c.id === urlId)) {
-    openChecklist(urlId);
+  // ?id= 파라미터 우선, 없으면 localStorage ck_last_id 복원
+  const urlId    = parseInt(params.get('id'), 10);
+  const savedId  = parseInt(localStorage.getItem('ck_last_id'), 10);
+  const restoreId = urlId || (savedId || 0);
+  if (restoreId && _allChecklists.find(c => c.id === restoreId)) {
+    openChecklist(restoreId);
   }
 });
 
@@ -632,6 +687,27 @@ function selectProject(proj) {
   // localStorage에 마지막 선택 프로젝트 저장
   localStorage.setItem('ck_last_proj', proj || '');
   renderList();
+
+  // 현재 선택된 항목이 새 필터에 없으면 우측 패널 초기화
+  const filtered = _curProj
+    ? _allChecklists.filter(c => c.project === _curProj)
+    : _allChecklists;
+  if (_curId && !filtered.find(c => c.id === _curId)) {
+    _curId = null;
+    _curItem = null;
+    _editMode = false;
+    _lockedByOther = false;
+    _stopPoll();
+    _stopHeartbeat();
+    if (_ckEditor) { _ckEditor.destroy(); _ckEditor = null; }
+    if (_ckViewer) { _ckViewer.destroy(); _ckViewer = null; }
+    document.getElementById('ck-placeholder').style.display = '';
+    document.getElementById('ck-right-header').style.display = 'none';
+    document.getElementById('ck-viewer-wrap').style.display = 'none';
+    document.getElementById('ck-lock-overlay').style.display = 'none';
+    if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
+    localStorage.removeItem('ck_last_id');
+  }
 }
 
 // ── 체크리스트 목록 렌더링 ─────────────────────────────────
@@ -675,6 +751,7 @@ async function openChecklist(id, forceEdit = false) {
   }
 
   _curId = id;
+  localStorage.setItem('ck_last_id', id);
   // URL에 id 반영 (공유 가능한 링크)
   const urlParams = new URLSearchParams(location.search);
   urlParams.set('id', id);
@@ -727,10 +804,12 @@ function _setLockState(lockedBy) {
     // 뷰어는 _showViewerMode()에서 표시
   }
 
-  // 편집 버튼 가시성
+  // 편집/이력 버튼 가시성
   if (IS_EDITOR) {
     const editBtn = document.getElementById('ck-edit-btn');
+    const histBtn = document.getElementById('ck-hist-btn');
     if (editBtn) editBtn.style.display = _lockedByOther ? 'none' : '';
+    if (histBtn) histBtn.style.display = _lockedByOther ? 'none' : '';
   }
 }
 
@@ -773,6 +852,7 @@ function _showViewerMode() {
 
   // 버튼 가시성
   if (IS_EDITOR) {
+    document.getElementById('ck-hist-btn').style.display    = _lockedByOther ? 'none' : '';
     document.getElementById('ck-edit-btn').style.display    = _lockedByOther ? 'none' : '';
     document.getElementById('ck-rename-btn').style.display  = 'none';
     document.getElementById('ck-viewer-btn').style.display  = 'none';
@@ -799,6 +879,7 @@ async function _showEditorMode() {
   document.getElementById('ck-editor-wrap').style.display = '';
 
   // 버튼 가시성
+  document.getElementById('ck-hist-btn').style.display    = 'none';
   document.getElementById('ck-edit-btn').style.display    = 'none';
   document.getElementById('ck-rename-btn').style.display  = '';
   document.getElementById('ck-viewer-btn').style.display  = '';
@@ -915,7 +996,8 @@ function _stopCountdown() {
 
 function switchToEdit() {
   if (!_curItem) return;
-  window.location.href = `/check/${_curItem.id}/edit`;
+  _stopPoll();
+  _showEditorMode();
 }
 
 function switchToViewer() {
@@ -958,6 +1040,20 @@ function initEditor(content) {
     ],
     events: {
       change: () => setDirty(true),
+    },
+    hooks: {
+      addImageBlobHook: async (blob, callback) => {
+        const form = new FormData();
+        form.append('file', blob, blob.name || 'image.png');
+        try {
+          const res = await fetch('/api/upload/image', { method: 'POST', body: form });
+          if (!res.ok) throw new Error('upload failed');
+          const { url } = await res.json();
+          callback(url, '');
+        } catch {
+          alert('이미지 업로드에 실패했습니다.');
+        }
+      },
     },
   });
 }
@@ -1054,6 +1150,22 @@ function setDirty(val) {
 async function saveContent(auto = false) {
   if (!_curId || !_ckEditor) return;
   const content = _ckEditor.getMarkdown();
+
+  // 새 항목: 첫 번째 줄을 제목으로 사용
+  if (_isNewItem) {
+    const firstLine = content.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').trim();
+    if (!firstLine) {
+      alert('첫 번째 줄이 제목이 됩니다. 내용을 입력하세요.');
+      return;
+    }
+    await fetch(`/api/checklists/${_curId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: firstLine, project: _curItem?.project || '' }),
+    });
+    _isNewItem = false;
+  }
+
   const res = await fetch(`/api/checklists/${_curId}/content`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -1070,17 +1182,19 @@ async function saveContent(auto = false) {
     if (updated.ok) {
       _curItem = await updated.json();
       const idx = _allChecklists.findIndex(c => c.id === _curId);
-      if (idx >= 0) _allChecklists[idx] = {..._allChecklists[idx], updated_at: _curItem.updated_at};
+      if (idx >= 0) _allChecklists[idx] = { ..._allChecklists[idx], title: _curItem.title, updated_at: _curItem.updated_at };
       renderList();
+      renderProjList();
       _updateMeta();
     }
     showSaveToast(auto ? '자동 저장되었습니다.' : '저장되었습니다.');
-    // 저장 후 자동으로 뷰어 모드로 전환
+    // 저장 후 현재 항목 그대로 뷰어 모드로 전환 (리스트 이동 없음)
     _editMode = false; // _showViewerMode 내 lock 해제 방지용
     if (_ckEditor) { _ckEditor.destroy(); _ckEditor = null; }
     document.getElementById('ck-viewer-wrap').style.display = '';
     if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
     if (IS_EDITOR) {
+      document.getElementById('ck-hist-btn').style.display    = '';
       document.getElementById('ck-edit-btn').style.display    = '';
       document.getElementById('ck-rename-btn').style.display  = 'none';
       document.getElementById('ck-viewer-btn').style.display  = 'none';
@@ -1092,35 +1206,29 @@ async function saveContent(auto = false) {
 }
 
 // ── 새 항목 ───────────────────────────────────────────────
-function openNewForm() {
-  document.getElementById('ck-new-form').classList.add('visible');
-  document.getElementById('ck-new-title').focus();
-  // 현재 선택된 프로젝트 기본값 설정
-  if (_curProj) {
-    const sel = document.getElementById('ck-new-project');
-    if (sel) sel.value = _curProj;
+async function openNewForm() {
+  // dirty 상태이면 확인
+  if (_dirty && _editMode) {
+    const choice = confirm('저장되지 않은 내용이 있습니다.\n[확인] 저장하고 이동  [취소] 저장 안 하고 이동');
+    if (choice) { await saveContent(); }
+    else { setDirty(false); }
   }
-}
-function closeNewForm() {
-  document.getElementById('ck-new-form').classList.remove('visible');
-  document.getElementById('ck-new-title').value = '';
-}
 
-async function createChecklist() {
-  const title = document.getElementById('ck-new-title').value.trim();
-  if (!title) { alert('제목을 입력하세요.'); return; }
-  const project = document.getElementById('ck-new-project')?.value || '';
-
+  // 현재 프로젝트 필터를 기본값으로 새 항목 생성
+  const project = _curProj || '';
   const res = await fetch('/api/checklists', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, project, content: '' }),
+    body: JSON.stringify({ title: '(새 항목)', project, content: '' }),
   });
   if (!res.ok) { alert('생성 실패'); return; }
   const { id } = await res.json();
-  closeNewForm();
-  // 새 항목은 전체화면 에디터로 이동
-  window.location.href = `/check/${id}/edit`;
+
+  // 목록 새로고침 후 인라인 에디터로 즉시 열기
+  await loadAll();
+  renderProjList();
+  _isNewItem = true;
+  await openChecklist(id, true);
 }
 
 // ── 이름 변경 ─────────────────────────────────────────────
@@ -1175,10 +1283,11 @@ async function deleteChecklist() {
   _editMode = false;
   setDirty(false);
 
+  localStorage.removeItem('ck_last_id');
   document.getElementById('ck-placeholder').style.display = '';
   document.getElementById('ck-right-header').style.display = 'none';
   document.getElementById('ck-viewer-wrap').style.display = 'none';
-  document.getElementById('ck-lock-banner').style.display = 'none';
+  document.getElementById('ck-lock-overlay').style.display = 'none';
   if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
   closeRenameForm();
 
@@ -1196,6 +1305,50 @@ function showSaveToast(msg = '저장되었습니다.') {
   el.style.display = 'block';
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => { el.style.display = 'none'; }, 2000);
+}
+
+// ── 이력 모달 ─────────────────────────────────────────────
+async function showHistoryModal() {
+  if (!_curId) return;
+  const res = await fetch(`/api/checklists/${_curId}/histories`);
+  const histories = res.ok ? await res.json() : [];
+
+  const body = document.getElementById('ck-hist-body');
+  if (!histories.length) {
+    body.innerHTML = '<div class="ck-hist-empty">저장된 이력이 없습니다.</div>';
+  } else {
+    body.innerHTML = histories.map(h => `
+      <div class="ck-hist-item">
+        <div class="ck-hist-meta">${h.edited_by} · ${h.edited_at.replace('T',' ').substring(0,16)}</div>
+        <div class="ck-hist-preview">${escHtml((h.content || '').substring(0, 120))}${h.content?.length > 120 ? '…' : ''}</div>
+        <button class="btn btn-sm" onclick="restoreFromHistory(${h.id})">이 버전으로 복원</button>
+      </div>
+    `).join('');
+  }
+  document.getElementById('ck-hist-backdrop').classList.add('open');
+}
+
+function closeHistoryModal() {
+  document.getElementById('ck-hist-backdrop').classList.remove('open');
+}
+
+async function restoreFromHistory(histId) {
+  if (!confirm('이 버전으로 내용을 복원하시겠습니까?\n현재 내용은 새 이력으로 저장됩니다.')) return;
+  const res = await fetch(`/api/checklists/${_curId}/histories/${histId}/restore`, { method: 'POST' });
+  if (!res.ok) { alert('복원 실패'); return; }
+  const updated = await res.json();
+  _curItem = updated;
+  // 목록 갱신
+  const idx = _allChecklists.findIndex(c => c.id === _curId);
+  if (idx >= 0) _allChecklists[idx] = { ..._allChecklists[idx], updated_at: updated.updated_at };
+  renderList();
+  _updateMeta();
+  closeHistoryModal();
+  // 뷰어 갱신
+  if (!_editMode) {
+    renderViewer(updated.content);
+  }
+  showSaveToast('이전 버전으로 복원되었습니다.');
 }
 
 // ── 전역 검색 설정 ─────────────────────────────────────────

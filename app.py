@@ -269,14 +269,28 @@ async def update_checklist(checklist_id: int, request: Request):
 
 @app.patch("/api/checklists/{checklist_id}/content")
 async def update_checklist_content(checklist_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     item = db.get_checklist(checklist_id)
     if not item:
         raise HTTPException(status_code=404)
     data = await request.json()
     content = data.get("content", "")
-    db.update_checklist_content(checklist_id, content)
+    db.update_checklist_content(checklist_id, content, user["name"])
     return {"ok": True}
+
+
+@app.get("/api/checklists/{checklist_id}/histories")
+def get_checklist_histories(checklist_id: int):
+    return db.get_checklist_histories(checklist_id)
+
+
+@app.post("/api/checklists/{checklist_id}/histories/{history_id}/restore")
+async def restore_checklist_history(checklist_id: int, history_id: int, request: Request):
+    user = _require_editor(request)
+    ok = db.restore_checklist_from_history(checklist_id, history_id, user["name"])
+    if not ok:
+        raise HTTPException(status_code=404, detail="이력을 찾을 수 없습니다.")
+    return db.get_checklist(checklist_id)
 
 
 @app.delete("/api/checklists/{checklist_id}")

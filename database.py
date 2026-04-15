@@ -80,6 +80,16 @@ def init_db():
                 edited_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # ── checklist_histories ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS checklist_histories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                checklist_id INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                edited_by TEXT NOT NULL,
+                edited_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         # ── projects ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS projects (
@@ -1762,13 +1772,66 @@ def update_checklist(checklist_id: int, title: str, project: str):
         )
 
 
-def update_checklist_content(checklist_id: int, content: str):
+def update_checklist_content(checklist_id: int, content: str, edited_by: str = ''):
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     with get_conn() as conn:
+        current = conn.execute(
+            "SELECT content FROM checklists WHERE id = ?", (checklist_id,)
+        ).fetchone()
+        if current:
+            conn.execute(
+                "INSERT INTO checklist_histories (checklist_id, content, edited_by) VALUES (?, ?, ?)",
+                (checklist_id, current["content"], edited_by)
+            )
+            # 최근 3개만 유지
+            conn.execute(
+                "DELETE FROM checklist_histories WHERE checklist_id = ? AND id NOT IN "
+                "(SELECT id FROM checklist_histories WHERE checklist_id = ? ORDER BY id DESC LIMIT 3)",
+                (checklist_id, checklist_id)
+            )
         conn.execute(
             "UPDATE checklists SET content = ?, updated_at = ? WHERE id = ?",
             (content, now, checklist_id)
         )
+
+
+def get_checklist_histories(checklist_id: int) -> list:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT * FROM checklist_histories
+               WHERE checklist_id = ?
+               ORDER BY edited_at DESC
+               LIMIT 3""",
+            (checklist_id,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def restore_checklist_from_history(checklist_id: int, history_id: int, restored_by: str) -> bool:
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        hist = conn.execute(
+            "SELECT * FROM checklist_histories WHERE id = ? AND checklist_id = ?",
+            (history_id, checklist_id)
+        ).fetchone()
+        if not hist:
+            return False
+        current = conn.execute("SELECT content FROM checklists WHERE id = ?", (checklist_id,)).fetchone()
+        if current:
+            conn.execute(
+                "INSERT INTO checklist_histories (checklist_id, content, edited_by) VALUES (?, ?, ?)",
+                (checklist_id, current["content"], restored_by)
+            )
+        conn.execute(
+            "UPDATE checklists SET content = ?, updated_at = ? WHERE id = ?",
+            (hist["content"], now, checklist_id)
+        )
+        conn.execute(
+            "DELETE FROM checklist_histories WHERE checklist_id = ? AND id NOT IN "
+            "(SELECT id FROM checklist_histories WHERE checklist_id = ? ORDER BY id DESC LIMIT 3)",
+            (checklist_id, checklist_id)
+        )
+        return True
 
 
 def delete_checklist(checklist_id: int, deleted_by: str = None, team_id: int = None):

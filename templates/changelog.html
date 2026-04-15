@@ -202,6 +202,73 @@
     </div>
   </div>
 
+  <!-- ── 2026-04-16 체크 페이지 7가지 개선 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-16</span>
+      <span class="cl-phase-badge phase-4">4차 6단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🕘</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag new">신규</span>체크 — 편집 이력 기능 (최대 3개, 복원 버튼)</div>
+          <div class="cl-item-detail">내용을 저장할 때마다 이전 버전이 자동으로 이력에 쌓입니다. 뷰어 모드에서 "이력" 버튼을 누르면 최대 3개의 이전 버전 미리보기와 복원 버튼이 모달로 표시됩니다. 복원 시 현재 내용도 이력으로 보존됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🖼️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag new">신규</span>체크 — 인라인 에디터 이미지 붙여넣기</div>
+          <div class="cl-item-detail">체크 페이지 인라인 에디터에서 이미지를 붙여넣거나 드래그 앤 드롭하면 서버에 자동 업로드됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">✏️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>체크 — 편집 버튼이 페이지 이동 없이 인라인 에디터로 전환</div>
+          <div class="cl-item-detail">기존에는 별도 편집 페이지로 이동했으나, 이제 3패널 체크 화면 내에서 바로 Toast UI 에디터가 열립니다. 저장 후에도 리스트로 이동하지 않고 현재 항목의 뷰어 모드로 유지됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">💾</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>체크 — 마지막 열람 항목 localStorage 복원</div>
+          <div class="cl-item-detail">항목을 열면 해당 ID가 localStorage에 저장되어, 다른 페이지를 갔다 돌아와도 마지막으로 보던 항목이 자동으로 선택됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">⚠️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>체크 — 저장 안 하고 목록 이동 시 확인 다이얼로그</div>
+          <div class="cl-item-detail">check_editor 페이지에서 "← 목록" 버튼을 클릭할 때 미저장 내용이 있으면 저장 여부를 묻는 다이얼로그가 표시됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">➕</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>체크 — 새 항목 클릭 시 즉시 편집창 오픈, 첫 줄이 제목</div>
+          <div class="cl-item-detail">기존 제목 입력 후 저장 방식에서, 클릭 즉시 빈 에디터가 인라인으로 열리는 방식으로 변경되었습니다. 저장 시 첫 번째 줄이 자동으로 제목이 되며, 내용이 없으면 저장이 차단됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🐛</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">수정</span>체크 — 삭제 후 목록 미갱신 버그 수정</div>
+          <div class="cl-item-detail">항목 삭제 시 잘못된 요소 참조(ck-lock-banner)로 인해 목록이 갱신되지 않던 버그를 수정했습니다. 이제 삭제 즉시 목록과 프로젝트 카운트가 정확히 반영됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🐛</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">수정</span>체크 — 프로젝트 전환 시 이전 항목 내용 잔류 버그 수정</div>
+          <div class="cl-item-detail">다른 프로젝트를 선택했을 때, 현재 프로젝트에 속하지 않는 항목이 우측 패널에 남아있던 문제를 수정했습니다. 이제 해당 프로젝트에 없는 항목은 자동으로 선택 해제됩니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-16 간트 차트 UX 개선 ── -->
   <div class="cl-group">
     <div class="cl-group-header">
