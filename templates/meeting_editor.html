@@ -184,7 +184,10 @@
   <button onclick="setImgWidth(50)">50%</button>
   <button onclick="setImgWidth(75)">75%</button>
   <button onclick="setImgWidth(100)">100%</button>
-  <button onclick="setImgWidth(null)">원본</button>
+  <button onclick="setImgWidth(125)">125%</button>
+  <button onclick="setImgWidth(150)">150%</button>
+  <button onclick="setImgWidth(175)">175%</button>
+  <button onclick="setImgWidth(200)">200%</button>
 </div>
 
 <!-- 이탈 확인 다이얼로그 -->
@@ -332,6 +335,7 @@ function initMeetingEditor() {
       ['image'],
     ],
     usageStatistics: false,
+    customHTMLSanitizer: html => html,
     hooks: {
       addImageBlobHook: async (blob, callback) => {
         const form = new FormData();
@@ -436,61 +440,108 @@ function toggleAiPanel() {
 
 /* ── 이미지 리사이즈 ──────────────────────────────────── */
 let _activeEditorImg = null;
+let _imgWidthMap = {};   // { '/uploads/.../img.png': px숫자 or null(원본) }
 
-function initImageResize() {
-  const container = document.querySelector('.toastui-editor-contents');
-  if (!container) return;
-
-  container.addEventListener('click', e => {
-    if (e.target.tagName === 'IMG') {
-      _activeEditorImg = e.target;
-      const r = e.target.getBoundingClientRect();
-      const tb = document.getElementById('img-resize-toolbar');
-      tb.style.top  = (r.bottom + window.scrollY + 6) + 'px';
-      tb.style.left = Math.max(4, r.left) + 'px';
-      tb.style.display = 'flex';
+function _applyImgWidths() {
+  const imgs = document.querySelectorAll('.toastui-editor-ww-container img');
+  imgs.forEach(img => {
+    const src = img.getAttribute('src');
+    if (!src) return;
+    if (!(src in _imgWidthMap)) return;
+    const px = _imgWidthMap[src];
+    if (px != null) {
+      img.style.setProperty('width', px + 'px', 'important');
+      img.style.setProperty('max-width', 'none', 'important');
     } else {
-      document.getElementById('img-resize-toolbar').style.display = 'none';
-      _activeEditorImg = null;
+      img.style.removeProperty('width');
+      img.style.removeProperty('max-width');
     }
   });
+}
 
-  // 스크롤 시 툴바 숨기기
-  container.addEventListener('scroll', () => {
-    document.getElementById('img-resize-toolbar').style.display = 'none';
-  }, { passive: true });
+function initImageResize() {
+  const tb = document.getElementById('img-resize-toolbar');
+  if (!tb) return;
+
+  // 로드 시 INITIAL_MD에서 저장된 px 복원
+  (function parseInitialWidths() {
+    const reg = /<img[^>]*src="([^"]+)"[^>]*style="[^"]*width\s*:\s*(\d+)px[^"]*"[^>]*>/g;
+    let m;
+    while ((m = reg.exec(INITIAL_MD || '')) !== null) {
+      _imgWidthMap[m[1]] = parseInt(m[2]);
+    }
+    if (Object.keys(_imgWidthMap).length) setTimeout(_applyImgWidths, 200);
+  })();
+
+  // MutationObserver: ProseMirror 재렌더링 시 스타일 재적용
+  const wwEl = document.querySelector('.toastui-editor-ww-container');
+  if (wwEl) {
+    new MutationObserver(_applyImgWidths).observe(wwEl, { childList: true, subtree: true });
+  }
+
+  // pointerdown capture: _activeEditorImg 확정
+  document.addEventListener('pointerdown', e => {
+    const editorEl = document.querySelector('.toastui-editor-ww-container');
+    const target = e.target;
+    if (target.tagName === 'IMG' && editorEl && editorEl.contains(target)) {
+      _activeEditorImg = target;
+    } else if (!tb.contains(target)) {
+      _activeEditorImg = null;
+    }
+  }, true);
+
+  // click capture: 툴바 위치 표시/숨기기
+  document.addEventListener('click', e => {
+    const editorEl = document.querySelector('.toastui-editor-ww-container');
+    const target = e.target;
+    if (target.tagName === 'IMG' && editorEl && editorEl.contains(target)) {
+      const r = target.getBoundingClientRect();
+      tb.style.top     = (r.bottom + window.scrollY + 6) + 'px';
+      tb.style.left    = Math.max(4, r.left) + 'px';
+      tb.style.display = 'flex';
+    } else if (!tb.contains(target)) {
+      tb.style.display = 'none';
+    }
+  }, true);
 }
 
 function setImgWidth(pct) {
-  if (!_activeEditorImg || !editor) return;
+  if (!_activeEditorImg) return;
   const src = _activeEditorImg.getAttribute('src');
   if (!src) return;
 
-  const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  let md = editor.getMarkdown();
-
   if (pct === null) {
-    // HTML img → 마크다운 이미지로 되돌리기
-    md = md.replace(
-      new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
-      m => { const a = m.match(/alt="([^"]*)"/); return `![${a ? a[1] : ''}](${src})`; }
-    );
+    _imgWidthMap[src] = null;
   } else {
-    // 마크다운 이미지 또는 기존 HTML img → 크기 지정 HTML img로 교체
-    md = md
-      .replace(
-        new RegExp(`!\\[([^\\]]*)\\]\\(${escapedSrc}\\)`, 'g'),
-        (_, alt) => `<img src="${src}" alt="${alt}" style="width:${pct}%">`
-      )
-      .replace(
-        new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
-        m => { const a = m.match(/alt="([^"]*)"/); return `<img src="${src}" alt="${a ? a[1] : ''}" style="width:${pct}%">`; }
-      );
+    // naturalWidth 기준 픽셀 계산
+    const nw = _activeEditorImg.naturalWidth;
+    _imgWidthMap[src] = nw > 0 ? Math.round(nw * pct / 100) : null;
   }
-  editor.setMarkdown(md);
+  _applyImgWidths();
   document.getElementById('img-resize-toolbar').style.display = 'none';
   _activeEditorImg = null;
   _meetingDirty = true;
+}
+
+/* 저장 시 마크다운에 _imgWidthMap 기반 style 주입 */
+function _injectImgStyles(md) {
+  for (const [src, px] of Object.entries(_imgWidthMap)) {
+    const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (px === null) {
+      // 원본: HTML img가 있으면 마크다운으로 되돌리기
+      md = md.replace(
+        new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
+        m => { const a = m.match(/alt="([^"]*)"/); return `![${a ? a[1] : ''}](${src})`; }
+      );
+    } else {
+      md = md
+        .replace(new RegExp(`!\\[([^\\]]*)\\]\\(${escapedSrc}\\)`, 'g'),
+          (_, alt) => `<img src="${src}" alt="${alt}" style="width:${px}px">`)
+        .replace(new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
+          m => { const a = m.match(/alt="([^"]*)"/); return `<img src="${src}" alt="${a ? a[1] : ''}" style="width:${px}px">`; });
+    }
+  }
+  return md;
 }
 
 /* ── 목록 이탈 확인 ───────────────────────────────────── */
@@ -522,7 +573,8 @@ async function saveAndLeave() {
 
 /* ── 저장 / 삭제 ─────────────────────────────────────── */
 function getMeetingContent() {
-  return IS_EDITOR ? editor.getMarkdown().trim() : '';
+  if (!IS_EDITOR) return '';
+  return _injectImgStyles(editor.getMarkdown()).trim();
 }
 
 let _saveCooldown = false;
