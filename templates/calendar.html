@@ -296,6 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     },
     eventClick(info) {
+      if (!CURRENT_USER) return;
       if (info.event.extendedProps.type === 'meeting') {
         location.href = `/meetings/${info.event.extendedProps.meeting_id}?from=calendar`;
         return;

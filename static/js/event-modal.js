@@ -628,6 +628,7 @@ function _renderKDetailButtons() {
 }
 
 async function openKDetail(id) {
+  if (!CURRENT_USER) return;
   const res = await fetch(`/api/events/${id}`);
   if (!res.ok) return;
   const e = await res.json();

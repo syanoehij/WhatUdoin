@@ -433,6 +433,7 @@ function renderNotice(notice) {
 }
 
 function openMeetingModal(id) {
+  if (!CURRENT_USER) return;
   fetch(`/api/events/${id}`)
     .then(r => r.json())
     .then(data => openModal('', data))
