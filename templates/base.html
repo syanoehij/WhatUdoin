@@ -6,15 +6,14 @@
   <title>{% block title %}WhatUDoin{% endblock %}</title>
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
 
-  <!-- FullCalendar -->
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+  <!-- FullCalendar (로컬, 오프라인 동작) -->
+  <script src="/static/lib/fullcalendar.min.js"></script>
 
-  <!-- flatpickr -->
-  <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ko.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/rangePlugin.js"></script>
+  <!-- flatpickr (로컬, 오프라인 동작) -->
+  <link href="/static/lib/flatpickr.min.css" rel="stylesheet" />
+  <script src="/static/lib/flatpickr.min.js"></script>
+  <script src="/static/lib/flatpickr-ko.js"></script>
+  <script src="/static/lib/flatpickr-range.js"></script>
 
   <link rel="stylesheet" href="/static/css/style.css?v={{ range(1000,9999) | random }}" />
   {% block extra_head %}{% endblock %}
