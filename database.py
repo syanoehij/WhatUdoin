@@ -907,10 +907,15 @@ def save_notice(content: str, created_by: str) -> int:
         conn.execute(
             "DELETE FROM team_notices WHERE created_at < datetime('now', '-30 days')"
         )
+        # 100개 초과분 삭제 (가장 오래된 것부터)
+        conn.execute(
+            "DELETE FROM team_notices WHERE id NOT IN "
+            "(SELECT id FROM team_notices ORDER BY id DESC LIMIT 100)"
+        )
     return cur.lastrowid
 
 
-def get_notice_history(limit: int = 50) -> list[dict]:
+def get_notice_history(limit: int = 100) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM team_notices ORDER BY id DESC LIMIT ?",
