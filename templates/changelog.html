@@ -124,6 +124,24 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-15 AI 프록시 우회 수정 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-15</span>
+      <span class="cl-phase-badge phase-4">3차 23단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🌐</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">수정</span>AI 연결 — 회사 프록시 우회</div>
+          <div class="cl-item-detail">회사 네트워크 프록시(시스템 HTTP 프록시)가 localhost:11434(Ollama) 요청을 가로채 연결 오류가 발생하던 문제를 수정합니다. <code>requests.Session(trust_env=False)</code>를 사용해 모든 Ollama API 호출이 프록시를 거치지 않고 직접 연결됩니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-15 가입 중복 검사 + 알림 생성 보완 + 다크모드 ── -->
   <div class="cl-group">
     <div class="cl-group-header">

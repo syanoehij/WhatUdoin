@@ -7,6 +7,11 @@ OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_URL = OLLAMA_BASE_URL + "/api/generate"
 DEFAULT_MODEL = "gemma4:e2b"
 
+# 회사 프록시 환경에서 localhost(Ollama) 요청이 프록시를 경유하지 않도록
+# trust_env=False 로 시스템/환경변수 프록시 설정을 무시하는 전용 세션 사용
+_session = requests.Session()
+_session.trust_env = False
+
 
 def set_ollama_base_url(base_url: str):
     """Ollama 서버 주소를 런타임에 변경한다."""
@@ -24,7 +29,7 @@ def get_available_models() -> list[str]:
 def get_available_models_with_status() -> tuple[list[str], bool]:
     """(모델 목록, 연결 성공 여부) 반환."""
     try:
-        response = requests.get(
+        response = _session.get(
             OLLAMA_BASE_URL + "/api/tags",
             timeout=5,
         )
@@ -81,7 +86,7 @@ def parse_schedule(text: str, model: str = DEFAULT_MODEL) -> list[dict]:
 
 JSON:"""
 
-    response = requests.post(
+    response = _session.post(
         OLLAMA_URL,
         json={"model": model, "prompt": prompt, "stream": False},
         timeout=120,
@@ -124,7 +129,7 @@ def refine_schedule(text: str, first_pass: list[dict], model: str = DEFAULT_MODE
 
 --- 최종 검토 결과 JSON ---"""
 
-    response = requests.post(
+    response = _session.post(
         OLLAMA_URL,
         json={"model": model, "prompt": prompt, "stream": False},
         timeout=180,
@@ -219,7 +224,7 @@ def generate_weekly_report(past_events: list[dict], future_events: list[dict], b
 - 알림 시스템 구축 (예정: 4/21)
 - 결제 모듈 연동 (예정: 4/29)"""
 
-    response = requests.post(
+    response = _session.post(
         OLLAMA_URL,
         json={"model": model, "prompt": prompt, "stream": False},
         timeout=180,
@@ -278,7 +283,7 @@ def review_all_conflicts(candidates: list[dict], existing: list[dict], model: st
 
 JSON:"""
 
-    response = requests.post(
+    response = _session.post(
         OLLAMA_URL,
         json={"model": model, "prompt": prompt, "stream": False},
         timeout=90,
