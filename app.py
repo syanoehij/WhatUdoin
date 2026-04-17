@@ -15,6 +15,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import database as db
 import llm_parser
 import auth
+import crypto
 
 scheduler = AsyncIOScheduler()
 
@@ -1425,38 +1426,94 @@ def api_restore_trash(item_type: str, item_id: int, request: Request):
     return {"ok": True}
 
 
-# ── WUDeskop 원격 데스크톱 연동 ──────────────────────────────────────────────
+# ── AVR (WUDeskop 원격 데스크톱 연동) ────────────────────────────────────────
 
-_WUDESKOP_URL    = os.environ.get("WUDESKOP_URL", "")       # 예: http://계측PC:8765
-_WUDESKOP_SECRET = os.environ.get("WUDESKOP_API_SECRET", "")
+@app.get("/remote")
+def remote_redirect():
+    return RedirectResponse(url="/avr", status_code=307)
 
 
-@app.get("/remote", response_class=HTMLResponse)
-def remote_page(request: Request):
-    if not _WUDESKOP_URL or not _WUDESKOP_SECRET:
+@app.get("/avr", response_class=HTMLResponse)
+def avr_page(request: Request):
+    user = auth.get_current_user(request)
+    if not user or not user.get("avr_enabled") or user.get("login_via") != "ip":
+        raise HTTPException(status_code=403, detail="AVR 접근 권한이 없습니다.")
+    avr_url_enc = db.get_setting("avr_url_enc")
+    avr_secret_enc = db.get_setting("avr_secret_enc")
+    if not avr_url_enc or not avr_secret_enc:
         return templates.TemplateResponse(
-            request, "remote.html",
-            _ctx(request, viewer_url=None, error="WUDeskop 연동이 설정되지 않았습니다."),
+            request, "avr.html",
+            _ctx(request, viewer_url=None, error="AVR 연동이 설정되지 않았습니다. 관리자에게 문의하세요."),
         )
     try:
+        wudeskop_url = crypto.decrypt(avr_url_enc)
+        wudeskop_secret = crypto.decrypt(avr_secret_enc)
         resp = _requests.post(
-            f"{_WUDESKOP_URL}/api/issue-token",
-            json={"secret": _WUDESKOP_SECRET},
+            f"{wudeskop_url}/api/issue-token",
+            json={"secret": wudeskop_secret},
             timeout=3,
         )
         resp.raise_for_status()
         token = resp.json()["token"]
-        viewer_url = f"{_WUDESKOP_URL}/viewer?token={token}"
+        viewer_url = f"{wudeskop_url}/viewer?token={token}"
     except Exception as e:
-        viewer_url = None
         return templates.TemplateResponse(
-            request, "remote.html",
+            request, "avr.html",
             _ctx(request, viewer_url=None, error=f"WUDeskop 연결 실패: {e}"),
         )
     return templates.TemplateResponse(
-        request, "remote.html",
+        request, "avr.html",
         _ctx(request, viewer_url=viewer_url, error=None),
     )
+
+
+@app.get("/api/admin/settings/avr")
+def admin_get_avr_settings(request: Request):
+    _require_admin(request)
+    url_enc = db.get_setting("avr_url_enc")
+    secret_enc = db.get_setting("avr_secret_enc")
+    url_plain = ""
+    if url_enc:
+        try:
+            url_plain = crypto.decrypt(url_enc)
+        except Exception:
+            url_plain = ""
+    return {
+        "url": url_plain,
+        "secret_set": bool(secret_enc),
+    }
+
+
+@app.put("/api/admin/settings/avr")
+async def admin_put_avr_settings(request: Request):
+    _require_admin(request)
+    body = await request.json()
+    url = body.get("url", "").strip()
+    secret = body.get("secret", "").strip()
+    if url:
+        db.set_setting("avr_url_enc", crypto.encrypt(url))
+    else:
+        db.delete_setting("avr_url_enc")
+    if secret:
+        db.set_setting("avr_secret_enc", crypto.encrypt(secret))
+    elif "secret" in body:
+        db.delete_setting("avr_secret_enc")
+    return {"ok": True}
+
+
+@app.get("/api/admin/users/avr")
+def admin_get_avr_users(request: Request):
+    _require_admin(request)
+    return db.list_users_with_avr()
+
+
+@app.put("/api/admin/users/{user_id}/avr")
+async def admin_put_avr_user(user_id: int, request: Request):
+    _require_admin(request)
+    body = await request.json()
+    enabled = bool(body.get("enabled", False))
+    db.set_user_avr_enabled(user_id, enabled)
+    return {"ok": True}
 
 
 if __name__ == "__main__":

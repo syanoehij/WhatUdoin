@@ -13,6 +13,7 @@
     <button class="tab-btn" onclick="switchTab('members', this)">멤버 목록</button>
     <button class="tab-btn" onclick="switchTab('teams', this)">팀 관리</button>
     <button class="tab-btn" onclick="switchTab('settings', this)">시스템 설정</button>
+    <button class="tab-btn" onclick="switchTab('avr', this)">AVR 설정</button>
   </div>
 
   <!-- ── 가입 신청 탭 ── -->
@@ -122,6 +123,32 @@
       </tbody>
     </table>
   </div>
+
+  <!-- ── AVR 탭 ── -->
+  <div id="tab-avr" class="tab-panel hidden">
+    <div class="admin-section-title">WUDeskop 연결 설정</div>
+    <div class="form-row">
+      <label>서버 주소 (URL)</label>
+      <input type="text" id="avr-url-input" placeholder="http://계측PC:8765" style="width:100%;max-width:480px;" />
+    </div>
+    <div class="form-row">
+      <label>API Secret</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="password" id="avr-secret-input" placeholder="비어 있으면 변경하지 않음" style="flex:1;max-width:480px;" autocomplete="new-password" />
+        <span id="avr-secret-status" style="font-size:0.85rem;color:var(--text-muted,#888);"></span>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;">
+      <button class="btn btn-primary" onclick="saveAvrSettings()">저장</button>
+    </div>
+    <div id="avr-settings-msg" style="margin-top:8px;font-size:0.85rem;display:none;"></div>
+
+    <div class="admin-section-title" style="margin-top:28px;">사용자별 AVR 권한</div>
+    <table class="admin-table" id="avr-user-table">
+      <thead><tr><th>이름</th><th>역할</th><th>AVR 활성화</th></tr></thead>
+      <tbody id="avr-user-tbody"></tbody>
+    </table>
+  </div>
 </div>
 
 <!-- ── 승인 모달 ── -->
@@ -220,6 +247,7 @@ function switchTab(name, btn) {
   document.getElementById(`tab-${name}`).classList.remove('hidden');
   btn.classList.add('active');
   if (name === 'settings') loadLlmSettings();
+  if (name === 'avr') loadAvrSettings();
 }
 
 // ── 가입 신청 ────────────────────────────────────────────
@@ -348,6 +376,56 @@ function showLlmStatus(msg, type) {
   el.style.display = 'block';
   el.style.color = type === 'ok' ? 'var(--accent)' : type === 'err' ? '#e74c3c' : 'var(--text-muted)';
   el.textContent = msg;
+}
+
+// ── AVR ──────────────────────────────────────────────────
+async function loadAvrSettings() {
+  const res = await fetch('/api/admin/settings/avr');
+  if (res.ok) {
+    const data = await res.json();
+    document.getElementById('avr-url-input').value = data.url || '';
+    document.getElementById('avr-secret-status').textContent = data.secret_set ? '(설정됨)' : '(미설정)';
+  }
+  const res2 = await fetch('/api/admin/users/avr');
+  if (res2.ok) {
+    const users = await res2.json();
+    const tbody = document.getElementById('avr-user-tbody');
+    tbody.innerHTML = users.map(u => `
+      <tr>
+        <td>${u.name}</td>
+        <td>${u.role}</td>
+        <td><input type="checkbox" ${u.avr_enabled ? 'checked' : ''}
+             onchange="toggleAvrUser(${u.id}, this.checked)" /></td>
+      </tr>`).join('');
+  }
+}
+async function saveAvrSettings() {
+  const url = document.getElementById('avr-url-input').value.trim();
+  const secret = document.getElementById('avr-secret-input').value.trim();
+  const msgEl = document.getElementById('avr-settings-msg');
+  const res = await fetch('/api/admin/settings/avr', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, secret }),
+  });
+  msgEl.style.display = 'block';
+  if (res.ok) {
+    msgEl.style.color = 'var(--accent)';
+    msgEl.textContent = '저장되었습니다.';
+    document.getElementById('avr-secret-input').value = '';
+    document.getElementById('avr-secret-status').textContent = secret ? '(설정됨)' : document.getElementById('avr-secret-status').textContent;
+  } else {
+    const e = await res.json().catch(() => ({}));
+    msgEl.style.color = '#e74c3c';
+    msgEl.textContent = e.detail || '오류가 발생했습니다.';
+  }
+}
+async function toggleAvrUser(userId, enabled) {
+  await fetch(`/api/admin/users/${userId}/avr`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
 }
 
 // ── IP 관리 ──────────────────────────────────────────────

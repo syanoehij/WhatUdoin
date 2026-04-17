@@ -124,6 +124,45 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-18 AVR 원격 접속 기능 개편 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-4">4차 11단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <span class="cl-item-icon">🖥️</span>
+        <div>
+          <div class="cl-item-title">AVR(Advanced Virtual Remote) 기능 도입</div>
+          <div class="cl-item-desc">네비게이션 메뉴 '원격' → 'AVR'로 개명. 관리자가 사용자별 AVR 권한을 opt-in으로 활성화. IP 화이트리스트 로그인 시에만 메뉴 노출 (세션 쿠키 로그인은 숨김).</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <span class="cl-item-icon">🔐</span>
+        <div>
+          <div class="cl-item-title">관리자 AVR 설정 탭 추가</div>
+          <div class="cl-item-desc">관리자 페이지에 'AVR 설정' 탭 추가. WUDeskop URL과 API Secret을 Fernet 대칭 암호화로 DB에 저장. Secret은 저장 여부(설정됨/미설정)만 표시하며 평문 노출 없음.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <span class="cl-item-icon">📄</span>
+        <div>
+          <div class="cl-item-title">credentials.json 기반 설정 전환</div>
+          <div class="cl-item-desc">암호화 키(crypto_key)를 credentials.json 파일 우선으로 읽고 WHATUDOIN_CRYPTO_KEY 환경변수를 폴백으로 사용. 최초 실행 시 키 자동 생성.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <span class="cl-item-icon">📐</span>
+        <div>
+          <div class="cl-item-title">AVR 뷰어 전체화면 레이아웃</div>
+          <div class="cl-item-desc">avr.html 전용 CSS로 body·main overflow hidden + flex 레이아웃 적용. 우측 스크롤바 제거, iframe이 화면 전체를 꽉 채움.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-18 WUDesktop 원격 데스크톱 연동 ── -->
   <div class="cl-group">
     <div class="cl-group-header">

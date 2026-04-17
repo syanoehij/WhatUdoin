@@ -163,10 +163,11 @@ def init_db():
             "UPDATE events SET event_type = 'schedule' WHERE event_type IS NULL"
         )
         _migrate(conn, "users", [
-            ("password",   "TEXT NOT NULL DEFAULT ''"),
-            ("team_id",    "INTEGER"),
-            ("is_active",  "INTEGER DEFAULT 1"),
-            ("created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
+            ("password",    "TEXT NOT NULL DEFAULT ''"),
+            ("team_id",     "INTEGER"),
+            ("is_active",   "INTEGER DEFAULT 1"),
+            ("created_at",  "TEXT DEFAULT CURRENT_TIMESTAMP"),
+            ("avr_enabled", "INTEGER DEFAULT 0"),
         ])
         _migrate(conn, "sessions", [
             ("expires_at", "TEXT"),
@@ -1661,6 +1662,29 @@ def set_setting(key: str, value: str):
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, value)
         )
+
+
+def delete_setting(key: str):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+
+
+# ── AVR ──────────────────────────────────────────────────
+
+def set_user_avr_enabled(user_id: int, enabled: bool):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET avr_enabled = ? WHERE id = ?",
+            (1 if enabled else 0, user_id)
+        )
+
+
+def list_users_with_avr():
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, name, role, avr_enabled FROM users WHERE role != 'admin' ORDER BY name"
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 # ── Meeting Locks ─────────────────────────────────────────

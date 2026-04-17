@@ -31,12 +31,28 @@ def _run_dir() -> str:
     return os.path.dirname(os.path.abspath(__file__))
 
 
+def _ensure_credentials(run_dir: str) -> None:
+    """credentials.json이 없으면 자동 생성 (crypto_key)."""
+    import json
+    from cryptography.fernet import Fernet
+
+    creds_path = os.path.join(run_dir, "credentials.json")
+    if os.path.exists(creds_path):
+        return
+    key = Fernet.generate_key().decode()
+    with open(creds_path, "w", encoding="utf-8") as f:
+        json.dump({"crypto_key": key}, f, indent=2, ensure_ascii=False)
+    print(f"[WhatUdoin] credentials.json 생성됨: {creds_path}")
+
+
 if __name__ == "__main__":
     multiprocessing.freeze_support()
 
     # app.py / database.py 가 import 되기 전에 경로 설정
     os.environ.setdefault("WHATUDOIN_BASE_DIR", _base_dir())
     os.environ.setdefault("WHATUDOIN_RUN_DIR",  _run_dir())
+
+    _ensure_credentials(_run_dir())
 
     import uvicorn
     from app import app as fastapi_app  # noqa: E402

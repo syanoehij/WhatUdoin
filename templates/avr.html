@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}AVR — WhatUDoin{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* AVR 페이지 전용 — body/main을 꽉 채워 스크롤 제거 */
+  html, body { height: 100%; overflow: hidden; }
+  main { padding: 0 !important; display: flex; flex-direction: column; overflow: hidden; }
+  .avr-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .avr-wrap iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #000;
+  }
+  .avr-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: var(--text-muted, #888);
+    font-size: 1rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="avr-wrap">
+  {% if error %}
+  <div class="avr-error">{{ error }}</div>
+  {% else %}
+  <iframe
+    src="{{ viewer_url }}"
+    allowfullscreen
+    sandbox="allow-scripts allow-same-origin allow-forms"
+  ></iframe>
+  {% endif %}
+</div>
+{% endblock %}
