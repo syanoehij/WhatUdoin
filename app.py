@@ -5,6 +5,8 @@ import os
 import re
 import uuid
 
+import requests as _requests
+
 from fastapi import FastAPI, Request, HTTPException, Response, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -1421,6 +1423,40 @@ def api_restore_trash(item_type: str, item_id: int, request: Request):
     if not ok:
         raise HTTPException(status_code=404, detail="항목을 찾을 수 없습니다.")
     return {"ok": True}
+
+
+# ── WUDeskop 원격 데스크톱 연동 ──────────────────────────────────────────────
+
+_WUDESKOP_URL    = os.environ.get("WUDESKOP_URL", "")       # 예: http://계측PC:8765
+_WUDESKOP_SECRET = os.environ.get("WUDESKOP_API_SECRET", "")
+
+
+@app.get("/remote", response_class=HTMLResponse)
+def remote_page(request: Request):
+    if not _WUDESKOP_URL or not _WUDESKOP_SECRET:
+        return templates.TemplateResponse(
+            request, "remote.html",
+            _ctx(request, viewer_url=None, error="WUDeskop 연동이 설정되지 않았습니다."),
+        )
+    try:
+        resp = _requests.post(
+            f"{_WUDESKOP_URL}/api/issue-token",
+            json={"secret": _WUDESKOP_SECRET},
+            timeout=3,
+        )
+        resp.raise_for_status()
+        token = resp.json()["token"]
+        viewer_url = f"{_WUDESKOP_URL}/viewer?token={token}"
+    except Exception as e:
+        viewer_url = None
+        return templates.TemplateResponse(
+            request, "remote.html",
+            _ctx(request, viewer_url=None, error=f"WUDeskop 연결 실패: {e}"),
+        )
+    return templates.TemplateResponse(
+        request, "remote.html",
+        _ctx(request, viewer_url=viewer_url, error=None),
+    )
 
 
 if __name__ == "__main__":

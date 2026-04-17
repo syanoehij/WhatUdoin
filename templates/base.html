@@ -238,6 +238,7 @@
       <a href="/kanban" class="nav-link {% if request.url.path.startswith('/kanban') %}nav-active{% endif %}">📌 칸반</a>
       <a href="/gantt" class="nav-link {% if request.url.path.startswith('/gantt') %}nav-active{% endif %}">📊 간트</a>
       {% if user %}<a href="/project-manage" class="nav-link {% if request.url.path.startswith('/project-manage') %}nav-active{% endif %}">🗂 프로젝트 관리</a>{% endif %}
+      <a href="/remote" class="nav-link {% if request.url.path.startswith('/remote') %}nav-active{% endif %}">🖥 원격</a>
     </nav>
     <!-- 전역 검색바 -->
     <div class="global-search-wrap" id="global-search-wrap">

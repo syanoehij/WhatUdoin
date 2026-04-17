@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}원격 데스크톱 — WhatUDoin{% endblock %}
+
+{% block extra_head %}
+<style>
+  .remote-wrap {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 56px);   /* nav 높이 제외 */
+    padding: 0;
+    overflow: hidden;
+  }
+  .remote-wrap iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #000;
+  }
+  .remote-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted, #888);
+    font-size: 1rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="remote-wrap">
+  {% if error %}
+  <div class="remote-error">{{ error }}</div>
+  {% else %}
+  <iframe
+    src="{{ viewer_url }}"
+    allowfullscreen
+    sandbox="allow-scripts allow-same-origin allow-forms"
+  ></iframe>
+  {% endif %}
+</div>
+{% endblock %}
