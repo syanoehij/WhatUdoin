@@ -114,6 +114,31 @@
     display: none; z-index: 9999;
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
   }
+
+  /* 이미지 리사이즈 툴바 */
+  #cke-img-resize-toolbar {
+    position: fixed;
+    display: none;
+    align-items: center;
+    gap: 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    z-index: 9999;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    font-size: 0.8rem;
+  }
+  #cke-img-resize-toolbar button {
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface-3);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.78rem;
+  }
+  #cke-img-resize-toolbar button:hover { background: var(--accent); color: #fff; }
 </style>
 {% endblock %}
 
@@ -174,6 +199,19 @@
     </div>
   </div>
 
+</div>
+
+<!-- 이미지 리사이즈 툴바 -->
+<div id="cke-img-resize-toolbar">
+  <span style="color:var(--text-muted);margin-right:2px">크기:</span>
+  <button onclick="ckeSetImgWidth(25)">25%</button>
+  <button onclick="ckeSetImgWidth(50)">50%</button>
+  <button onclick="ckeSetImgWidth(75)">75%</button>
+  <button onclick="ckeSetImgWidth(100)">100%</button>
+  <button onclick="ckeSetImgWidth(125)">125%</button>
+  <button onclick="ckeSetImgWidth(150)">150%</button>
+  <button onclick="ckeSetImgWidth(175)">175%</button>
+  <button onclick="ckeSetImgWidth(200)">200%</button>
 </div>
 
 <div id="cke-save-toast">저장되었습니다.</div>
@@ -343,6 +381,104 @@ function initEditor() {
       },
     },
   });
+  setTimeout(() => ckeInitImageResize(), 300);
+}
+
+// ── 이미지 리사이즈 ───────────────────────────────────────
+let _ckeActiveImg = null;
+let _ckeImgWidthMap = {};
+
+function _ckeApplyImgWidths() {
+  const imgs = document.querySelectorAll('.toastui-editor-ww-container img');
+  imgs.forEach(img => {
+    const src = img.getAttribute('src');
+    if (!src || !(src in _ckeImgWidthMap)) return;
+    const px = _ckeImgWidthMap[src];
+    if (px != null) {
+      img.style.setProperty('width', px + 'px', 'important');
+      img.style.setProperty('max-width', 'none', 'important');
+    } else {
+      img.style.removeProperty('width');
+      img.style.removeProperty('max-width');
+    }
+  });
+}
+
+function ckeInitImageResize() {
+  const tb = document.getElementById('cke-img-resize-toolbar');
+  if (!tb) return;
+
+  // 초기 MD에서 저장된 px 복원
+  _ckeImgWidthMap = {};
+  const reg = /<img[^>]*src="([^"]+)"[^>]*style="[^"]*width\s*:\s*(\d+)px[^"]*"[^>]*>/g;
+  let m;
+  while ((m = reg.exec(INITIAL_MD || '')) !== null) {
+    _ckeImgWidthMap[m[1]] = parseInt(m[2]);
+  }
+  if (Object.keys(_ckeImgWidthMap).length) setTimeout(_ckeApplyImgWidths, 200);
+
+  const wwEl = document.querySelector('.toastui-editor-ww-container');
+  if (wwEl) {
+    new MutationObserver(_ckeApplyImgWidths).observe(wwEl, { childList: true, subtree: true });
+  }
+
+  document.addEventListener('pointerdown', e => {
+    const editorEl = document.querySelector('.toastui-editor-ww-container');
+    const target = e.target;
+    if (target.tagName === 'IMG' && editorEl && editorEl.contains(target)) {
+      _ckeActiveImg = target;
+    } else if (!tb.contains(target)) {
+      _ckeActiveImg = null;
+    }
+  }, true);
+
+  document.addEventListener('click', e => {
+    const editorEl = document.querySelector('.toastui-editor-ww-container');
+    const target = e.target;
+    if (target.tagName === 'IMG' && editorEl && editorEl.contains(target)) {
+      const r = target.getBoundingClientRect();
+      tb.style.top     = (r.bottom + window.scrollY + 6) + 'px';
+      tb.style.left    = Math.max(4, r.left) + 'px';
+      tb.style.display = 'flex';
+    } else if (!tb.contains(target)) {
+      tb.style.display = 'none';
+    }
+  }, true);
+}
+
+function ckeSetImgWidth(pct) {
+  if (!_ckeActiveImg) return;
+  const src = _ckeActiveImg.getAttribute('src');
+  if (!src) return;
+  if (pct === null) {
+    _ckeImgWidthMap[src] = null;
+  } else {
+    const nw = _ckeActiveImg.naturalWidth;
+    _ckeImgWidthMap[src] = nw > 0 ? Math.round(nw * pct / 100) : null;
+  }
+  _ckeApplyImgWidths();
+  document.getElementById('cke-img-resize-toolbar').style.display = 'none';
+  _ckeActiveImg = null;
+  setDirty(true);
+}
+
+function _ckeInjectImgStyles(md) {
+  for (const [src, px] of Object.entries(_ckeImgWidthMap)) {
+    const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (px === null) {
+      md = md.replace(
+        new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
+        m => { const a = m.match(/alt="([^"]*)"/); return `![${a ? a[1] : ''}](${src})`; }
+      );
+    } else {
+      md = md
+        .replace(new RegExp(`!\\[([^\\]]*)\\]\\(${escapedSrc}\\)`, 'g'),
+          (_, alt) => `<img src="${src}" alt="${alt}" style="width:${px}px">`)
+        .replace(new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
+          m => { const a = m.match(/alt="([^"]*)"/); return `<img src="${src}" alt="${a ? a[1] : ''}" style="width:${px}px">`; });
+    }
+  }
+  return md;
 }
 
 function setDirty(val) {
@@ -364,7 +500,7 @@ async function saveContent(auto = false) {
 
   const title   = document.getElementById('ck-edit-title').value.trim();
   const project = document.getElementById('ck-edit-project').value;
-  const content = _ckeEditor.getMarkdown();
+  const content = _ckeInjectImgStyles(_ckeEditor.getMarkdown());
 
   if (!title) { alert('제목을 입력하세요.'); return; }
 
