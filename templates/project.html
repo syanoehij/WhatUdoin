@@ -477,6 +477,13 @@ function isoWeek(d) {
   return 1 + Math.round(((t - jan4) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
 }
 function today() { const d = new Date(); d.setHours(0,0,0,0); return d; }
+function todayTimeFraction() {
+  const n = new Date();
+  return (n.getHours() * 60 + n.getMinutes()) / 1440;
+}
+function calcTodayLineLeft(todayOff, dayPx) {
+  return (todayOff + todayTimeFraction()) * dayPx;
+}
 function getDayPx() {
   const tl = document.getElementById('gantt-timeline');
   return tl ? (tl.clientWidth / daysShown) : 10;
@@ -873,15 +880,27 @@ function render() {
     }
   });
 
-  // 오늘 선
+  // 오늘 선 (시간 비율 반영)
   const todayOff = daysBetween(viewStart, tod);
   if (todayOff >= 0 && todayOff < daysShown) {
     const line = document.createElement('div');
     line.className = 'gantt-today-line';
-    line.style.cssText = `left:${todayOff * dayPx + Math.floor(dayPx / 2)}px;height:${totalH}px`;
+    line.id = 'gantt-today-line';
+    line.style.cssText = `left:${calcTodayLineLeft(todayOff, dayPx)}px;height:${totalH}px`;
     ganttRowsEl.appendChild(line);
   }
 }
+
+// ── 오늘 선 1분마다 위치 갱신 ────────────────────────────
+setInterval(function () {
+  const line = document.getElementById('gantt-today-line');
+  if (!line) return;
+  const todayOff = daysBetween(viewStart, today());
+  const dayPx = getDayPx();
+  if (todayOff >= 0 && todayOff < daysShown) {
+    line.style.left = calcTodayLineLeft(todayOff, dayPx) + 'px';
+  }
+}, 60000);
 
 // ── 스크롤 동기화 (가로만: 타임라인 ↔ 날짜 헤더) ────────
 document.getElementById('gantt-timeline').addEventListener('scroll', function () {
