@@ -273,6 +273,7 @@
 </head>
 <body>
   <header>
+    <div class="header-scale-wrap">
     <div class="header-left">
       <a href="/" class="site-title-link"><h1>📅 WhatUDoin</h1></a>
       <span class="subtitle">너 뭐하니?</span>
@@ -400,15 +401,12 @@
         <button class="btn btn-sm btn-outline" onclick="openLoginModal()">로그인</button>
       {% endif %}
     </div>
+    </div>
   </header>
 
   <main>
     {% block content %}{% endblock %}
   </main>
-
-  <footer class="site-footer">
-    <span class="footer-copy">WhatUDoin</span>
-  </footer>
 
   <!-- ── 로그인 모달 ── -->
   <div id="login-modal-overlay" class="modal-overlay hidden" onclick="closeLoginModalOuter(event)">

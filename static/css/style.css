@@ -64,14 +64,23 @@ body {
 header {
   background: #24292f;
   color: white;
+  height: 45px;
+  padding: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+.header-scale-wrap {
+  width: calc(100% / 0.9);
+  height: 50px;
   padding: 10px 24px;
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
-  position: sticky;
-  top: 0;
-  z-index: 1000;
+  transform: scale(0.9);
+  transform-origin: top left;
 }
 [data-theme="dark"] header { background: #161b22; border-bottom: 1px solid #30363d; }
 
@@ -80,7 +89,7 @@ header h1 { font-size: 1.3rem; font-weight: 700; }
 .site-title-link { text-decoration: none; color: inherit; }
 .site-title-link:hover h1 { opacity: 0.85; }
 header .subtitle { font-size: 0.85rem; opacity: 0.8; }
-nav { display: flex; gap: 4px; margin-right: auto; }
+nav { display: flex; gap: 1px; margin-left: 16px; margin-right: auto; }
 
 /* ── 전역 검색바 ── */
 .global-search-wrap {
@@ -148,7 +157,7 @@ nav { display: flex; gap: 4px; margin-right: auto; }
 .nav-link {
   color: white;
   text-decoration: none;
-  padding: 6px 12px;
+  padding: 5px 8px;
   border-radius: 6px;
   font-size: 0.88rem;
   transition: background 0.15s;
@@ -317,21 +326,6 @@ a.profile-dropdown-item:hover { color: var(--text); }
 
 /* ── Main ── */
 main { padding: 20px 24px; width: 100%; flex: 1; }
-
-/* ── Footer ── */
-.site-footer {
-  padding: 12px 24px;
-  text-align: left;
-  flex-shrink: 0;
-}
-.footer-copy { font-size: 0.75rem; color: var(--text-faint); }
-.footer-link {
-  font-size: 0.75rem;
-  color: var(--text-faint);
-  text-decoration: none;
-}
-.footer-link:hover { color: var(--text-muted); }
-.footer-sep { color: var(--border); margin: 0 6px; font-size: 0.75rem; }
 
 /* ── Toolbar ── */
 .toolbar { margin-bottom: 16px; display: flex; justify-content: flex-end; }
@@ -1015,7 +1009,7 @@ mark.search-hl {
 /* grid 레이아웃: 구분(72) | 작성자(110) | 제목(1fr) | 팀(100) | 날짜(96) */
 .meetings-content .meeting-table tr {
   display: grid;
-  grid-template-columns: 72px 110px 1fr 100px 96px;
+  grid-template-columns: 96px 110px 1fr 100px 96px;
   width: 100%;
   align-items: center;
 }
@@ -1042,7 +1036,8 @@ mark.search-hl {
   text-transform: uppercase;
   white-space: nowrap;
 }
-.meeting-table th.col-type  { text-align: center; min-width: 120px; }
+.meeting-table th.col-type   { text-align: center; min-width: 120px; }
+.meeting-table th.col-author { text-align: center; }
 .meeting-table th.col-date  { text-align: right; padding-right: 28px; }
 .meeting-row {
   cursor: pointer;
@@ -1059,7 +1054,7 @@ mark.search-hl {
 /* td 전용 — th에 번지지 않도록 tbody로 범위 제한 */
 .meeting-table tbody .col-type   { text-align: center; white-space: nowrap; min-width: 120px; }
 .meeting-table tbody .col-type .doc-badge + .doc-badge { margin-left: 4px; }
-.meeting-table tbody .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meeting-table tbody .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
 .meeting-table tbody .col-title  { font-weight: 500; min-width: 0; }
 .meeting-table tbody .col-team   { }
 .meeting-table tbody .col-date   { white-space: nowrap; font-size: 0.8rem; color: var(--text-faint); text-align: right; padding-right: 28px; }
@@ -1145,7 +1140,7 @@ mark.search-hl {
   display: flex;
   flex-direction: column;
   margin: -20px -24px;          /* main 패딩 상쇄 */
-  height: calc(100vh - 50px);   /* navbar(~50px) 제외 */
+  height: calc(100vh - 45px);   /* navbar(~45px) 제외 */
 }
 .editor-header {
   display: flex;
