@@ -130,6 +130,111 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-18 헤더 드롭다운 표시 버그 수정 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-7">8차 9단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🐛</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title">헤더 우측 드롭다운 메뉴 미표시 버그 수정</div>
+          <div class="cl-item-detail">
+            <span class="cl-tag fix">FIX</span>
+            메뉴바 축소(scale 0.9) 적용 후 일정 추가 버튼·링크·알림·프로필 드롭다운이 펼쳐지지 않는 버그 수정
+            <ul>
+              <li>원인: <code>header { overflow: hidden }</code>이 45px 아래로 내려오는 드롭다운 콘텐츠를 세로로 clip</li>
+              <li><code>overflow: hidden</code> → <code>overflow-x: clip; overflow-y: visible</code> 으로 변경</li>
+              <li><code>overflow-x: clip</code>은 스크롤 컨테이너를 만들지 않아 세로 축을 <code>visible</code>로 유지 가능</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-18 ToC 클릭 이동 버그 수정 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-7">8차 8단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🐛</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title">목차 클릭 이동 버그 수정</div>
+          <div class="cl-item-detail">
+            <span class="cl-tag fix">FIX</span>
+            목차 항목 클릭 시 해당 heading으로 스크롤 이동이 동작하지 않는 문제 수정
+            <ul>
+              <li>에디터 모드: ProseMirror가 DOM 노드 교체 시 주입한 <code>id</code>가 소멸 → <code>getElementById</code> 실패. element 직접 참조(<code>_tocHeadingRefs[]</code>) + <code>isConnected</code> 검사 방식으로 전환</li>
+              <li>뷰어 모드: <code>.editor-main { overflow: hidden }</code> 아래 스크롤 컨테이너 부재로 <code>scrollIntoView</code> 무효. <code>.meeting-content-view</code>에 <code>flex: 1; overflow-y: auto</code> 추가</li>
+              <li>공통: <code>_findScrollParent(el)</code>로 heading에서 위로 DOM을 탐색해 실제 스크롤 컨테이너를 동적으로 감지, <code>scrollBy</code>로 명시적 스크롤</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-18 메모 에디터 ToC 목차 패널 추가 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-7">8차 7단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">📑</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title">메모 에디터 Notion 스타일 목차(ToC) 우측 패널 추가</div>
+          <div class="cl-item-detail">
+            <span class="cl-tag feat">FEAT</span>
+            <ul>
+              <li>헤더에 "📑 목차" 토글 버튼 추가 — 기존 AI 패널과 독립적으로 동시에 열 수 있음</li>
+              <li>H1·H2·H3 자동 스캔, 3단계 들여쓰기로 계층 표시, 활성 heading 하이라이트</li>
+              <li>편집 모드: <code>MutationObserver</code>(200ms debounce)로 타이핑 중 실시간 목록 갱신</li>
+              <li>뷰어 모드(읽기 전용·잠금 포함) 에서도 동작</li>
+              <li>열기/닫기 상태 <code>localStorage</code>로 유지 (새로고침 후 복원)</li>
+              <li>클릭 시 해당 heading으로 부드러운 스크롤 이동</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-18 메모장 좌측 필터 개선 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-7">8차 6단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🔍</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title">메모장 좌측 사이드바 필터 개선</div>
+          <div class="cl-item-detail">
+            <span class="cl-tag feat">FEAT</span>
+            <ul>
+              <li>작성자 필터에 '팀' 항목 추가 — 팀 문서(<code>is_team_doc</code>)만 필터링</li>
+              <li>공개 여부 필터 섹션 신설 — 전체 / 공개 / 비공개 3가지 선택 가능</li>
+              <li>선택 상태 <code>localStorage</code> 저장으로 새로고침 후 복원</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-18 메모장 테이블 컬럼 정렬 개선 ── -->
   <div class="cl-group">
     <div class="cl-group-header">

@@ -119,6 +119,7 @@
       {% endif %}
       {% if meeting %}
       <a href="/meetings/{{ meeting.id }}/history" class="btn btn-sm">수정 이력</a>
+      <button id="btn-toc-toggle" class="btn btn-sm" onclick="toggleTocPanel()" title="목차">📑 목차</button>
       {% endif %}
       {% if can_edit and not locked_by %}
       <button id="btn-ai-toggle" class="btn btn-sm" onclick="toggleAiPanel()">{% if meeting_events %}일정 관리{% else %}일정 생성(AI){% endif %}</button>
@@ -143,6 +144,7 @@
         (function() {
           const md = '# ' + {{ meeting.title | tojson | safe }} + '\n\n' + {{ (meeting.content if meeting else '') | tojson | safe }};
           new toastui.Editor.factory({ el: document.getElementById('meeting-content-view'), viewer: true, initialValue: md });
+          setTimeout(initToc, 300);
         })();
       </script>
       {% endif %}
@@ -187,6 +189,18 @@
 
       </div><!-- /ai-panel-body -->
     </div><!-- /ai-panel -->
+    {% endif %}
+
+    <!-- 오른쪽: ToC 패널 (기본 숨김) -->
+    {% if meeting %}
+    <aside class="toc-panel hidden" id="toc-panel">
+      <div class="toc-panel-header">
+        <span class="toc-panel-title">목차</span>
+        <button class="toc-close" onclick="toggleTocPanel()" title="닫기">✕</button>
+      </div>
+      <nav class="toc-list" id="toc-list"></nav>
+      <div class="toc-empty hidden" id="toc-empty">문서에 제목(H1~H3)이 없습니다.</div>
+    </aside>
     {% endif %}
 
   </div><!-- /editor-body -->
@@ -453,6 +467,8 @@ function initMeetingEditor() {
     const sel = document.getElementById('ai-model-select');
     if (sel) sel.innerHTML = '<option value="gemma4:e2b">gemma4:e2b (빠름)</option>';
   });
+
+  initToc();
 }
 
 if (document.readyState === 'loading') {
@@ -1372,6 +1388,129 @@ async function deleteLinkedEvent(i) {
   } else {
     alert('삭제 실패');
   }
+}
+
+/* ── ToC (목차) ─────────────────────────────────────────── */
+let _tocObserver    = null;
+let _tocActiveObs   = null;
+let _tocHeadingRefs = [];  // 직접 element 참조 (getElementById 의존 제거)
+
+function _findHeadingsRoot() {
+  return document.querySelector('#editor-container .toastui-editor-ww-container')
+      || document.getElementById('meeting-content-view');
+}
+
+function _findScrollParent(el) {
+  // heading에서 위로 올라가며 실제로 overflow:auto/scroll인 컨테이너를 찾음
+  let node = el ? el.parentElement : null;
+  while (node && node !== document.body) {
+    const oy = getComputedStyle(node).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
+function buildToc() {
+  const root  = _findHeadingsRoot();
+  const list  = document.getElementById('toc-list');
+  const empty = document.getElementById('toc-empty');
+  if (!root || !list) return;
+
+  const headings = Array.from(root.querySelectorAll('h1, h2, h3'));
+  _tocHeadingRefs = headings;
+
+  if (!headings.length) {
+    list.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+
+  empty.classList.add('hidden');
+  list.innerHTML = headings.map((h, idx) =>
+    `<a class="toc-item toc-lv${parseInt(h.tagName.slice(1))}" data-idx="${idx}">${esc(h.textContent)}</a>`
+  ).join('');
+
+  // onclick 문자열 대신 addEventListener로 클로저에 idx 바인딩
+  list.querySelectorAll('.toc-item').forEach((a, idx) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      _tocJumpTo(idx);
+    });
+  });
+
+  _rebindActiveObserver(headings);
+}
+
+function _tocJumpTo(idx) {
+  let target = _tocHeadingRefs[idx];
+  // ProseMirror가 노드를 교체해 isConnected=false인 경우 재빌드
+  if (!target || !target.isConnected) {
+    buildToc();
+    target = _tocHeadingRefs[idx];
+    if (!target || !target.isConnected) return;
+  }
+  // heading에서 위로 올라가며 실제 스크롤 컨테이너를 동적으로 탐색
+  const scrollRoot = _findScrollParent(target);
+  if (scrollRoot) {
+    const rootRect   = scrollRoot.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    scrollRoot.scrollBy({ top: targetRect.top - rootRect.top - 16, behavior: 'smooth' });
+  } else {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function _rebindActiveObserver(headingEls) {
+  if (_tocActiveObs) { _tocActiveObs.disconnect(); _tocActiveObs = null; }
+  const scrollRoot = headingEls.length ? _findScrollParent(headingEls[0]) : null;
+  if (!scrollRoot) return;
+  _tocActiveObs = new IntersectionObserver((entries) => {
+    entries.forEach(ent => {
+      if (!ent.isIntersecting) return;
+      const idx = _tocHeadingRefs.indexOf(ent.target);
+      if (idx < 0) return;
+      document.querySelectorAll('.toc-item').forEach((a, i) =>
+        a.classList.toggle('active', i === idx));
+    });
+  }, { root: scrollRoot, rootMargin: '0px 0px -70% 0px', threshold: 0 });
+  headingEls.forEach(h => _tocActiveObs.observe(h));
+}
+
+function _startTocWatch() {
+  if (_tocObserver) return;
+  const root = _findHeadingsRoot();
+  if (!root) return;
+  let debounce;
+  _tocObserver = new MutationObserver(() => {
+    clearTimeout(debounce);
+    debounce = setTimeout(buildToc, 200);
+  });
+  _tocObserver.observe(root, { childList: true, subtree: true, characterData: true });
+}
+
+function toggleTocPanel() {
+  const panel = document.getElementById('toc-panel');
+  const body  = document.getElementById('editor-body');
+  const btn   = document.getElementById('btn-toc-toggle');
+  if (!panel) return;
+  const open = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !open);
+  body.classList.toggle('toc-open', open);
+  btn?.classList.toggle('active', open);
+  localStorage.setItem('meeting_toc_open', open ? '1' : '0');
+  if (open) {
+    buildToc();
+    _startTocWatch();
+  }
+  if (typeof editor !== 'undefined' && editor) editor.resize?.();
+}
+
+function initToc() {
+  const shouldOpen = localStorage.getItem('meeting_toc_open') === '1';
+  if (shouldOpen) setTimeout(() => toggleTocPanel(), 400);
 }
 </script>
 {% endblock %}
