@@ -179,7 +179,7 @@ def project_manage_page(request: Request):
     return templates.TemplateResponse(request, "project_manage.html", _ctx(request))
 
 
-@app.get("/meetings", response_class=HTMLResponse)
+@app.get("/memo", response_class=HTMLResponse)
 def meetings_page(request: Request):
     user = auth.get_current_user(request)
     meetings = db.get_all_meetings(viewer=user)
@@ -190,7 +190,7 @@ def meetings_page(request: Request):
     ))
 
 
-@app.get("/meetings/new", response_class=HTMLResponse)
+@app.get("/memo/new", response_class=HTMLResponse)
 def meeting_new_page(request: Request):
     user = auth.get_current_user(request)
     if not auth.is_editor(user):
@@ -198,7 +198,7 @@ def meeting_new_page(request: Request):
     return templates.TemplateResponse(request, "meeting_editor.html", _ctx(request, meeting=None, meeting_events=[], can_edit=True))
 
 
-@app.get("/meetings/{meeting_id}", response_class=HTMLResponse)
+@app.get("/memo/{meeting_id}", response_class=HTMLResponse)
 def meeting_detail_page(request: Request, meeting_id: int):
     meeting = db.get_meeting(meeting_id)
     current_user = auth.get_current_user(request)
@@ -216,11 +216,11 @@ def meeting_detail_page(request: Request, meeting_id: int):
     ))
 
 
-@app.get("/meetings/{meeting_id}/history", response_class=HTMLResponse)
+@app.get("/memo/{meeting_id}/history", response_class=HTMLResponse)
 def meeting_history_page(request: Request, meeting_id: int):
     meeting = db.get_meeting(meeting_id)
     current_user = auth.get_current_user(request)
-    if not _can_read_meeting(current_user, meeting):
+    if current_user is None or not _can_read_meeting(current_user, meeting):
         raise HTTPException(status_code=404)
     histories = db.get_meeting_histories(meeting_id)
     return templates.TemplateResponse(request, "meeting_history.html", _ctx(
@@ -1440,13 +1440,13 @@ def api_delete_link(link_id: int, request: Request):
 
 # ── 회의록 API ───────────────────────────────────────────
 
-@app.get("/api/meetings")
+@app.get("/api/memo")
 def list_meetings(request: Request):
     user = auth.get_current_user(request)
     return db.get_all_meetings(viewer=user)
 
 
-@app.post("/api/meetings")
+@app.post("/api/memo")
 async def create_meeting(request: Request):
     user = _require_editor(request)
     data = await request.json()
@@ -1465,7 +1465,7 @@ async def create_meeting(request: Request):
     return {"id": meeting_id}
 
 
-@app.put("/api/meetings/{meeting_id}")
+@app.put("/api/memo/{meeting_id}")
 async def update_meeting(meeting_id: int, request: Request):
     user = _require_editor(request)
     meeting = db.get_meeting(meeting_id)
@@ -1489,7 +1489,7 @@ async def update_meeting(meeting_id: int, request: Request):
 
 
 # ── 회의록 편집 잠금 ────────────────────────────────────────
-@app.post("/api/meetings/{meeting_id}/lock")
+@app.post("/api/memo/{meeting_id}/lock")
 def lock_meeting(meeting_id: int, request: Request):
     user = _require_editor(request)
     ok = db.acquire_meeting_lock(meeting_id, user["name"])
@@ -1500,14 +1500,14 @@ def lock_meeting(meeting_id: int, request: Request):
     return {"ok": True}
 
 
-@app.put("/api/meetings/{meeting_id}/lock")
+@app.put("/api/memo/{meeting_id}/lock")
 def heartbeat_meeting_lock(meeting_id: int, request: Request):
     user = _require_editor(request)
     db.heartbeat_meeting_lock(meeting_id, user["name"])
     return {"ok": True}
 
 
-@app.delete("/api/meetings/{meeting_id}/lock")
+@app.delete("/api/memo/{meeting_id}/lock")
 def unlock_meeting(meeting_id: int, request: Request):
     user = auth.get_current_user(request)
     if user:
@@ -1515,15 +1515,17 @@ def unlock_meeting(meeting_id: int, request: Request):
     return {"ok": True}
 
 
-@app.get("/api/meetings/{meeting_id}/lock")
+@app.get("/api/memo/{meeting_id}/lock")
 def get_meeting_lock(meeting_id: int):
     lock = db.get_meeting_lock(meeting_id)
     return {"locked_by": lock["user_name"] if lock else None}
 
 
-@app.get("/api/meetings/calendar")
+@app.get("/api/memo/calendar")
 def meetings_calendar(request: Request):
     user = auth.get_current_user(request)
+    if user is None:
+        return []
     meetings = db.get_all_meetings(viewer=user)
     result = []
     for m in meetings:
@@ -1564,7 +1566,7 @@ def _delete_meeting_images(content: str):
             p.unlink()
 
 
-@app.delete("/api/meetings/{meeting_id}")
+@app.delete("/api/memo/{meeting_id}")
 def delete_meeting(meeting_id: int, request: Request):
     user = _require_editor(request)
     meeting = db.get_meeting(meeting_id)
@@ -1576,7 +1578,7 @@ def delete_meeting(meeting_id: int, request: Request):
     return {"ok": True}
 
 
-@app.get("/api/meetings/{meeting_id}/histories")
+@app.get("/api/memo/{meeting_id}/histories")
 def meeting_histories(meeting_id: int, request: Request):
     user = auth.get_current_user(request)
     meeting = db.get_meeting(meeting_id)
@@ -1585,7 +1587,7 @@ def meeting_histories(meeting_id: int, request: Request):
     return db.get_meeting_histories(meeting_id)
 
 
-@app.post("/api/meetings/{meeting_id}/histories/{history_id}/restore")
+@app.post("/api/memo/{meeting_id}/histories/{history_id}/restore")
 def restore_meeting_history(meeting_id: int, history_id: int, request: Request):
     user = _require_editor(request)
     meeting = db.get_meeting(meeting_id)
@@ -1597,7 +1599,7 @@ def restore_meeting_history(meeting_id: int, history_id: int, request: Request):
     return {"ok": True}
 
 
-@app.get("/api/meetings/{meeting_id}/events")
+@app.get("/api/memo/{meeting_id}/events")
 def meeting_events_api(meeting_id: int, request: Request):
     user = auth.get_current_user(request)
     meeting = db.get_meeting(meeting_id)

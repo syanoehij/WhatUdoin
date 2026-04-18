@@ -21,21 +21,19 @@
 
   <!-- ── 상단 헤더 ── -->
   <div class="editor-header">
-    <a id="btn-back" href="/meetings" class="btn btn-sm">← 목록</a>
-
-    <div class="meeting-date-wrap">
-      {% if user and user.role in ('editor', 'admin') and not locked_by %}
-      <input type="date" id="meeting-date"
-             value="{{ meeting.meeting_date or meeting.created_at[:10] if meeting else '' }}" />
-      {% else %}
-      <span class="meeting-date-label">
-        {{ (meeting.meeting_date or meeting.created_at[:10]) if meeting else '' }}
-      </span>
-      {% endif %}
-    </div>
+    <a id="btn-back" href="/memo" class="btn btn-sm">← 목록</a>
 
     <div class="btn-group">
       {% if can_edit and not locked_by %}
+      <label class="doc-type-toggle" id="team-share-wrap"
+             title="팀원에게 읽기 전용으로 공유합니다"
+             style="{% if not meeting or meeting.is_team_doc %}visibility:hidden{% endif %}">
+        <input type="checkbox" id="chk-team-share"
+               {% if meeting and meeting.team_share %}checked{% endif %} />
+        <span class="doc-type-label" id="team-share-label">
+          {% if meeting and meeting.team_share %}팀 공유{% else %}팀 공유 끔{% endif %}
+        </span>
+      </label>
       <label class="doc-type-toggle" title="팀 문서면 캘린더에 노출됩니다">
         <input type="checkbox" id="chk-team-doc"
                {% if meeting and meeting.is_team_doc %}checked{% endif %} />
@@ -43,25 +41,16 @@
           {% if meeting and meeting.is_team_doc %}팀 문서{% else %}개인 문서{% endif %}
         </span>
       </label>
-      <label class="doc-type-toggle" id="team-share-wrap"
-             title="팀원에게 읽기 전용으로 공유합니다"
-             style="{% if meeting and meeting.is_team_doc %}display:none{% endif %}">
-        <input type="checkbox" id="chk-team-share"
-               {% if meeting and meeting.team_share %}checked{% endif %} />
-        <span class="doc-type-label" id="team-share-label">
-          {% if meeting and meeting.team_share %}팀 공유{% else %}팀 공유 끔{% endif %}
-        </span>
-      </label>
       <label class="doc-type-toggle" title="비로그인 사용자를 포함해 누구나 읽을 수 있습니다">
         <input type="checkbox" id="chk-public"
                {% if meeting and meeting.is_public %}checked{% endif %} />
         <span class="doc-type-label" id="public-label">
-          {% if meeting and meeting.is_public %}공개{% else %}비공개{% endif %}
+          {% if meeting and meeting.is_public %}외부 공개{% else %}외부 비공개{% endif %}
         </span>
       </label>
       {% endif %}
-      {% if meeting %}
-      <a href="/meetings/{{ meeting.id }}/history" class="btn btn-sm">수정 이력</a>
+      {% if user and meeting %}
+      <a href="/memo/{{ meeting.id }}/history" class="btn btn-sm">수정 이력</a>
       <button id="btn-toc-toggle" class="btn btn-sm" onclick="toggleTocPanel()" title="목차">📑 목차</button>
       {% endif %}
       {% if can_edit and not locked_by %}
@@ -210,32 +199,44 @@ function initMeetingEditor() {
   }
 
   // 팀/개인 문서 토글 레이블 동기화 + URL 파라미터 초기화
-  const chkTeamDoc = document.getElementById('chk-team-doc');
-  const lblDocType = document.getElementById('doc-type-label');
+  const chkTeamDoc  = document.getElementById('chk-team-doc');
+  const lblDocType  = document.getElementById('doc-type-label');
+  const chkTeamShare = document.getElementById('chk-team-share');
+  const lblTeamShare = document.getElementById('team-share-label');
+  const chkPublic   = document.getElementById('chk-public');
+  const lblPublic   = document.getElementById('public-label');
+  const shareWrap   = document.getElementById('team-share-wrap');
+
+  function syncShareWrap() {
+    if (shareWrap) shareWrap.style.visibility = chkTeamDoc.checked ? 'hidden' : 'visible';
+    if (chkTeamDoc.checked && chkTeamShare) {
+      chkTeamShare.checked = false;
+      if (lblTeamShare) lblTeamShare.textContent = '팀 공유 끔';
+    }
+  }
+
   if (chkTeamDoc && lblDocType) {
     if (!MEETING_ID) {
       const isPersonal = new URLSearchParams(location.search).get('personal') === '1';
       chkTeamDoc.checked = !isPersonal;
       lblDocType.textContent = chkTeamDoc.checked ? '팀 문서' : '개인 문서';
+      if (isPersonal && chkTeamShare) {
+        chkTeamShare.checked = true;
+        if (lblTeamShare) lblTeamShare.textContent = '팀 공유';
+      }
+      if (chkPublic) chkPublic.checked = false;
+      if (lblPublic) lblPublic.textContent = '외부 비공개';
+      syncShareWrap();
     }
     chkTeamDoc.addEventListener('change', () => {
       lblDocType.textContent = chkTeamDoc.checked ? '팀 문서' : '개인 문서';
-      const shareWrap = document.getElementById('team-share-wrap');
-      if (shareWrap) {
-        shareWrap.style.display = chkTeamDoc.checked ? 'none' : '';
-        const chkShare = document.getElementById('chk-team-share');
-        if (chkTeamDoc.checked && chkShare) { chkShare.checked = false; document.getElementById('team-share-label').textContent = '팀 공유 끔'; }
-      }
+      syncShareWrap();
     });
-    const chkPublic = document.getElementById('chk-public');
-    const lblPublic = document.getElementById('public-label');
     if (chkPublic && lblPublic) {
       chkPublic.addEventListener('change', () => {
-        lblPublic.textContent = chkPublic.checked ? '공개' : '비공개';
+        lblPublic.textContent = chkPublic.checked ? '외부 공개' : '외부 비공개';
       });
     }
-    const chkTeamShare = document.getElementById('chk-team-share');
-    const lblTeamShare = document.getElementById('team-share-label');
     if (chkTeamShare && lblTeamShare) {
       chkTeamShare.addEventListener('change', () => {
         lblTeamShare.textContent = chkTeamShare.checked ? '팀 공유' : '팀 공유 끔';
@@ -271,7 +272,7 @@ function initMeetingEditor() {
       autosave: MEETING_ID ? { intervalMs: 120000, respectCooldown: true } : false,
       saveCooldown: { seconds: 10, saveBtnSelector: 'button[onclick="saveMeeting()"]' },
       editLock: MEETING_ID ? {
-        endpoint: `/api/meetings/${MEETING_ID}/lock`,
+        endpoint: `/api/memo/${MEETING_ID}/lock`,
         heartbeatMs: 30000,
         onLockFailed: () => location.reload(),
       } : false,
@@ -367,8 +368,7 @@ async function saveMeeting(leaveTarget) {
   if (!title) { alert('첫 줄에 제목(H1)을 입력하세요.'); return; }
 
   const method = MEETING_ID ? 'PUT' : 'POST';
-  const url    = MEETING_ID ? `/api/meetings/${MEETING_ID}` : '/api/meetings';
-  const meetingDate = document.getElementById('meeting-date')?.value || null;
+  const url    = MEETING_ID ? `/api/memo/${MEETING_ID}` : '/api/memo';
   const isTeamDoc   = document.getElementById('chk-team-doc')?.checked ?? true;
   const isPublic    = document.getElementById('chk-public')?.checked ?? false;
   const teamShare   = document.getElementById('chk-team-share')?.checked ?? false;
@@ -376,14 +376,14 @@ async function saveMeeting(leaveTarget) {
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, content, meeting_date: meetingDate, is_team_doc: isTeamDoc, is_public: isPublic, team_share: teamShare }),
+    body: JSON.stringify({ title, content, is_team_doc: isTeamDoc, is_public: isPublic, team_share: teamShare }),
   });
 
   if (res.ok) {
     const data = await res.json();
     if (typeof window._checkNotifications === 'function') window._checkNotifications();
     if (!MEETING_ID) {
-      location.href = `/meetings/${data.id}`;
+      location.href = `/memo/${data.id}`;
     } else {
       wuInst?.afterSave();
       if (leaveTarget) location.href = leaveTarget;
@@ -396,8 +396,8 @@ async function saveMeeting(leaveTarget) {
 
 async function deleteMeeting() {
   if (!confirm('이 메모를 삭제하시겠습니까?')) return;
-  const res = await fetch(`/api/meetings/${MEETING_ID}`, { method: 'DELETE' });
-  if (res.ok) location.href = '/meetings';
+  const res = await fetch(`/api/memo/${MEETING_ID}`, { method: 'DELETE' });
+  if (res.ok) location.href = '/memo';
 }
 
 /* ── AI 파싱 ─────────────────────────────────────────── */

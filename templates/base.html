@@ -280,7 +280,7 @@
     </div>
     <nav>
       {% if user %}<a href="/" class="nav-link {% if request.url.path == '/' %}nav-active{% endif %}">🏠 내 스케줄</a>{% endif %}
-      <a href="/meetings" class="nav-link {% if request.url.path.startswith('/meetings') %}nav-active{% endif %}">📋 메모장</a>
+      <a href="/memo" class="nav-link {% if request.url.path.startswith('/memo') %}nav-active{% endif %}">📋 메모장</a>
       <a href="/check" class="nav-link {% if request.url.path.startswith('/check') %}nav-active{% endif %}">✅ 체크</a>
       <a href="/calendar" class="nav-link {% if request.url.path == '/calendar' %}nav-active{% endif %}">📅 캘린더</a>
       <a href="/kanban" class="nav-link {% if request.url.path.startswith('/kanban') %}nav-active{% endif %}">📌 칸반</a>

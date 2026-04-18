@@ -1345,10 +1345,9 @@ window.__pageSearch = {
   onSearch(q) {
     const term = q.trim().toLowerCase();
     if (!term) { renderList(); return; }
-    const filtered = _allChecklists.filter(c =>
-      c.title.toLowerCase().includes(term) ||
-      (c.project || '').toLowerCase().includes(term)
-    );
+    const filtered = _allChecklists
+      .filter(c => c.title.toLowerCase().includes(term) || (c.project || '').toLowerCase().includes(term))
+      .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
     const container = document.getElementById('ck-list');
     if (!filtered.length) {
       container.innerHTML = '<div class="ck-empty">검색 결과가 없습니다.</div>';

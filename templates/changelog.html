@@ -130,6 +130,161 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-19 삭제 일정 필터 + 캘린더 비로그인 회의 숨김 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-3">10차 6단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🗑️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">FIX</span>메모 연결 일정에서 삭제된 일정 제외</div>
+          <div class="cl-item-detail">
+            메모 상세 페이지의 "연결된 일정" 영역과 목록 카운트 뱃지에 소프트-삭제된 일정이 유령처럼 남는 버그를 수정했습니다.
+            <ul>
+              <li><code>database.py get_events_by_meeting()</code> — <code>AND deleted_at IS NULL</code> 추가</li>
+              <li><code>get_all_meetings()</code> <code>event_count</code> 서브쿼리 — <code>AND e.deleted_at IS NULL</code> 추가</li>
+              <li>캘린더에서 일정 삭제 → 메모 재진입 시 카운트 및 카드 즉시 반영</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🔒</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">보안</span>캘린더 비로그인 회의 이벤트 숨김</div>
+          <div class="cl-item-detail">
+            비로그인 사용자의 캘린더에 <code>is_public=1</code>인 팀 문서 회의가 노출되는 문제를 수정했습니다.
+            <ul>
+              <li><code>GET /api/memo/calendar</code> — <code>user is None</code>이면 즉시 <code>[]</code> 반환</li>
+              <li>캘린더 클라이언트는 변경 없음 — 빈 배열 수신 시 자연스럽게 미렌더</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-19 메모 편집기 공개 설정 UI 개선 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-3">10차 5단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">✨</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>메모 편집기 공개 설정 토글 순서·라벨·기본값 개선</div>
+          <div class="cl-item-detail">
+            편집기 헤더 토글 배치와 신규 문서 기본값을 정비했습니다.
+            <ul>
+              <li>토글 순서 변경: <b>팀 공유 여부 → 팀/개인 문서 → 외부 공개</b> (이전: 팀/개인 → 팀 공유 → 외부 공개)</li>
+              <li>'팀 공유' 토글이 팀 문서 선택 시 사라지는 대신 <code>visibility:hidden</code>으로 공간 보존 → 레이아웃 흔들림 없음</li>
+              <li>'공개/비공개' 라벨 → <b>'외부 공개/외부 비공개'</b>로 의미 명확화 (편집기·목록 뱃지 모두)</li>
+              <li><b>새 메모</b> 기본값: 팀 공유 ON + 개인 문서 + 외부 비공개</li>
+              <li><b>새 회의록</b> 기본값: 팀 문서 + 외부 비공개 (팀 공유 토글 미표시)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-19 메모 편집기 날짜 위젯 제거 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-3">10차 4단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🗑️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>메모 편집기 상단 날짜 선택 위젯 제거</div>
+          <div class="cl-item-detail">
+            헤더 중앙의 날짜 선택 입력(<code>.meeting-date-wrap</code>)을 제거했습니다. 해당 필드(<code>meeting_date</code>)는 캘린더 노출 날짜 fallback으로 사용되었으나 실사용 빈도가 없어 UI를 단순화했습니다. 캘린더는 <code>meeting_date or created_at[:10]</code> 로직을 그대로 유지하므로 기존 데이터에 영향 없음.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-19 메모장 비로그인 노출 제한 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-3">10차 3단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🔒</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">보안</span>메모장 비로그인 노출 범위 축소</div>
+          <div class="cl-item-detail">
+            비로그인 사용자에게 불필요하게 노출되던 UI와 페이지를 정리했습니다.
+            <ul>
+              <li>메모 목록 '외부 공개' 뱃지 — 비로그인 시 미표시 (어차피 전부 공개 문서만 표시됨)</li>
+              <li>메모 편집기 "수정 이력" 버튼 — 비로그인 시 미표시</li>
+              <li><code>GET /memo/{id}/history</code> 페이지 — 비로그인 시 404 반환 (공개 문서라도 차단)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-19 체크 검색 정렬 개선 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-3">10차 2단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🔍</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">FIX</span>체크리스트 검색 결과 최신순 정렬 누락 수정</div>
+          <div class="cl-item-detail">
+            검색 키워드 입력 시 결과가 수정일 역순으로 정렬되지 않는 문제를 수정했습니다. <code>check.html</code> <code>onSearch</code> 핸들러에서 <code>filter()</code> 후 <code>updated_at DESC</code> 정렬을 추가했습니다. 전체 목록(<code>renderList</code>)은 이미 정렬이 적용되어 있었으나 검색 경로만 누락되어 있었습니다.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-19 메모장 URL /meetings → /memo 재명명 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-3">10차 1단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🔗</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">FEAT</span>메모장 URL <code>/meetings</code> → <code>/memo</code> 재명명</div>
+          <div class="cl-item-detail">
+            기능명과 URL이 일치하지 않아 외부 공유 링크 시 혼란을 주는 문제를 개선했습니다. DB 테이블명·Python 함수명·저장 폴더(<code>meetings/YYYY/MM/</code>)는 그대로 두고 외부 노출 경로만 변경했습니다.
+            <ul>
+              <li>페이지: <code>/meetings</code> → <code>/memo</code>, <code>/meetings/{id}</code> → <code>/memo/{id}</code>, <code>/meetings/{id}/history</code> → <code>/memo/{id}/history</code></li>
+              <li>API: <code>/api/meetings/*</code> → <code>/api/memo/*</code> (lock·calendar·histories·events 포함)</li>
+              <li>변경 파일: <code>app.py</code> 24곳, <code>base.html</code>, <code>meeting_list.html</code>, <code>meeting_editor.html</code>, <code>meeting_history.html</code>, <code>calendar.html</code></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-18 체크 편집기 기능 패리티 ── -->
   <div class="cl-group">
     <div class="cl-group-header">

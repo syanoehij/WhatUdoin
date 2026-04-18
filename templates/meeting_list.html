@@ -88,8 +88,8 @@
       {% if user and user.role in ('editor', 'admin') %}
       <div style="display:flex;gap:8px;">
         <button class="btn btn-outline btn-sm" onclick="openWeeklyReportModal()">📊 주간 업무 작성(AI)</button>
-        <a href="/meetings/new" class="btn btn-outline btn-sm">+ 새 회의록</a>
-        <a href="/meetings/new?personal=1" class="btn btn-primary btn-sm">+ 새 메모</a>
+        <a href="/memo/new" class="btn btn-outline btn-sm">+ 새 회의록</a>
+        <a href="/memo/new?personal=1" class="btn btn-primary btn-sm">+ 새 메모</a>
       </div>
       {% endif %}
     </div>
@@ -119,6 +119,7 @@
 const ALL_MEETINGS  = {{ meetings | tojson | safe }};
 const CURRENT_UID   = {{ user.id if user else 'null' }};
 const CURRENT_UNAME = {{ (user.name or user.username) | tojson | safe if user else 'null' }};
+const IS_LOGGED_IN  = {{ 'true' if user else 'false' }};
 
 // ── 상태 ────────────────────────────────────────────────
 // selectedAuthor:     null=전체, '__team__'=팀, '__me__'=내 작성, 'name'=특정 작성자
@@ -358,10 +359,10 @@ function renderRow(m, showYear) {
     ? escHtml(m.title).replace(new RegExp(escRegex(searchQuery), 'gi'), s => `<mark class="search-hl">${s}</mark>`)
     : escHtml(m.title);
   return `
-  <tr class="meeting-row ${isMine ? 'mine' : ''}" onclick="location.href='/meetings/${m.id}?from=meetings'">
+  <tr class="meeting-row ${isMine ? 'mine' : ''}" onclick="location.href='/memo/${m.id}?from=memo'">
     <td class="col-type">
       <span class="doc-badge ${m.is_team_doc ? 'doc-team' : 'doc-personal'}">${m.is_team_doc ? '팀' : '개인'}</span>
-      ${m.is_public ? '<span class="doc-badge doc-public" title="비로그인 포함 공개">공개</span>' : ''}
+      ${IS_LOGGED_IN && m.is_public ? '<span class="doc-badge doc-public" title="비로그인 포함 공개">외부 공개</span>' : ''}
       ${!m.is_team_doc && m.team_share ? '<span class="doc-badge doc-shared" title="팀원 읽기 공유">공유</span>' : ''}
     </td>
     <td class="col-author ${isMine ? 'author-me' : ''}">${escHtml(m.author_name || '-')}</td>
@@ -479,7 +480,7 @@ document.addEventListener('DOMContentLoaded', () => {
     el.innerHTML = `
       <p>등록된 메모가 없습니다.</p>
       {% if user and user.role in ('editor', 'admin') %}
-      <a href="/meetings/new?personal=1" class="btn btn-primary" style="margin-top:12px">첫 메모 작성하기</a>
+      <a href="/memo/new?personal=1" class="btn btn-primary" style="margin-top:12px">첫 메모 작성하기</a>
       {% endif %}
     `;
   }
@@ -529,7 +530,7 @@ async function generateWeeklyReport() {
     });
     if (!res.ok) { const err = await res.json(); throw new Error(err.detail || '서버 오류'); }
     const data = await res.json();
-    location.href = `/meetings/${data.meeting_id}?from=meetings`;
+    location.href = `/memo/${data.meeting_id}?from=memo`;
   } catch (err) {
     document.getElementById('weekly-loading').classList.add('hidden');
     document.getElementById('weekly-form').style.display = '';

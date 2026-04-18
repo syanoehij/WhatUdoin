@@ -1488,7 +1488,7 @@ def reject_pending_user(pending_id: int):
 def get_all_meetings(viewer=None):
     """viewer: None=비로그인, dict=로그인 사용자. 가시성 규칙을 SQL에서 처리."""
     base = """SELECT m.*, u.name as author_name, u.id as author_id, t.name as team_name,
-               (SELECT COUNT(*) FROM events e WHERE e.meeting_id = m.id) as event_count
+               (SELECT COUNT(*) FROM events e WHERE e.meeting_id = m.id AND e.deleted_at IS NULL) as event_count
                FROM meetings m
                LEFT JOIN users u ON m.created_by = u.id
                LEFT JOIN teams t ON m.team_id = t.id
@@ -1626,7 +1626,7 @@ def restore_meeting_from_history(meeting_id: int, history_id: int, restored_by: 
 def get_events_by_meeting(meeting_id: int):
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM events WHERE meeting_id = ? ORDER BY start_datetime",
+            "SELECT * FROM events WHERE meeting_id = ? AND deleted_at IS NULL ORDER BY start_datetime",
             (meeting_id,)
         ).fetchall()
     return [dict(r) for r in rows]
