@@ -1716,9 +1716,13 @@ def api_get_trash(request: Request):
 
 @app.post("/api/trash/{item_type}/{item_id}/restore")
 def api_restore_trash(item_type: str, item_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     if item_type not in ("event", "meeting", "checklist", "project"):
         raise HTTPException(status_code=400, detail="잘못된 항목 타입입니다.")
+    if user.get("role") != "admin":
+        item_team = db.get_trash_item_team(item_type, item_id)
+        if item_team is None or item_team != user.get("team_id"):
+            raise HTTPException(status_code=403, detail="권한이 없습니다.")
     ok = db.restore_trash_item(item_type, item_id)
     if not ok:
         raise HTTPException(status_code=404, detail="항목을 찾을 수 없습니다.")

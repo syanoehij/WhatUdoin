@@ -2098,6 +2098,20 @@ def get_trash_items(team_id: int = None) -> dict:
     }
 
 
+def get_trash_item_team(item_type: str, item_id: int):
+    """휴지통 항목의 team_id 반환 (권한 검사용). 항목 없으면 None."""
+    table_map = {"event": "events", "meeting": "meetings", "checklist": "checklists", "project": "projects"}
+    table = table_map.get(item_type)
+    if not table:
+        return None
+    with get_conn() as conn:
+        row = conn.execute(
+            f"SELECT team_id FROM {table} WHERE id = ? AND deleted_at IS NOT NULL",
+            (item_id,)
+        ).fetchone()
+    return row["team_id"] if row else None
+
+
 def restore_trash_item(item_type: str, item_id: int) -> bool:
     """휴지통에서 복원 (deleted_at = NULL)"""
     with get_conn() as conn:
