@@ -7,6 +7,10 @@ import uuid
 
 import requests as _requests
 
+import io
+import zipfile
+from urllib.parse import quote
+
 from fastapi import FastAPI, Request, HTTPException, Response, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -41,9 +45,11 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)
     # APScheduler: 매일 새벽 3시 휴지통 30일 초과 항목 정리
     scheduler.add_job(db.cleanup_old_trash, "cron", hour=3, minute=0)
-    scheduler.start()
+    if not scheduler.running:
+        scheduler.start()
     yield
-    scheduler.shutdown(wait=False)
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="WhatUDoin", lifespan=lifespan)
@@ -59,9 +65,24 @@ def favicon():
 
 # ── 헬퍼 ────────────────────────────────────────────────
 
+_HTTPS_CERT_PATH = _RUN_DIR / "whatudoin-cert.pem"
+_HTTPS_KEY_PATH  = _RUN_DIR / "whatudoin-key.pem"
+
+
+def _https_available() -> bool:
+    return _HTTPS_CERT_PATH.is_file() and _HTTPS_KEY_PATH.is_file()
+
+
 def _ctx(request: Request, **kwargs):
     user = auth.get_current_user(request)
-    return {"request": request, "user": user, **kwargs}
+    return {
+        "request": request,
+        "user": user,
+        "https_available": _https_available(),
+        "https_port": 8443,
+        "http_port": 8000,
+        **kwargs,
+    }
 
 
 def _require_editor(request: Request):
@@ -186,6 +207,30 @@ def ai_import_page(request: Request):
 @app.get("/changelog", response_class=HTMLResponse)
 def changelog_page(request: Request):
     return templates.TemplateResponse(request, "changelog.html", _ctx(request))
+
+
+# ── 알람 설정 (인증서 다운로드) 페이지 ─────────────────────
+@app.get("/alarm-setup", response_class=HTMLResponse)
+def alarm_setup_page(request: Request):
+    cert_path = _RUN_DIR / "whatudoin-rootCA.pem"
+    return templates.TemplateResponse(
+        request, "alarm_setup.html",
+        _ctx(request, cert_ready=cert_path.is_file()),
+    )
+
+
+@app.get("/api/cert/rootCA.crt")
+def download_rootca():
+    cert_path = _RUN_DIR / "whatudoin-rootCA.pem"
+    if not cert_path.is_file():
+        raise HTTPException(status_code=404, detail="루트 인증서가 아직 준비되지 않았습니다.")
+    filename = "WhatUdoin-인증서.crt"
+    return FileResponse(
+        cert_path,
+        media_type="application/x-x509-ca-cert",
+        filename=filename,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── 팀 공지 페이지 ─────────────────────────────────────────
@@ -1031,6 +1076,206 @@ async def manage_delete_project(name: str, request: Request):
     delete_events = data.get("delete_events", False)
     db.delete_project(name, delete_events, deleted_by=user["name"], team_id=user.get("team_id"))
     return {"ok": True}
+
+
+_IMG_URL_RE = re.compile(r'/uploads/meetings/\d{4}/\d{2}/[\w\-.]+')
+
+
+def _safe_filename(s: str, fallback: str = "untitled") -> str:
+    s = re.sub(r'[\\/:*?"<>|#^\[\]]+', "_", (s or "").strip())
+    s = re.sub(r"\s+", " ", s).strip(". ")
+    return s or fallback
+
+
+def _yaml_str(v) -> str:
+    s = "" if v is None else str(v).replace("\r\n", "\n").strip()
+    if not s:
+        return '""'
+    return '"' + s.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+def _esc(v) -> str:
+    if v is None:
+        return ""
+    return str(v).replace("\r\n", "\n").strip()
+
+
+def _build_index_md(name: str, proj: dict | None, events: list[dict], checklists: list[dict],
+                    event_files: list[str], checklist_files: list[str], exported_at: str) -> str:
+    lines = ["---", f"project: {_yaml_str(name)}", "type: project"]
+    if proj:
+        if proj.get("color"):      lines.append(f"color: {_yaml_str(proj.get('color'))}")
+        if proj.get("start_date"): lines.append(f"start_date: {_esc(proj.get('start_date'))}")
+        if proj.get("end_date"):   lines.append(f"end_date: {_esc(proj.get('end_date'))}")
+        lines.append(f"is_active: {'true' if proj.get('is_active', 1) else 'false'}")
+    lines += [f"exported_at: {exported_at}", "tags: [whatudoin, project-export]", "---", "",
+              f"# {name}", ""]
+    if proj and proj.get("memo"):
+        lines.append("> " + _esc(proj["memo"]).replace("\n", "\n> "))
+        lines.append("")
+    lines.append(f"## 📅 일정 ({len(events)}개)")
+    lines.append("")
+    if event_files:
+        for stem in event_files:
+            lines.append(f"- [[일정/{stem}]]")
+    else:
+        lines.append("_연결된 일정 없음_")
+    lines.append("")
+    lines.append(f"## ✅ 체크리스트 ({len(checklists)}개)")
+    lines.append("")
+    if checklist_files:
+        for stem in checklist_files:
+            lines.append(f"- [[체크리스트/{stem}]]")
+    else:
+        lines.append("_연결된 체크리스트 없음_")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_event_md(project_name: str, ev: dict, exported_at: str) -> str:
+    title = _esc(ev.get("title")) or "(제목 없음)"
+    lines = ["---", "type: event", f"project: {_yaml_str(project_name)}", f"title: {_yaml_str(title)}"]
+    if ev.get("start_datetime"): lines.append(f"start: {_esc(ev.get('start_datetime'))}")
+    if ev.get("end_datetime"):   lines.append(f"end: {_esc(ev.get('end_datetime'))}")
+    if ev.get("assignee"):       lines.append(f"assignee: {_yaml_str(ev.get('assignee'))}")
+    if ev.get("priority"):       lines.append(f"priority: {_yaml_str(ev.get('priority'))}")
+    if ev.get("location"):       lines.append(f"location: {_yaml_str(ev.get('location'))}")
+    status = "완료" if ev.get("is_active") == 0 else "진행 중"
+    lines.append(f"status: {_yaml_str(status)}")
+    lines += [f"exported_at: {exported_at}", "tags: [whatudoin, event]", "---", "",
+              f"# {title}", "",
+              f"← [[index]]", ""]
+    s = _esc(ev.get("start_datetime")); e = _esc(ev.get("end_datetime"))
+    if s and e and e != s:
+        lines.append(f"- **기간**: {s} ~ {e}")
+    elif s:
+        lines.append(f"- **일시**: {s}")
+    if ev.get("assignee"): lines.append(f"- **담당**: {_esc(ev.get('assignee'))}")
+    if ev.get("priority"): lines.append(f"- **우선순위**: {_esc(ev.get('priority'))}")
+    if ev.get("location"): lines.append(f"- **장소**: {_esc(ev.get('location'))}")
+    lines.append(f"- **상태**: {status}")
+    desc = _esc(ev.get("description"))
+    if desc:
+        lines.append("")
+        lines.append("## 설명")
+        lines.append("")
+        lines.append(desc)
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _rewrite_image_paths(content: str) -> tuple[str, list[tuple[Path, str]]]:
+    """content 내 /uploads/meetings/… URL을 ../attachments/{basename} 로 치환.
+    Returns (rewritten_content, [(disk_path, zip_archive_path), ...])"""
+    collected: list[tuple[Path, str]] = []
+    seen: set[str] = set()
+
+    def _repl(m: re.Match) -> str:
+        url = m.group(0)
+        basename = url.rsplit("/", 1)[-1]
+        if basename not in seen:
+            seen.add(basename)
+            rel = url.replace("/uploads/meetings/", "", 1)
+            disk = MEETINGS_DIR / rel
+            collected.append((disk, f"attachments/{basename}"))
+        return f"../attachments/{basename}"
+
+    return _IMG_URL_RE.sub(_repl, content), collected
+
+
+def _build_checklist_md(project_name: str, cl: dict, exported_at: str,
+                        images: list | None = None) -> str:
+    title = _esc(cl.get("title")) or "(제목 없음)"
+    updated = _esc(cl.get("updated_at"))
+    lines = ["---", "type: checklist", f"project: {_yaml_str(project_name)}", f"title: {_yaml_str(title)}"]
+    if updated:
+        lines.append(f"updated_at: {updated[:19].replace('T', ' ')}")
+    lines += [f"exported_at: {exported_at}", "tags: [whatudoin, checklist]", "---", "",
+              f"# {title}", "",
+              f"← [[index]]", ""]
+    raw = (cl.get("content") or "").replace("\r\n", "\n").strip()
+    if raw:
+        rewritten, found = _rewrite_image_paths(raw)
+        if images is not None:
+            images.extend(found)
+        lines.append(rewritten)
+    else:
+        lines.append("_(내용 없음)_")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _uniq_filename(stem: str, used: set[str]) -> str:
+    base = stem
+    n = 2
+    while stem in used:
+        stem = f"{base}_{n}"
+        n += 1
+    used.add(stem)
+    return stem
+
+
+def _build_project_zip(name: str) -> bytes:
+    proj = db.get_project(name)
+    events = db.get_events_by_project(name)
+    cl_metas = db.get_checklists(project=name)
+    checklists = [db.get_checklist(c["id"]) for c in cl_metas]
+    checklists = [c for c in checklists if c]
+
+    exported_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    root = _safe_filename(name, "project")
+
+    event_entries = []
+    used_ev_stems: set[str] = set()
+    for ev in events:
+        stem = _uniq_filename(_safe_filename(ev.get("title") or "일정", "일정"), used_ev_stems)
+        event_entries.append((stem, ev))
+
+    cl_entries = []
+    used_cl_stems: set[str] = set()
+    for cl in checklists:
+        stem = _uniq_filename(_safe_filename(cl.get("title") or "체크리스트", "체크리스트"), used_cl_stems)
+        cl_entries.append((stem, cl))
+
+    images: list[tuple[Path, str]] = []
+    cl_mds = [(stem, _build_checklist_md(name, cl, exported_at, images)) for stem, cl in cl_entries]
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        index_md = _build_index_md(
+            name, proj, events, checklists,
+            [s for s, _ in event_entries],
+            [s for s, _ in cl_entries],
+            exported_at,
+        )
+        zf.writestr(f"{root}/index.md", index_md)
+        for stem, ev in event_entries:
+            zf.writestr(f"{root}/일정/{stem}.md", _build_event_md(name, ev, exported_at))
+        for stem, md_text in cl_mds:
+            zf.writestr(f"{root}/체크리스트/{stem}.md", md_text)
+        seen_archive: set[str] = set()
+        for disk_path, archive_name in images:
+            if archive_name in seen_archive:
+                continue
+            seen_archive.add(archive_name)
+            if disk_path.exists():
+                zf.write(disk_path, f"{root}/{archive_name}")
+    return buf.getvalue()
+
+
+@app.get("/api/manage/projects/{name:path}/export.zip")
+async def manage_export_project_zip(name: str, request: Request):
+    _require_editor(request)
+    data = _build_project_zip(name)
+    safe = _safe_filename(name, "project")
+    stamp = datetime.now().strftime("%Y%m%d")
+    filename = f"{safe}_{stamp}.zip"
+    disposition = f"attachment; filename=\"{quote(filename)}\"; filename*=UTF-8''{quote(filename)}"
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": disposition},
+    )
 
 
 @app.post("/api/manage/projects/{name:path}/events")

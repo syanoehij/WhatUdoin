@@ -1127,6 +1127,24 @@ def create_project(name: str, color: str = None, memo: str = None) -> int:
     return cur.lastrowid
 
 
+def get_project(name: str) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM projects WHERE name = ? AND deleted_at IS NULL",
+            (name,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_events_by_project(name: str) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM events WHERE project = ? AND deleted_at IS NULL ORDER BY start_datetime",
+            (name,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def rename_project(old_name: str, new_name: str):
     with get_conn() as conn:
         conn.execute(
