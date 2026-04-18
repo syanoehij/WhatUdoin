@@ -1835,7 +1835,7 @@ def get_checklists(project: str = None) -> list:
 def get_checklist(checklist_id: int) -> dict | None:
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT * FROM checklists WHERE id = ?", (checklist_id,)
+            "SELECT * FROM checklists WHERE id = ? AND deleted_at IS NULL", (checklist_id,)
         ).fetchone()
     return dict(row) if row else None
 
