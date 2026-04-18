@@ -3,23 +3,9 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
+<link rel="stylesheet" href="/static/css/wu-editor.css" />
 <script src="/static/lib/toastui-editor-all.min.js"></script>
 <style>
-  .lock-banner {
-    display: flex; align-items: center; gap: 10px;
-    background: #fff8e1; border: 1px solid #ffe082;
-    border-radius: 8px; padding: 10px 16px; margin: 12px 16px 0;
-    font-size: 0.88rem; color: #7a5800;
-  }
-  .dark .lock-banner { background: #3d2f00; border-color: #7a6000; color: #ffd166; }
-  .lock-banner-icon { font-size: 1.1rem; flex-shrink: 0; }
-  .lock-banner-refresh {
-    margin-left: auto; flex-shrink: 0;
-    background: none; border: 1px solid #ffe082; border-radius: 5px;
-    padding: 3px 10px; font-size: 0.8rem; cursor: pointer; color: inherit;
-  }
-  .lock-banner-refresh:hover { background: rgba(0,0,0,0.05); }
-
   /* 헤더 내 제목/프로젝트 */
   .ck-edit-meta {
     flex: 1;
@@ -59,24 +45,6 @@
   }
   .ck-dirty-dot.dirty { color: var(--accent); }
 
-  #leave-confirm-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,.4);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 10000;
-  }
-  #leave-confirm-box {
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 24px 28px;
-    max-width: 380px; width: 90%;
-    box-shadow: 0 4px 24px rgba(0,0,0,.2);
-  }
-  #leave-confirm-box h3 { margin: 0 0 10px; font-size: 1rem; }
-  #leave-confirm-box p  { margin: 0 0 20px; font-size: 0.88rem; color: var(--text-muted); }
-  #leave-confirm-box .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
-
   /* editor-page 안에서 editor 전체 차지 */
   #cke-editor-container {
     flex: 1;
@@ -114,31 +82,6 @@
     display: none; z-index: 9999;
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
   }
-
-  /* 이미지 리사이즈 툴바 */
-  #cke-img-resize-toolbar {
-    position: fixed;
-    display: none;
-    align-items: center;
-    gap: 4px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px 8px;
-    z-index: 9999;
-    box-shadow: 0 2px 8px rgba(0,0,0,.15);
-    font-size: 0.8rem;
-  }
-  #cke-img-resize-toolbar button {
-    padding: 2px 7px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--surface-3);
-    color: var(--text);
-    cursor: pointer;
-    font-size: 0.78rem;
-  }
-  #cke-img-resize-toolbar button:hover { background: var(--accent); color: #fff; }
 </style>
 {% endblock %}
 
@@ -180,6 +123,7 @@
       {% endif %}
       {% if not locked_by %}
       {% if checklist.id %}
+      <button class="btn btn-sm" id="btn-toc-toggle" onclick="toggleTocPanel()" title="목차">📑 목차</button>
       <button class="btn btn-sm btn-danger" onclick="deleteChecklist()">삭제</button>
       {% endif %}
       <button class="btn btn-sm btn-primary" id="cke-save-btn" onclick="saveContent()">저장</button>
@@ -188,7 +132,7 @@
   </div>
 
   <!-- ── 에디터 본문 ── -->
-  <div class="editor-body">
+  <div class="editor-body" id="cke-editor-body">
     <div class="editor-main">
       {% if not locked_by %}
       <div id="cke-editor-container"></div>
@@ -197,314 +141,101 @@
       <div id="cke-viewer-wrap" style="padding:24px; overflow-y:auto; flex:1;"></div>
       {% endif %}
     </div>
+
+    <!-- 목차 패널 (기본 숨김) -->
+    {% if checklist.id and not locked_by %}
+    <aside class="toc-panel hidden" id="toc-panel">
+      <div class="toc-panel-header">
+        <span class="toc-panel-title">목차</span>
+        <button class="toc-close" onclick="toggleTocPanel()" title="닫기">✕</button>
+      </div>
+      <nav class="toc-list" id="toc-list"></nav>
+      <div class="toc-empty hidden" id="toc-empty">문서에 제목(H1~H3)이 없습니다.</div>
+    </aside>
+    {% endif %}
   </div>
 
-</div>
-
-<!-- 이미지 리사이즈 툴바 -->
-<div id="cke-img-resize-toolbar">
-  <span style="color:var(--text-muted);margin-right:2px">크기:</span>
-  <button onclick="ckeSetImgWidth(25)">25%</button>
-  <button onclick="ckeSetImgWidth(50)">50%</button>
-  <button onclick="ckeSetImgWidth(75)">75%</button>
-  <button onclick="ckeSetImgWidth(100)">100%</button>
-  <button onclick="ckeSetImgWidth(125)">125%</button>
-  <button onclick="ckeSetImgWidth(150)">150%</button>
-  <button onclick="ckeSetImgWidth(175)">175%</button>
-  <button onclick="ckeSetImgWidth(200)">200%</button>
 </div>
 
 <div id="cke-save-toast">저장되었습니다.</div>
-
-<!-- ── 이탈 확인 모달 ── -->
-<div id="leave-confirm-overlay" style="display:none">
-  <div id="leave-confirm-box">
-    <h3 id="leave-confirm-title">저장하지 않은 변경사항이 있습니다</h3>
-    <p id="leave-confirm-desc">저장하지 않고 목록으로 이동하면 변경사항이 사라집니다.</p>
-    <div class="modal-actions">
-      <button class="btn" onclick="leaveWithoutSave()">저장 안하고 나가기</button>
-      <button class="btn btn-primary" onclick="saveAndLeave()">저장하고 나가기</button>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/wu-editor.js"></script>
 <script>
 const CKE_ID       = {{ checklist.id if checklist.id else 'null' }};
 const CKE_LOCKED   = {{ 'true' if locked_by else 'false' }};
 const INITIAL_MD   = {{ checklist.content | tojson | safe }};
-const INITIAL_TITLE   = {{ checklist.title | tojson | safe }};
-const INITIAL_PROJECT = {{ (checklist.project or '') | tojson | safe }};
-const CKE_IS_NEW   = (CKE_ID === null);  // 새 항목 여부
+const CKE_IS_NEW   = (CKE_ID === null);
 
-let _ckeEditor     = null;
-let _dirty         = false;
-let _saved         = false;
-let _saveCooldown  = false;
-let _autoSaveTimer = null;
-let _heartbeat     = null;
+let wuInst = null;
 
-// ── 자동 새로고침 훅 ──────────────────────────────────────
 window._autoSaveAndRefresh = async () => {
-  if (!CKE_LOCKED && _dirty && !CKE_IS_NEW) { await saveContent(true); }
+  if (!CKE_LOCKED && wuInst?.dirty && !CKE_IS_NEW) { await saveContent(true); }
   location.reload();
 };
 
-// ── 이탈 방지 / 잠금 해제 ──────────────────────────────
-window.addEventListener('beforeunload', (e) => {
-  if (!CKE_IS_NEW && !CKE_LOCKED) {
-    fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'DELETE', keepalive: true });
-  }
-  // dirty 상태면 브라우저 이탈 경고 (사이드바 등 다른 메뉴 클릭 시)
-  if (_dirty && !CKE_IS_NEW) {
-    e.preventDefault();
-    e.returnValue = '';
-  }
-});
+function toggleTocPanel() { wuInst?.toggleToc(); }
 
-// ── Ctrl+S 단축키 ─────────────────────────────────────────
-document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-    e.preventDefault();
-    if (!CKE_LOCKED) saveContent();
-  }
-});
-
-// ── 목록 버튼 이탈 확인 (커스텀 모달) ────────────────────
-let _leaveTarget = '/check';
-
-function handleBackClick(e) {
-  _leaveTarget = document.getElementById('btn-back').href;
-  if (CKE_IS_NEW && !_saved) {
-    e.preventDefault();
-    document.getElementById('leave-confirm-title').textContent = '항목이 저장되지 않았습니다';
-    document.getElementById('leave-confirm-desc').textContent = '저장하지 않으면 작성 내용이 사라집니다.';
-    document.getElementById('leave-confirm-overlay').style.display = 'flex';
-    return;
-  }
-  if (!_dirty) return;
-  e.preventDefault();
-  document.getElementById('leave-confirm-title').textContent = '저장하지 않은 변경사항이 있습니다';
-  document.getElementById('leave-confirm-desc').textContent = '저장하지 않고 목록으로 이동하면 변경사항이 사라집니다.';
-  document.getElementById('leave-confirm-overlay').style.display = 'flex';
-}
-
-function leaveWithoutSave() {
-  document.getElementById('leave-confirm-overlay').style.display = 'none';
-  setDirty(false); // beforeunload 경고 방지
-  window.location.href = _leaveTarget;
-}
-
-async function saveAndLeave() {
-  document.getElementById('leave-confirm-overlay').style.display = 'none';
-  await saveContent();
-  if (_saved || !CKE_IS_NEW) {
-    setDirty(false);
-    window.location.href = _leaveTarget;
-  }
-}
-
-// ── 초기화 ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   const backBtn = document.getElementById('btn-back');
-  backBtn.href = CKE_IS_NEW ? '/check' : `/check?id=${CKE_ID}`;
-  backBtn.addEventListener('click', handleBackClick);
+  if (backBtn) backBtn.href = CKE_IS_NEW ? '/check' : `/check?id=${CKE_ID}`;
 
   if (CKE_LOCKED) {
-    // 잠금 상태: 뷰어로만 표시
-    const viewEl = document.getElementById('cke-viewer-wrap');
-    if (viewEl) {
-      toastui.Editor.factory({
-        el: viewEl,
-        viewer: true,
-        initialValue: INITIAL_MD || '',
-        usageStatistics: false,
-      });
-    }
-    return;
-  }
-
-  if (CKE_IS_NEW) {
-    // 새 항목: 잠금 없이 바로 에디터 초기화
-    initEditor();
-    return;
-  }
-
-  // 기존 항목: 잠금 획득
-  fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'POST' })
-    .then(r => {
-      if (!r.ok) {
-        alert('편집 잠금을 획득하지 못했습니다. 다른 사람이 편집 중입니다.');
-        window.location.href = '/check';
-        return;
-      }
-      initEditor();
-      // Heartbeat 2분마다
-      _heartbeat = setInterval(() => {
-        fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'PUT' });
-      }, 120000);
+    wuInst = WUEditor.create({
+      el: '#cke-viewer-wrap',
+      canEdit: false,
+      initialMarkdown: INITIAL_MD || '',
+      features: { sanitizerOff: true },
     });
-});
+    return;
+  }
 
-function initEditor() {
-  const container = document.getElementById('cke-editor-container');
-  _ckeEditor = new toastui.Editor({
-    el: container,
-    height: '100%',
-    initialEditType: 'wysiwyg',
-    initialValue: INITIAL_MD || '',
-    previewStyle: 'tab',
-    usageStatistics: false,
-    toolbarItems: [
-      ['heading', 'bold', 'italic', 'strike'],
-      ['hr', 'quote'],
-      ['ul', 'ol', 'task'],
-      ['table', 'image', 'link'],
-      ['code', 'codeblock'],
-    ],
-    events: {
-      change: () => setDirty(true),
+  wuInst = WUEditor.create({
+    el: '#cke-editor-container',
+    bodyEl: '#cke-editor-body',
+    canEdit: true,
+    initialMarkdown: INITIAL_MD || '',
+    features: {
+      imageResize: true,
+      imageUpload: { endpoint: '/api/upload/image' },
+      sanitizerOff: true,
+      toc: CKE_ID ? { storageKey: 'check_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
+      shortcutSave: true,
+      autosave: CKE_ID ? { intervalMs: 120000, respectCooldown: false } : false,
+      saveCooldown: { seconds: 10, saveBtnSelector: '#cke-save-btn' },
+      editLock: CKE_ID ? {
+        endpoint: `/api/checklists/${CKE_ID}/lock`,
+        heartbeatMs: 120000,
+        onLockFailed: () => { alert('편집 잠금을 획득하지 못했습니다. 다른 사람이 편집 중입니다.'); location.href = '/check'; }
+      } : false,
+      leaveConfirm: { backBtnSelector: '#btn-back' },
     },
     hooks: {
-      addImageBlobHook: async (blob, callback) => {
-        const form = new FormData();
-        form.append('file', blob, blob.name || 'image.png');
-        try {
-          const res = await fetch('/api/upload/image', { method: 'POST', body: form });
-          if (!res.ok) throw new Error('upload failed');
-          const { url } = await res.json();
-          callback(url, '');
-        } catch {
-          alert('이미지 업로드에 실패했습니다.');
+      onSave: (md, { leaveTarget } = {}) => saveContent(false, leaveTarget),
+      onDirtyChange: (dirty) => {
+        const dot = document.getElementById('cke-dirty-dot');
+        if (dot) {
+          dot.textContent = dirty ? '● 저장 안 됨' : '';
+          dot.className = 'ck-dirty-dot' + (dirty ? ' dirty' : '');
         }
       },
+      shouldWarnOnUnload: () => !!(CKE_ID && !CKE_LOCKED && wuInst?.dirty),
     },
   });
-  setTimeout(() => ckeInitImageResize(), 300);
-}
 
-// ── 이미지 리사이즈 ───────────────────────────────────────
-let _ckeActiveImg = null;
-let _ckeImgWidthMap = {};
-
-function _ckeApplyImgWidths() {
-  const imgs = document.querySelectorAll('.toastui-editor-ww-container img');
-  imgs.forEach(img => {
-    const src = img.getAttribute('src');
-    if (!src || !(src in _ckeImgWidthMap)) return;
-    const px = _ckeImgWidthMap[src];
-    if (px != null) {
-      img.style.setProperty('width', px + 'px', 'important');
-      img.style.setProperty('max-width', 'none', 'important');
-    } else {
-      img.style.removeProperty('width');
-      img.style.removeProperty('max-width');
-    }
-  });
-}
-
-function ckeInitImageResize() {
-  const tb = document.getElementById('cke-img-resize-toolbar');
-  if (!tb) return;
-
-  // 초기 MD에서 저장된 px 복원
-  _ckeImgWidthMap = {};
-  const reg = /<img[^>]*src="([^"]+)"[^>]*style="[^"]*width\s*:\s*(\d+)px[^"]*"[^>]*>/g;
-  let m;
-  while ((m = reg.exec(INITIAL_MD || '')) !== null) {
-    _ckeImgWidthMap[m[1]] = parseInt(m[2]);
+  if (CKE_IS_NEW) {
+    wuInst.setLeaveMsg('항목이 저장되지 않았습니다', '저장하지 않으면 작성 내용이 사라집니다.');
   }
-  if (Object.keys(_ckeImgWidthMap).length) setTimeout(_ckeApplyImgWidths, 200);
+});
 
-  const wwEl = document.querySelector('.toastui-editor-ww-container');
-  if (wwEl) {
-    new MutationObserver(_ckeApplyImgWidths).observe(wwEl, { childList: true, subtree: true });
-  }
-
-  document.addEventListener('pointerdown', e => {
-    const editorEl = document.querySelector('.toastui-editor-ww-container');
-    const target = e.target;
-    if (target.tagName === 'IMG' && editorEl && editorEl.contains(target)) {
-      _ckeActiveImg = target;
-    } else if (!tb.contains(target)) {
-      _ckeActiveImg = null;
-    }
-  }, true);
-
-  document.addEventListener('click', e => {
-    const editorEl = document.querySelector('.toastui-editor-ww-container');
-    const target = e.target;
-    if (target.tagName === 'IMG' && editorEl && editorEl.contains(target)) {
-      const r = target.getBoundingClientRect();
-      tb.style.top     = (r.bottom + window.scrollY + 6) + 'px';
-      tb.style.left    = Math.max(4, r.left) + 'px';
-      tb.style.display = 'flex';
-    } else if (!tb.contains(target)) {
-      tb.style.display = 'none';
-    }
-  }, true);
-}
-
-function ckeSetImgWidth(pct) {
-  if (!_ckeActiveImg) return;
-  const src = _ckeActiveImg.getAttribute('src');
-  if (!src) return;
-  if (pct === null) {
-    _ckeImgWidthMap[src] = null;
-  } else {
-    const nw = _ckeActiveImg.naturalWidth;
-    _ckeImgWidthMap[src] = nw > 0 ? Math.round(nw * pct / 100) : null;
-  }
-  _ckeApplyImgWidths();
-  document.getElementById('cke-img-resize-toolbar').style.display = 'none';
-  _ckeActiveImg = null;
-  setDirty(true);
-}
-
-function _ckeInjectImgStyles(md) {
-  for (const [src, px] of Object.entries(_ckeImgWidthMap)) {
-    const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (px === null) {
-      md = md.replace(
-        new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
-        m => { const a = m.match(/alt="([^"]*)"/); return `![${a ? a[1] : ''}](${src})`; }
-      );
-    } else {
-      md = md
-        .replace(new RegExp(`!\\[([^\\]]*)\\]\\(${escapedSrc}\\)`, 'g'),
-          (_, alt) => `<img src="${src}" alt="${alt}" style="width:${px}px">`)
-        .replace(new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
-          m => { const a = m.match(/alt="([^"]*)"/); return `<img src="${src}" alt="${a ? a[1] : ''}" style="width:${px}px">`; });
-    }
-  }
-  return md;
-}
-
-function setDirty(val) {
-  _dirty = val;
-  const dot = document.getElementById('cke-dirty-dot');
-  if (dot) {
-    dot.textContent = val ? '● 저장 안 됨' : '';
-    dot.className   = 'ck-dirty-dot' + (val ? ' dirty' : '');
-  }
-  if (val && !CKE_IS_NEW) {
-    clearTimeout(_autoSaveTimer);
-    _autoSaveTimer = setTimeout(() => { if (_dirty) saveContent(true); }, 120000); // 2분 자동저장
-  }
-}
-
-async function saveContent(auto = false) {
-  if (!_ckeEditor) return;
-  if (_saveCooldown && !auto) return; // 10초 쿨다운 중 (자동저장은 통과)
-
-  const title   = document.getElementById('ck-edit-title').value.trim();
-  const project = document.getElementById('ck-edit-project').value;
-  const content = _ckeInjectImgStyles(_ckeEditor.getMarkdown());
+async function saveContent(auto = false, leaveTarget = null) {
+  const title   = document.getElementById('ck-edit-title')?.value.trim();
+  const project = document.getElementById('ck-edit-project')?.value || '';
+  const content = wuInst ? wuInst.getMarkdown() : '';
 
   if (!title) { alert('제목을 입력하세요.'); return; }
 
-  // ── 새 항목: POST로 생성 후 편집 페이지로 이동 ──────────
   if (CKE_IS_NEW) {
     const res = await fetch('/api/checklists', {
       method: 'POST',
@@ -513,8 +244,7 @@ async function saveContent(auto = false) {
     });
     if (res.ok) {
       const data = await res.json();
-      _saved = true;
-      setDirty(false);
+      wuInst?.afterSave();
       window.location.href = `/check/${data.id}/edit`;
     } else {
       const err = await res.json().catch(() => ({}));
@@ -523,15 +253,12 @@ async function saveContent(auto = false) {
     return;
   }
 
-  // ── 기존 항목: PATCH로 업데이트 ────────────────────────
-  // 제목/프로젝트 저장
   await fetch(`/api/checklists/${CKE_ID}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, project }),
   });
 
-  // 내용 저장 (수동 저장 시에만 이력 보관)
   const res = await fetch(`/api/checklists/${CKE_ID}/content`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -539,42 +266,26 @@ async function saveContent(auto = false) {
   });
 
   if (res.ok) {
-    setDirty(false);
-    _saved = true;
-    clearTimeout(_autoSaveTimer);
+    wuInst?.afterSave();
     if (typeof window._checkNotifications === 'function') window._checkNotifications();
 
     const toast = document.getElementById('cke-save-toast');
-    toast.textContent = auto ? '자동 저장되었습니다.' : '저장되었습니다.';
-    toast.style.display = 'block';
-    setTimeout(() => { toast.style.display = 'none'; }, 2000);
-
-    // 수동 저장 시 10초 쿨다운
-    if (!auto) {
-      _saveCooldown = true;
-      const btn = document.getElementById('cke-save-btn');
-      if (btn) { btn.disabled = true; btn.textContent = '✓ 저장됨 (10s)'; }
-      let remaining = 10;
-      const countdown = setInterval(() => {
-        remaining--;
-        if (remaining <= 0) {
-          clearInterval(countdown);
-          _saveCooldown = false;
-          if (btn) { btn.textContent = '저장'; btn.disabled = false; }
-        } else {
-          if (btn) btn.textContent = `✓ 저장됨 (${remaining}s)`;
-        }
-      }, 1000);
+    if (toast) {
+      toast.textContent = auto ? '자동 저장되었습니다.' : '저장되었습니다.';
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 2000);
     }
+
+    if (leaveTarget) location.href = leaveTarget;
   }
 }
 
 async function deleteChecklist() {
   if (!confirm('이 체크리스트를 삭제하시겠습니까?')) return;
-  await fetch(`/api/checklists/${CKE_ID}/lock`, { method: 'DELETE' });
+  wuInst?.releaseLock();
   const res = await fetch(`/api/checklists/${CKE_ID}`, { method: 'DELETE' });
   if (res.ok) {
-    setDirty(false); // beforeunload 경고 방지
+    wuInst?.setDirty(false);
     const lastProj = localStorage.getItem('ck_last_proj');
     window.location.href = lastProj ? `/check?proj=${encodeURIComponent(lastProj)}` : '/check';
   } else {

@@ -277,7 +277,6 @@
     function _afterSave() {
       _setDirty(false);
       clearTimeout(_autoSaveTimer);
-      clearInterval(_lockHeartbeat);  // 저장 시 서버도 잠금 해제하므로 heartbeat 중단
       _startCooldown();
     }
 

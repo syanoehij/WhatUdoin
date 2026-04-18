@@ -3,32 +3,9 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
+<link rel="stylesheet" href="/static/css/wu-editor.css" />
 <script src="/static/lib/toastui-editor-all.min.js"></script>
 <style>
-  /* 이미지 리사이즈 툴바 */
-  #ck-img-resize-toolbar {
-    position: fixed;
-    display: none;
-    align-items: center;
-    gap: 4px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px 8px;
-    z-index: 9999;
-    box-shadow: 0 2px 8px rgba(0,0,0,.15);
-    font-size: 0.8rem;
-  }
-  #ck-img-resize-toolbar button {
-    padding: 2px 7px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--surface-3);
-    color: var(--text);
-    cursor: pointer;
-    font-size: 0.78rem;
-  }
-  #ck-img-resize-toolbar button:hover { background: var(--accent); color: #fff; }
 
   html, body { height: 100%; overflow: hidden; }
   main { max-width: none; padding: 0; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
@@ -273,6 +250,12 @@
 
   /* ── 편집기 ── */
   .ck-editor-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+  }
+  #ck-editor-container {
     flex: 1;
     min-height: 0;
     display: flex;
@@ -524,6 +507,8 @@
         {% if user and user.role in ('editor', 'admin') %}
         <!-- 뷰어 모드 전용 버튼 -->
         <button class="btn btn-sm btn-primary" id="ck-edit-btn" onclick="switchToEdit()" style="display:none;">편집</button>
+        <!-- 편집 모드 전용 목차 버튼 -->
+        <button class="btn btn-sm" id="btn-toc-toggle-inline" onclick="toggleTocInline()" style="display:none;" title="목차">📑 목차</button>
         <!-- 편집 모드 전용 버튼 -->
         <button class="btn btn-sm" id="ck-rename-btn" onclick="toggleRenameForm()" style="display:none;">이름 변경</button>
         <button class="btn btn-sm btn-warn" id="ck-viewer-btn" onclick="switchToViewer()" style="display:none;">뷰어로 전환</button>
@@ -565,23 +550,18 @@
     {% if user and user.role in ('editor', 'admin') %}
     <div class="ck-editor-wrap" id="ck-editor-wrap" style="display:none;">
       <div id="ck-editor-container"></div>
+      <aside class="toc-panel hidden" id="toc-panel">
+        <div class="toc-panel-header">
+          <span class="toc-panel-title">목차</span>
+          <button class="toc-close" onclick="toggleTocInline()" title="닫기">✕</button>
+        </div>
+        <nav class="toc-list" id="toc-list"></nav>
+        <div class="toc-empty hidden" id="toc-empty">문서에 제목(H1~H3)이 없습니다.</div>
+      </aside>
     </div>
     {% endif %}
 
   </div>
-</div>
-
-<!-- 이미지 리사이즈 툴바 -->
-<div id="ck-img-resize-toolbar">
-  <span style="color:var(--text-muted);margin-right:2px">크기:</span>
-  <button onclick="ckSetImgWidth(25)">25%</button>
-  <button onclick="ckSetImgWidth(50)">50%</button>
-  <button onclick="ckSetImgWidth(75)">75%</button>
-  <button onclick="ckSetImgWidth(100)">100%</button>
-  <button onclick="ckSetImgWidth(125)">125%</button>
-  <button onclick="ckSetImgWidth(150)">150%</button>
-  <button onclick="ckSetImgWidth(175)">175%</button>
-  <button onclick="ckSetImgWidth(200)">200%</button>
 </div>
 
 <div id="ck-save-toast">저장되었습니다.</div>
@@ -601,24 +581,25 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/wu-editor.js"></script>
 <script>
 const IS_EDITOR = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
 const ALL_PROJECTS = {{ projects | tojson | safe }};
 
-let _allChecklists      = [];    // 전체 목록
-let _curProj            = null;  // 현재 선택된 프로젝트 필터 (null = 전체)
-let _curId              = null;  // 현재 선택된 체크리스트 id
-let _curItem            = null;  // 현재 선택된 체크리스트 데이터
-let _ckEditor           = null;  // Toast UI Editor 인스턴스
-let _ckViewer           = null;  // Toast UI Viewer 인스턴스
+let _allChecklists      = [];
+let _curProj            = null;
+let _curId              = null;
+let _curItem            = null;
+let wuInst              = null;   // WUEditor 인스턴스
+let _ckViewer           = null;
 let _dirty              = false;
 let _autoSaveTimer      = null;
-let _editMode           = false; // true = 편집기 모드, false = 뷰어 모드
-let _lockedByOther      = false; // 다른 사람이 편집 중
-let _heartbeatInterval  = null;  // 잠금 heartbeat 타이머
-let _pollTimer          = null;  // 뷰어 실시간 동기화 폴링
-let _pollUpdatedAt      = null;  // 마지막으로 확인한 updated_at
-let _isNewItem          = false; // 방금 새로 생성된 항목 여부
+let _editMode           = false;
+let _lockedByOther      = false;
+let _heartbeatInterval  = null;
+let _pollTimer          = null;
+let _pollUpdatedAt      = null;
+let _isNewItem          = false;
 
 // 자동 새로고침 훅: 편집 중 dirty면 저장 후 reload
 window._autoSaveAndRefresh = async () => {
@@ -736,7 +717,7 @@ function selectProject(proj) {
     _lockedByOther = false;
     _stopPoll();
     _stopHeartbeat();
-    if (_ckEditor) { _ckEditor.destroy(); _ckEditor = null; }
+    if (wuInst) { wuInst.destroy(); wuInst = null; }
     if (_ckViewer) { _ckViewer.destroy(); _ckViewer = null; }
     document.getElementById('ck-placeholder').style.display = '';
     document.getElementById('ck-right-header').style.display = 'none';
@@ -871,7 +852,9 @@ function _showViewerMode() {
   }
 
   _editMode = false;
-  if (_ckEditor) { _ckEditor.destroy(); _ckEditor = null; }
+  if (wuInst) { wuInst.destroy(); wuInst = null; }
+  const tocToggleBtn = document.getElementById('btn-toc-toggle-inline');
+  if (tocToggleBtn) tocToggleBtn.style.display = 'none';
 
   if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
 
@@ -917,6 +900,8 @@ async function _showEditorMode() {
   document.getElementById('ck-rename-btn').style.display  = '';
   document.getElementById('ck-viewer-btn').style.display  = '';
   document.getElementById('ck-save-btn').style.display    = '';
+  const tocToggleBtnShow = document.getElementById('btn-toc-toggle-inline');
+  if (tocToggleBtnShow) tocToggleBtnShow.style.display = '';
 
   // Heartbeat (2분마다 — LOCK_TIMEOUT_MINUTES=5 이내)
   _stopHeartbeat();
@@ -1048,165 +1033,34 @@ function _updateMeta() {
 }
 
 // ── 편집기 초기화 ─────────────────────────────────────────
-// ── 이미지 리사이즈 ───────────────────────────────────────
-let _ckActiveImg = null;
-let _ckImgWidthMap = {};  // { 'src_url': px숫자 or null(원본) }
-
-function _ckApplyImgWidths() {
-  const imgs = document.querySelectorAll('.toastui-editor-ww-container img');
-  imgs.forEach(img => {
-    const src = img.getAttribute('src');
-    if (!src || !(src in _ckImgWidthMap)) return;
-    const px = _ckImgWidthMap[src];
-    if (px != null) {
-      img.style.setProperty('width', px + 'px', 'important');
-      img.style.setProperty('max-width', 'none', 'important');
-    } else {
-      img.style.removeProperty('width');
-      img.style.removeProperty('max-width');
-    }
-  });
-}
-
-function _ckApplyImgWidthsViewer() {
-  const imgs = document.querySelectorAll('#ck-viewer img');
-  imgs.forEach(img => {
-    const src = img.getAttribute('src');
-    if (!src || !(src in _ckImgWidthMap)) return;
-    const px = _ckImgWidthMap[src];
-    if (px != null) {
-      img.style.setProperty('width', px + 'px', 'important');
-      img.style.setProperty('max-width', 'none', 'important');
-    } else {
-      img.style.removeProperty('width');
-      img.style.removeProperty('max-width');
-    }
-  });
-}
-
-function ckInitImageResize(initialMd) {
-  const tb = document.getElementById('ck-img-resize-toolbar');
-  if (!tb) return;
-
-  // 초기 MD에서 저장된 px 복원
-  _ckImgWidthMap = {};
-  const reg = /<img[^>]*src="([^"]+)"[^>]*style="[^"]*width\s*:\s*(\d+)px[^"]*"[^>]*>/g;
-  let m;
-  while ((m = reg.exec(initialMd || '')) !== null) {
-    _ckImgWidthMap[m[1]] = parseInt(m[2]);
-  }
-  if (Object.keys(_ckImgWidthMap).length) setTimeout(_ckApplyImgWidths, 200);
-
-  // MutationObserver: 에디터 재렌더링 시 스타일 재적용
-  const wwEl = document.querySelector('.toastui-editor-ww-container');
-  if (wwEl) {
-    new MutationObserver(_ckApplyImgWidths).observe(wwEl, { childList: true, subtree: true });
-  }
-
-  // pointerdown capture: _ckActiveImg 확정
-  document.addEventListener('pointerdown', e => {
-    const editorEl = document.querySelector('.toastui-editor-ww-container');
-    const target = e.target;
-    if (target.tagName === 'IMG' && editorEl && editorEl.contains(target)) {
-      _ckActiveImg = target;
-    } else if (!tb.contains(target)) {
-      _ckActiveImg = null;
-    }
-  }, true);
-
-  // click capture: 툴바 위치 표시/숨기기
-  document.addEventListener('click', e => {
-    const editorEl = document.querySelector('.toastui-editor-ww-container');
-    const target = e.target;
-    if (target.tagName === 'IMG' && editorEl && editorEl.contains(target)) {
-      const r = target.getBoundingClientRect();
-      tb.style.top     = (r.bottom + window.scrollY + 6) + 'px';
-      tb.style.left    = Math.max(4, r.left) + 'px';
-      tb.style.display = 'flex';
-    } else if (!tb.contains(target)) {
-      tb.style.display = 'none';
-    }
-  }, true);
-}
-
-function ckSetImgWidth(pct) {
-  if (!_ckActiveImg) return;
-  const src = _ckActiveImg.getAttribute('src');
-  if (!src) return;
-  if (pct === null) {
-    _ckImgWidthMap[src] = null;
-  } else {
-    const nw = _ckActiveImg.naturalWidth;
-    _ckImgWidthMap[src] = nw > 0 ? Math.round(nw * pct / 100) : null;
-  }
-  _ckApplyImgWidths();
-  document.getElementById('ck-img-resize-toolbar').style.display = 'none';
-  _ckActiveImg = null;
-  setDirty(true);
-}
-
-/* 저장 시 마크다운에 _ckImgWidthMap 기반 style 주입 */
-function _ckInjectImgStyles(md) {
-  for (const [src, px] of Object.entries(_ckImgWidthMap)) {
-    const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (px === null) {
-      md = md.replace(
-        new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
-        m => { const a = m.match(/alt="([^"]*)"/); return `![${a ? a[1] : ''}](${src})`; }
-      );
-    } else {
-      md = md
-        .replace(new RegExp(`!\\[([^\\]]*)\\]\\(${escapedSrc}\\)`, 'g'),
-          (_, alt) => `<img src="${src}" alt="${alt}" style="width:${px}px">`)
-        .replace(new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
-          m => { const a = m.match(/alt="([^"]*)"/); return `<img src="${src}" alt="${a ? a[1] : ''}" style="width:${px}px">`; });
-    }
-  }
-  return md;
-}
-
 function initEditor(content) {
   const container = document.getElementById('ck-editor-container');
-  if (_ckEditor) {
-    _ckEditor.destroy();
-    _ckEditor = null;
-  }
+  if (wuInst) { wuInst.destroy(); wuInst = null; }
   container.innerHTML = '';
 
-  _ckEditor = new toastui.Editor({
-    el: container,
-    height: '100%',
-    initialEditType: 'wysiwyg',
-    initialValue: content || '',
-    previewStyle: 'tab',
-    usageStatistics: false,
-    toolbarItems: [
-      ['heading', 'bold', 'italic', 'strike'],
-      ['hr', 'quote'],
-      ['ul', 'ol', 'task'],
-      ['table', 'image', 'link'],
-      ['code', 'codeblock'],
-    ],
-    events: {
-      change: () => setDirty(true),
+  wuInst = WUEditor.create({
+    el: '#ck-editor-container',
+    canEdit: true,
+    initialMarkdown: content || '',
+    features: {
+      imageResize: true,
+      imageUpload: { endpoint: '/api/upload/image' },
+      sanitizerOff: true,
+      toc: _curId ? { storageKey: 'check_toc_open', toggleBtnSelector: '#btn-toc-toggle-inline' } : false,
+      shortcutSave: true,
+      autosave: false,
+      saveCooldown: false,
+      editLock: false,
+      leaveConfirm: false,
     },
     hooks: {
-      addImageBlobHook: async (blob, callback) => {
-        const form = new FormData();
-        form.append('file', blob, blob.name || 'image.png');
-        try {
-          const res = await fetch('/api/upload/image', { method: 'POST', body: form });
-          if (!res.ok) throw new Error('upload failed');
-          const { url } = await res.json();
-          callback(url, '');
-        } catch {
-          alert('이미지 업로드에 실패했습니다.');
-        }
-      },
+      onSave: () => saveContent(false),
+      onChange: () => setDirty(true),
     },
   });
-  setTimeout(() => ckInitImageResize(content), 300);
 }
+
+function toggleTocInline() { wuInst?.toggleToc(); }
 
 // ── 뷰어 렌더링 ───────────────────────────────────────────
 function renderViewer(content) {
@@ -1219,11 +1073,11 @@ function renderViewer(content) {
     viewer: true,
     initialValue: content || '',
     usageStatistics: false,
+    customHTMLSanitizer: html => html,
   });
 
   // 체크박스 클릭 인터랙션 — 읽기 전용 뷰어에서도 토글 가능하게
   setTimeout(() => attachCheckboxHandlers(content), 100);
-  setTimeout(() => _ckApplyImgWidthsViewer(), 200);
 }
 
 function attachCheckboxHandlers(mdContent) {
@@ -1299,8 +1153,8 @@ function setDirty(val) {
 
 // ── 저장 ──────────────────────────────────────────────────
 async function saveContent(auto = false) {
-  if (!_curId || !_ckEditor) return;
-  const content = _ckInjectImgStyles(_ckEditor.getMarkdown());
+  if (!_curId || !wuInst) return;
+  const content = wuInst.getMarkdown();
 
   // 새 항목: 첫 번째 줄을 제목으로 사용
   if (_isNewItem) {
@@ -1340,8 +1194,10 @@ async function saveContent(auto = false) {
     }
     showSaveToast(auto ? '자동 저장되었습니다.' : '저장되었습니다.');
     // 저장 후 현재 항목 그대로 뷰어 모드로 전환 (리스트 이동 없음)
-    _editMode = false; // _showViewerMode 내 lock 해제 방지용
-    if (_ckEditor) { _ckEditor.destroy(); _ckEditor = null; }
+    _editMode = false;
+    if (wuInst) { wuInst.destroy(); wuInst = null; }
+    const tocToggleBtnSave = document.getElementById('btn-toc-toggle-inline');
+    if (tocToggleBtnSave) tocToggleBtnSave.style.display = 'none';
     document.getElementById('ck-viewer-wrap').style.display = '';
     if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
     if (IS_EDITOR) {
@@ -1422,7 +1278,7 @@ async function deleteChecklist() {
   if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
   closeRenameForm();
 
-  if (_ckEditor) { _ckEditor.destroy(); _ckEditor = null; }
+  if (wuInst) { wuInst.destroy(); wuInst = null; }
 
   await loadAll();
   renderProjList();
