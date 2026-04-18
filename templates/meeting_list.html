@@ -65,12 +65,16 @@
     <div class="month-nav-header">
       <span class="page-title" style="font-size:1rem;font-weight:700;">📋 메모장</span>
     </div>
-    <!-- 작성자 필터 -->
-    <div class="author-filter-section" id="author-filter-section">
+    <!-- 문서 종류 필터 -->
+    <div class="author-filter-section" id="doctype-filter-section">
       <!-- JS 렌더링 -->
     </div>
-    <!-- 공개/비공개 필터 -->
+    <!-- 공개 여부 필터 -->
     <div class="author-filter-section" id="visibility-filter-section">
+      <!-- JS 렌더링 -->
+    </div>
+    <!-- 작성자 필터 -->
+    <div class="author-filter-section" id="author-filter-section">
       <!-- JS 렌더링 -->
     </div>
     <div class="month-nav-body" id="month-nav-body">
@@ -123,24 +127,29 @@ const CURRENT_UNAME = {{ (user.name or user.username) | tojson | safe if user el
 const IS_LOGGED_IN  = {{ 'true' if user else 'false' }};
 
 // ── 상태 ────────────────────────────────────────────────
-// selectedAuthor:     null=전체, '__team__'=팀, '__me__'=내 작성, 'name'=특정 작성자
-// selectedVisibility: null=전체, 'public'=공개, 'private'=비공개
+// selectedDocType:    null=전체, 'team'=팀 문서, 'personal'=개인 문서
+// selectedVisibility: null=전체, 'public'=외부 공개, 'team-shared'=팀 공유, 'private'=비공개
+// selectedAuthor:     null=전체, '__me__'=내가 작성, 'name'=특정 작성자
 // selectedYM:         'YYYY-MM'=특정 월, '__all__'=전체
-let selectedAuthor     = null;
+let selectedDocType    = null;
 let selectedVisibility = null;
+let selectedAuthor     = null;
 let selectedYM         = null;
 let searchQuery        = '';
 
 // ── 필터 적용 ──────────────────────────────────────────
 function getFiltered() {
   let list = ALL_MEETINGS;
+  // 문서 종류 필터
+  if (selectedDocType === 'team')     list = list.filter(m => m.is_team_doc);
+  else if (selectedDocType === 'personal') list = list.filter(m => !m.is_team_doc);
+  // 공개 여부 필터
+  if (selectedVisibility === 'public')       list = list.filter(m => m.is_public);
+  else if (selectedVisibility === 'team-shared') list = list.filter(m => !m.is_public && (m.is_team_doc || m.team_share));
+  else if (selectedVisibility === 'private')     list = list.filter(m => !m.is_public && !m.is_team_doc && !m.team_share);
   // 작성자 필터
-  if (selectedAuthor === '__me__')     list = list.filter(m => m.author_id === CURRENT_UID);
-  else if (selectedAuthor === '__team__') list = list.filter(m => m.is_team_doc);
-  else if (selectedAuthor)             list = list.filter(m => m.author_name === selectedAuthor);
-  // 공개/비공개 필터
-  if (selectedVisibility === 'public')   list = list.filter(m => m.is_public);
-  else if (selectedVisibility === 'private') list = list.filter(m => !m.is_public);
+  if (selectedAuthor === '__me__') list = list.filter(m => m.author_id === CURRENT_UID);
+  else if (selectedAuthor)         list = list.filter(m => m.author_name === selectedAuthor);
   // 검색
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
@@ -171,6 +180,49 @@ function buildGroups() {
   return { byMonth, byYear, filtered };
 }
 
+// ── 문서 종류 필터 섹션 렌더링 ──────────────────────────
+function renderDocTypeFilter() {
+  const section = document.getElementById('doctype-filter-section');
+  if (!section) return;
+
+  const items = [
+    { key: null,       label: '전체',    cls: selectedDocType === null       ? 'active' : '' },
+    { key: 'team',     label: '팀 문서', cls: selectedDocType === 'team'     ? 'active' : '' },
+    { key: 'personal', label: '개인 문서', cls: selectedDocType === 'personal' ? 'active' : '' },
+  ];
+
+  section.innerHTML = `
+    <div class="author-filter-label">문서 종류</div>
+    <div class="author-filter-list">
+      ${items.map(it => `
+        <button class="author-filter-item ${it.cls}" onclick='selectDocType(${JSON.stringify(it.key)})'>
+          ${escHtml(it.label)}
+        </button>`).join('')}
+    </div>`;
+}
+
+// ── 공개 여부 필터 섹션 렌더링 ───────────────────────────
+function renderVisibilityFilter() {
+  const section = document.getElementById('visibility-filter-section');
+  if (!section) return;
+
+  const items = [
+    { key: null,          label: '전체',    cls: selectedVisibility === null          ? 'active' : '' },
+    { key: 'public',      label: '외부 공개', cls: selectedVisibility === 'public'    ? 'active' : '' },
+    { key: 'team-shared', label: '팀 공유', cls: selectedVisibility === 'team-shared' ? 'active' : '' },
+    { key: 'private',     label: '비공개',  cls: selectedVisibility === 'private'     ? 'active' : '' },
+  ];
+
+  section.innerHTML = `
+    <div class="author-filter-label">공개 여부</div>
+    <div class="author-filter-list">
+      ${items.map(it => `
+        <button class="author-filter-item ${it.cls}" onclick='selectVisibility(${JSON.stringify(it.key)})'>
+          ${escHtml(it.label)}
+        </button>`).join('')}
+    </div>`;
+}
+
 // ── 작성자 필터 섹션 렌더링 ──────────────────────────────
 function renderAuthorFilter() {
   const section = document.getElementById('author-filter-section');
@@ -184,11 +236,11 @@ function renderAuthorFilter() {
   const others = Object.keys(authorMap).sort();
 
   const items = [
-    { key: null,        label: '전체',   cls: selectedAuthor === null        ? 'active' : '' },
-    { key: '__team__',  label: '팀',     cls: selectedAuthor === '__team__'  ? 'active' : '' },
-    ...(CURRENT_UID ? [{ key: '__me__', label: '내 작성', cls: selectedAuthor === '__me__' ? 'active' : '' }] : []),
+    ...(CURRENT_UID ? [{ key: '__me__', label: '내가 작성', cls: selectedAuthor === '__me__' ? 'active' : '' }] : []),
     ...others.map(name => ({ key: name, label: name, cls: selectedAuthor === name ? 'active' : '' })),
   ];
+
+  if (!items.length) { section.innerHTML = ''; return; }
 
   section.innerHTML = `
     <div class="author-filter-label">작성자</div>
@@ -200,32 +252,32 @@ function renderAuthorFilter() {
     </div>`;
 }
 
-// ── 공개/비공개 필터 섹션 렌더링 ─────────────────────────
-function renderVisibilityFilter() {
-  const section = document.getElementById('visibility-filter-section');
-  if (!section) return;
-
-  const items = [
-    { key: null,      label: '전체',      cls: selectedVisibility === null      ? 'active' : '' },
-    { key: 'public',  label: '외부 공개', cls: selectedVisibility === 'public'  ? 'active' : '' },
-    { key: 'private', label: '외부 비공개', cls: selectedVisibility === 'private' ? 'active' : '' },
-  ];
-
-  section.innerHTML = `
-    <div class="author-filter-label">공개 여부</div>
-    <div class="author-filter-list">
-      ${items.map(it => `
-        <button class="author-filter-item ${it.cls}" onclick='selectVisibility(${JSON.stringify(it.key)})'>
-          ${escHtml(it.label)}
-        </button>`).join('')}
-    </div>`;
+// ── 문서 종류 선택 ──────────────────────────────────────
+function selectDocType(key) {
+  selectedDocType = key;
+  localStorage.setItem('meeting_doctype', key === null ? '' : key);
+  const { byMonth, byYear, filtered } = buildGroups();
+  renderDocTypeFilter();
+  renderVisibilityFilter();
+  renderAuthorFilter();
+  renderMonthNav(byMonth, byYear, filtered);
+  if (selectedYM === '__all__') {
+    renderAllList(filtered);
+  } else if (selectedYM && byMonth[selectedYM]) {
+    renderMeetingList(selectedYM, byMonth);
+  } else {
+    const allYMs = Object.keys(byMonth).sort().reverse();
+    if (allYMs.length) selectMonth(allYMs[0]);
+    else showEmpty();
+  }
 }
 
-// ── 작성자 선택 ──────────────────────────────────────────
+// ── 작성자 선택 (클릭 재선택 시 해제) ───────────────────
 function selectAuthor(key) {
-  selectedAuthor = key;
-  localStorage.setItem('meeting_author', key === null ? '' : key);
+  selectedAuthor = (selectedAuthor === key) ? null : key;
+  localStorage.setItem('meeting_author', selectedAuthor === null ? '' : selectedAuthor);
   const { byMonth, byYear, filtered } = buildGroups();
+  renderDocTypeFilter();
   renderAuthorFilter();
   renderVisibilityFilter();
   renderMonthNav(byMonth, byYear, filtered);
@@ -241,13 +293,14 @@ function selectAuthor(key) {
   }
 }
 
-// ── 공개/비공개 선택 ─────────────────────────────────────
+// ── 공개 여부 선택 ──────────────────────────────────────
 function selectVisibility(key) {
   selectedVisibility = key;
   localStorage.setItem('meeting_visibility', key === null ? '' : key);
   const { byMonth, byYear, filtered } = buildGroups();
-  renderAuthorFilter();
+  renderDocTypeFilter();
   renderVisibilityFilter();
+  renderAuthorFilter();
   renderMonthNav(byMonth, byYear, filtered);
 
   if (selectedYM === '__all__') {
@@ -450,6 +503,14 @@ function escRegex(s) {
 
 // ── 초기화 ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  // localStorage에서 문서 종류 복원
+  const savedDocType = localStorage.getItem('meeting_doctype');
+  if (savedDocType === 'team' || savedDocType === 'personal') selectedDocType = savedDocType;
+
+  // localStorage에서 공개 여부 복원
+  const savedVis = localStorage.getItem('meeting_visibility');
+  if (['public','team-shared','private'].includes(savedVis)) selectedVisibility = savedVis;
+
   // localStorage에서 작성자 복원
   const savedAuthor = localStorage.getItem('meeting_author');
   if (savedAuthor !== null) {
@@ -463,16 +524,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // localStorage에서 공개/비공개 복원
-  const savedVis = localStorage.getItem('meeting_visibility');
-  if (savedVis === 'public' || savedVis === 'private') selectedVisibility = savedVis;
-
   // localStorage에서 선택 월 복원
   const savedYM = localStorage.getItem('meeting_ym');
   if (savedYM) selectedYM = savedYM;
 
-  renderAuthorFilter();
+  renderDocTypeFilter();
   renderVisibilityFilter();
+  renderAuthorFilter();
   const { byMonth, byYear, filtered } = buildGroups();
   const allYMs = Object.keys(byMonth).sort().reverse();
   if (allYMs.length) {
