@@ -1,5 +1,7 @@
 # 자격증명 파일 (커밋 금지)
 credentials.json
+*.pem
+mkcert.exe
 
 __pycache__/
 *.pyc
