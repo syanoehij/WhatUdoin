@@ -1042,7 +1042,7 @@ mark.search-hl {
   text-transform: uppercase;
   white-space: nowrap;
 }
-.meeting-table th.col-type  { text-align: center; }
+.meeting-table th.col-type  { text-align: center; min-width: 120px; }
 .meeting-table th.col-date  { text-align: right; padding-right: 28px; }
 .meeting-row {
   cursor: pointer;
@@ -1057,7 +1057,8 @@ mark.search-hl {
   overflow: hidden;
 }
 /* td 전용 — th에 번지지 않도록 tbody로 범위 제한 */
-.meeting-table tbody .col-type   { text-align: center; white-space: nowrap; }
+.meeting-table tbody .col-type   { text-align: center; white-space: nowrap; min-width: 120px; }
+.meeting-table tbody .col-type .doc-badge + .doc-badge { margin-left: 4px; }
 .meeting-table tbody .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meeting-table tbody .col-title  { font-weight: 500; min-width: 0; }
 .meeting-table tbody .col-team   { }
@@ -1091,6 +1092,10 @@ mark.search-hl {
 }
 .doc-team     { background: var(--accent-bg); color: var(--accent); }
 .doc-personal { background: var(--surface-3); color: var(--text-muted); }
+.doc-public   { background: #d1fae5; color: #065f46; }
+.dark .doc-public { background: #064e3b; color: #6ee7b7; }
+.doc-shared   { background: #fef3c7; color: #92400e; }
+.dark .doc-shared { background: #451a03; color: #fcd34d; }
 
 .event-count-badge {
   display: inline-block;

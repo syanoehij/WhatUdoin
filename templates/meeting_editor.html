@@ -92,7 +92,7 @@
     </div>
 
     <div class="btn-group">
-      {% if user and user.role in ('editor', 'admin') and not locked_by %}
+      {% if can_edit and not locked_by %}
       <label class="doc-type-toggle" title="팀 문서면 캘린더에 노출됩니다">
         <input type="checkbox" id="chk-team-doc"
                {% if meeting and meeting.is_team_doc %}checked{% endif %} />
@@ -100,11 +100,27 @@
           {% if meeting and meeting.is_team_doc %}팀 문서{% else %}개인 문서{% endif %}
         </span>
       </label>
+      <label class="doc-type-toggle" id="team-share-wrap"
+             title="팀원에게 읽기 전용으로 공유합니다"
+             style="{% if meeting and meeting.is_team_doc %}display:none{% endif %}">
+        <input type="checkbox" id="chk-team-share"
+               {% if meeting and meeting.team_share %}checked{% endif %} />
+        <span class="doc-type-label" id="team-share-label">
+          {% if meeting and meeting.team_share %}팀 공유{% else %}팀 공유 끔{% endif %}
+        </span>
+      </label>
+      <label class="doc-type-toggle" title="비로그인 사용자를 포함해 누구나 읽을 수 있습니다">
+        <input type="checkbox" id="chk-public"
+               {% if meeting and meeting.is_public %}checked{% endif %} />
+        <span class="doc-type-label" id="public-label">
+          {% if meeting and meeting.is_public %}공개{% else %}비공개{% endif %}
+        </span>
+      </label>
       {% endif %}
       {% if meeting %}
       <a href="/meetings/{{ meeting.id }}/history" class="btn btn-sm">수정 이력</a>
       {% endif %}
-      {% if user and user.role in ('editor', 'admin') and not locked_by %}
+      {% if can_edit and not locked_by %}
       <button id="btn-ai-toggle" class="btn btn-sm" onclick="toggleAiPanel()">{% if meeting_events %}일정 관리{% else %}일정 생성(AI){% endif %}</button>
       {% if meeting %}
       <button class="btn btn-sm btn-danger" onclick="deleteMeeting()">삭제</button>
@@ -119,7 +135,7 @@
 
     <!-- 왼쪽: 에디터 영역 -->
     <div class="editor-main" id="editor-main">
-      {% if user and user.role in ('editor', 'admin') and not locked_by %}
+      {% if can_edit and not locked_by %}
       <div id="editor-container"></div>
       {% else %}
       <div id="meeting-content-view" class="meeting-content-view markdown-body"></div>
@@ -133,12 +149,12 @@
     </div>
 
     <!-- 드래그 리사이저 -->
-    {% if user and user.role in ('editor', 'admin') and not locked_by %}
+    {% if can_edit and not locked_by %}
     <div class="editor-resizer" id="editor-resizer"></div>
     {% endif %}
 
     <!-- 오른쪽: AI 패널 (기본 숨김) -->
-    {% if user and user.role in ('editor', 'admin') and not locked_by %}
+    {% if can_edit and not locked_by %}
     <div class="ai-panel hidden" id="ai-panel">
 
       <!-- AI 패널 상단: 컨트롤 -->
@@ -208,7 +224,7 @@
 {% block scripts %}
 <script>
 const MEETING_ID     = {{ meeting.id if meeting else 'null' }};
-const IS_EDITOR      = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
+const IS_EDITOR      = {{ 'true' if can_edit else 'false' }};
 const LOCKED_BY      = {{ (locked_by | tojson) if locked_by else 'null' }};
 const INITIAL_MD     = {{ (('# ' + meeting.title + '\n\n' + (meeting.content or '')) if meeting else '') | tojson | safe }};
 const MEETING_EVENTS = {{ (meeting_events if meeting_events else []) | tojson | safe }};
@@ -309,7 +325,27 @@ function initMeetingEditor() {
     }
     chkTeamDoc.addEventListener('change', () => {
       lblDocType.textContent = chkTeamDoc.checked ? '팀 문서' : '개인 문서';
+      const shareWrap = document.getElementById('team-share-wrap');
+      if (shareWrap) {
+        shareWrap.style.display = chkTeamDoc.checked ? 'none' : '';
+        const chkShare = document.getElementById('chk-team-share');
+        if (chkTeamDoc.checked && chkShare) { chkShare.checked = false; document.getElementById('team-share-label').textContent = '팀 공유 끔'; }
+      }
     });
+    const chkPublic = document.getElementById('chk-public');
+    const lblPublic = document.getElementById('public-label');
+    if (chkPublic && lblPublic) {
+      chkPublic.addEventListener('change', () => {
+        lblPublic.textContent = chkPublic.checked ? '공개' : '비공개';
+      });
+    }
+    const chkTeamShare = document.getElementById('chk-team-share');
+    const lblTeamShare = document.getElementById('team-share-label');
+    if (chkTeamShare && lblTeamShare) {
+      chkTeamShare.addEventListener('change', () => {
+        lblTeamShare.textContent = chkTeamShare.checked ? '팀 공유' : '팀 공유 끔';
+      });
+    }
   }
 
   // 자동완성 데이터 로드
@@ -590,11 +626,13 @@ async function saveMeeting() {
   const url    = MEETING_ID ? `/api/meetings/${MEETING_ID}` : '/api/meetings';
   const meetingDate = document.getElementById('meeting-date')?.value || null;
   const isTeamDoc   = document.getElementById('chk-team-doc')?.checked ?? true;
+  const isPublic    = document.getElementById('chk-public')?.checked ?? false;
+  const teamShare   = document.getElementById('chk-team-share')?.checked ?? false;
 
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, content, meeting_date: meetingDate, is_team_doc: isTeamDoc }),
+    body: JSON.stringify({ title, content, meeting_date: meetingDate, is_team_doc: isTeamDoc, is_public: isPublic, team_share: teamShare }),
   });
 
   if (res.ok) {

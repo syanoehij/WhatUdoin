@@ -61,15 +61,22 @@ def init_db():
                 team_id INTEGER,
                 created_by INTEGER NOT NULL,
                 is_team_doc INTEGER DEFAULT 1,
+                is_public INTEGER DEFAULT 0,
+                team_share INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        # 기존 DB에 is_team_doc 컬럼이 없는 경우 추가
-        try:
-            conn.execute("ALTER TABLE meetings ADD COLUMN is_team_doc INTEGER DEFAULT 1")
-        except Exception:
-            pass
+        # 기존 DB에 누락 컬럼 추가
+        for _col, _def in [
+            ("is_team_doc", "INTEGER DEFAULT 1"),
+            ("is_public",   "INTEGER DEFAULT 0"),
+            ("team_share",  "INTEGER DEFAULT 0"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE meetings ADD COLUMN {_col} {_def}")
+            except Exception:
+                pass
         # ── meeting_histories ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS meeting_histories (
@@ -1478,17 +1485,37 @@ def reject_pending_user(pending_id: int):
 
 # ── Meetings ────────────────────────────────────────────
 
-def get_all_meetings():
-    with get_conn() as conn:
-        rows = conn.execute(
-            """SELECT m.*, u.name as author_name, u.id as author_id, t.name as team_name,
+def get_all_meetings(viewer=None):
+    """viewer: None=비로그인, dict=로그인 사용자. 가시성 규칙을 SQL에서 처리."""
+    base = """SELECT m.*, u.name as author_name, u.id as author_id, t.name as team_name,
                (SELECT COUNT(*) FROM events e WHERE e.meeting_id = m.id) as event_count
                FROM meetings m
                LEFT JOIN users u ON m.created_by = u.id
                LEFT JOIN teams t ON m.team_id = t.id
-               WHERE m.deleted_at IS NULL
-               ORDER BY m.updated_at DESC"""
-        ).fetchall()
+               WHERE m.deleted_at IS NULL"""
+    with get_conn() as conn:
+        if viewer is None:
+            rows = conn.execute(
+                base + " AND m.is_public = 1 ORDER BY m.updated_at DESC"
+            ).fetchall()
+        elif viewer.get("role") == "admin":
+            rows = conn.execute(
+                base + " ORDER BY m.updated_at DESC"
+            ).fetchall()
+        else:
+            uid = viewer["id"]
+            tid = viewer.get("team_id")
+            rows = conn.execute(
+                base + """
+                  AND (
+                    m.created_by = ?
+                    OR m.is_public = 1
+                    OR (m.is_team_doc = 1 AND m.team_id = ?)
+                    OR (m.is_team_doc = 0 AND m.team_share = 1 AND m.team_id = ?)
+                  )
+                  ORDER BY m.updated_at DESC""",
+                (uid, tid, tid)
+            ).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -1499,22 +1526,29 @@ def get_meeting(meeting_id: int):
                FROM meetings m
                LEFT JOIN users u ON m.created_by = u.id
                LEFT JOIN teams t ON m.team_id = t.id
-               WHERE m.id = ?""",
+               WHERE m.id = ? AND m.deleted_at IS NULL""",
             (meeting_id,)
         ).fetchone()
     return dict(row) if row else None
 
 
-def create_meeting(title: str, content: str, team_id, created_by: int, meeting_date: str = None, is_team_doc: int = 1) -> int:
+def create_meeting(title: str, content: str, team_id, created_by: int,
+                   meeting_date: str = None, is_team_doc: int = 1,
+                   is_public: int = 0, team_share: int = 0) -> int:
+    _team_share = 0 if is_team_doc else team_share
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO meetings (title, content, team_id, created_by, meeting_date, is_team_doc) VALUES (?, ?, ?, ?, ?, ?)",
-            (title, content, team_id, created_by, meeting_date, is_team_doc)
+            "INSERT INTO meetings (title, content, team_id, created_by, meeting_date, is_team_doc, is_public, team_share) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (title, content, team_id, created_by, meeting_date, is_team_doc, is_public, _team_share)
         )
     return cur.lastrowid
 
 
-def update_meeting(meeting_id: int, title: str, content: str, edited_by: int, meeting_date: str = None, is_team_doc: int = 1):
+def update_meeting(meeting_id: int, title: str, content: str, edited_by: int,
+                   meeting_date: str = None, is_team_doc: int = 1,
+                   is_public: int = 0, team_share: int = 0):
+    _team_share = 0 if is_team_doc else team_share
     with get_conn() as conn:
         current = conn.execute(
             "SELECT content FROM meetings WHERE id = ?", (meeting_id,)
@@ -1531,8 +1565,9 @@ def update_meeting(meeting_id: int, title: str, content: str, edited_by: int, me
                 (meeting_id, meeting_id)
             )
         conn.execute(
-            "UPDATE meetings SET title = ?, content = ?, meeting_date = ?, is_team_doc = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (title, content, meeting_date, is_team_doc, meeting_id)
+            "UPDATE meetings SET title = ?, content = ?, meeting_date = ?, is_team_doc = ?, "
+            "is_public = ?, team_share = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (title, content, meeting_date, is_team_doc, is_public, _team_share, meeting_id)
         )
 
 

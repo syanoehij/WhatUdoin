@@ -306,6 +306,8 @@ function renderRow(m, showYear) {
   <tr class="meeting-row ${isMine ? 'mine' : ''}" onclick="location.href='/meetings/${m.id}?from=meetings'">
     <td class="col-type">
       <span class="doc-badge ${m.is_team_doc ? 'doc-team' : 'doc-personal'}">${m.is_team_doc ? '팀' : '개인'}</span>
+      ${m.is_public ? '<span class="doc-badge doc-public" title="비로그인 포함 공개">공개</span>' : ''}
+      ${!m.is_team_doc && m.team_share ? '<span class="doc-badge doc-shared" title="팀원 읽기 공유">공유</span>' : ''}
     </td>
     <td class="col-author ${isMine ? 'author-me' : ''}">${escHtml(m.author_name || '-')}</td>
     <td class="col-title">
