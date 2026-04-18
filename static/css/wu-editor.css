@@ -1,0 +1,61 @@
+/* wu-editor.css — WUEditor 공용 편집기 모듈 전용 스타일 */
+
+/* ── 이미지 리사이즈 툴바 ── */
+.wu-img-resize-toolbar {
+  position: fixed;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  z-index: 9999;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  font-size: 0.8rem;
+}
+.wu-img-resize-toolbar button {
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+.wu-img-resize-toolbar button:hover { background: var(--accent); color: #fff; }
+
+/* ── 이탈 확인 모달 ── */
+.wu-leave-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10000;
+}
+.wu-leave-box {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px 28px;
+  max-width: 380px; width: 90%;
+  box-shadow: 0 4px 24px rgba(0,0,0,.2);
+}
+.wu-leave-box h3 { margin: 0 0 10px; font-size: 1rem; }
+.wu-leave-box p  { margin: 0 0 20px; font-size: 0.88rem; color: var(--text-muted); }
+.wu-leave-box .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ── 잠금 배너 (전역 공용) ── */
+.lock-banner {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff8e1; border: 1px solid #ffe082;
+  border-radius: 8px; padding: 10px 16px; margin: 12px 16px 0;
+  font-size: 0.88rem; color: #7a5800;
+}
+.dark .lock-banner { background: #3d2f00; border-color: #7a6000; color: #ffd166; }
+.lock-banner-icon { font-size: 1.1rem; flex-shrink: 0; }
+.lock-banner-refresh {
+  margin-left: auto; flex-shrink: 0;
+  background: none; border: 1px solid #ffe082; border-radius: 5px;
+  padding: 3px 10px; font-size: 0.8rem; cursor: pointer; color: inherit;
+}
+.lock-banner-refresh:hover { background: rgba(0,0,0,0.05); }
