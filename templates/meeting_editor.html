@@ -3,65 +3,8 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
+<link rel="stylesheet" href="/static/css/wu-editor.css" />
 <script src="/static/lib/toastui-editor-all.min.js"></script>
-<style>
-  /* 이미지 리사이즈 툴바 */
-  #img-resize-toolbar {
-    position: fixed;
-    display: none;
-    align-items: center;
-    gap: 4px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px 8px;
-    z-index: 9999;
-    box-shadow: 0 2px 8px rgba(0,0,0,.15);
-    font-size: 0.8rem;
-  }
-  #img-resize-toolbar button {
-    padding: 2px 7px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--surface-3);
-    color: var(--text);
-    cursor: pointer;
-    font-size: 0.78rem;
-  }
-  #img-resize-toolbar button:hover { background: var(--accent); color: #fff; }
-  /* 이탈 확인 다이얼로그 */
-  #leave-confirm-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,.4);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 10000;
-  }
-  #leave-confirm-box {
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 24px 28px;
-    max-width: 380px; width: 90%;
-    box-shadow: 0 4px 24px rgba(0,0,0,.2);
-  }
-  #leave-confirm-box h3 { margin: 0 0 10px; font-size: 1rem; }
-  #leave-confirm-box p  { margin: 0 0 20px; font-size: 0.88rem; color: var(--text-muted); }
-  #leave-confirm-box .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
-  .lock-banner {
-    display: flex; align-items: center; gap: 10px;
-    background: #fff8e1; border: 1px solid #ffe082;
-    border-radius: 8px; padding: 10px 16px; margin: 12px 16px 0;
-    font-size: 0.88rem; color: #7a5800;
-  }
-  .dark .lock-banner { background: #3d2f00; border-color: #7a6000; color: #ffd166; }
-  .lock-banner-icon { font-size: 1.1rem; flex-shrink: 0; }
-  .lock-banner-refresh {
-    margin-left: auto; flex-shrink: 0;
-    background: none; border: 1px solid #ffe082; border-radius: 5px;
-    padding: 3px 10px; font-size: 0.8rem; cursor: pointer; color: inherit;
-  }
-  .lock-banner-refresh:hover { background: rgba(0,0,0,0.05); }
-</style>
 {% endblock %}
 
 {% block content %}
@@ -78,7 +21,7 @@
 
   <!-- ── 상단 헤더 ── -->
   <div class="editor-header">
-    <a id="btn-back" href="/meetings" class="btn btn-sm" onclick="handleBackClick(event)">← 목록</a>
+    <a id="btn-back" href="/meetings" class="btn btn-sm">← 목록</a>
 
     <div class="meeting-date-wrap">
       {% if user and user.role in ('editor', 'admin') and not locked_by %}
@@ -140,13 +83,6 @@
       <div id="editor-container"></div>
       {% else %}
       <div id="meeting-content-view" class="meeting-content-view markdown-body"></div>
-      <script>
-        (function() {
-          const md = '# ' + {{ meeting.title | tojson | safe }} + '\n\n' + {{ (meeting.content if meeting else '') | tojson | safe }};
-          new toastui.Editor.factory({ el: document.getElementById('meeting-content-view'), viewer: true, initialValue: md });
-          setTimeout(initToc, 300);
-        })();
-      </script>
       {% endif %}
     </div>
 
@@ -207,35 +143,11 @@
 <!-- 자동완성 공유 드롭다운 -->
 <ul id="editor-ac-dd" class="ac-dropdown hidden" style="position:fixed;z-index:9999;"></ul>
 
-<!-- 이미지 리사이즈 툴바 -->
-<div id="img-resize-toolbar">
-  <span style="color:var(--text-muted);margin-right:2px">크기:</span>
-  <button onclick="setImgWidth(25)">25%</button>
-  <button onclick="setImgWidth(50)">50%</button>
-  <button onclick="setImgWidth(75)">75%</button>
-  <button onclick="setImgWidth(100)">100%</button>
-  <button onclick="setImgWidth(125)">125%</button>
-  <button onclick="setImgWidth(150)">150%</button>
-  <button onclick="setImgWidth(175)">175%</button>
-  <button onclick="setImgWidth(200)">200%</button>
-</div>
-
-<!-- 이탈 확인 다이얼로그 -->
-<div id="leave-confirm-overlay" style="display:none">
-  <div id="leave-confirm-box">
-    <h3>저장하지 않은 변경사항이 있습니다</h3>
-    <p>저장하지 않고 목록으로 이동하면 변경사항이 사라집니다.</p>
-    <div class="modal-actions">
-      <button class="btn" onclick="leaveWithoutSave()">저장 안하고 나가기</button>
-      <button class="btn btn-primary" onclick="saveAndLeave()">저장하고 나가기</button>
-    </div>
-  </div>
-</div>
-
 </div><!-- /editor-page -->
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/wu-editor.js"></script>
 <script>
 const MEETING_ID     = {{ meeting.id if meeting else 'null' }};
 const IS_EDITOR      = {{ 'true' if can_edit else 'false' }};
@@ -259,61 +171,17 @@ const PRIORITIES = [
 
 let parsedEvents  = [];
 let linkedEvents  = MEETING_EVENTS.map(e => ({...e}));
-let editor        = null;
+let wuInst        = null;
+let editor        = null;   // WUEditor onReady에서 채워짐
 let aiPanelOpen   = false;
-let lockHeartbeat = null;
-
-/* ── 편집 잠금 ───────────────────────────────────────── */
-async function acquireLock() {
-  if (!MEETING_ID || !IS_EDITOR || LOCKED_BY) return;
-  try {
-    const res = await fetch(`/api/meetings/${MEETING_ID}/lock`, { method: 'POST' });
-    if (res.status === 423) {
-      // 다른 사람이 잠금 보유 → 페이지 새로고침으로 뷰어 모드 전환
-      location.reload();
-      return;
-    }
-    // 잠금 성공 → 30초마다 heartbeat
-    lockHeartbeat = setInterval(() => {
-      fetch(`/api/meetings/${MEETING_ID}/lock`, { method: 'PUT' });
-    }, 30000);
-  } catch(e) { /* 잠금 실패해도 편집은 허용 */ }
-}
-
-function releaseLock() {
-  if (!MEETING_ID || !IS_EDITOR || LOCKED_BY) return;
-  clearInterval(lockHeartbeat);
-  // keepalive: 탭 닫힘/이탈에도 신뢰성 있게 전송
-  fetch(`/api/meetings/${MEETING_ID}/lock`, { method: 'DELETE', keepalive: true }).catch(() => {});
-}
-
-let _meetingDirty = false;
-let _meetingAutoSave = null;
 
 // 자동 새로고침 훅: dirty 상태면 저장 후 reload, 아니면 그냥 reload
 window._autoSaveAndRefresh = async () => {
-  if (IS_EDITOR && !LOCKED_BY && _meetingDirty) {
+  if (IS_EDITOR && !LOCKED_BY && wuInst?.dirty) {
     await saveMeeting();
   }
   location.reload();
 };
-
-// 새로고침/이탈 방지 (편집 중 변경사항 있을 때)
-window.addEventListener('beforeunload', (e) => {
-  releaseLock();
-  if (IS_EDITOR && !LOCKED_BY && _meetingDirty) {
-    e.preventDefault();
-    e.returnValue = '';
-  }
-});
-
-/* ── Ctrl+S 저장 단축키 ──────────────────────────────── */
-document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-    e.preventDefault();
-    if (IS_EDITOR && !LOCKED_BY) saveMeeting();
-  }
-});
 
 /* ── 초기화 ─────────────────────────────────────────── */
 function initMeetingEditor() {
@@ -325,13 +193,26 @@ function initMeetingEditor() {
     btnBack.textContent = '← 캘린더';
   }
 
-  if (!IS_EDITOR || LOCKED_BY) return;
+  if (!IS_EDITOR || LOCKED_BY) {
+    // 뷰어 모드: WUEditor로 TOC 포함 렌더
+    wuInst = WUEditor.create({
+      el: '#meeting-content-view',
+      bodyEl: '#editor-body',
+      canEdit: false,
+      initialMarkdown: INITIAL_MD || '',
+      features: {
+        sanitizerOff: true,
+        toc: MEETING_ID ? { storageKey: 'meeting_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
+      },
+      hooks: {},
+    });
+    return;
+  }
 
   // 팀/개인 문서 토글 레이블 동기화 + URL 파라미터 초기화
   const chkTeamDoc = document.getElementById('chk-team-doc');
   const lblDocType = document.getElementById('doc-type-label');
   if (chkTeamDoc && lblDocType) {
-    // 신규 문서일 때만 URL 파라미터로 팀/개인 결정
     if (!MEETING_ID) {
       const isPersonal = new URLSearchParams(location.search).get('personal') === '1';
       chkTeamDoc.checked = !isPersonal;
@@ -368,15 +249,12 @@ function initMeetingEditor() {
   // AI 버튼 초기 레이블
   updateAiBtnLabel();
 
-
-  // Toast UI 에디터 초기화
-  editor = new toastui.Editor({
-    el: document.getElementById('editor-container'),
-    height: '100%',
-    initialEditType: 'wysiwyg',
-    initialValue: INITIAL_MD || '',
-    hideModeSwitch: false,
-    placeholder: '제목을 입력하세요...',
+  // WUEditor 공용 모듈 초기화
+  wuInst = WUEditor.create({
+    el: '#editor-container',
+    bodyEl: '#editor-body',
+    canEdit: true,
+    initialMarkdown: INITIAL_MD || '',
     toolbarItems: [
       ['heading', 'bold', 'italic', 'strike'],
       ['hr', 'quote'],
@@ -384,49 +262,35 @@ function initMeetingEditor() {
       ['table'],
       ['image'],
     ],
-    usageStatistics: false,
-    customHTMLSanitizer: html => html,
-    hooks: {
-      addImageBlobHook: async (blob, callback) => {
-        const form = new FormData();
-        form.append('file', blob, blob.name || 'image.png');
-        try {
-          const res = await fetch('/api/upload/image', { method: 'POST', body: form });
-          if (!res.ok) throw new Error('upload failed');
-          const { url } = await res.json();
-          callback(url, '');
-        } catch {
-          alert('이미지 업로드에 실패했습니다.');
-        }
-      },
+    features: {
+      imageResize: true,
+      imageUpload: { endpoint: '/api/upload/image' },
+      sanitizerOff: true,
+      toc: MEETING_ID ? { storageKey: 'meeting_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
+      shortcutSave: true,
+      autosave: MEETING_ID ? { intervalMs: 120000, respectCooldown: true } : false,
+      saveCooldown: { seconds: 10, saveBtnSelector: 'button[onclick="saveMeeting()"]' },
+      editLock: MEETING_ID ? {
+        endpoint: `/api/meetings/${MEETING_ID}/lock`,
+        heartbeatMs: 30000,
+        onLockFailed: () => location.reload(),
+      } : false,
+      leaveConfirm: { backBtnSelector: '#btn-back' },
     },
-    events: {
-      change: () => {
-        if (!_meetingDirty) _meetingDirty = true;
-        // 자동 저장: 마지막 변경 후 2분 뒤 (기존 문서만, 쿨다운 우선)
-        if (MEETING_ID) {
-          clearTimeout(_meetingAutoSave);
-          _meetingAutoSave = setTimeout(() => {
-            if (_meetingDirty && !_saveCooldown) saveMeeting();
-          }, 120000);
-        }
+    hooks: {
+      onSave: (md, { leaveTarget } = {}) => saveMeeting(leaveTarget),
+      onReady: (ed) => {
+        editor = ed;
+        renderLinkedEvents();
+        if (linkedEvents.length) toggleAiPanel();
       },
+      shouldWarnOnUnload: () => !!(IS_EDITOR && !LOCKED_BY && wuInst?.dirty),
     },
   });
 
-  // 이미지 리사이즈 — 에디터 렌더 후 클릭 리스너 등록
-  setTimeout(() => initImageResize(), 300);
-
-  // 연결된 일정 초기 렌더링 — 있으면 패널 자동 오픈
-  renderLinkedEvents();
-  if (linkedEvents.length) toggleAiPanel();
-
-  // 편집 잠금 획득 (기존 회의록일 때만)
-  if (MEETING_ID) acquireLock();
-
   // 리사이저 드래그
-  const resizer   = document.getElementById('editor-resizer');
-  const aiPanel   = document.getElementById('ai-panel');
+  const resizer    = document.getElementById('editor-resizer');
+  const aiPanel    = document.getElementById('ai-panel');
   const editorBody = document.getElementById('editor-body');
   if (resizer) {
     resizer.addEventListener('mousedown', (e) => {
@@ -435,7 +299,6 @@ function initMeetingEditor() {
       const startX     = e.clientX;
       const startWidth = aiPanel.getBoundingClientRect().width;
       const totalWidth = editorBody.getBoundingClientRect().width;
-
       function onMouseMove(e) {
         const delta    = startX - e.clientX;
         const newWidth = Math.min(Math.max(startWidth + delta, 280), totalWidth * 0.7);
@@ -467,8 +330,6 @@ function initMeetingEditor() {
     const sel = document.getElementById('ai-model-select');
     if (sel) sel.innerHTML = '<option value="gemma4:e2b">gemma4:e2b (빠름)</option>';
   });
-
-  initToc();
 }
 
 if (document.readyState === 'loading') {
@@ -476,6 +337,9 @@ if (document.readyState === 'loading') {
 } else {
   initMeetingEditor();
 }
+
+/* ── TOC 글로벌 래퍼 (HTML onclick에서 호출) ─────────── */
+function toggleTocPanel() { wuInst?.toggleToc(); }
 
 /* ── AI 패널 토글 ────────────────────────────────────── */
 function toggleAiPanel() {
@@ -486,152 +350,16 @@ function toggleAiPanel() {
   panel.classList.toggle('hidden', !aiPanelOpen);
   body.classList.toggle('split', aiPanelOpen);
   btnAi.classList.toggle('active', aiPanelOpen);
-  // 에디터 리사이즈 트리거
   if (editor) editor.resize?.();
-}
-
-/* ── 이미지 리사이즈 ──────────────────────────────────── */
-let _activeEditorImg = null;
-let _imgWidthMap = {};   // { '/uploads/.../img.png': px숫자 or null(원본) }
-
-function _applyImgWidths() {
-  const imgs = document.querySelectorAll('.toastui-editor-ww-container img');
-  imgs.forEach(img => {
-    const src = img.getAttribute('src');
-    if (!src) return;
-    if (!(src in _imgWidthMap)) return;
-    const px = _imgWidthMap[src];
-    if (px != null) {
-      img.style.setProperty('width', px + 'px', 'important');
-      img.style.setProperty('max-width', 'none', 'important');
-    } else {
-      img.style.removeProperty('width');
-      img.style.removeProperty('max-width');
-    }
-  });
-}
-
-function initImageResize() {
-  const tb = document.getElementById('img-resize-toolbar');
-  if (!tb) return;
-
-  // 로드 시 INITIAL_MD에서 저장된 px 복원
-  (function parseInitialWidths() {
-    const reg = /<img[^>]*src="([^"]+)"[^>]*style="[^"]*width\s*:\s*(\d+)px[^"]*"[^>]*>/g;
-    let m;
-    while ((m = reg.exec(INITIAL_MD || '')) !== null) {
-      _imgWidthMap[m[1]] = parseInt(m[2]);
-    }
-    if (Object.keys(_imgWidthMap).length) setTimeout(_applyImgWidths, 200);
-  })();
-
-  // MutationObserver: ProseMirror 재렌더링 시 스타일 재적용
-  const wwEl = document.querySelector('.toastui-editor-ww-container');
-  if (wwEl) {
-    new MutationObserver(_applyImgWidths).observe(wwEl, { childList: true, subtree: true });
-  }
-
-  // pointerdown capture: _activeEditorImg 확정
-  document.addEventListener('pointerdown', e => {
-    const editorEl = document.querySelector('.toastui-editor-ww-container');
-    const target = e.target;
-    if (target.tagName === 'IMG' && editorEl && editorEl.contains(target)) {
-      _activeEditorImg = target;
-    } else if (!tb.contains(target)) {
-      _activeEditorImg = null;
-    }
-  }, true);
-
-  // click capture: 툴바 위치 표시/숨기기
-  document.addEventListener('click', e => {
-    const editorEl = document.querySelector('.toastui-editor-ww-container');
-    const target = e.target;
-    if (target.tagName === 'IMG' && editorEl && editorEl.contains(target)) {
-      const r = target.getBoundingClientRect();
-      tb.style.top     = (r.bottom + window.scrollY + 6) + 'px';
-      tb.style.left    = Math.max(4, r.left) + 'px';
-      tb.style.display = 'flex';
-    } else if (!tb.contains(target)) {
-      tb.style.display = 'none';
-    }
-  }, true);
-}
-
-function setImgWidth(pct) {
-  if (!_activeEditorImg) return;
-  const src = _activeEditorImg.getAttribute('src');
-  if (!src) return;
-
-  if (pct === null) {
-    _imgWidthMap[src] = null;
-  } else {
-    // naturalWidth 기준 픽셀 계산
-    const nw = _activeEditorImg.naturalWidth;
-    _imgWidthMap[src] = nw > 0 ? Math.round(nw * pct / 100) : null;
-  }
-  _applyImgWidths();
-  document.getElementById('img-resize-toolbar').style.display = 'none';
-  _activeEditorImg = null;
-  _meetingDirty = true;
-}
-
-/* 저장 시 마크다운에 _imgWidthMap 기반 style 주입 */
-function _injectImgStyles(md) {
-  for (const [src, px] of Object.entries(_imgWidthMap)) {
-    const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (px === null) {
-      // 원본: HTML img가 있으면 마크다운으로 되돌리기
-      md = md.replace(
-        new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
-        m => { const a = m.match(/alt="([^"]*)"/); return `![${a ? a[1] : ''}](${src})`; }
-      );
-    } else {
-      md = md
-        .replace(new RegExp(`!\\[([^\\]]*)\\]\\(${escapedSrc}\\)`, 'g'),
-          (_, alt) => `<img src="${src}" alt="${alt}" style="width:${px}px">`)
-        .replace(new RegExp(`<img[^>]*src="${escapedSrc}"[^>]*>`, 'g'),
-          m => { const a = m.match(/alt="([^"]*)"/); return `<img src="${src}" alt="${a ? a[1] : ''}" style="width:${px}px">`; });
-    }
-  }
-  return md;
-}
-
-/* ── 목록 이탈 확인 ───────────────────────────────────── */
-let _leaveTarget = '/meetings';
-
-function handleBackClick(e) {
-  if (!IS_EDITOR || !_meetingDirty) return; // dirty 없으면 그냥 이동
-  e.preventDefault();
-  _leaveTarget = document.getElementById('btn-back').href;
-  document.getElementById('leave-confirm-overlay').style.display = 'flex';
-}
-
-function leaveWithoutSave() {
-  _meetingDirty = false; // beforeunload 방지
-  releaseLock();
-  location.href = _leaveTarget;
-}
-
-async function saveAndLeave() {
-  document.getElementById('leave-confirm-overlay').style.display = 'none';
-  await saveMeeting();
-  // saveMeeting이 신규 문서면 redirect하므로, 기존 문서일 경우에만 이동
-  if (MEETING_ID) {
-    _meetingDirty = false;
-    releaseLock();
-    location.href = _leaveTarget;
-  }
 }
 
 /* ── 저장 / 삭제 ─────────────────────────────────────── */
 function getMeetingContent() {
-  if (!IS_EDITOR) return '';
-  return _injectImgStyles(editor.getMarkdown()).trim();
+  return wuInst ? wuInst.getMarkdown().trim() : '';
 }
 
-let _saveCooldown = false;
-async function saveMeeting() {
-  if (_saveCooldown) return;
+async function saveMeeting(leaveTarget) {
+  if (wuInst?.cooldown) return;
   const raw   = getMeetingContent();
   const lines = raw.split('\n');
   const title = lines[0].replace(/^#+\s*/, '').trim();
@@ -653,30 +381,12 @@ async function saveMeeting() {
 
   if (res.ok) {
     const data = await res.json();
-    clearInterval(lockHeartbeat); // heartbeat 중단 (서버에서도 잠금 해제됨)
-    _meetingDirty = false;
-    clearTimeout(_meetingAutoSave);
-    // 저장 시점에 알림 즉시 체크 (작성 중 밀린 알림 발화)
     if (typeof window._checkNotifications === 'function') window._checkNotifications();
     if (!MEETING_ID) {
       location.href = `/meetings/${data.id}`;
     } else {
-      // 저장 버튼 10초 쿨다운 (연속 저장 방지)
-      _saveCooldown = true;
-      const btn = document.querySelector('button[onclick="saveMeeting()"]');
-      const orig = btn ? btn.textContent : null;
-      if (btn) { btn.disabled = true; btn.textContent = `✓ 저장됨 (10s)`; }
-      let remaining = 10;
-      const countdown = setInterval(() => {
-        remaining--;
-        if (remaining <= 0) {
-          clearInterval(countdown);
-          _saveCooldown = false;
-          if (btn) { btn.textContent = orig; btn.disabled = false; }
-        } else {
-          if (btn) btn.textContent = `✓ 저장됨 (${remaining}s)`;
-        }
-      }, 1000);
+      wuInst?.afterSave();
+      if (leaveTarget) location.href = leaveTarget;
     }
   } else {
     const err = await res.json();
@@ -1390,127 +1100,6 @@ async function deleteLinkedEvent(i) {
   }
 }
 
-/* ── ToC (목차) ─────────────────────────────────────────── */
-let _tocObserver    = null;
-let _tocActiveObs   = null;
-let _tocHeadingRefs = [];  // 직접 element 참조 (getElementById 의존 제거)
 
-function _findHeadingsRoot() {
-  return document.querySelector('#editor-container .toastui-editor-ww-container')
-      || document.getElementById('meeting-content-view');
-}
-
-function _findScrollParent(el) {
-  // heading에서 위로 올라가며 실제로 overflow:auto/scroll인 컨테이너를 찾음
-  let node = el ? el.parentElement : null;
-  while (node && node !== document.body) {
-    const oy = getComputedStyle(node).overflowY;
-    if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight) {
-      return node;
-    }
-    node = node.parentElement;
-  }
-  return null;
-}
-
-function buildToc() {
-  const root  = _findHeadingsRoot();
-  const list  = document.getElementById('toc-list');
-  const empty = document.getElementById('toc-empty');
-  if (!root || !list) return;
-
-  const headings = Array.from(root.querySelectorAll('h1, h2, h3'));
-  _tocHeadingRefs = headings;
-
-  if (!headings.length) {
-    list.innerHTML = '';
-    empty.classList.remove('hidden');
-    return;
-  }
-
-  empty.classList.add('hidden');
-  list.innerHTML = headings.map((h, idx) =>
-    `<a class="toc-item toc-lv${parseInt(h.tagName.slice(1))}" data-idx="${idx}">${esc(h.textContent)}</a>`
-  ).join('');
-
-  // onclick 문자열 대신 addEventListener로 클로저에 idx 바인딩
-  list.querySelectorAll('.toc-item').forEach((a, idx) => {
-    a.addEventListener('click', (e) => {
-      e.preventDefault();
-      _tocJumpTo(idx);
-    });
-  });
-
-  _rebindActiveObserver(headings);
-}
-
-function _tocJumpTo(idx) {
-  let target = _tocHeadingRefs[idx];
-  // ProseMirror가 노드를 교체해 isConnected=false인 경우 재빌드
-  if (!target || !target.isConnected) {
-    buildToc();
-    target = _tocHeadingRefs[idx];
-    if (!target || !target.isConnected) return;
-  }
-  // heading에서 위로 올라가며 실제 스크롤 컨테이너를 동적으로 탐색
-  const scrollRoot = _findScrollParent(target);
-  if (scrollRoot) {
-    const rootRect   = scrollRoot.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
-    scrollRoot.scrollBy({ top: targetRect.top - rootRect.top - 16, behavior: 'smooth' });
-  } else {
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-}
-
-function _rebindActiveObserver(headingEls) {
-  if (_tocActiveObs) { _tocActiveObs.disconnect(); _tocActiveObs = null; }
-  const scrollRoot = headingEls.length ? _findScrollParent(headingEls[0]) : null;
-  if (!scrollRoot) return;
-  _tocActiveObs = new IntersectionObserver((entries) => {
-    entries.forEach(ent => {
-      if (!ent.isIntersecting) return;
-      const idx = _tocHeadingRefs.indexOf(ent.target);
-      if (idx < 0) return;
-      document.querySelectorAll('.toc-item').forEach((a, i) =>
-        a.classList.toggle('active', i === idx));
-    });
-  }, { root: scrollRoot, rootMargin: '0px 0px -70% 0px', threshold: 0 });
-  headingEls.forEach(h => _tocActiveObs.observe(h));
-}
-
-function _startTocWatch() {
-  if (_tocObserver) return;
-  const root = _findHeadingsRoot();
-  if (!root) return;
-  let debounce;
-  _tocObserver = new MutationObserver(() => {
-    clearTimeout(debounce);
-    debounce = setTimeout(buildToc, 200);
-  });
-  _tocObserver.observe(root, { childList: true, subtree: true, characterData: true });
-}
-
-function toggleTocPanel() {
-  const panel = document.getElementById('toc-panel');
-  const body  = document.getElementById('editor-body');
-  const btn   = document.getElementById('btn-toc-toggle');
-  if (!panel) return;
-  const open = panel.classList.contains('hidden');
-  panel.classList.toggle('hidden', !open);
-  body.classList.toggle('toc-open', open);
-  btn?.classList.toggle('active', open);
-  localStorage.setItem('meeting_toc_open', open ? '1' : '0');
-  if (open) {
-    buildToc();
-    _startTocWatch();
-  }
-  if (typeof editor !== 'undefined' && editor) editor.resize?.();
-}
-
-function initToc() {
-  const shouldOpen = localStorage.getItem('meeting_toc_open') === '1';
-  if (shouldOpen) setTimeout(() => toggleTocPanel(), 400);
-}
 </script>
 {% endblock %}
