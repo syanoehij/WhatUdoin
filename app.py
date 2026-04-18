@@ -41,11 +41,11 @@ async def lifespan(app: FastAPI):
     saved_url = db.get_setting("ollama_url")
     if saved_url:
         llm_parser.set_ollama_base_url(saved_url)
-    # APScheduler: 1분마다 15분 후 일정 알람 체크
-    scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)
-    # APScheduler: 매일 새벽 3시 휴지통 30일 초과 항목 정리
-    scheduler.add_job(db.cleanup_old_trash, "cron", hour=3, minute=0)
     if not scheduler.running:
+        # APScheduler: 1분마다 15분 후 일정 알람 체크
+        scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)
+        # APScheduler: 매일 새벽 3시 휴지통 30일 초과 항목 정리
+        scheduler.add_job(db.cleanup_old_trash, "cron", hour=3, minute=0)
         scheduler.start()
     yield
     if scheduler.running:
