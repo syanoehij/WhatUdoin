@@ -1654,6 +1654,7 @@ def get_events_by_date_range(start_date: str, end_date: str, team_id: int = None
                    FROM events e LEFT JOIN teams t ON e.team_id = t.id
                    WHERE date(e.start_datetime) >= ? AND date(e.start_datetime) <= ?
                    AND e.team_id = ? AND e.deleted_at IS NULL
+                   AND (e.event_type IS NULL OR e.event_type = 'schedule')
                    ORDER BY e.start_datetime""",
                 (start_date, end_date, team_id)
             ).fetchall()
@@ -1663,6 +1664,7 @@ def get_events_by_date_range(start_date: str, end_date: str, team_id: int = None
                    FROM events e LEFT JOIN teams t ON e.team_id = t.id
                    WHERE date(e.start_datetime) >= ? AND date(e.start_datetime) <= ?
                    AND e.deleted_at IS NULL
+                   AND (e.event_type IS NULL OR e.event_type = 'schedule')
                    ORDER BY e.start_datetime""",
                 (start_date, end_date)
             ).fetchall()

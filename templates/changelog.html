@@ -130,6 +130,104 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-19 AI 일정 생성 중 자동 새로고침 차단 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-4">12차 4단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🛡️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">FIX</span>AI 일정 생성 중 자동 새로고침 차단</div>
+          <div class="cl-item-detail">
+            메모 편집기에서 '일정 생성(AI)' 분석 도중 주기적 자동 새로고침이 발동해 패널이 닫히는 문제를 수정했습니다.
+            <ul>
+              <li>AI 분석 시작 시 <code>_blockAutoRefresh = true</code> 설정</li>
+              <li>분석 완료(성공·실패 모두) 후 <code>finally</code>에서 플래그 해제</li>
+              <li>분석 중에는 자동 새로고침이 건너뛰어져 패널이 유지됨</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-19 주간 보고서 회의 일정 제외 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-4">12차 3단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🚫</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">FEAT</span>주간 보고서 — 회의 일정 제외</div>
+          <div class="cl-item-detail">
+            '주간 업무 작성(AI)' 보고서 생성 시 회의 타입 일정이 포함되던 문제를 수정했습니다.
+            <ul>
+              <li>날짜 범위 이벤트 조회 쿼리에 <code>event_type = 'schedule'</code> 조건 추가</li>
+              <li>회의(<code>event_type = 'meeting'</code>)는 보고서 대상에서 제외</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-19 주간 보고서 AI 일정 내용 요약 포함 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-4">12차 2단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">📝</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">FEAT</span>주간 보고서 — 일정 내용 요약 포함</div>
+          <div class="cl-item-detail">
+            일정에 내용(설명)이 있을 경우 보고서에 요약 문장을 추가하도록 AI 프롬프트를 개선했습니다.
+            <ul>
+              <li>설명이 있는 항목 바로 아래 줄에 <code>: 요약 1~2문장</code> 형식으로 출력</li>
+              <li>무엇을 위해 어떤 작업을 했는지 맥락을 담아 작성</li>
+              <li>설명 없는 항목은 기존 형식(<code>- 일정명 (완료/예정)</code>) 유지</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-19 주간 업무 작성 모달 UI 텍스트 개선 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-4">12차 1단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">✏️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>주간 업무 작성 모달 텍스트 개선</div>
+          <div class="cl-item-detail">
+            주간 업무 작성 모달의 제목과 버튼 텍스트를 간결하게 수정했습니다.
+            <ul>
+              <li>모달 제목: <b>주간 업무 보고서 생성</b> → <b>주간 업무 작성</b></li>
+              <li>생성 버튼: <b>AI 보고서 생성</b> → <b>생성</b></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-19 메모장 사이드바 필터 재구성 ── -->
   <div class="cl-group">
     <div class="cl-group-header">

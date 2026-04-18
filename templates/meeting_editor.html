@@ -403,6 +403,7 @@ async function runAiParse() {
   if (!content) { alert('메모 내용을 먼저 입력하세요.'); return; }
 
   const model = document.getElementById('ai-model-select').value;
+  window._blockAutoRefresh = true;
   document.getElementById('ai-loading').classList.remove('hidden');
   document.getElementById('ai-error').classList.add('hidden');
   document.getElementById('ai-result-section').classList.add('hidden');
@@ -457,6 +458,7 @@ async function runAiParse() {
   } catch (e) {
     showAiError(e.message);
   } finally {
+    window._blockAutoRefresh = false;
     document.getElementById('ai-loading').classList.add('hidden');
     document.getElementById('btn-run-ai').disabled = false;
   }
