@@ -4,7 +4,37 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}WhatUDoin{% endblock %}</title>
-  <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon" id="app-favicon" />
+
+  {% if https_available and request.url.scheme == 'http' %}
+  <script>
+  (function () {
+    if (localStorage.getItem('whatudoin_force_http') === '1') return;
+    var failAt = parseInt(localStorage.getItem('whatudoin_https_fail_at') || '0', 10);
+    if (failAt && (Date.now() - failAt) < 10 * 60 * 1000) return;
+    var host = location.hostname;
+    var httpsBase = 'https://' + host + ':{{ https_port }}';
+    var probe = new Image();
+    var done = false;
+    var timer = setTimeout(function () {
+      if (done) return; done = true;
+      localStorage.setItem('whatudoin_https_fail_at', String(Date.now()));
+    }, 2500);
+    probe.onload = function () {
+      if (done) return; done = true;
+      clearTimeout(timer);
+      localStorage.removeItem('whatudoin_https_fail_at');
+      location.replace(httpsBase + location.pathname + location.search + location.hash);
+    };
+    probe.onerror = function () {
+      if (done) return; done = true;
+      clearTimeout(timer);
+      localStorage.setItem('whatudoin_https_fail_at', String(Date.now()));
+    };
+    probe.src = httpsBase + '/static/favicon.ico?_probe=' + Date.now();
+  })();
+  </script>
+  {% endif %}
 
   <!-- FullCalendar (로컬, 오프라인 동작) -->
   <script src="/static/lib/fullcalendar.min.js"></script>
@@ -173,6 +203,23 @@
     border-radius: 8px; padding: 0 3px;
     display: flex; align-items: center; justify-content: center;
     line-height: 1; pointer-events: none;
+  }
+  @keyframes _notif-pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); transform: scale(1); }
+    50%      { box-shadow: 0 0 0 5px rgba(231,76,60,0.35); transform: scale(1.08); }
+  }
+  @keyframes _notif-shake {
+    0%,100% { transform: translateX(0); }
+    20%     { transform: translateX(-4px) rotate(-4deg); }
+    40%     { transform: translateX(4px) rotate(4deg); }
+    60%     { transform: translateX(-3px) rotate(-2deg); }
+    80%     { transform: translateX(3px) rotate(2deg); }
+  }
+  .notif-bell-btn.has-unread {
+    animation: _notif-pulse 2s ease-in-out infinite;
+  }
+  .notif-bell-btn.shake {
+    animation: _notif-shake 0.6s ease-in-out forwards !important;
   }
   .notif-dropdown {
     position: absolute; top: calc(100% + 6px); right: 0;
@@ -343,6 +390,7 @@
               🔧 관리자 페이지
               <span class="dropdown-pending-badge hidden" id="dropdown-pending-badge"></span>
             </a>
+            <a href="/alarm-setup" class="profile-dropdown-item" onclick="closeProfileMenu()">🔔 알람 설정</a>
             <a href="/changelog" class="profile-dropdown-item" onclick="closeProfileMenu()">📋 변경 이력</a>
             <div class="profile-dropdown-sep"></div>
             <button class="profile-dropdown-item danger" onclick="closeProfileMenu(); doLogout()">로그아웃</button>
@@ -907,6 +955,79 @@
     // sessionStorage로 새로고침 후에도 이전 카운트 유지 (자동새로고침 중복 발화 방지)
     let _notifPrevCount = parseInt(sessionStorage.getItem('notif_prev_count') || '0', 10);
 
+    /* ── 시각 알림 3종 ── */
+    const _origTitle   = document.title;
+    const _faviconEl   = document.getElementById('app-favicon');
+    const _origFavicon = _faviconEl ? _faviconEl.href : '/static/favicon.ico';
+    let   _titleTimer  = null;
+    let   _faviconImg  = null; // 원본 favicon Image 캐시
+
+    function _startTitleBlink(count) {
+      if (_titleTimer) clearInterval(_titleTimer);
+      let _flipped = false;
+      _titleTimer = setInterval(function() {
+        if (document.hidden) {
+          _flipped = !_flipped;
+          document.title = _flipped ? `🔔 (${count}) 새 알림` : _origTitle;
+        } else {
+          document.title = _origTitle;
+        }
+      }, 1000);
+    }
+    function _stopTitleBlink() {
+      if (_titleTimer) { clearInterval(_titleTimer); _titleTimer = null; }
+      document.title = _origTitle;
+    }
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden && !_titleTimer) document.title = _origTitle;
+    });
+
+    function _setFaviconDot(on) {
+      if (!_faviconEl) return;
+      if (!on) { _faviconEl.href = _origFavicon; return; }
+      const SIZE = 32;
+      function _draw(baseImg) {
+        const c = document.createElement('canvas');
+        c.width = c.height = SIZE;
+        const ctx = c.getContext('2d');
+        if (baseImg) ctx.drawImage(baseImg, 0, 0, SIZE, SIZE);
+        ctx.beginPath();
+        ctx.arc(SIZE - 7, 7, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#e74c3c';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        _faviconEl.href = c.toDataURL('image/png');
+      }
+      if (_faviconImg) { _draw(_faviconImg); return; }
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload  = function() { _faviconImg = img; _draw(img); };
+      img.onerror = function() { _draw(null); };
+      img.src = _origFavicon + '?_=' + Date.now();
+    }
+
+    function _pulseBell(on, justArrived) {
+      const btn = document.getElementById('notif-bell-btn');
+      if (!btn) return;
+      if (on) {
+        btn.classList.add('has-unread');
+        if (justArrived) {
+          btn.classList.add('shake');
+          setTimeout(function() { btn.classList.remove('shake'); }, 650);
+        }
+      } else {
+        btn.classList.remove('has-unread', 'shake');
+      }
+    }
+
+    function _clearVisualAlerts() {
+      _stopTitleBlink();
+      _setFaviconDot(false);
+      _pulseBell(false);
+    }
+
     // 브라우저 알림 (허용된 경우 보조 수단으로만 사용)
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
@@ -931,10 +1052,16 @@
             badge.classList.add('hidden');
           }
         }
-        // 이전보다 알림이 늘었으면 브라우저 알림
-        if (count > _notifPrevCount) {
+        // 이전보다 알림이 늘었으면 브라우저 알림 (HTTPS/localhost에서만 동작)
+        const arrived = count > _notifPrevCount;
+        if (arrived) {
           _showBrowserNotif(`새 알림 ${count - _notifPrevCount}건이 있습니다.`);
         }
+        // 시각 알림 3종 (HTTP에서도 동작)
+        _pulseBell(count > 0, arrived);
+        _setFaviconDot(count > 0);
+        if (count > 0 && arrived) _startTitleBlink(count);
+        if (count === 0) _stopTitleBlink();
         _notifPrevCount = count;
         sessionStorage.setItem('notif_prev_count', count);
       } catch {}
@@ -1010,6 +1137,7 @@
         if (badge) badge.classList.add('hidden');
         _notifPrevCount = 0;
         sessionStorage.setItem('notif_prev_count', '0');
+        _clearVisualAlerts();
         const list = document.getElementById('notif-list');
         if (list) list.innerHTML = '<div class="notif-empty">알림이 없습니다.</div>';
         // 드롭다운 닫기
