@@ -1007,10 +1007,10 @@ mark.search-hl {
   display: block;
   width: 100%;
 }
-/* grid 레이아웃: 구분(72) | 작성자(110) | 제목(1fr) | 팀(100) | 날짜(96) */
+/* grid 레이아웃: 문서종류(88) | 공개여부(90) | 작성자(80) | 제목(1fr) | 팀(80) | 날짜(72) */
 .meetings-content .meeting-table tr {
   display: grid;
-  grid-template-columns: 96px 110px 1fr 100px 96px;
+  grid-template-columns: 88px 90px 80px 1fr 80px 72px;
   width: 100%;
   align-items: center;
 }
@@ -1037,10 +1037,12 @@ mark.search-hl {
   text-transform: uppercase;
   white-space: nowrap;
 }
-.meeting-table th.col-doc-type   { text-align: center; width: 92px; }
-.meeting-table th.col-visibility { text-align: center; width: 104px; }
-.meeting-table th.col-author { text-align: center; }
-.meeting-table th.col-date  { text-align: right; padding-right: 28px; }
+.meeting-table th.col-doc-type   { text-align: center; width: 88px; }
+.meeting-table th.col-visibility { text-align: center; width: 90px; }
+.meeting-table th.col-author { text-align: center; width: 80px; }
+.meeting-table th.col-title  { width: auto; }
+.meeting-table th.col-team   { width: 80px; }
+.meeting-table th.col-date   { text-align: right; padding-right: 20px; width: 72px; }
 .meeting-row {
   cursor: pointer;
   border-bottom: 1px solid var(--border-faint);
@@ -1056,10 +1058,10 @@ mark.search-hl {
 /* td 전용 — th에 번지지 않도록 tbody로 범위 제한 */
 .meeting-table tbody .col-doc-type   { text-align: center; white-space: nowrap; }
 .meeting-table tbody .col-visibility { text-align: center; white-space: nowrap; }
-.meeting-table tbody .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.meeting-table tbody .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; max-width: 80px; }
 .meeting-table tbody .col-title  { font-weight: 500; min-width: 0; }
-.meeting-table tbody .col-team   { }
-.meeting-table tbody .col-date   { white-space: nowrap; font-size: 0.8rem; color: var(--text-faint); text-align: right; padding-right: 28px; }
+.meeting-table tbody .col-team   { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
+.meeting-table tbody .col-date   { white-space: nowrap; font-size: 0.8rem; color: var(--text-faint); text-align: right; padding-right: 20px; }
 
 .meeting-title-wrap { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .meeting-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); transition: color 0.12s; }

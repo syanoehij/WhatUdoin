@@ -25,6 +25,7 @@
 
     <div class="btn-group">
       {% if can_edit and not locked_by %}
+      <div class="visibility-segment" id="visibility-segment" role="radiogroup" aria-label="공개 범위"></div>
       <label class="doc-type-toggle" title="팀 문서면 캘린더/팀원에게 공개됩니다">
         <input type="checkbox" id="chk-team-doc"
                {% if not meeting or meeting.is_team_doc %}checked{% endif %} />
@@ -32,7 +33,6 @@
           {% if not meeting or meeting.is_team_doc %}팀 문서{% else %}개인 문서{% endif %}
         </span>
       </label>
-      <div class="visibility-segment" id="visibility-segment" role="radiogroup" aria-label="공개 범위"></div>
       {% endif %}
       {% if user and meeting %}
       <a href="/memo/{{ meeting.id }}/history" class="btn btn-sm">수정 이력</a>
