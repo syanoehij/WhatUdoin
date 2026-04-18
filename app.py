@@ -900,76 +900,150 @@ async def update_event_project(event_id: int, request: Request):
     return {"ok": True}
 
 
+_CONFLICT_EXACT = 70
+_CONFLICT_SIMILAR = 50
+
+
+def _db_row_to_prompt_shape(row: dict) -> dict:
+    """DB 행의 start_datetime/end_datetime을 date/start_time/end_time으로 분해."""
+    sd = row.get("start_datetime") or ""
+    ed = row.get("end_datetime") or ""
+    return {
+        **row,
+        "date":       sd[:10] if sd else "",
+        "start_time": sd[11:16] if len(sd) > 10 else None,
+        "end_time":   ed[11:16] if len(ed) > 10 else None,
+    }
+
+
 @app.post("/api/events/check-conflicts")
 async def check_event_conflicts(request: Request):
-    """AI 파싱 결과와 기존 일정의 중복 여부를 검사합니다."""
-    from datetime import datetime as _dt
-    _require_editor(request)
+    """AI 파싱 결과와 기존 일정의 중복 여부를 검사합니다.
+
+    필드별 가중치 점수화 방식 사용.
+    - total >= 70: exact (자동 중복)
+    - 50 <= total < 70: similar (LLM funnel 대상, ai_funnel_candidates 첨부)
+    - total < 50: pass
+    intra-batch(같은 실행 내 후보끼리)도 동일 함수로 비교 후 _conflict_batch 플래그.
+    """
+    user = _require_editor(request)
     data = await request.json()
     candidates = data.get("events", [])
-    existing = db.get_events_for_conflict_check()
+    team_id = user.get("team_id")
+    existing = db.get_events_for_conflict_check(team_id)
 
     results = []
-    for cand in candidates:
-        cand_title = (cand.get("title") or "").strip().lower()
-        cand_date  = (cand.get("date") or "")[:10]
+    for i, cand in enumerate(candidates):
+        # ── DB existing 비교 ──
+        scored = []
+        for ex in existing:
+            s = llm_parser.score_conflict(cand, ex)
+            scored.append((s, ex))
+        scored.sort(key=lambda x: x[0]["total"], reverse=True)
 
         conflict = None
-        for ex in existing:
-            ex_date  = (ex.get("start_datetime") or "")[:10]
-            ex_title = (ex.get("title") or "").strip().lower()
+        if scored:
+            best_score, best_ex = scored[0]
+            total = best_score["total"]
+            if total >= _CONFLICT_EXACT:
+                conflict = {
+                    "type":           "exact",
+                    "existing_id":    best_ex["id"],
+                    "existing_title": best_ex["title"],
+                    "similarity":     total,
+                    "fields_matched": best_score["fields_matched"],
+                }
+            elif total >= _CONFLICT_SIMILAR:
+                top3 = [
+                    {
+                        "id":    ex["id"],
+                        "title": ex["title"],
+                        "date":  (ex.get("start_datetime") or "")[:10],
+                        "assignee": ex.get("assignee"),
+                        "project":  ex.get("project"),
+                        "start_time": (ex.get("start_datetime") or "")[11:16] or None,
+                        "end_time":   (ex.get("end_datetime") or "")[11:16] or None,
+                        "all_day":    bool(ex.get("all_day")),
+                    }
+                    for _, ex in scored[:3]
+                ]
+                conflict = {
+                    "type":                "similar",
+                    "existing_id":         best_ex["id"],
+                    "existing_title":      best_ex["title"],
+                    "similarity":          total,
+                    "fields_matched":      best_score["fields_matched"],
+                    "ai_funnel_candidates": top3,
+                }
 
-            if not cand_date or not ex_date:
-                continue
-
-            # 날짜 차이 계산 (AI 파싱 오차 ±1일 허용)
-            try:
-                date_diff = abs((_dt.strptime(cand_date, "%Y-%m-%d") - _dt.strptime(ex_date, "%Y-%m-%d")).days)
-            except ValueError:
-                continue
-
-            # 제목 일치: ±1일 이내
-            if date_diff <= 1 and cand_title and ex_title == cand_title:
-                cand_assignee = (cand.get("assignee") or "").strip()
-                ex_assignee   = (ex.get("assignee") or "").strip()
-                # 양쪽 담당자가 모두 존재하고 다르면 별개 일정으로 취급 — 중복 아님
-                if cand_assignee and ex_assignee and cand_assignee != ex_assignee:
-                    continue
-                conflict = {"type": "exact", "existing_id": ex["id"], "existing_title": ex["title"]}
+        # ── intra-batch 비교 (이전 후보들과 비교) ──
+        conflict_batch = None
+        for j in range(i):
+            prev = candidates[j]
+            s = llm_parser.score_conflict(cand, {
+                **prev,
+                "start_datetime": f"{prev.get('date','')}" + (f"T{prev.get('start_time')}" if prev.get("start_time") else ""),
+                "end_datetime": f"{prev.get('date','')}" + (f"T{prev.get('end_time')}" if prev.get("end_time") else ""),
+            })
+            if s["total"] >= _CONFLICT_SIMILAR:
+                conflict_batch = {
+                    "batch_index":  j,
+                    "batch_title":  prev.get("title", ""),
+                    "similarity":   s["total"],
+                }
                 break
 
-            # 부분 포함: 같은 날짜만 + 담당자도 같을 때만
-            if date_diff == 0 and cand_title and ex_title and len(cand_title) >= 2 and (
-                cand_title in ex_title or ex_title in cand_title
-            ):
-                cand_assignee = (cand.get("assignee") or "").strip()
-                ex_assignee   = (ex.get("assignee") or "").strip()
-                # 담당자가 다르면 별개 일정 — 중복 아님
-                if cand_assignee and ex_assignee and cand_assignee != ex_assignee:
-                    continue
-                conflict = {"type": "similar", "existing_id": ex["id"], "existing_title": ex["title"]}
-                break
-
-        results.append({"conflict": conflict})
+        results.append({"conflict": conflict, "conflict_batch": conflict_batch})
 
     return {"results": results}
 
 
 @app.post("/api/events/ai-conflict-review")
 async def ai_conflict_review(request: Request):
-    """신규 일정 전체를 기존 일정과 비교해 AI가 중복 여부를 최종 판단합니다."""
-    _require_editor(request)
+    """similar 구간 후보만 AI가 최종 검토합니다. server-owned top-K 방식.
+
+    클라이언트는 후보 전체와 check-conflicts 결과(conflict 포함)를 보낸다.
+    서버가 similar 구간을 골라 각 후보에 대한 top-3 existing만 프롬프트에 주입.
+    exact 판정은 AI가 뒤집지 못한다.
+    """
+    user = _require_editor(request)
     data = await request.json()
-    candidates = data.get("events", [])   # [{title, date, assignee}]
+    all_events = data.get("events", [])
     model      = data.get("model", llm_parser.DEFAULT_MODEL)
-    if not candidates:
+    team_id    = user.get("team_id")
+
+    if not all_events:
         return {"results": []}
 
-    # AI 검토용 기존 일정: 넓은 풀 사용 (날짜 오차 대응)
-    existing = db.get_events_for_conflict_check()
+    # 서버에서 직접 DB 재조회 후 similar 구간 재계산 (클라이언트 check_results 무시)
+    existing = db.get_events_for_conflict_check(team_id)
+    similar_indices: list[int] = []
+    ai_funnel_map: dict[int, list] = {}  # ai_candidates 인덱스 → top3 existing
 
-    results = llm_parser.review_all_conflicts(candidates, existing, model)
-    return {"results": results}
+    for i, cand in enumerate(all_events):
+        scored = [(llm_parser.score_conflict(cand, ex), ex) for ex in existing]
+        scored.sort(key=lambda x: x[0]["total"], reverse=True)
+        if scored:
+            best_total = scored[0][0]["total"]
+            if _CONFLICT_SIMILAR <= best_total < _CONFLICT_EXACT:
+                ai_funnel_map[len(similar_indices)] = [_db_row_to_prompt_shape(ex) for _, ex in scored[:3]]
+                similar_indices.append(i)
+
+    if not similar_indices:
+        return {"results": [{"is_duplicate": False, "reason": "", "existing_title": None} for _ in all_events]}
+
+    ai_candidates = [all_events[i] for i in similar_indices]
+
+    # AI 검토 호출 (후보마다 top-3만 넘김)
+    ai_raw_results = llm_parser.review_all_conflicts_with_funnel(ai_candidates, ai_funnel_map, model)
+
+    # 결과를 전체 이벤트 인덱스로 매핑
+    out = [{"is_duplicate": False, "reason": "", "existing_title": None} for _ in all_events]
+    for ai_idx, orig_idx in enumerate(similar_indices):
+        if ai_idx < len(ai_raw_results):
+            out[orig_idx] = ai_raw_results[ai_idx]
+
+    return {"results": out}
 
 
 @app.patch("/api/events/{event_id}/kanban")
@@ -1628,18 +1702,43 @@ async def ai_parse(request: Request):
 async def ai_confirm(request: Request):
     user = _require_editor(request)
     body = await request.json()
-    events = body.get("events", [])
+    events     = body.get("events", [])
     meeting_id = body.get("meeting_id")
+    force      = bool(body.get("force", False))
+    team_id    = user.get("team_id")
+
+    # 저장 직전 재검사 — force=True가 아닌 경우만
+    if not force:
+        existing = db.get_events_for_conflict_check(team_id)
+        blocked = []
+        for i, e in enumerate(events):
+            scored_pairs = sorted(
+                [(llm_parser.score_conflict(e, ex), ex) for ex in existing],
+                key=lambda x: x[0]["total"], reverse=True,
+            )
+            if scored_pairs and scored_pairs[0][0]["total"] >= _CONFLICT_EXACT:
+                best_score, best_ex = scored_pairs[0]
+                blocked.append({
+                    "index":          i,
+                    "title":          e.get("title", ""),
+                    "reason":         "exact",
+                    "existing_id":    best_ex["id"],
+                    "existing_title": best_ex["title"],
+                    "similarity":     best_score["total"],
+                })
+        if blocked:
+            return {"saved": 0, "blocked": blocked, "requires_force": True}
+
     saved = 0
     for e in events:
         payload = llm_parser.to_event_payload(e)
         if payload["start_datetime"]:
-            payload["team_id"] = user.get("team_id")
+            payload["team_id"]    = team_id
             payload["created_by"] = str(user["id"])
             payload["meeting_id"] = meeting_id
             db.create_event(payload)
             saved += 1
-    return {"saved": saved}
+    return {"saved": saved, "blocked": [], "requires_force": False}
 
 
 @app.post("/api/ai/refine")

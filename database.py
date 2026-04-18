@@ -1632,17 +1632,36 @@ def get_events_by_meeting(meeting_id: int):
     return [dict(r) for r in rows]
 
 
-def get_events_for_conflict_check() -> list[dict]:
-    """중복 감지용: 과거 3개월 ~ 미래 12개월 이벤트 title/date/assignee 반환"""
+def get_events_for_conflict_check(team_id: int | None = None) -> list[dict]:
+    """중복 감지용: 과거 3개월 ~ 미래 12개월 이벤트 반환.
+
+    team_id 전달 시 현재 팀 + 공용 일정(team_id IS NULL)을 포함.
+    """
     with get_conn() as conn:
-        rows = conn.execute(
-            """SELECT id, title, start_datetime, assignee
-               FROM events
-               WHERE date(start_datetime) >= date('now', '-3 months')
-                 AND date(start_datetime) <= date('now', '+12 months')
-                 AND deleted_at IS NULL
-               ORDER BY start_datetime"""
-        ).fetchall()
+        if team_id is not None:
+            rows = conn.execute(
+                """SELECT id, title, start_datetime, end_datetime, all_day,
+                          assignee, project, location, event_type
+                   FROM events
+                   WHERE date(start_datetime) >= date('now', '-3 months')
+                     AND date(start_datetime) <= date('now', '+12 months')
+                     AND deleted_at IS NULL
+                     AND (event_type IS NULL OR event_type = 'schedule')
+                     AND (team_id = ? OR team_id IS NULL)
+                   ORDER BY start_datetime""",
+                (team_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT id, title, start_datetime, end_datetime, all_day,
+                          assignee, project, location, event_type
+                   FROM events
+                   WHERE date(start_datetime) >= date('now', '-3 months')
+                     AND date(start_datetime) <= date('now', '+12 months')
+                     AND deleted_at IS NULL
+                     AND (event_type IS NULL OR event_type = 'schedule')
+                   ORDER BY start_datetime"""
+            ).fetchall()
     return [dict(r) for r in rows]
 
 def get_events_by_date_range(start_date: str, end_date: str, team_id: int = None) -> list[dict]:

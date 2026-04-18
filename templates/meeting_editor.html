@@ -469,67 +469,92 @@ async function checkConflictsForParsed() {
     const res = await fetch('/api/events/check-conflicts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ events: parsedEvents.map(e => ({ title: e.title, date: e.date, assignee: e.assignee })) }),
+      body: JSON.stringify({
+        events: parsedEvents.map(e => ({
+          title:      e.title,
+          date:       e.date,
+          assignee:   e.assignee,
+          project:    e.project    || null,
+          location:   e.location   || null,
+          start_time: e.start_time || null,
+          end_time:   e.end_time   || null,
+          all_day:    !!e.all_day,
+        })),
+      }),
     });
     const data = await res.json();
+    // check-conflicts 결과 보존 (ai-conflict-review funnel에서 재사용)
+    window._lastCheckResults = data.results;
     data.results.forEach((r, i) => {
       if (r.conflict) {
         parsedEvents[i]._conflict = r.conflict;
-        parsedEvents[i]._include  = false;
+        if (r.conflict.type === 'exact') parsedEvents[i]._include = false;
+      }
+      if (r.conflict_batch) {
+        parsedEvents[i]._conflict_batch = r.conflict_batch;
       }
     });
   } catch (_) {}
 }
 
 async function aiReviewConflicts(model) {
-  // 전체 파싱된 일정을 서버로 보내 AI가 기존 일정과 통합 비교
-  const events = parsedEvents
-    .filter(Boolean)
-    .map(e => ({ title: e.title, date: e.date, assignee: e.assignee }));
+  // similar 구간만 AI 검토. 클라이언트는 전체 이벤트와 check-results만 보낸다.
+  // 서버가 top-K existing을 선별(server-owned funnel).
+  const events = parsedEvents.filter(Boolean).map(e => ({
+    title:      e.title,
+    date:       e.date,
+    assignee:   e.assignee,
+    project:    e.project    || null,
+    start_time: e.start_time || null,
+    end_time:   e.end_time   || null,
+    all_day:    !!e.all_day,
+  }));
 
   if (!events.length) return;
+
+  const checkResults = window._lastCheckResults || events.map(() => ({}));
 
   try {
     const res = await fetch('/api/events/ai-conflict-review', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ events, model: model || document.getElementById('ai-model-select').value }),
+      body: JSON.stringify({
+        events,
+        check_results: checkResults,
+        model: model || document.getElementById('ai-model-select').value,
+      }),
     });
     const data = await res.json();
 
-    // parsedEvents 중 null 제외한 실제 순서와 results가 1:1 대응
-    let ri = 0;
-    parsedEvents.forEach((e, i) => {
-      if (!e) return;
-      const r = data.results[ri++];
-      if (!r) return;
-
-      const wasExactMatch = e._conflict && e._conflict.type === 'exact';
+    data.results.forEach((r, i) => {
+      if (!parsedEvents[i] || !r) return;
+      const wasExact = parsedEvents[i]._conflict && parsedEvents[i]._conflict.type === 'exact';
 
       if (r.is_duplicate) {
-        // AI가 중복 확정 — exact 단순 매칭이 이미 있으면 ai_confirmed만 보강
-        if (wasExactMatch) {
+        if (wasExact) {
           parsedEvents[i]._conflict.ai_confirmed = true;
           parsedEvents[i]._conflict.ai_reason    = r.reason;
         } else {
+          const prev = parsedEvents[i]._conflict || {};
           parsedEvents[i]._conflict = {
             type:           'ai',
-            existing_title: r.existing_title || (e._conflict?.existing_title) || '기존 일정',
+            existing_title: r.existing_title || prev.existing_title || '기존 일정',
+            similarity:     prev.similarity,
+            fields_matched: prev.fields_matched,
             ai_confirmed:   true,
             ai_reason:      r.reason,
           };
           parsedEvents[i]._include = false;
         }
       } else {
-        // AI가 중복 아님 — exact 매칭은 AI가 덮어쓸 수 없음 (AI 오판 방지)
-        if (!wasExactMatch) {
+        // exact 판정은 AI가 뒤집지 못함
+        if (!wasExact) {
           parsedEvents[i]._conflict = null;
           parsedEvents[i]._include  = true;
         }
-        // wasExactMatch인 경우: 단순 매칭 결과를 그대로 유지
       }
     });
-  } catch (_) {} // 실패 시 단순 검사 결과 유지
+  } catch (_) {}
 }
 
 function setLoadingMsg(msg) {
@@ -573,10 +598,16 @@ function renderAiResults() {
         ${!e.date ? `<span class="date-missing-warn" title="날짜를 직접 입력해야 등록할 수 있습니다">⚠ 날짜 미입력</span>` : ''}
         ${e._conflict ? (() => {
           const typeLabel = e._conflict.type === 'exact' ? '중복' : '유사';
-          const aiNote   = e._conflict.ai_confirmed ? ` (AI 확인: ${esc(e._conflict.ai_reason || '')})` : '';
-          const tooltip  = (e._conflict.ai_confirmed ? 'AI가 중복으로 확인했습니다' : '유사한 일정이 감지되었습니다') + (e._conflict.ai_reason ? ': ' + e._conflict.ai_reason : '');
-          return `<span class="conflict-warn${e._conflict.ai_confirmed ? ' ai-confirmed' : ''}" title="${esc(tooltip)}">⚠ ${typeLabel}: &quot;${esc(e._conflict.existing_title)}&quot;${e._conflict.ai_confirmed ? ' ✓AI' : ''}</span>`;
+          const simBadge  = e._conflict.similarity != null ? ` (${e._conflict.similarity}%)` : '';
+          const fieldsBadge = (e._conflict.fields_matched && e._conflict.fields_matched.length)
+            ? ` [${e._conflict.fields_matched.join('·')}]` : '';
+          const aiNote   = e._conflict.ai_confirmed ? ` ✓AI` : '';
+          const tooltip  = (e._conflict.ai_confirmed ? 'AI가 중복으로 확인했습니다' : '유사한 일정이 감지되었습니다')
+            + (e._conflict.ai_reason ? ': ' + e._conflict.ai_reason : '')
+            + fieldsBadge;
+          return `<span class="conflict-warn${e._conflict.ai_confirmed ? ' ai-confirmed' : ''}" title="${esc(tooltip)}">⚠ ${typeLabel}: &quot;${esc(e._conflict.existing_title)}&quot;${simBadge}${fieldsBadge}${aiNote}</span>`;
         })() : ''}
+        ${e._conflict_batch ? `<span class="batch-conflict-warn" title="같은 메모에서 추출된 #${e._conflict_batch.batch_index + 1}번 일정과 유사 (${e._conflict_batch.similarity}%)">⚠ 같은 메모 내 중복</span>` : ''}
         <div class="btn-group" onclick="event.stopPropagation()">
           <label class="ai-include-label ${e._include !== false ? 'is-included' : 'is-excluded'}" title="${e._include !== false ? '클릭하면 등록에서 제외됩니다' : '클릭하면 등록 대상에 포함됩니다'}">
             <input type="checkbox" id="ai-include-${i}" ${e._include !== false ? 'checked' : ''} onchange="toggleAiInclude(${i},this.checked)" />
@@ -701,7 +732,7 @@ function removeAiItem(i) {
   if (!remaining.length) resetAiResult();
 }
 
-async function confirmAiEvents() {
+async function confirmAiEvents(force = false) {
   if (!MEETING_ID) { alert('메모를 먼저 저장하세요.'); return; }
   const toSave = parsedEvents.filter((e, i) => {
     if (!e) return false;
@@ -709,12 +740,23 @@ async function confirmAiEvents() {
     return chk ? chk.checked : e._include !== false;
   });
   if (!toSave.length) { alert('등록할 일정이 없습니다. 체크박스를 확인하세요.'); return; }
-  const res  = await fetch('/api/ai/confirm', {
+
+  const res = await fetch('/api/ai/confirm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ events: toSave, meeting_id: MEETING_ID }),
+    body: JSON.stringify({ events: toSave, meeting_id: MEETING_ID, force }),
   });
   const data = await res.json();
+
+  if (data.requires_force && data.blocked && data.blocked.length) {
+    const names = data.blocked.map(b => `"${b.title}" (${b.similarity}% 유사: "${b.existing_title}")`).join('\n');
+    const ok = confirm(
+      `아래 일정이 기존 일정과 중복될 수 있습니다:\n\n${names}\n\n그래도 강제 등록하시겠습니까?`
+    );
+    if (ok) await confirmAiEvents(true);
+    return;
+  }
+
   alert(`${data.saved}개 일정이 등록되었습니다.`);
   location.reload();
 }

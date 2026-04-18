@@ -1,7 +1,14 @@
-import requests
+import hashlib
 import json
+import logging
 import re
+import unicodedata
 from datetime import date
+from typing import Optional
+
+import requests
+
+logger = logging.getLogger("whatudoin.llm")
 
 OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_URL = OLLAMA_BASE_URL + "/api/generate"
@@ -86,15 +93,20 @@ def parse_schedule(text: str, model: str = DEFAULT_MODEL) -> list[dict]:
 
 JSON:"""
 
-    response = _session.post(
-        OLLAMA_URL,
-        json={"model": model, "prompt": prompt, "stream": False},
-        timeout=120,
-    )
-    response.raise_for_status()
+    def _call(opts: dict) -> list[dict]:
+        resp = _session.post(
+            OLLAMA_URL,
+            json={"model": model, "prompt": prompt, "stream": False, **opts},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        return validate_and_normalize(_extract_json(resp.json().get("response", "")))
 
-    raw = response.json().get("response", "")
-    return _extract_json(raw)
+    result = _call({"options": {"temperature": 0.1}})
+    if not result and len(text) >= 30:
+        retry_prompt = "이전 출력이 JSON 배열이 아니었습니다. 반드시 [ 로 시작해 ] 로 끝나는 JSON 배열만 출력하세요.\n\n" + prompt
+        result = _call({"options": {"temperature": 0.0}, "prompt": retry_prompt})
+    return result
 
 
 def refine_schedule(text: str, first_pass: list[dict], model: str = DEFAULT_MODEL) -> list[dict]:
@@ -136,7 +148,7 @@ def refine_schedule(text: str, first_pass: list[dict], model: str = DEFAULT_MODE
     )
     response.raise_for_status()
     raw = response.json().get("response", "")
-    result = _extract_json(raw)
+    result = validate_and_normalize(_extract_json(raw))
     # 2차가 빈 배열을 돌려주면 1차 결과 사용 (안전망)
     return result if result else first_pass
 
@@ -144,14 +156,34 @@ def refine_schedule(text: str, first_pass: list[dict], model: str = DEFAULT_MODE
 def _extract_json(raw: str) -> list[dict]:
     cleaned = re.sub(r"```(?:json)?", "", raw).strip().replace("```", "").strip()
 
-    match = re.search(r"\[.*\]", cleaned, re.DOTALL)
-    if match:
+    def _find_last_array(s: str) -> Optional[str]:
+        end = s.rfind("]")
+        if end == -1:
+            return None
+        depth = 0
+        for i in range(end, -1, -1):
+            if s[i] == "]":
+                depth += 1
+            elif s[i] == "[":
+                depth -= 1
+                if depth == 0:
+                    return s[i:end + 1]
+        return None
+
+    candidate = _find_last_array(cleaned)
+    if candidate:
         try:
-            data = json.loads(match.group())
+            data = json.loads(candidate)
             if isinstance(data, list):
                 return data
         except json.JSONDecodeError:
-            pass
+            fixed = re.sub(r",\s*([}\]])", r"\1", candidate)
+            try:
+                data = json.loads(fixed)
+                if isinstance(data, list):
+                    return data
+            except json.JSONDecodeError:
+                pass
 
     match = re.search(r"\{.*\}", cleaned, re.DOTALL)
     if match:
@@ -162,7 +194,235 @@ def _extract_json(raw: str) -> list[dict]:
         except json.JSONDecodeError:
             pass
 
+    sha8 = hashlib.sha256(raw.encode()).hexdigest()[:8]
+    logger.warning("llm_parser: JSON extract failed len=%d sha8=%s head=%s", len(raw), sha8, raw[:200])
     return []
+
+
+def validate_and_normalize(items: list) -> list[dict]:
+    """추출된 일정 항목을 보수적으로 검증·정규화한다.
+
+    형식 오류 필드는 None으로 내린다. 애매한 값을 추측 보정하지 않는다.
+    """
+    from text_utils import canon_assignee, canon_project, canon_location
+
+    _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+    def _fix_time(s) -> Optional[str]:
+        if s is None:
+            return None
+        s = str(s).strip()
+        m = re.match(r"^(\d{1,2})시(?:(\d{1,2})분)?$", s)
+        if m:
+            return f"{int(m.group(1)):02d}:{int(m.group(2) or 0):02d}"
+        m = re.match(r"^(\d{1,2})\.(\d{2})$", s)
+        if m:
+            return f"{int(m.group(1)):02d}:{m.group(2)}"
+        m = re.match(r"^(\d{1,2}):(\d{1,2})$", s)
+        if m:
+            return f"{int(m.group(1)):02d}:{int(m.group(2)):02d}"
+        return None
+
+    result = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        if not title:
+            continue
+
+        date_val = item.get("date")
+        if date_val is not None and not _DATE_RE.match(str(date_val)):
+            date_val = None
+
+        end_date_val = item.get("end_date")
+        if end_date_val is not None and not _DATE_RE.match(str(end_date_val)):
+            end_date_val = None
+
+        start_time = _fix_time(item.get("start_time"))
+        end_time = _fix_time(item.get("end_time"))
+
+        all_day = bool(item.get("all_day"))
+        if start_time:
+            all_day = False
+
+        result.append({
+            "title":       title,
+            "project":     canon_project(item.get("project")),
+            "date":        date_val,
+            "end_date":    end_date_val,
+            "start_time":  start_time,
+            "end_time":    end_time,
+            "all_day":     all_day,
+            "location":    canon_location(item.get("location")),
+            "assignee":    canon_assignee(item.get("assignee")),
+            "description": item.get("description") or None,
+        })
+    return result
+
+
+def time_overlap(cand: dict, ex: dict) -> Optional[bool]:
+    """시간 겹침 판정.
+
+    반환: True=겹침, False=명확히 분리, None=불확정(추정 포함 시 페널티 금지).
+    """
+    from datetime import datetime as _dt
+
+    if cand.get("all_day") or ex.get("all_day"):
+        return None
+
+    cand_date = (cand.get("date") or "")[:10]
+    cand_start_t = cand.get("start_time")
+    cand_end_t = cand.get("end_time")
+
+    ex_start_str = ex.get("start_datetime") or ""
+    ex_end_str = ex.get("end_datetime") or ""
+
+    if not cand_date or not cand_start_t or not ex_start_str:
+        return None
+
+    try:
+        cand_start = _dt.strptime(f"{cand_date}T{cand_start_t}", "%Y-%m-%dT%H:%M")
+    except ValueError:
+        return None
+
+    try:
+        ex_start = _dt.fromisoformat(ex_start_str[:16])
+    except ValueError:
+        return None
+
+    cand_end_estimated = cand_end_t is None
+    ex_end_estimated = not ex_end_str
+
+    if cand_end_estimated or ex_end_estimated:
+        return None
+
+    try:
+        cand_end = _dt.strptime(f"{cand_date}T{cand_end_t}", "%Y-%m-%dT%H:%M")
+        ex_end = _dt.fromisoformat(ex_end_str[:16])
+    except ValueError:
+        return None
+
+    if cand_end <= ex_start or ex_end <= cand_start:
+        return False
+    return True
+
+
+def score_conflict(cand: dict, ex: dict) -> dict:
+    """후보와 기존 일정의 충돌 점수를 계산한다 (순수 함수).
+
+    반환: {"total": int, "breakdown": dict, "fields_matched": list,
+            "title_ratio": int, "time_overlap": Optional[bool]}
+    판정 타입(exact/similar/pass) 변환은 호출부(app.py)에서 수행.
+    """
+    from text_utils import canon_title, canon_assignee, canon_project, canon_location
+    from datetime import datetime as _dt
+
+    try:
+        from rapidfuzz import fuzz as _fuzz
+        def _ratio(a, b): return _fuzz.token_set_ratio(a, b) if a and b else 0
+    except ImportError:
+        import difflib
+        def _ratio(a, b): return int(difflib.SequenceMatcher(None, a, b).ratio() * 100) if a and b else 0
+
+    breakdown: dict = {}
+    fields_matched: list = []
+
+    # ── title ──
+    ct = canon_title(cand.get("title") or "")
+    et = canon_title(ex.get("title") or "")
+    ratio = _ratio(ct, et)
+
+    if ratio >= 95:
+        title_score = 40
+    elif ratio >= 85:
+        title_score = 30
+    elif ratio >= 70:
+        title_score = 15
+    else:
+        title_score = 0
+
+    if len(ct) < 3 and title_score > 0:
+        title_score -= 5
+
+    breakdown["title"] = title_score
+    if title_score > 0:
+        fields_matched.append("제목")
+
+    title_strong = ratio >= 85
+
+    # ── date ──
+    cand_date = (cand.get("date") or "")[:10]
+    ex_date = (ex.get("start_datetime") or "")[:10]
+    date_score = 0
+
+    if cand_date and ex_date:
+        try:
+            diff = abs((_dt.strptime(cand_date, "%Y-%m-%d") - _dt.strptime(ex_date, "%Y-%m-%d")).days)
+            if diff == 0:
+                date_score = 30
+                fields_matched.append("날짜")
+            elif diff <= 1:
+                date_score = 15
+        except ValueError:
+            pass
+    else:
+        date_score = 3 if title_strong else 0
+
+    breakdown["date"] = date_score
+
+    # ── assignee ──
+    ca = canon_assignee(cand.get("assignee"))
+    ea = canon_assignee(ex.get("assignee"))
+
+    if ca is not None and ea is not None:
+        if ca == ea:
+            assignee_score = 15
+            fields_matched.append("담당자")
+        else:
+            assignee_score = -20
+    else:
+        assignee_score = 3 if title_strong else 0
+
+    breakdown["assignee"] = assignee_score
+
+    # ── project ──
+    cp = canon_project(cand.get("project"))
+    ep = canon_project(ex.get("project"))
+    project_score = 0
+    if cp and ep and cp == ep:
+        project_score = 8
+        fields_matched.append("프로젝트")
+    breakdown["project"] = project_score
+
+    # ── time_overlap ──
+    to = time_overlap(cand, ex)
+    if to is True:
+        time_score = 5
+    elif to is False:
+        time_score = -10
+    else:
+        time_score = 0
+    breakdown["time_overlap"] = time_score
+
+    # ── location ──
+    cl = canon_location(cand.get("location"))
+    el = canon_location(ex.get("location"))
+    location_score = 0
+    if cl and el and cl == el:
+        location_score = 2
+        fields_matched.append("장소")
+    breakdown["location"] = location_score
+
+    total = title_score + date_score + assignee_score + project_score + time_score + location_score
+
+    return {
+        "total":         total,
+        "breakdown":     breakdown,
+        "fields_matched": fields_matched,
+        "title_ratio":   ratio,
+        "time_overlap":  to,
+    }
 
 
 def generate_weekly_report(past_events: list[dict], future_events: list[dict], base_date: str, model: str = DEFAULT_MODEL) -> str:
@@ -303,14 +563,134 @@ JSON:"""
     default = [{"is_duplicate": False, "reason": "", "existing_title": None}] * len(candidates)
     try:
         result_list = _extract_json(raw)
+        if not result_list:
+            return default
+
         out = [{"is_duplicate": False, "reason": "", "existing_title": None} for _ in candidates]
-        for item in result_list:
-            if not isinstance(item, dict):
-                continue
-            idx = int(item.get("index", 0)) - 1  # 1-based → 0-based
-            if 0 <= idx < len(candidates):
-                out[idx] = {
-                    "is_duplicate": bool(item.get("is_duplicate")),
+        has_index = any(isinstance(item, dict) and "index" in item for item in result_list)
+
+        if has_index:
+            for item in result_list:
+                if not isinstance(item, dict):
+                    continue
+                idx = int(item.get("index", 0)) - 1
+                if 0 <= idx < len(candidates):
+                    out[idx] = {
+                        "is_duplicate":  bool(item.get("is_duplicate")),
+                        "reason":        str(item.get("reason", "")),
+                        "existing_title": item.get("existing_title") or None,
+                    }
+        else:
+            # index 누락 시 순서 기반 fallback
+            logger.info("llm_parser: ai conflict review index missing, using positional fallback")
+            for i, item in enumerate(result_list):
+                if i >= len(candidates) or not isinstance(item, dict):
+                    break
+                out[i] = {
+                    "is_duplicate":  bool(item.get("is_duplicate")),
+                    "reason":        str(item.get("reason", "")),
+                    "existing_title": item.get("existing_title") or None,
+                }
+        return out
+    except Exception:
+        return default
+
+
+def review_all_conflicts_with_funnel(
+    candidates: list[dict],
+    funnel_map: dict[int, list[dict]],
+    model: str = DEFAULT_MODEL,
+) -> list[dict]:
+    """similar 후보마다 서버가 좁힌 top-K existing만 보고 AI가 중복 여부 판단.
+
+    funnel_map: {candidate_index: [top-K existing dicts]}
+    """
+    if not candidates:
+        return []
+
+    today = date.today().isoformat()
+    default = [{"is_duplicate": False, "reason": "", "existing_title": None}] * len(candidates)
+
+    def _fmt_existing(items: list[dict]) -> str:
+        if not items:
+            return "- (없음)"
+        return "\n".join(
+            f'- "{e.get("title","")}" ({e.get("date","")}, '
+            f'시작:{e.get("start_time") or "미지정"}, 담당:{e.get("assignee") or "미지정"})'
+            for e in items
+        )
+
+    candidates_text = "\n".join(
+        f'{i+1}. "{c.get("title","")}" ({c.get("date","")}, '
+        f'시작:{c.get("start_time") or "미지정"}, 끝:{c.get("end_time") or "미지정"}, '
+        f'담당:{c.get("assignee") or "미지정"}, 프로젝트:{c.get("project") or "미지정"})'
+        for i, c in enumerate(candidates)
+    )
+
+    existing_sections = "\n".join(
+        f"[신규 {i+1}번 관련 기존 일정]\n{_fmt_existing(funnel_map.get(i, []))}"
+        for i in range(len(candidates))
+    )
+
+    prompt = f"""아래 신규 일정들이 관련 기존 일정과 중복인지 판단하세요. JSON만 출력하세요.
+
+오늘: {today}
+
+[신규 일정]
+{candidates_text}
+
+{existing_sections}
+
+출력 형식:
+[{{"index":1,"is_duplicate":false,"reason":"기존에 없는 새 일정","existing_title":null}}]
+
+판단 기준:
+- 제목·날짜·담당자가 모두 같으면 중복
+- 시간대가 다르면(명시된 경우) 중복 아님
+- 담당자가 서로 다르면(둘 다 지정된 경우) 중복 아님
+- 회차(1차/2차)·단계가 다르면 중복 아님
+- 애매하면 is_duplicate:false
+- JSON 배열만 출력, 신규 일정 개수({len(candidates)}개)만큼 항목 필수
+
+JSON:"""
+
+    try:
+        response = _session.post(
+            OLLAMA_URL,
+            json={"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0.0}},
+            timeout=90,
+        )
+        response.raise_for_status()
+        raw = response.json().get("response", "")
+    except Exception:
+        return default
+
+    try:
+        result_list = _extract_json(raw)
+        if not result_list:
+            return default
+
+        out = [{"is_duplicate": False, "reason": "", "existing_title": None} for _ in candidates]
+        has_index = any(isinstance(item, dict) and "index" in item for item in result_list)
+
+        if has_index:
+            for item in result_list:
+                if not isinstance(item, dict):
+                    continue
+                idx = int(item.get("index", 0)) - 1
+                if 0 <= idx < len(candidates):
+                    out[idx] = {
+                        "is_duplicate":  bool(item.get("is_duplicate")),
+                        "reason":        str(item.get("reason", "")),
+                        "existing_title": item.get("existing_title") or None,
+                    }
+        else:
+            logger.info("llm_parser: funnel conflict review index missing, using positional fallback")
+            for i, item in enumerate(result_list):
+                if i >= len(candidates) or not isinstance(item, dict):
+                    break
+                out[i] = {
+                    "is_duplicate":  bool(item.get("is_duplicate")),
                     "reason":        str(item.get("reason", "")),
                     "existing_title": item.get("existing_title") or None,
                 }
