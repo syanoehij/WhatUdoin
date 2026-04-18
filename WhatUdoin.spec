@@ -15,6 +15,7 @@ a = Analysis(
         # 정적 자원 (번들 내부, 읽기전용)
         ('templates', 'templates'),
         ('static',    'static'),
+        ('docs',      'docs'),
     ],
     hiddenimports=[
         # ── uvicorn ──────────────────────────────────────

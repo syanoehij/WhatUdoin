@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}알람 설정 — WhatUDoin{% endblock %}
+
+{% block extra_head %}
+<style>
+  .alarm-setup-wrap {
+    max-width: 680px;
+    margin: 2rem auto;
+    padding: 0 1rem 3rem;
+  }
+  .alarm-setup-wrap h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+  }
+  .alarm-status-banner {
+    padding: .75rem 1rem;
+    border-radius: 8px;
+    font-size: .92rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+  }
+  .alarm-status-banner.https { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+  .alarm-status-banner.http  { background: #e2e3e5; color: #383d41; border: 1px solid #d6d8db; }
+  .alarm-section {
+    margin-bottom: 2rem;
+  }
+  .alarm-section h2 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    padding-bottom: .4rem;
+    border-bottom: 1px solid var(--border, #ddd);
+  }
+  .alarm-cert-status {
+    font-size: .85rem;
+    font-weight: 600;
+    margin-bottom: .75rem;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+  }
+  .alarm-cert-status.ready  { color: #28a745; }
+  .alarm-cert-status.notyet { color: #6c757d; }
+  .alarm-download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .6rem 1.2rem;
+    background: var(--primary, #4a90e2);
+    color: #fff;
+    border-radius: 7px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: .95rem;
+    transition: opacity .15s;
+    margin-bottom: 1rem;
+  }
+  .alarm-download-btn:hover { opacity: .85; }
+  .alarm-download-btn.disabled {
+    background: #aaa;
+    pointer-events: none;
+    cursor: default;
+  }
+  .alarm-install-steps {
+    padding-left: 1.4rem;
+    line-height: 2;
+    font-size: .92rem;
+    margin: .5rem 0 0;
+  }
+  .alarm-install-steps li { margin-bottom: .1rem; }
+  .alarm-install-steps code {
+    background: var(--code-bg, #f0f0f0);
+    padding: .1rem .35rem;
+    border-radius: 4px;
+    font-size: .85em;
+  }
+  .alarm-cache-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .5rem 1rem;
+    background: var(--primary, #4a90e2);
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    font-weight: 600;
+    font-size: .9rem;
+    cursor: pointer;
+    transition: opacity .15s;
+    margin-bottom: .75rem;
+  }
+  .alarm-cache-btn:hover { opacity: .85; }
+  .alarm-cache-btn.done { background: #28a745; }
+  .alarm-section-desc {
+    font-size: .9rem;
+    color: var(--text-muted, #555);
+    margin-bottom: .75rem;
+    line-height: 1.6;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="alarm-setup-wrap">
+  <h1>🔔 OS 알림 받기 — 1회 인증서 설치</h1>
+
+  {% if request.url.scheme == 'https' %}
+  <div class="alarm-status-banner https">
+    ✅ 지금 HTTPS로 접속 중입니다. OS 알림이 정상 수신됩니다.
+  </div>
+  {% else %}
+  <div class="alarm-status-banner http">
+    ℹ️ 지금 HTTP로 접속 중입니다. 아래 절차를 완료하면 자동으로 HTTPS로 전환되어 OS 알림을 받을 수 있습니다.
+  </div>
+  {% endif %}
+
+  <!-- 1단계 -->
+  <div class="alarm-section">
+    <h2>1단계. 인증서 다운로드 및 설치</h2>
+
+    {% if cert_ready %}
+    <div class="alarm-cert-status ready">✔ 인증서 준비 완료</div>
+    <a class="alarm-download-btn" href="/api/cert/rootCA.crt" download>
+      🔐 인증서 다운로드 (WhatUdoin-인증서.crt)
+    </a>
+    {% else %}
+    <div class="alarm-cert-status notyet">○ 인증서 미준비 — 서버 관리자에게 문의하세요.</div>
+    <span class="alarm-download-btn disabled">🔐 인증서 다운로드 (준비 중)</span>
+    {% endif %}
+
+    <ol class="alarm-install-steps">
+      <li>위 버튼으로 <code>WhatUdoin-인증서.crt</code> 다운로드</li>
+      <li>파일 더블클릭 → <strong>인증서 설치</strong> 버튼 클릭</li>
+      <li>저장 위치: <strong>현재 사용자</strong> 선택</li>
+      <li>「인증서를 다음 저장소에 모두 저장」→ <strong>찾아보기</strong> → <strong>신뢰할 수 있는 루트 인증 기관</strong> 선택 → 확인</li>
+      <li>마법사 완료</li>
+    </ol>
+  </div>
+
+  <!-- 2단계 -->
+  <div class="alarm-section">
+    <h2>2단계. 캐시 삭제</h2>
+    <p class="alarm-section-desc">
+      인증서 설치 후 아래 버튼을 눌러 브라우저 캐시를 초기화해야 자동 전환이 정상 동작합니다.
+    </p>
+    <button class="alarm-cache-btn" id="clear-cache-btn" onclick="clearHttpsCache()">
+      🗑️ 캐시 삭제
+    </button>
+    <p class="alarm-section-desc" id="cache-clear-msg" style="display:none;color:#28a745;font-weight:600;">
+      ✔ 캐시가 삭제되었습니다. 3단계로 진행하세요.
+    </p>
+  </div>
+
+  <!-- 3단계 -->
+  <div class="alarm-section">
+    <h2>3단계. 브라우저 완전 종료 후 재시작</h2>
+    <p class="alarm-section-desc">
+      Chrome / Edge는 완전히 종료해야 인증서가 반영됩니다.<br>
+      <strong>작업 표시줄 트레이 아이콘까지 종료</strong>한 뒤 다시 열고,
+      기존 HTTP 주소로 접속하면 자동으로 HTTPS로 전환됩니다.
+    </p>
+  </div>
+</div>
+
+<script>
+function clearHttpsCache() {
+  localStorage.removeItem('whatudoin_https_fail_at');
+  localStorage.removeItem('whatudoin_force_http');
+  var btn = document.getElementById('clear-cache-btn');
+  var msg = document.getElementById('cache-clear-msg');
+  if (btn) { btn.classList.add('done'); btn.textContent = '✔ 삭제 완료'; btn.disabled = true; }
+  if (msg) msg.style.display = 'block';
+}
+</script>
+{% endblock %}
