@@ -49,11 +49,15 @@
   .cl-phase-badge.phase-2     { background: #eaf8f0; color: #1a8a46; border-color: #a8e4c0; }
   .cl-phase-badge.phase-3     { background: #f3eaff; color: #7c3aed; border-color: #d8b4fe; }
   .cl-phase-badge.phase-4     { background: #fff0f3; color: #c0263c; border-color: #ffb3bf; }
+  .cl-phase-badge.phase-5     { background: #e3faf8; color: #0f766e; border-color: #99e6e0; }
+  .cl-phase-badge.phase-6     { background: #eef2ff; color: #3730a3; border-color: #c7d2fe; }
   .dark .cl-phase-badge.phase-init  { background: #1a3a52; color: #7ec8f7; border-color: #2d5e7e; }
   .dark .cl-phase-badge.phase-1     { background: #3d2a00; color: #f5b84a; border-color: #6e4a10; }
   .dark .cl-phase-badge.phase-2     { background: #0d3320; color: #4ecc8a; border-color: #1a5c38; }
   .dark .cl-phase-badge.phase-3     { background: #250d4a; color: #c08aff; border-color: #5b2d9e; }
   .dark .cl-phase-badge.phase-4     { background: #3d0a14; color: #ff8096; border-color: #7e1e2e; }
+  .dark .cl-phase-badge.phase-5     { background: #0a2e2b; color: #2dd4c8; border-color: #145e58; }
+  .dark .cl-phase-badge.phase-6     { background: #141033; color: #a5b4fc; border-color: #312e81; }
 
   .cl-rule {
     flex: 1;
@@ -124,11 +128,125 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-18 HTTPS 병행 서빙 + 알람 설정 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-6">6차 4단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🔒</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">신규</span>HTTPS 병행 서빙 (HTTP 8000 + HTTPS 8443 동시)</div>
+          <div class="cl-item-detail">mkcert로 발급한 인증서를 WhatUdoin.exe 옆에 두면 자동으로 HTTPS 모드가 추가됩니다. 기존 HTTP 접속은 그대로 유지되며, 두 포트를 asyncio.gather로 동시 서빙합니다. 인증서 파일이 없으면 HTTP 단독으로 기존과 동일하게 동작합니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🔔</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">신규</span>알람 설정 페이지 — 인증서 다운로드 및 설치 안내</div>
+          <div class="cl-item-detail">프로필 드롭다운에 '알람 설정' 메뉴 추가. 사용자가 루트 CA 인증서를 다운로드하고 1단계(설치) → 2단계(캐시 삭제 버튼) → 3단계(브라우저 재시작) 순서로 안내합니다. 관리자가 rootCA.pem을 준비하지 않은 경우 다운로드 버튼이 비활성화됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">⚡</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>HTTPS 자동 전환 프로브</div>
+          <div class="cl-item-detail">HTTP로 접속 시 브라우저가 백그라운드에서 HTTPS 가용성을 자동 감지합니다. CA가 설치된 사용자는 2.5초 내에 자동으로 https://IP:8443으로 전환됩니다. CA 미설치 사용자는 10분간 재시도 없이 HTTP를 그대로 사용합니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">📄</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">신규</span>관리자 가이드 문서 자동 배포</div>
+          <div class="cl-item-detail">docs/HTTPS-관리자-설정.md가 WhatUdoin.exe 최초 실행 시 exe 옆에 자동 복사됩니다. mkcert 설치부터 인증서 발급, 재발급 방법, 방화벽 설정까지 관리자용 가이드를 포함합니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-18 시각 알림 3종 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-6">6차 3단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🔔</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">신규</span>탭 제목 깜빡임 알림</div>
+          <div class="cl-item-detail">탭이 숨겨진 상태에서 읽지 않은 알림이 있으면 탭 제목이 '🔔 (N) 새 알림'과 원래 제목을 1초 간격으로 교대합니다. 탭으로 돌아오면 즉시 원래 제목으로 복원됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🔴</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">신규</span>Favicon 빨간 점 알림</div>
+          <div class="cl-item-detail">읽지 않은 알림이 있으면 브라우저 탭의 favicon 우상단에 빨간 점이 오버레이됩니다. Canvas API로 원본 favicon에 직접 그려 별도 이미지 파일이 필요 없습니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">✨</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">신규</span>알림 벨 버튼 펄스 + 흔들기 애니메이션</div>
+          <div class="cl-item-detail">읽지 않은 알림이 있으면 🔔 버튼에 빨간 glow 펄스가 지속됩니다. 새 알림이 도착한 순간에는 추가로 600ms 흔들기 애니메이션이 재생됩니다. HTTP 환경에서도 완전히 동작합니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-18 프로젝트 옵시디언 ZIP 내보내기 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-6">6차 2단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">📦</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">신규</span>프로젝트 옵시디언 ZIP 내보내기</div>
+          <div class="cl-item-detail">프로젝트 관리 페이지에서 '옵시디언 ZIP으로 저장' 버튼으로 프로젝트 전체를 옵시디언 호환 ZIP으로 내보낼 수 있습니다. index.md(프로젝트 개요), 일정별 md 파일, 체크리스트별 md 파일이 각각 생성되며 YAML frontmatter와 [[wikilinks]] 형식을 사용합니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🖼️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">신규</span>ZIP 내보내기 — 첨부 이미지 포함</div>
+          <div class="cl-item-detail">체크리스트 본문에 삽입된 이미지를 ZIP의 attachments/ 폴더에 자동으로 포함하고, 마크다운 내 이미지 경로를 ../attachments/파일명 형식으로 재작성합니다. 옵시디언에서 바로 이미지가 표시됩니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-18 AVR 자동 새로고침 차단 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-6">6차 1단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🖥️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">수정</span>AVR 페이지 자동 새로고침 차단</div>
+          <div class="cl-item-detail">AVR(원격 제어) 페이지 접속 중에는 5분 주기 자동 새로고침이 비활성화됩니다. 원격 세션이 끊기는 문제가 해결됩니다. 다른 페이지로 이동하면 자동 새로고침이 정상 재개됩니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-18 AVR 원격 접속 기능 개편 ── -->
   <div class="cl-group">
     <div class="cl-group-header">
       <span class="cl-date">2026-04-18</span>
-      <span class="cl-phase-badge phase-4">4차 11단계</span>
+      <span class="cl-phase-badge phase-5">5차 3단계</span>
       <div class="cl-rule"></div>
     </div>
     <div class="cl-items">
@@ -167,7 +285,7 @@
   <div class="cl-group">
     <div class="cl-group-header">
       <span class="cl-date">2026-04-18</span>
-      <span class="cl-phase-badge phase-4">4차 10단계</span>
+      <span class="cl-phase-badge phase-5">5차 2단계</span>
       <div class="cl-rule"></div>
     </div>
     <div class="cl-items">
@@ -185,7 +303,7 @@
   <div class="cl-group">
     <div class="cl-group-header">
       <span class="cl-date">2026-04-18</span>
-      <span class="cl-phase-badge phase-4">4차 9단계</span>
+      <span class="cl-phase-badge phase-5">5차 1단계</span>
       <div class="cl-rule"></div>
     </div>
     <div class="cl-items">
