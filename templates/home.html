@@ -179,7 +179,7 @@
 <div id="view-user" class="hidden">
 
   <!-- 상단: 인사말 + 예정 회의 (좌) / 팀 공지 (우) -->
-  <div style="display:flex; gap:24px; align-items:stretch; margin-bottom:24px;">
+  <div style="display:flex; gap:24px; align-items:stretch; margin-bottom:20px;">
 
     <!-- 왼쪽: 인사말 + 진행요약 + 예정 회의 -->
     <div style="flex:1; min-width:0;">
@@ -189,7 +189,7 @@
       </div>
       <div class="home-progress" id="user-progress"></div>
       <div class="home-section-title">💬 예정 회의</div>
-      <div id="user-meetings" class="home-meeting-list" style="min-height:200px;"></div>
+      <div id="user-meetings" class="home-meeting-list" style="min-height:20px;"></div>
     </div>
 
     <!-- 오른쪽: 팀 공지 -->
@@ -209,7 +209,7 @@
 
   <!-- 하단: 내 담당 일정 — 전체 너비 -->
   <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-    <div class="home-section-title" style="margin-bottom:0;">내 담당 일정</div>
+    <div class="home-section-title" style="margin-bottom:0; font-size:1.05rem;">내 담당 일정</div>
     {% if user and user.role in ('editor', 'admin') %}
     <button class="btn btn-sm btn-primary" onclick="openModal()">+ 일정 추가</button>
     {% endif %}
