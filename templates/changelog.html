@@ -128,6 +128,156 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-18 휴지통 복원 API 팀 소유권 검사 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-6">7차 5단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🗑️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">보안</span>휴지통 복원 API 팀 소유권 검사 추가</div>
+          <div class="cl-item-detail">
+            <code>POST /api/trash/{type}/{id}/restore</code>가 <code>_require_editor</code>만 통과하면 팀 구분 없이 복원되던 문제를 수정했습니다.
+            <ul>
+              <li>admin은 모든 항목 복원 가능 (기존과 동일)</li>
+              <li>일반 에디터는 <code>item.team_id == user.team_id</code>가 일치해야만 복원 허용, 불일치 시 403</li>
+              <li>이미 복원됐거나 존재하지 않는 항목 ID를 직접 요청해도 403으로 차단</li>
+              <li><code>database.py</code>에 <code>get_trash_item_team()</code> 헬퍼 추가 — SQL 인젝션 방지를 위해 테이블명을 dict 매핑으로 처리</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-18 메모장 보조 API 권한 + soft-delete + 컬럼 폭 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-6">7차 4단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🔒</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">보안</span>메모장 보조 API 권한 검사 추가</div>
+          <div class="cl-item-detail">
+            이력·이벤트 3개 엔드포인트에 <code>_can_read_meeting</code> / <code>_can_write_meeting</code> 검사를 추가했습니다.
+            <ul>
+              <li><code>GET /api/meetings/{id}/histories</code> — 비로그인·타팀·삭제 문서 접근 시 404</li>
+              <li><code>POST /api/meetings/{id}/histories/{hid}/restore</code> — 쓰기 권한 없으면 403</li>
+              <li><code>GET /api/meetings/{id}/events</code> — 비로그인·타팀·삭제 문서 접근 시 404</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🗂️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">보안</span>메모장 단건 조회 soft-delete 필터 적용</div>
+          <div class="cl-item-detail"><code>get_meeting()</code> SQL에 <code>AND m.deleted_at IS NULL</code>을 추가했습니다. 휴지통에 있는 문서를 ID로 직접 조회하면 <code>None</code>이 반환되어 이후 권한 체크에서 자동으로 404 처리됩니다. 휴지통 복원 경로(<code>restore_trash_item</code>)는 별도 함수를 사용하므로 영향 없음.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">📐</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag style">UI</span>메모장 목록 '구분' 컬럼 폭 확대</div>
+          <div class="cl-item-detail">배지가 최대 3개(팀/개인 + 공개 + 공유)까지 붙을 수 있어 컬럼이 좁아지는 문제를 수정했습니다. <code>col-type</code>에 <code>min-width: 120px</code>을 적용하고, 배지 사이 간격(<code>.doc-badge + .doc-badge { margin-left: 4px }</code>)을 추가했습니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-18 체크리스트 삭제 문서 직접 접근 차단 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-6">7차 3단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">✅</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">보안</span>삭제된 체크리스트 직접 ID 접근 차단</div>
+          <div class="cl-item-detail">
+            <code>get_checklist()</code> SQL에 <code>AND deleted_at IS NULL</code>을 추가했습니다. 휴지통으로 이동된 체크리스트에 대해 아래 경로가 모두 차단됩니다.
+            <ul>
+              <li><code>/check/{id}/edit</code> — 리다이렉트 처리(이미 404 가드 존재)</li>
+              <li><code>GET /api/checklists/{id}</code> → 404</li>
+              <li><code>PATCH /api/checklists/{id}</code> → 404</li>
+              <li><code>POST /api/checklists/{id}/histories/{hid}/restore</code> → 404</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-18 메모장 가시성 모델 재설계 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-6">7차 2단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">📋</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">개선</span>메모장 가시성 모델 재설계 — 4단계 공개 범위</div>
+          <div class="cl-item-detail">
+            DB에 <code>is_public</code>, <code>team_share</code> 컬럼을 추가하고 문서별 공개 범위를 4단계로 세분화했습니다.
+            <ul>
+              <li><b>개인 문서</b> — 작성자 + admin만 열람·수정</li>
+              <li><b>개인 + 팀 공유 ON</b> — 같은 팀원 열람 가능, 수정은 작성자만</li>
+              <li><b>개인·팀 + 공개 ON</b> — 비로그인 포함 전체 열람 가능, 수정은 기존 권한 유지</li>
+              <li><b>팀 문서</b> — 같은 팀 열람·수정, admin 전권</li>
+            </ul>
+            모든 권한 검사는 SQL 레벨 필터(<code>get_all_meetings(viewer)</code>)와 헬퍼 함수(<code>_can_read_meeting</code>, <code>_can_write_meeting</code>)로 처리합니다.
+          </div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🎛️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>메모장 에디터 상단 버튼 3종 (개인↔팀 / 팀 공유 / 공개)</div>
+          <div class="cl-item-detail">에디터 헤더에 공개 범위 토글 버튼 3종을 추가했습니다. '팀 공유' 버튼은 개인 문서일 때만 표시되고, 팀 문서로 전환하면 자동으로 숨깁니다. 편집 가능 여부(<code>can_edit</code>)는 서버에서 계산해 템플릿에 전달하며, 버튼·저장 UI는 <code>can_edit</code> 기준으로 렌더링됩니다.</div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🏷️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag ux">UX</span>메모장 목록 공개·공유 상태 배지</div>
+          <div class="cl-item-detail">목록 '구분' 컬럼에 문서 상태에 따라 배지를 추가 표시합니다. 공개 문서에는 <b>공개</b>(초록), 팀 공유 문서에는 <b>공유</b>(노랑) 배지가 붙습니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-18 APScheduler 중복 등록 차단 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-6">7차 1단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">⚙️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">수정</span>HTTPS 병행 서빙 시 APScheduler 작업 중복 등록 차단</div>
+          <div class="cl-item-detail">HTTP + HTTPS 두 Uvicorn 서버가 같은 FastAPI 앱을 공유할 때 lifespan이 2회 호출되어 스케줄 작업(<code>check_upcoming_event_alarms</code>, <code>cleanup_old_trash</code>)이 각각 2번 등록되던 문제를 수정했습니다. <code>add_job()</code> 두 호출을 <code>if not scheduler.running:</code> 블록 안으로 이동해 최초 1회만 등록·기동됩니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-18 HTTPS 병행 서빙 + 알람 설정 ── -->
   <div class="cl-group">
     <div class="cl-group-header">
