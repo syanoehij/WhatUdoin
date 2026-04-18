@@ -130,6 +130,115 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-18 체크 편집기 기능 패리티 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-7">9차 6단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">✨</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title">체크 편집기 — 📑 목차 패널 신규 추가</div>
+          <div class="cl-item-detail">
+            <span class="cl-tag feat">FEAT</span>
+            <code>check_editor.html</code> · <code>check.html</code> 인라인 편집기에 목차 패널 추가
+            <ul>
+              <li>H1~H3 자동 추출 · 헤더 클릭 시 해당 위치로 스크롤</li>
+              <li>활성 헤더 하이라이트(IntersectionObserver) · localStorage 열림 상태 복원</li>
+              <li>storageKey: <code>check_toc_open</code> (메모장과 별개 상태)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">✨</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title">체크 편집기 — Ctrl+S · 10초 쿨다운 신규 추가</div>
+          <div class="cl-item-detail">
+            <span class="cl-tag feat">FEAT</span>
+            <code>check_editor.html</code> · <code>check.html</code> 인라인 편집기에 메모장과 동일한 저장 UX 적용
+            <ul>
+              <li>Ctrl+S(Mac: Cmd+S)로 즉시 저장</li>
+              <li>수동 저장 후 버튼 10초 쿨다운 — "✓ 저장됨 (Ns)" 카운트다운 표시</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="cl-item">
+        <div class="cl-item-icon">🔧</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title">체크 편집기 — WUEditor 모듈로 전환</div>
+          <div class="cl-item-detail">
+            <span class="cl-tag feat">FEAT</span>
+            <span class="cl-tag ux">UX</span>
+            <code>check_editor.html</code> · <code>check.html</code> 인라인 중복 JS 제거, 공용 모듈 적용
+            <ul>
+              <li>이미지 리사이즈(25~200%) · 업로드 · sanitizerOff — 기존 기능 유지</li>
+              <li>잠금 heartbeat 120초 · 이탈 확인 모달 · 2분 자동저장 — 모듈로 통합</li>
+              <li>뷰어에 <code>customHTMLSanitizer</code> 추가 → <code>&lt;img style="width:Npx"&gt;</code> 너비 정상 보존</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-18 메모장 편집기 모듈 전환 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-7">9차 5단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🔧</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title">메모장 편집기 — WUEditor 공용 모듈로 전환</div>
+          <div class="cl-item-detail">
+            <span class="cl-tag ux">UX</span>
+            <code>meeting_editor.html</code> 인라인 중복 JS ~470줄 제거, <code>WUEditor.create()</code> 단일 호출로 교체
+            <ul>
+              <li>편집기 코어(잠금·리사이즈·자동저장·이탈모달·TOC) 공용 모듈로 위임</li>
+              <li>도메인 고유 코드(AI 일정 패널, 연결 일정, 팀/공개/공유 토글, 자동완성)는 템플릿 유지</li>
+              <li>기존 메모장 전체 기능 100% 동일하게 동작 (회귀 없음)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2026-04-18 편집기 공용 모듈 신규 ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-18</span>
+      <span class="cl-phase-badge phase-7">9차 4단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+      <div class="cl-item">
+        <div class="cl-item-icon">🏗️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title">공용 편집기 모듈 wu-editor 신규 생성</div>
+          <div class="cl-item-detail">
+            <span class="cl-tag feat">FEAT</span>
+            Toast UI Editor 래퍼 로직을 <code>static/js/wu-editor.js</code> 팩토리로 추출 — 3곳 복붙 중복 해소
+            <ul>
+              <li><code>WUEditor.create(opts)</code> → 인스턴스 반환 (<code>save</code> / <code>destroy</code> / <code>toggleToc</code> 등)</li>
+              <li>기능 opt-in: imageResize · imageUpload · toc · editLock · leaveConfirm · autosave · shortcutSave · saveCooldown · autocomplete</li>
+              <li><code>destroy()</code>로 MutationObserver · IntersectionObserver · 이벤트 리스너 완전 정리 (메모리 누수 방지)</li>
+              <li><code>static/css/wu-editor.css</code> 신규 — 이미지 리사이즈 툴바, 이탈 모달, 잠금 배너 스타일 통합</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── 2026-04-18 홈 레이아웃 세부 조정 ── -->
   <div class="cl-group">
     <div class="cl-group-header">
