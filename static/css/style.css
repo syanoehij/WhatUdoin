@@ -1037,7 +1037,8 @@ mark.search-hl {
   text-transform: uppercase;
   white-space: nowrap;
 }
-.meeting-table th.col-type   { text-align: center; min-width: 120px; }
+.meeting-table th.col-doc-type   { text-align: center; width: 92px; }
+.meeting-table th.col-visibility { text-align: center; width: 104px; }
 .meeting-table th.col-author { text-align: center; }
 .meeting-table th.col-date  { text-align: right; padding-right: 28px; }
 .meeting-row {
@@ -1053,8 +1054,8 @@ mark.search-hl {
   overflow: hidden;
 }
 /* td 전용 — th에 번지지 않도록 tbody로 범위 제한 */
-.meeting-table tbody .col-type   { text-align: center; white-space: nowrap; min-width: 120px; }
-.meeting-table tbody .col-type .doc-badge + .doc-badge { margin-left: 4px; }
+.meeting-table tbody .col-doc-type   { text-align: center; white-space: nowrap; }
+.meeting-table tbody .col-visibility { text-align: center; white-space: nowrap; }
 .meeting-table tbody .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
 .meeting-table tbody .col-title  { font-weight: 500; min-width: 0; }
 .meeting-table tbody .col-team   { }
@@ -1079,19 +1080,34 @@ mark.search-hl {
   vertical-align: middle;
 }
 
-.doc-badge {
+/* 목록 문서 종류 뱃지 */
+.doc-badge-lg {
   display: inline-block;
-  font-size: 0.72rem;
-  padding: 2px 7px;
-  border-radius: 10px;
-  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
 }
-.doc-team     { background: var(--accent-bg); color: var(--accent); }
-.doc-personal { background: var(--surface-3); color: var(--text-muted); }
-.doc-public   { background: #d1fae5; color: #065f46; }
-.dark .doc-public { background: #064e3b; color: #6ee7b7; }
-.doc-shared   { background: #fef3c7; color: #92400e; }
-.dark .doc-shared { background: #451a03; color: #fcd34d; }
+.doc-badge-lg.doc-team     { background: var(--accent-bg); color: var(--accent); }
+.doc-badge-lg.doc-personal { background: var(--surface-3); color: var(--text-muted); }
+
+/* 목록 공개 여부 뱃지 */
+.vis-badge {
+  display: inline-block;
+  font-size: 0.82rem;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.vis-badge.vis-public  { background: #d1fae5; color: #065f46; }
+.dark .vis-badge.vis-public  { background: #064e3b; color: #6ee7b7; }
+.vis-badge.vis-team    { background: #fef3c7; color: #92400e; }
+.dark .vis-badge.vis-team    { background: #451a03; color: #fcd34d; }
+.vis-badge.vis-private { background: var(--surface-3); color: var(--text-muted); }
 
 .event-count-badge {
   display: inline-block;
@@ -1127,6 +1143,32 @@ mark.search-hl {
   border-color: var(--border);
   color: var(--text-muted);
   background: transparent;
+}
+
+/* ── 공개 범위 세그먼트 컨트롤 (에디터 헤더) ── */
+.visibility-segment {
+  display: inline-flex;
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  overflow: hidden;
+  height: 32px;
+  align-items: stretch;
+}
+.vis-btn {
+  border: 0;
+  background: transparent;
+  padding: 0 11px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.vis-btn + .vis-btn { border-left: 1.5px solid var(--border); }
+.vis-btn.active {
+  background: var(--accent-bg);
+  color: var(--accent);
 }
 
 .empty-state {

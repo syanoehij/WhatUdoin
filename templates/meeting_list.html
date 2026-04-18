@@ -97,11 +97,12 @@
     <table class="meeting-table" id="meetings-table">
       <thead>
         <tr>
-          <th class="col-type">구분</th>
+          <th class="col-doc-type">문서 종류</th>
+          <th class="col-visibility">공개 여부</th>
           <th class="col-author">작성자</th>
           <th class="col-title">제목</th>
-          <th class="col-team">팀</th>
-          <th class="col-date">날짜</th>
+          <th class="col-team">소속 팀</th>
+          <th class="col-date">작성 날짜</th>
         </tr>
       </thead>
       <tbody id="meetings-tbody"></tbody>
@@ -205,9 +206,9 @@ function renderVisibilityFilter() {
   if (!section) return;
 
   const items = [
-    { key: null,      label: '전체',   cls: selectedVisibility === null      ? 'active' : '' },
-    { key: 'public',  label: '공개',   cls: selectedVisibility === 'public'  ? 'active' : '' },
-    { key: 'private', label: '비공개', cls: selectedVisibility === 'private' ? 'active' : '' },
+    { key: null,      label: '전체',      cls: selectedVisibility === null      ? 'active' : '' },
+    { key: 'public',  label: '외부 공개', cls: selectedVisibility === 'public'  ? 'active' : '' },
+    { key: 'private', label: '외부 비공개', cls: selectedVisibility === 'private' ? 'active' : '' },
   ];
 
   section.innerHTML = `
@@ -358,13 +359,24 @@ function renderRow(m, showYear) {
   const titleHtml = searchQuery
     ? escHtml(m.title).replace(new RegExp(escRegex(searchQuery), 'gi'), s => `<mark class="search-hl">${s}</mark>`)
     : escHtml(m.title);
+  const docBadge = m.is_team_doc
+    ? '<span class="doc-badge-lg doc-team">팀 문서</span>'
+    : '<span class="doc-badge-lg doc-personal">개인 문서</span>';
+  let visBadge;
+  if (m.is_public) {
+    visBadge = '<span class="vis-badge vis-public">외부 공개</span>';
+  } else if (!IS_LOGGED_IN) {
+    visBadge = '';
+  } else if (m.is_team_doc || m.team_share) {
+    visBadge = '<span class="vis-badge vis-team">팀 공유</span>';
+  } else {
+    visBadge = '<span class="vis-badge vis-private">비공개</span>';
+  }
+
   return `
   <tr class="meeting-row ${isMine ? 'mine' : ''}" onclick="location.href='/memo/${m.id}?from=memo'">
-    <td class="col-type">
-      <span class="doc-badge ${m.is_team_doc ? 'doc-team' : 'doc-personal'}">${m.is_team_doc ? '팀' : '개인'}</span>
-      ${IS_LOGGED_IN && m.is_public ? '<span class="doc-badge doc-public" title="비로그인 포함 공개">외부 공개</span>' : ''}
-      ${!m.is_team_doc && m.team_share ? '<span class="doc-badge doc-shared" title="팀원 읽기 공유">공유</span>' : ''}
-    </td>
+    <td class="col-doc-type">${docBadge}</td>
+    <td class="col-visibility">${visBadge}</td>
     <td class="col-author ${isMine ? 'author-me' : ''}">${escHtml(m.author_name || '-')}</td>
     <td class="col-title">
       <div class="meeting-title-wrap">

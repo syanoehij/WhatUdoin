@@ -25,29 +25,14 @@
 
     <div class="btn-group">
       {% if can_edit and not locked_by %}
-      <label class="doc-type-toggle" id="team-share-wrap"
-             title="팀원에게 읽기 전용으로 공유합니다"
-             style="{% if not meeting or meeting.is_team_doc %}visibility:hidden{% endif %}">
-        <input type="checkbox" id="chk-team-share"
-               {% if meeting and meeting.team_share %}checked{% endif %} />
-        <span class="doc-type-label" id="team-share-label">
-          {% if meeting and meeting.team_share %}팀 공유{% else %}팀 공유 끔{% endif %}
-        </span>
-      </label>
-      <label class="doc-type-toggle" title="팀 문서면 캘린더에 노출됩니다">
+      <label class="doc-type-toggle" title="팀 문서면 캘린더/팀원에게 공개됩니다">
         <input type="checkbox" id="chk-team-doc"
-               {% if meeting and meeting.is_team_doc %}checked{% endif %} />
+               {% if not meeting or meeting.is_team_doc %}checked{% endif %} />
         <span class="doc-type-label" id="doc-type-label">
-          {% if meeting and meeting.is_team_doc %}팀 문서{% else %}개인 문서{% endif %}
+          {% if not meeting or meeting.is_team_doc %}팀 문서{% else %}개인 문서{% endif %}
         </span>
       </label>
-      <label class="doc-type-toggle" title="비로그인 사용자를 포함해 누구나 읽을 수 있습니다">
-        <input type="checkbox" id="chk-public"
-               {% if meeting and meeting.is_public %}checked{% endif %} />
-        <span class="doc-type-label" id="public-label">
-          {% if meeting and meeting.is_public %}외부 공개{% else %}외부 비공개{% endif %}
-        </span>
-      </label>
+      <div class="visibility-segment" id="visibility-segment" role="radiogroup" aria-label="공개 범위"></div>
       {% endif %}
       {% if user and meeting %}
       <a href="/memo/{{ meeting.id }}/history" class="btn btn-sm">수정 이력</a>
@@ -198,21 +183,45 @@ function initMeetingEditor() {
     return;
   }
 
-  // 팀/개인 문서 토글 레이블 동기화 + URL 파라미터 초기화
-  const chkTeamDoc  = document.getElementById('chk-team-doc');
-  const lblDocType  = document.getElementById('doc-type-label');
-  const chkTeamShare = document.getElementById('chk-team-share');
-  const lblTeamShare = document.getElementById('team-share-label');
-  const chkPublic   = document.getElementById('chk-public');
-  const lblPublic   = document.getElementById('public-label');
-  const shareWrap   = document.getElementById('team-share-wrap');
+  // 문서 종류 토글 + 공개 범위 세그먼트 컨트롤 초기화
+  const chkTeamDoc = document.getElementById('chk-team-doc');
+  const lblDocType = document.getElementById('doc-type-label');
+  const visSeg     = document.getElementById('visibility-segment');
 
-  function syncShareWrap() {
-    if (shareWrap) shareWrap.style.visibility = chkTeamDoc.checked ? 'hidden' : 'visible';
-    if (chkTeamDoc.checked && chkTeamShare) {
-      chkTeamShare.checked = false;
-      if (lblTeamShare) lblTeamShare.textContent = '팀 공유 끔';
-    }
+  const VIS_OPTS = [
+    { v: 'private', label: '외부 비공개' },
+    { v: 'team',    label: '팀에게만 공개' },
+    { v: 'public',  label: '외부 공개' },
+  ];
+
+  function renderVisSegment(cur) {
+    if (!visSeg) return;
+    const isTeamDoc = chkTeamDoc ? chkTeamDoc.checked : true;
+    visSeg.innerHTML = VIS_OPTS
+      .filter(o => isTeamDoc ? o.v !== 'team' : true)
+      .map(o => `<button type="button" class="vis-btn${o.v === cur ? ' active' : ''}"
+                          data-value="${o.v}" role="radio" aria-checked="${o.v === cur}">
+                 ${o.label}</button>`).join('');
+    visSeg.querySelectorAll('.vis-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        visSeg.querySelectorAll('.vis-btn').forEach(b => {
+          b.classList.remove('active');
+          b.setAttribute('aria-checked', 'false');
+        });
+        btn.classList.add('active');
+        btn.setAttribute('aria-checked', 'true');
+      });
+    });
+  }
+
+  function deriveInitialVisibility() {
+    {% if meeting %}
+    if ({{ 'true' if meeting.is_public else 'false' }}) return 'public';
+    if ({{ 'true' if (not meeting.is_team_doc and meeting.team_share) else 'false' }}) return 'team';
+    return 'private';
+    {% else %}
+    return 'private';
+    {% endif %}
   }
 
   if (chkTeamDoc && lblDocType) {
@@ -220,28 +229,15 @@ function initMeetingEditor() {
       const isPersonal = new URLSearchParams(location.search).get('personal') === '1';
       chkTeamDoc.checked = !isPersonal;
       lblDocType.textContent = chkTeamDoc.checked ? '팀 문서' : '개인 문서';
-      if (isPersonal && chkTeamShare) {
-        chkTeamShare.checked = true;
-        if (lblTeamShare) lblTeamShare.textContent = '팀 공유';
-      }
-      if (chkPublic) chkPublic.checked = false;
-      if (lblPublic) lblPublic.textContent = '외부 비공개';
-      syncShareWrap();
+      renderVisSegment(isPersonal ? 'team' : 'private');
+    } else {
+      renderVisSegment(deriveInitialVisibility());
     }
     chkTeamDoc.addEventListener('change', () => {
       lblDocType.textContent = chkTeamDoc.checked ? '팀 문서' : '개인 문서';
-      syncShareWrap();
+      const cur = visSeg?.querySelector('.vis-btn.active')?.dataset.value || 'private';
+      renderVisSegment(chkTeamDoc.checked && cur === 'team' ? 'private' : cur);
     });
-    if (chkPublic && lblPublic) {
-      chkPublic.addEventListener('change', () => {
-        lblPublic.textContent = chkPublic.checked ? '외부 공개' : '외부 비공개';
-      });
-    }
-    if (chkTeamShare && lblTeamShare) {
-      chkTeamShare.addEventListener('change', () => {
-        lblTeamShare.textContent = chkTeamShare.checked ? '팀 공유' : '팀 공유 끔';
-      });
-    }
   }
 
   // 자동완성 데이터 로드
@@ -370,8 +366,9 @@ async function saveMeeting(leaveTarget) {
   const method = MEETING_ID ? 'PUT' : 'POST';
   const url    = MEETING_ID ? `/api/memo/${MEETING_ID}` : '/api/memo';
   const isTeamDoc   = document.getElementById('chk-team-doc')?.checked ?? true;
-  const isPublic    = document.getElementById('chk-public')?.checked ?? false;
-  const teamShare   = document.getElementById('chk-team-share')?.checked ?? false;
+  const vis         = document.getElementById('visibility-segment')?.querySelector('.vis-btn.active')?.dataset.value || 'private';
+  const isPublic    = vis === 'public';
+  const teamShare   = !isTeamDoc && vis === 'team';
 
   const res = await fetch(url, {
     method,
