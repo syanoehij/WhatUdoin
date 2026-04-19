@@ -14,20 +14,6 @@
     gap: 10px;
     min-width: 0;
   }
-  #ck-edit-title {
-    flex: 1;
-    min-width: 0;
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--text);
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    outline: none;
-    padding: 3px 4px;
-    transition: border-color 0.15s;
-  }
-  #ck-edit-title:focus { border-bottom-color: var(--accent); }
   #ck-edit-project {
     padding: 4px 8px;
     border: 1px solid var(--border);
@@ -101,10 +87,6 @@
     <a id="btn-back" href="/check" class="btn btn-sm">← 목록</a>
 
     <div class="ck-edit-meta">
-      <input type="text" id="ck-edit-title"
-             value="{{ checklist.title | e }}"
-             placeholder="제목을 입력하세요"
-             {% if locked_by %}disabled{% endif %} />
       <select id="ck-edit-project" {% if locked_by %}disabled{% endif %}>
         <option value="">프로젝트 없음</option>
         {% for p in projects %}
@@ -120,6 +102,7 @@
     <div class="btn-group">
       {% if checklist.id %}
       <a href="/check/{{ checklist.id }}/history" class="btn btn-sm">수정 이력</a>
+      <a href="/api/checklists/{{ checklist.id }}/export" class="btn btn-sm" rel="noopener" title="옵시디언 호환 마크다운으로 내보내기">⬇ 내보내기</a>
       {% endif %}
       {% if not locked_by %}
       {% if checklist.id %}
@@ -165,8 +148,17 @@
 <script>
 const CKE_ID       = {{ checklist.id if checklist.id else 'null' }};
 const CKE_LOCKED   = {{ 'true' if locked_by else 'false' }};
-const INITIAL_MD   = {{ checklist.content | tojson | safe }};
 const CKE_IS_NEW   = (CKE_ID === null);
+
+// 첫 줄 = 제목 패턴: content에 # 제목이 없으면 title을 H1으로 앞에 붙임
+(function () {
+  const _rawContent = {{ checklist.content | tojson | safe }};
+  const _title      = {{ checklist.title   | tojson | safe }};
+  const _startsWithH1 = /^\s*#\s/.test(_rawContent || '');
+  window.INITIAL_MD = _startsWithH1
+    ? _rawContent
+    : (_title ? `# ${_title}\n\n${_rawContent || ''}` : (_rawContent || ''));
+})();
 
 let wuInst = null;
 
@@ -181,11 +173,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const backBtn = document.getElementById('btn-back');
   if (backBtn) backBtn.href = CKE_IS_NEW ? '/check' : `/check?id=${CKE_ID}`;
 
+  // AI 초안 주입: ?ai_draft=1 쿼리 + sessionStorage 에 check_ai_draft 있을 때
+  let initialMd = window.INITIAL_MD || '';
+  if (CKE_IS_NEW && new URLSearchParams(location.search).get('ai_draft') === '1') {
+    try {
+      const draft = JSON.parse(sessionStorage.getItem('check_ai_draft') || 'null');
+      if (draft && draft.markdown) {
+        const quoted = (draft.sourcePrompt || '')
+          .split('\n').map(l => '> ' + l).join('\n');
+        initialMd = draft.markdown.trimEnd()
+          + '\n\n---\n\n> **AI 생성 입력:**\n'
+          + quoted + '\n';
+        const sel = document.getElementById('ck-edit-project');
+        if (sel && draft.project) sel.value = draft.project;
+      } else {
+        alert('AI 초안을 찾을 수 없습니다. 빈 편집기로 시작합니다.');
+      }
+    } catch (_) {}
+    sessionStorage.removeItem('check_ai_draft');
+  }
+
   if (CKE_LOCKED) {
     wuInst = WUEditor.create({
       el: '#cke-viewer-wrap',
       canEdit: false,
-      initialMarkdown: INITIAL_MD || '',
+      initialMarkdown: initialMd,
       features: { sanitizerOff: true },
     });
     return;
@@ -195,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
     el: '#cke-editor-container',
     bodyEl: '#cke-editor-body',
     canEdit: true,
-    initialMarkdown: INITIAL_MD || '',
+    initialMarkdown: initialMd,
     features: {
       imageResize: true,
       imageUpload: { endpoint: '/api/upload/image' },
@@ -230,11 +242,13 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function saveContent(auto = false, leaveTarget = null) {
-  const title   = document.getElementById('ck-edit-title')?.value.trim();
   const project = document.getElementById('ck-edit-project')?.value || '';
-  const content = wuInst ? wuInst.getMarkdown() : '';
+  const md      = wuInst ? wuInst.getMarkdown() : '';
+  const lines   = md.split('\n');
+  const title   = lines[0].replace(/^#+\s*/, '').trim();
+  const content = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd();
 
-  if (!title) { alert('제목을 입력하세요.'); return; }
+  if (!title) { alert('첫 줄에 제목(H1)을 입력하세요.'); return; }
 
   if (CKE_IS_NEW) {
     const res = await fetch('/api/checklists', {

@@ -458,6 +458,87 @@
     font-size: 0.88rem;
     color: var(--text-faint);
   }
+
+  /* ── 새 항목 버튼 그룹 ── */
+  .ck-new-btn-group {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .ck-ai-btn {
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    color: #fff;
+    border-color: transparent;
+  }
+  .ck-ai-btn:hover { opacity: 0.88; }
+
+  /* ── AI 생성 모달 ── */
+  .ck-ai-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 2000;
+  }
+  .ck-ai-overlay.hidden { display: none; }
+  .ck-ai-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: min(560px, 92vw);
+    max-height: 88vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.28);
+    overflow: hidden;
+  }
+  .ck-ai-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ck-ai-title { font-weight: 700; font-size: 1rem; }
+  .ck-ai-close {
+    background: none; border: none; cursor: pointer;
+    font-size: 1.1rem; color: var(--text-faint); padding: 2px 6px;
+  }
+  .ck-ai-body {
+    padding: 18px 20px; flex: 1; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .ck-ai-label {
+    display: flex; flex-direction: column; gap: 5px;
+    font-size: 0.85rem; font-weight: 600; color: var(--text-faint);
+  }
+  .ck-ai-select, .ck-ai-textarea {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.9rem;
+    resize: vertical;
+  }
+  .ck-ai-textarea { min-height: 90px; }
+  .ck-ai-loading {
+    font-size: 0.88rem; color: var(--text-faint);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ck-ai-error {
+    font-size: 0.88rem; color: #e74c3c;
+    background: #fef2f2; border-radius: 6px; padding: 8px 12px;
+  }
+  .ck-ai-preview-label { font-size: 0.8rem; font-weight: 600; color: var(--text-faint); }
+  .ck-ai-preview {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 7px; padding: 12px 14px;
+    font-size: 0.83rem; line-height: 1.6;
+    white-space: pre-wrap; overflow-y: auto; max-height: 260px;
+    color: var(--text); margin: 0;
+  }
+  .ck-ai-footer {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
 </style>
 {% endblock %}
 
@@ -481,7 +562,10 @@
     <div class="ck-mid-header">
       <span class="ck-mid-title" id="ck-mid-title">전체</span>
       {% if user and user.role in ('editor', 'admin') %}
-      <button class="ck-new-btn" onclick="openNewForm()">+ 새 항목</button>
+      <div class="ck-new-btn-group">
+        <button class="ck-new-btn" onclick="openNewForm()">+ 새 항목</button>
+        <button class="ck-new-btn ck-ai-btn" onclick="openAiForm()">✨ AI 생성</button>
+      </div>
       {% endif %}
     </div>
 
@@ -505,6 +589,7 @@
       <div class="ck-right-actions">
         <span class="ck-save-indicator" id="ck-dirty-indicator"></span>
         {% if user and user.role in ('editor', 'admin') %}
+        <button class="btn btn-sm" id="ck-export-btn" onclick="exportChecklist()" title="옵시디언 호환 마크다운으로 내보내기">⬇ 내보내기</button>
         <!-- 뷰어 모드 전용 버튼 -->
         <button class="btn btn-sm btn-primary" id="ck-edit-btn" onclick="switchToEdit()" style="display:none;">편집</button>
         <!-- 편집 모드 전용 목차 버튼 -->
@@ -575,6 +660,37 @@
     </div>
     <div class="ck-hist-body" id="ck-hist-body">
       <div class="ck-hist-empty">이력이 없습니다.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── AI 체크리스트 생성 모달 ── -->
+<div id="ck-ai-modal" class="ck-ai-overlay hidden" role="dialog" aria-modal="true">
+  <div class="ck-ai-card">
+    <div class="ck-ai-header">
+      <span class="ck-ai-title">✨ AI 체크리스트 생성</span>
+      <button class="ck-ai-close" onclick="closeAiForm()">✕</button>
+    </div>
+    <div class="ck-ai-body">
+      <label class="ck-ai-label">모델
+        <select id="ck-ai-model" class="ck-ai-select"></select>
+      </label>
+      <label class="ck-ai-label">요청 내용
+        <textarea id="ck-ai-input" class="ck-ai-textarea" rows="5"
+                  placeholder="예) 신제품 출시 D-7 준비 체크리스트를 만들어줘"></textarea>
+      </label>
+      <div id="ck-ai-error" class="ck-ai-error hidden"></div>
+      <div id="ck-ai-loading" class="ck-ai-loading hidden">생성 중…</div>
+      <div id="ck-ai-preview-wrap" class="hidden">
+        <div class="ck-ai-preview-label">미리보기</div>
+        <pre id="ck-ai-preview" class="ck-ai-preview"></pre>
+      </div>
+    </div>
+    <div class="ck-ai-footer">
+      <button id="ck-ai-gen-btn" class="btn btn-primary btn-sm" onclick="runAiGen()">생성</button>
+      <button id="ck-ai-use-btn" class="btn btn-sm hidden" onclick="useAiDraft()">편집기로 가져가기</button>
+      <button id="ck-ai-retry-btn" class="btn btn-sm hidden" onclick="runAiGen()">다시 생성</button>
+      <button class="btn btn-sm" onclick="closeAiForm()">취소</button>
     </div>
   </div>
 </div>
@@ -915,7 +1031,11 @@ async function _showEditorMode() {
     if (_curId && _editMode) fetch(`/api/checklists/${_curId}/lock`, { method: 'PUT' });
   }, 120000);
 
-  initEditor(_curItem.content);
+  const _initContent = (_curItem.content || '');
+  const _editorMd = /^\s*#\s/.test(_initContent)
+    ? _initContent
+    : ((_curItem.title ? '# ' + _curItem.title + '\n\n' : '') + _initContent);
+  initEditor(_editorMd);
 }
 
 function _stopHeartbeat() {
@@ -1018,6 +1138,14 @@ function _stopCountdown() {
   if (badge) { badge.classList.remove('active', 'flash'); badge.textContent = ''; }
 }
 
+function exportChecklist() {
+  if (!_curId) return;
+  const a = document.createElement('a');
+  a.href = `/api/checklists/${_curId}/export`;
+  a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
 function switchToEdit() {
   if (!_curItem) return;
   window.location.href = `/check/${_curItem.id}/edit`;
@@ -1070,6 +1198,10 @@ function toggleTocInline() { wuInst?.toggleToc(); }
 
 // ── 뷰어 렌더링 ───────────────────────────────────────────
 function renderViewer(content) {
+  // ck-right-title이 제목을 표시하므로 content 첫 줄 H1은 제거 (기존 데이터 호환)
+  const displayContent = /^\s*#\s/.test(content || '')
+    ? (content || '').replace(/^\s*#[^\n]*\n*/, '')
+    : (content || '');
   const container = document.getElementById('ck-viewer');
   if (_ckViewer) { _ckViewer.destroy(); _ckViewer = null; }
   container.innerHTML = '';
@@ -1077,13 +1209,13 @@ function renderViewer(content) {
   _ckViewer = toastui.Editor.factory({
     el: container,
     viewer: true,
-    initialValue: content || '',
+    initialValue: displayContent,
     usageStatistics: false,
     customHTMLSanitizer: html => html,
   });
 
   // 체크박스 클릭 인터랙션 — 읽기 전용 뷰어에서도 토글 가능하게
-  setTimeout(() => attachCheckboxHandlers(content), 100);
+  setTimeout(() => attachCheckboxHandlers(displayContent), 100);
 }
 
 function attachCheckboxHandlers(mdContent) {
@@ -1160,22 +1292,23 @@ function setDirty(val) {
 // ── 저장 ──────────────────────────────────────────────────
 async function saveContent(auto = false) {
   if (!_curId || !wuInst) return;
-  const content = wuInst.getMarkdown();
+  const md      = wuInst.getMarkdown();
+  const lines   = md.split('\n');
+  const title   = lines[0].replace(/^#+\s*/, '').trim();
+  const content = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd();
 
-  // 새 항목: 첫 번째 줄을 제목으로 사용
-  if (_isNewItem) {
-    const firstLine = content.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').trim();
-    if (!firstLine) {
-      alert('첫 번째 줄이 제목이 됩니다. 내용을 입력하세요.');
-      return;
-    }
-    await fetch(`/api/checklists/${_curId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: firstLine, project: _curItem?.project || '' }),
-    });
-    _isNewItem = false;
+  if (!title) {
+    alert('첫 번째 줄이 제목이 됩니다. 내용을 입력하세요.');
+    return;
   }
+
+  // 제목 컬럼 항상 갱신
+  await fetch(`/api/checklists/${_curId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, project: _curItem?.project || '' }),
+  });
+  _isNewItem = false;
 
   const res = await fetch(`/api/checklists/${_curId}/content`, {
     method: 'PATCH',
@@ -1184,7 +1317,6 @@ async function saveContent(auto = false) {
   });
   if (res.ok) {
     setDirty(false);
-    _curItem.content = content;
     // 저장 완료 시 잠금 해제 후 뷰어로 전환
     await fetch(`/api/checklists/${_curId}/lock`, { method: 'DELETE' });
     _stopHeartbeat();
@@ -1370,5 +1502,103 @@ window.__pageSearch = {
     `).join('');
   }
 };
+
+/* ── AI 체크리스트 생성 ─────────────────────────────────── */
+let _aiLastMd = '', _aiLastInput = '', _aiModelsLoaded = false, _aiAbort = null;
+
+async function openAiForm() {
+  document.getElementById('ck-ai-modal').classList.remove('hidden');
+  document.getElementById('ck-ai-input').focus();
+  if (!_aiModelsLoaded) await _loadAiModels();
+}
+
+function closeAiForm() {
+  document.getElementById('ck-ai-modal').classList.add('hidden');
+  if (_aiAbort) { _aiAbort.abort(); _aiAbort = null; }
+  document.getElementById('ck-ai-error').classList.add('hidden');
+  document.getElementById('ck-ai-loading').classList.add('hidden');
+  document.getElementById('ck-ai-preview-wrap').classList.add('hidden');
+  document.getElementById('ck-ai-use-btn').classList.add('hidden');
+  document.getElementById('ck-ai-retry-btn').classList.add('hidden');
+  document.getElementById('ck-ai-gen-btn').disabled = false;
+}
+
+async function _loadAiModels() {
+  const sel = document.getElementById('ck-ai-model');
+  try {
+    const res = await fetch('/api/ai/models');
+    if (!res.ok) throw new Error('연결 실패');
+    const { models } = await res.json();
+    sel.innerHTML = models.map(m => `<option value="${escHtml(m)}">${escHtml(m)}</option>`).join('');
+    _aiModelsLoaded = true;
+  } catch (_) {
+    sel.innerHTML = '<option value="">모델 로드 실패</option>';
+  }
+}
+
+async function runAiGen() {
+  const text  = document.getElementById('ck-ai-input').value.trim();
+  const model = document.getElementById('ck-ai-model').value;
+  const errEl = document.getElementById('ck-ai-error');
+  errEl.classList.add('hidden');
+  if (!text) { errEl.textContent = '요청 내용을 입력하세요.'; errEl.classList.remove('hidden'); return; }
+  if (!model) { errEl.textContent = '모델을 선택하세요.'; errEl.classList.remove('hidden'); return; }
+
+  if (_aiAbort) _aiAbort.abort();
+  _aiAbort = new AbortController();
+
+  document.getElementById('ck-ai-gen-btn').disabled = true;
+  document.getElementById('ck-ai-retry-btn').classList.add('hidden');
+  document.getElementById('ck-ai-use-btn').classList.add('hidden');
+  document.getElementById('ck-ai-preview-wrap').classList.add('hidden');
+  document.getElementById('ck-ai-loading').classList.remove('hidden');
+
+  try {
+    const res = await fetch('/api/ai/generate-checklist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, model }),
+      signal: _aiAbort.signal,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || '생성 실패');
+    }
+    const { markdown } = await res.json();
+    _aiLastMd = markdown;
+    _aiLastInput = text;
+    document.getElementById('ck-ai-preview').textContent = markdown;
+    document.getElementById('ck-ai-preview-wrap').classList.remove('hidden');
+    document.getElementById('ck-ai-use-btn').classList.remove('hidden');
+    document.getElementById('ck-ai-retry-btn').classList.remove('hidden');
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      errEl.textContent = e.message || '생성 중 오류가 발생했습니다.';
+      errEl.classList.remove('hidden');
+    }
+  } finally {
+    document.getElementById('ck-ai-loading').classList.add('hidden');
+    document.getElementById('ck-ai-gen-btn').disabled = false;
+    _aiAbort = null;
+  }
+}
+
+function useAiDraft() {
+  sessionStorage.setItem('check_ai_draft', JSON.stringify({
+    markdown: _aiLastMd,
+    sourcePrompt: _aiLastInput,
+    project: _curProj || '',
+  }));
+  const q = new URLSearchParams({ ai_draft: '1' });
+  if (_curProj) q.set('proj', _curProj);
+  location.href = '/check/new/edit?' + q.toString();
+}
+
+// ESC 키로 모달 닫기
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !document.getElementById('ck-ai-modal').classList.contains('hidden')) {
+    closeAiForm();
+  }
+});
 </script>
 {% endblock %}

@@ -1277,9 +1277,46 @@ def _build_index_md(name: str, proj: dict | None, events: list[dict], checklists
     return "\n".join(lines)
 
 
-def _build_event_md(project_name: str, ev: dict, exported_at: str) -> str:
+def _build_doc_md(doc: dict, exported_at: str,
+                  images: list | None = None,
+                  include_backlink: bool = False) -> str:
+    title = _esc(doc.get("title")) or "(제목 없음)"
+    lines = ["---", "type: doc", f"title: {_yaml_str(title)}"]
+    if doc.get("meeting_date"):
+        lines.append(f"meeting_date: {_esc(doc.get('meeting_date'))}")
+    lines.append(f"is_team_doc: {'true' if doc.get('is_team_doc', 1) else 'false'}")
+    lines.append(f"is_public: {'true' if doc.get('is_public', 0) else 'false'}")
+    lines.append(f"team_share: {'true' if doc.get('team_share', 0) else 'false'}")
+    if doc.get("author_name"):
+        lines.append(f"author: {_yaml_str(doc.get('author_name'))}")
+    if doc.get("team_name"):
+        lines.append(f"team: {_yaml_str(doc.get('team_name'))}")
+    updated = _esc(doc.get("updated_at") or doc.get("created_at") or "")
+    if updated:
+        lines.append(f"updated_at: {updated[:19].replace('T', ' ')}")
+    lines += [f"exported_at: {exported_at}", "tags: [whatudoin, doc]", "---", "",
+              f"# {title}", ""]
+    if include_backlink:
+        lines += [f"← [[index]]", ""]
+    raw = (doc.get("content") or "").replace("\r\n", "\n").strip()
+    if raw:
+        rewritten, found = _rewrite_image_paths(raw)
+        if images is not None:
+            images.extend(found)
+        lines.append(rewritten)
+    else:
+        lines.append("_(내용 없음)_")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_event_md(project_name: str | None, ev: dict, exported_at: str,
+                    include_backlink: bool = True) -> str:
     title = _esc(ev.get("title")) or "(제목 없음)"
-    lines = ["---", "type: event", f"project: {_yaml_str(project_name)}", f"title: {_yaml_str(title)}"]
+    lines = ["---", "type: event"]
+    if project_name is not None:
+        lines.append(f"project: {_yaml_str(project_name)}")
+    lines += [f"title: {_yaml_str(title)}"]
     if ev.get("start_datetime"): lines.append(f"start: {_esc(ev.get('start_datetime'))}")
     if ev.get("end_datetime"):   lines.append(f"end: {_esc(ev.get('end_datetime'))}")
     if ev.get("assignee"):       lines.append(f"assignee: {_yaml_str(ev.get('assignee'))}")
@@ -1288,8 +1325,9 @@ def _build_event_md(project_name: str, ev: dict, exported_at: str) -> str:
     status = "완료" if ev.get("is_active") == 0 else "진행 중"
     lines.append(f"status: {_yaml_str(status)}")
     lines += [f"exported_at: {exported_at}", "tags: [whatudoin, event]", "---", "",
-              f"# {title}", "",
-              f"← [[index]]", ""]
+              f"# {title}", ""]
+    if include_backlink:
+        lines += [f"← [[index]]", ""]
     s = _esc(ev.get("start_datetime")); e = _esc(ev.get("end_datetime"))
     if s and e and e != s:
         lines.append(f"- **기간**: {s} ~ {e}")
@@ -1328,16 +1366,20 @@ def _rewrite_image_paths(content: str) -> tuple[str, list[tuple[Path, str]]]:
     return _IMG_URL_RE.sub(_repl, content), collected
 
 
-def _build_checklist_md(project_name: str, cl: dict, exported_at: str,
-                        images: list | None = None) -> str:
+def _build_checklist_md(project_name: str | None, cl: dict, exported_at: str,
+                        images: list | None = None, include_backlink: bool = True) -> str:
     title = _esc(cl.get("title")) or "(제목 없음)"
     updated = _esc(cl.get("updated_at"))
-    lines = ["---", "type: checklist", f"project: {_yaml_str(project_name)}", f"title: {_yaml_str(title)}"]
+    lines = ["---", "type: checklist"]
+    if project_name is not None:
+        lines.append(f"project: {_yaml_str(project_name)}")
+    lines.append(f"title: {_yaml_str(title)}")
     if updated:
         lines.append(f"updated_at: {updated[:19].replace('T', ' ')}")
     lines += [f"exported_at: {exported_at}", "tags: [whatudoin, checklist]", "---", "",
-              f"# {title}", "",
-              f"← [[index]]", ""]
+              f"# {title}", ""]
+    if include_backlink:
+        lines += [f"← [[index]]", ""]
     raw = (cl.get("content") or "").replace("\r\n", "\n").strip()
     if raw:
         rewritten, found = _rewrite_image_paths(raw)
@@ -1360,10 +1402,44 @@ def _uniq_filename(stem: str, used: set[str]) -> str:
     return stem
 
 
+def _build_single_export(stem: str, md_text: str,
+                         images: list[tuple[Path, str]]) -> tuple[bytes, str, str]:
+    """이미지 없으면 (.md 바이트, 'text/markdown; charset=utf-8', f'{stem}.md'),
+       이미지 있으면 ZIP, 내부: {stem}/{stem}.md + {stem}/attachments/{basename}"""
+    if not images:
+        return md_text.encode("utf-8"), "text/markdown; charset=utf-8", f"{stem}.md"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"{stem}/{stem}.md", md_text)
+        seen_archive: set[str] = set()
+        for disk_path, archive_name in images:
+            if archive_name in seen_archive:
+                continue
+            seen_archive.add(archive_name)
+            if disk_path.exists():
+                zf.write(disk_path, f"{stem}/{archive_name}")
+    return buf.getvalue(), "application/zip", f"{stem}.zip"
+
+
+def _attachment_response(body: bytes, media_type: str, filename: str) -> Response:
+    disposition = (
+        f"attachment; filename=\"{quote(filename)}\"; "
+        f"filename*=UTF-8''{quote(filename)}"
+    )
+    return Response(content=body, media_type=media_type,
+                    headers={"Content-Disposition": disposition})
+
+
 def _build_project_zip(name: str) -> bytes:
-    proj = db.get_project(name)
-    events = db.get_events_by_project(name)
-    cl_metas = db.get_checklists(project=name)
+    is_unset = (name == "미지정")
+    if is_unset:
+        proj = None
+        events = db.get_unassigned_events()
+        cl_metas = db.get_unassigned_checklists()
+    else:
+        proj = db.get_project(name)
+        events = db.get_events_by_project(name)
+        cl_metas = db.get_checklists(project=name)
     checklists = [db.get_checklist(c["id"]) for c in cl_metas]
     checklists = [c for c in checklists if c]
 
@@ -1382,8 +1458,9 @@ def _build_project_zip(name: str) -> bytes:
         stem = _uniq_filename(_safe_filename(cl.get("title") or "체크리스트", "체크리스트"), used_cl_stems)
         cl_entries.append((stem, cl))
 
+    proj_arg = None if is_unset else name
     images: list[tuple[Path, str]] = []
-    cl_mds = [(stem, _build_checklist_md(name, cl, exported_at, images)) for stem, cl in cl_entries]
+    cl_mds = [(stem, _build_checklist_md(proj_arg, cl, exported_at, images)) for stem, cl in cl_entries]
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -1395,7 +1472,7 @@ def _build_project_zip(name: str) -> bytes:
         )
         zf.writestr(f"{root}/index.md", index_md)
         for stem, ev in event_entries:
-            zf.writestr(f"{root}/일정/{stem}.md", _build_event_md(name, ev, exported_at))
+            zf.writestr(f"{root}/일정/{stem}.md", _build_event_md(proj_arg, ev, exported_at))
         for stem, md_text in cl_mds:
             zf.writestr(f"{root}/체크리스트/{stem}.md", md_text)
         seen_archive: set[str] = set()
@@ -1415,12 +1492,57 @@ async def manage_export_project_zip(name: str, request: Request):
     safe = _safe_filename(name, "project")
     stamp = datetime.now().strftime("%Y%m%d")
     filename = f"{safe}_{stamp}.zip"
-    disposition = f"attachment; filename=\"{quote(filename)}\"; filename*=UTF-8''{quote(filename)}"
-    return Response(
-        content=data,
-        media_type="application/zip",
-        headers={"Content-Disposition": disposition},
-    )
+    return _attachment_response(data, "application/zip", filename)
+
+
+@app.get("/api/doc/{meeting_id}/export")
+def export_doc(meeting_id: int, request: Request):
+    user = auth.get_current_user(request)
+    doc = db.get_meeting(meeting_id)
+    if not _can_read_doc(user, doc):
+        raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
+    exported_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    images: list[tuple[Path, str]] = []
+    md_text = _build_doc_md(doc, exported_at, images=images, include_backlink=False)
+    stem = _safe_filename(doc.get("title") or "doc", "doc")
+    stamp = datetime.now().strftime("%Y%m%d")
+    body, media_type, base_name = _build_single_export(stem, md_text, images)
+    name_root, _, ext = base_name.rpartition(".")
+    filename = f"{name_root}_{stamp}.{ext}"
+    return _attachment_response(body, media_type, filename)
+
+
+@app.get("/api/checklists/{checklist_id}/export")
+def export_checklist(checklist_id: int, request: Request):
+    _require_editor(request)
+    cl = db.get_checklist(checklist_id)
+    if not cl:
+        raise HTTPException(status_code=404, detail="체크리스트를 찾을 수 없습니다.")
+    exported_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    project_name = cl.get("project") or None
+    images: list[tuple[Path, str]] = []
+    md_text = _build_checklist_md(project_name, cl, exported_at, images=images, include_backlink=False)
+    stem = _safe_filename(cl.get("title") or "체크리스트", "체크리스트")
+    stamp = datetime.now().strftime("%Y%m%d")
+    body, media_type, base_name = _build_single_export(stem, md_text, images)
+    name_root, _, ext = base_name.rpartition(".")
+    filename = f"{name_root}_{stamp}.{ext}"
+    return _attachment_response(body, media_type, filename)
+
+
+@app.get("/api/events/{event_id}/export")
+def export_event(event_id: int, request: Request):
+    _require_editor(request)
+    ev = db.get_event(event_id)
+    if not ev or ev.get("deleted_at"):
+        raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
+    exported_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    project_name = ev.get("project") or None
+    md_text = _build_event_md(project_name, ev, exported_at, include_backlink=False)
+    stem = _safe_filename(ev.get("title") or "일정", "일정")
+    stamp = datetime.now().strftime("%Y%m%d")
+    filename = f"{stem}_{stamp}.md"
+    return _attachment_response(md_text.encode("utf-8"), "text/markdown; charset=utf-8", filename)
 
 
 @app.post("/api/manage/projects/{name:path}/events")
@@ -1811,6 +1933,21 @@ def ai_models():
     if not ok:
         raise HTTPException(status_code=502, detail=f"Ollama 서버({llm_parser.OLLAMA_BASE_URL})에 연결할 수 없습니다.")
     return {"models": models}
+
+
+@app.post("/api/ai/generate-checklist")
+async def ai_generate_checklist(request: Request):
+    _require_editor(request)
+    body = await request.json()
+    text  = (body.get("text") or "").strip()
+    model = body.get("model", llm_parser.DEFAULT_MODEL)
+    if not text:
+        raise HTTPException(status_code=400, detail="요청 내용을 입력하세요.")
+    try:
+        md = await run_in_threadpool(llm_parser.generate_checklist, text, model)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")
+    return {"markdown": md}
 
 
 @app.post("/api/ai/weekly-report")

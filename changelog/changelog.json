@@ -6,6 +6,16 @@
       "phase_class": "phase-7",
       "entries": [
         {
+          "icon": "✅",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>체크리스트 AI 생성 기능 추가",
+          "detail_html": "<ul>\n              <li><b>백엔드</b> — <code>llm_parser.generate_checklist()</code> 추가: Ollama 연동, 온도 단계적 하락(0.3→0.15→0.05) 3회 재시도, 코드펜스 자동 strip, 첫 줄 H1 없으면 자동 prefix</li>\n              <li><code>POST /api/ai/generate-checklist</code> 엔드포인트 추가 — <code>_require_editor</code> 인증, <code>run_in_threadpool</code> 비동기 처리</li>\n              <li><b>check.html</b> — <b>✨ AI 생성</b> 버튼 추가 (+ 새 항목 옆), 모달에서 모델 선택 → 자연어 입력 → LLM 생성 → 마크다운 미리보기 → 편집기로 가져가기</li>\n              <li>AbortController로 중복 요청 방지, ESC 키 모달 닫기, 모델 목록 최초 1회 로드</li>\n              <li><b>check_editor.html</b> — <code>?ai_draft=1</code> + <code>sessionStorage</code>로 AI 초안 주입, 생성 본문 하단에 <code>---</code> 구분선 + <b>&gt; AI 생성 입력:</b> 원문 인용 자동 삽입</li>\n              <li>현재 프로젝트 필터가 있으면 편집기 프로젝트 select에 자동 선택</li>\n            </ul>"
+        },
+        {
+          "icon": "🖊️",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>체크리스트 편집기 첫 줄=제목 UX 통일 (별도 제목 input 제거)",
+          "detail_html": "<ul>\n              <li>문서 편집기와 동일하게 <b>첫 줄 H1이 제목</b>이 되는 방식으로 통일 — <code>check_editor.html</code>의 별도 제목 <code>&lt;input&gt;</code> 제거</li>\n              <li><code>check_editor.html</code> — <code>INITIAL_MD</code> 합성: 기존 <code>content</code>에 H1이 없으면 <code># title\\n\\ncontent</code>로 자동 prepend (기존 데이터 호환)</li>\n              <li><code>saveContent()</code>: 첫 줄에서 <code>/^#+\\s*/</code>로 title 파싱, 나머지를 content로 분리 저장 — DB의 <code>title</code>·<code>content</code> 컬럼 분리 유지</li>\n              <li><code>check.html</code> — 인라인 편집 모드 <code>initEditor()</code>에 <code># title</code> 자동 prepend, <code>saveContent()</code>에서 동일하게 분리 저장</li>\n              <li><code>renderViewer()</code>에서 content 첫 줄 H1 자동 제거 — <code>ck-right-title</code> 헤더와 이중 표시 방지 (기존 데이터 호환)</li>\n              <li><code>saveRename()</code> 버그 해소 — content에 제목이 없으므로 title 컬럼만 갱신해도 뷰어에 즉시 반영</li>\n            </ul>"
+        },
+        {
           "icon": "📑",
           "title_html": "<span class=\"cl-tag feat\">feat</span>문서 비로그인 유저에게 목차(TOC) 버튼 노출",
           "detail_html": "<ul>\n              <li>공개 문서 열람 시 비로그인 유저에게도 <b>📑 목차</b> 버튼 표시 — <code>{% if user and doc %}</code> 게이트에서 목차 버튼만 <code>{% if doc %}</code>로 분리</li>\n              <li>수정 이력 링크는 로그인자 전용 유지, TOC 패널 DOM·JS 로직은 변경 없음 (비로그인 경로에서 이미 활성화된 상태였음)</li>\n            </ul>"

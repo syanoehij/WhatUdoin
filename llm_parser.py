@@ -853,3 +853,50 @@ def to_event_payload(parsed: dict) -> dict:
         "created_by":       "editor",
         "source":           "ai_parsed",
     }
+
+
+def generate_checklist(text: str, model: str = DEFAULT_MODEL) -> str:
+    """자연어 요청 → 마크다운 체크리스트 생성. 첫 줄은 반드시 # 제목."""
+    prompt = f"""아래 요청에 대해 실행 가능한 마크다운 체크리스트를 작성하라.
+형식 규칙(반드시 준수):
+- 첫 줄은 `# 제목` 한 줄 (H1, 요청 내용을 압축한 짧은 제목)
+- 빈 줄 1개
+- 이후 각 항목은 `- [ ] 내용` 형태 (대괄호 안은 반드시 빈칸, 체크된 상태로 쓰지 마라)
+- 필요시 소제목은 `## 섹션명` 으로만 추가 (H3 이상 금지)
+- 코드펜스(```) 금지. 부연 설명 금지. 마크다운 본문만 출력.
+
+요청:
+{text}
+
+출력:"""
+
+    _sampling = [
+        {"temperature": 0.3, "top_p": 0.9},
+        {"temperature": 0.15, "top_p": 0.7},
+        {"temperature": 0.05, "top_p": 0.5},
+    ]
+    for attempt in range(3):
+        try:
+            resp = _session.post(
+                OLLAMA_URL,
+                json={"model": model, "prompt": prompt, "stream": False,
+                      "options": _sampling[attempt]},
+                timeout=120,
+            )
+            resp.raise_for_status()
+            raw = resp.json().get("response", "").strip()
+            # 코드펜스 strip
+            raw = re.sub(r"^```(?:markdown)?\n?", "", raw, flags=re.IGNORECASE)
+            raw = re.sub(r"\n?```\s*$", "", raw)
+            raw = raw.strip()
+            # 첫 줄이 # 제목이 아니면 prefix 추가
+            if raw and not re.match(r"^\s*#\s", raw):
+                raw = "# 할 일\n\n" + raw
+            if raw:
+                return raw
+            logger.warning("generate_checklist: 빈 응답 (시도 %d), 재시도", attempt + 1)
+        except requests.Timeout:
+            logger.warning("generate_checklist: Timeout (시도 %d)", attempt + 1)
+        except requests.RequestException as exc:
+            logger.warning("generate_checklist: 요청 오류 (시도 %d): %s", attempt + 1, exc)
+    raise RuntimeError("AI 체크리스트 생성 실패 (3회 재시도 후에도 유효한 응답 없음)")
