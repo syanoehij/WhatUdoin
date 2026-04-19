@@ -595,6 +595,8 @@
       <span class="ck-right-meta" id="ck-right-meta"></span>
       <div class="ck-right-actions">
         <span class="ck-save-indicator" id="ck-dirty-indicator"></span>
+        <!-- 뷰어 목차: 로그인 여부 무관하게 표시 -->
+        <button class="btn btn-sm" id="btn-toc-viewer" onclick="toggleViewerToc()" style="display:none;" title="목차">📑 목차</button>
         {% if user and user.role in ('editor', 'admin') %}
         <!-- 뷰어 모드 전용: 공개 범위 토글 -->
         <div class="visibility-segment" id="ck-vis-seg-viewer" style="display:none;" data-cid="">
@@ -602,8 +604,6 @@
           <button type="button" class="vis-btn" data-val="1">외부 공개</button>
         </div>
         <button class="btn btn-sm" id="ck-export-btn" onclick="exportChecklist()" title="옵시디언 호환 마크다운으로 내보내기">⬇ 내보내기</button>
-        <!-- 뷰어 모드 전용 버튼 -->
-        <button class="btn btn-sm" id="btn-toc-viewer" onclick="toggleViewerToc()" style="display:none;" title="목차">📑 목차</button>
         <button class="btn btn-sm btn-primary" id="ck-edit-btn" onclick="switchToEdit()" style="display:none;">편집</button>
         <!-- 편집 모드 전용 목차 버튼 -->
         <button class="btn btn-sm" id="btn-toc-toggle-inline" onclick="toggleTocInline()" style="display:none;" title="목차">📑 목차</button>
@@ -1022,14 +1022,18 @@ function _showViewerMode() {
     renderViewer(_curItem.content);
   }
 
+  // 목차 버튼은 로그인 여부와 무관하게 뷰어 모드에서 표시
+  const tocViewerBtn = document.getElementById('btn-toc-viewer');
+  if (tocViewerBtn) tocViewerBtn.style.display = _lockedByOther ? 'none' : '';
+
   // 버튼 가시성
   if (IS_EDITOR) {
     document.getElementById('ck-edit-btn').style.display    = _lockedByOther ? 'none' : '';
     document.getElementById('ck-rename-btn').style.display  = 'none';
     document.getElementById('ck-viewer-btn').style.display  = 'none';
     document.getElementById('ck-save-btn').style.display    = 'none';
-    document.getElementById('btn-toc-viewer').style.display = _lockedByOther ? 'none' : '';
-    // 공개 범위 토글 표시 및 초기 상태 반영
+    // 공개 범위 토글 표시
+
     const visSeg = document.getElementById('ck-vis-seg-viewer');
     if (visSeg && !_lockedByOther) {
       visSeg.style.display = '';
@@ -1270,8 +1274,7 @@ function renderViewer(content) {
 }
 
 function attachCheckboxHandlers(mdContent) {
-  // Toast UI Viewer는 CSS로 체크박스를 이미 그림 — input 주입 불필요
-  // DOM class 대신 mdContent에서 상태를 읽어야 Toast UI 내부 토글과 충돌 방지
+  if (!CURRENT_USER) return; // 비로그인 시 체크박스 인터랙션 비활성
   const viewerEl = document.getElementById('ck-viewer');
   viewerEl.querySelectorAll('li.task-list-item').forEach((li, idx) => {
     if (li.dataset.ckBound) return; // 중복 바인딩 방지

@@ -133,7 +133,15 @@ def _can_write_doc(user, doc: dict) -> bool:
 def _can_read_checklist(user, cl: dict) -> bool:
     if user:
         return True
-    return int(cl.get("is_public") or 0) == 1
+    is_pub = cl.get("is_public")
+    if is_pub == 1:
+        return True
+    if is_pub is None:
+        proj_name = cl.get("project") or ""
+        if proj_name:
+            proj = db.get_project(proj_name)
+            return bool(proj and not proj.get("is_private"))
+    return False
 
 
 # ── 페이지 ──────────────────────────────────────────────

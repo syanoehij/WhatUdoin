@@ -1,6 +1,23 @@
 {
   "groups": [
     {
+      "date": "2026-04-20",
+      "phase": "22차 10단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 비로그인 게스트 항목 내용·목차 노출",
+          "detail_html": "<ul>\n              <li><b>내용 미노출 수정</b> — <code>_can_read_checklist()</code>가 <code>is_public=1</code>만 허용하던 로직을 목록 쿼리와 동일한 3상태 기준(<code>is_public=1</code> 또는 <code>is_public=NULL</code>+소속 프로젝트 <code>is_private=0</code>)으로 통일</li>\n              <li><b>목차 버튼 노출</b> — '📑 목차' 버튼(<code>#btn-toc-viewer</code>)을 에디터 전용 <code>{% if user %}</code> 블록 밖으로 이동, 뷰어 모드 진입 시 비로그인에서도 표시</li>\n              <li><b>체크박스 클릭 가드</b> — <code>attachCheckboxHandlers()</code>에 <code>if (!CURRENT_USER) return;</code> 추가, 비로그인 시 클릭해도 서버 403 오류 없이 무반응 처리</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>간트 — 비로그인 일정 바 클릭 시 로그인 팝업 제거",
+          "detail_html": "<ul>\n              <li>비로그인 분기에서 <code>bar.addEventListener('click', () =&gt; openBarDetail(...))</code> 등록 제거</li>\n              <li>바 클릭 시 <code>openLoginModal()</code>이 호출되던 동작 제거 — 아무 반응 없음으로 변경</li>\n              <li>호버 툴팁(제목·기간·담당자)은 기존대로 유지</li>\n            </ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-04-19",
       "phase": "22차 9단계",
       "phase_class": "phase-7",

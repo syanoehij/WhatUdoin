@@ -855,7 +855,6 @@ function render() {
                   setupBarProjectDrag(bar, ev);
                 } else {
                   bar.classList.add('bar-no-drag');
-                  bar.addEventListener('click', () => openBarDetail(ev.id));
                 }
                 evGRow.appendChild(bar);
               }
