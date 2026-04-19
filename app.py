@@ -1774,16 +1774,39 @@ async def ai_weekly_report(request: Request):
     team_id   = body.get("team_id") or None
     model     = body.get("model", llm_parser.DEFAULT_MODEL)
 
-    base_dt    = _dt.strptime(base_date, "%Y-%m-%d")
-    past_start = (base_dt - _td(days=7)).strftime("%Y-%m-%d")
-    past_end   = (base_dt - _td(days=1)).strftime("%Y-%m-%d")
-    future_end = (base_dt + _td(days=6)).strftime("%Y-%m-%d")
+    base_dt      = _dt.strptime(base_date, "%Y-%m-%d")
+    past_start   = (base_dt - _td(days=7)).strftime("%Y-%m-%d")
+    past_end     = base_date
+    future_start = (base_dt + _td(days=1)).strftime("%Y-%m-%d")
+    future_end   = (base_dt + _td(days=6)).strftime("%Y-%m-%d")
 
-    past_events   = db.get_events_by_date_range(past_start, past_end, team_id)
-    future_events = db.get_events_by_date_range(base_date,  future_end, team_id)
+    past_events   = db.get_events_by_date_range(past_start, past_end,   team_id)
+    future_events = db.get_events_by_date_range(future_start, future_end, team_id)
+
+    def _is_today_active(e):
+        start = (e.get("start_datetime") or "")[:10]
+        end   = (e.get("end_datetime")   or "")[:10]
+        return start <= base_date and (not end or end >= base_date)
+
+    today_events = [e for e in past_events if _is_today_active(e)]
+
+    meetings   = db.get_meetings_by_date_range(past_start, past_end,
+                                                team_id=team_id, created_by=user["id"])
+    checklists = db.get_checklists_by_date_range(past_start, past_end)
+
+    prev = db.get_previous_weekly_report(base_date, team_id, user["id"])
+    if prev:
+        gap = (_dt.strptime(base_date, "%Y-%m-%d") -
+               _dt.strptime(prev["meeting_date"], "%Y-%m-%d")).days
+        if gap > 14:
+            prev = None
 
     try:
-        report = llm_parser.generate_weekly_report(past_events, future_events, base_date, model)
+        report = llm_parser.generate_weekly_report(
+            past_events, future_events, base_date, model,
+            today_events=today_events,
+            meetings=meetings, checklists=checklists, previous_report=prev,
+        )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")
 
@@ -1791,12 +1814,14 @@ async def ai_weekly_report(request: Request):
     meeting_id = db.create_meeting(title, report, user.get("team_id"), user["id"], base_date)
 
     return {
-        "meeting_id":   meeting_id,
-        "past_count":   len(past_events),
-        "future_count": len(future_events),
-        "base_date":    base_date,
-        "past_start":   past_start,
-        "future_end":   future_end,
+        "meeting_id":       meeting_id,
+        "past_count":       len(past_events),
+        "today_count":      len(today_events),
+        "future_count":     len(future_events),
+        "meetings_count":   len(meetings),
+        "checklists_count": len(checklists),
+        "has_previous":     prev is not None,
+        "base_date":        base_date,
     }
 
 
