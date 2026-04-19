@@ -163,11 +163,10 @@
     border-radius: 3px;
     flex-shrink: 0;
     vertical-align: middle;
+    margin-right: 5px;
   }
   .ck-pub-badge.pub  { background: #d1fae5; color: #065f46; }
-  .ck-pub-badge.priv { background: #f3f4f6; color: #6b7280; }
   .dark .ck-pub-badge.pub  { background: #064e3b; color: #6ee7b7; }
-  .dark .ck-pub-badge.priv { background: #374151; color: #9ca3af; }
 
   .ck-item-proj {
     background: var(--surface-3);
@@ -1100,12 +1099,10 @@ function selectProject(proj) {
 // ── 체크리스트 목록 렌더링 ─────────────────────────────────
 function _pubBadge(isPub, project) {
   if (isPub === null || isPub === undefined) {
-    // 프로젝트 연동: 소속 프로젝트의 is_private로 실효 공개 여부 판단
     const proj = ALL_PROJECTS.find(p => p.name === project);
     isPub = proj?.is_private ? 0 : 1;
   }
-  if (isPub === 1) return '<span class="ck-pub-badge pub">공개</span>';
-  if (isPub === 0) return '<span class="ck-pub-badge priv">비공개</span>';
+  if (isPub === 1) return '<span class="ck-pub-badge pub">공개</span> ';
   return '';
 }
 
