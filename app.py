@@ -461,6 +461,8 @@ async def update_checklist_content(checklist_id: int, request: Request):
     item = db.get_checklist(checklist_id)
     if not item:
         raise HTTPException(status_code=404)
+    if item.get("is_locked"):
+        raise HTTPException(status_code=423, detail="체크 잠금 상태입니다.")
     data = await request.json()
     content = data.get("content", "")
     save_history = data.get("save_history", True)
@@ -525,6 +527,18 @@ def unlock_checklist(checklist_id: int, request: Request):
 def get_checklist_lock_status(checklist_id: int):
     lock = db.get_checklist_lock(checklist_id)
     return {"locked_by": lock["user_name"] if lock else None}
+
+
+@app.patch("/api/checklists/{checklist_id}/is-locked")
+async def set_checklist_is_locked(checklist_id: int, request: Request):
+    _require_editor(request)
+    item = db.get_checklist(checklist_id)
+    if not item:
+        raise HTTPException(status_code=404)
+    data = await request.json()
+    locked = 1 if data.get("locked") else 0
+    db.set_checklist_is_locked(checklist_id, locked)
+    return {"ok": True, "is_locked": locked}
 
 
 @app.get("/api/notice")

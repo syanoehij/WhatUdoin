@@ -155,6 +155,20 @@
     align-items: center;
     gap: 6px;
   }
+  .ck-pub-badge {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    vertical-align: middle;
+  }
+  .ck-pub-badge.pub  { background: #d1fae5; color: #065f46; }
+  .ck-pub-badge.priv { background: #f3f4f6; color: #6b7280; }
+  .dark .ck-pub-badge.pub  { background: #064e3b; color: #6ee7b7; }
+  .dark .ck-pub-badge.priv { background: #374151; color: #9ca3af; }
+
   .ck-item-proj {
     background: var(--surface-3);
     border-radius: 4px;
@@ -231,6 +245,20 @@
   .ck-poll-badge.flash  { background: #fde68a; }
   .dark .ck-poll-badge  { background: #3d2f00; color: #fbbf24; }
   .dark .ck-poll-badge.flash { background: #5a4200; }
+  .ck-content-lock-badge {
+    display: none;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-size: 0.72rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .dark .ck-content-lock-badge { background: #3b0a0a; color: #f87171; }
 
   /* ── 뷰어 ── */
   .ck-viewer-wrap {
@@ -252,6 +280,13 @@
     width: 15px;
     height: 15px;
     accent-color: var(--accent);
+  }
+  #ck-viewer.no-check-interaction .toastui-editor-contents input[type="checkbox"] {
+    pointer-events: none;
+    cursor: default;
+  }
+  #ck-viewer.no-check-interaction li.task-list-item {
+    cursor: default !important;
   }
 
   /* ── 편집기 ── */
@@ -722,6 +757,8 @@
       <span class="ck-right-meta" id="ck-right-meta"></span>
       <div class="ck-right-actions">
         <span class="ck-save-indicator" id="ck-dirty-indicator"></span>
+        <!-- 체크 잠금 상태 배지 -->
+        <span class="ck-content-lock-badge" id="ck-content-lock-badge" style="display:none;" title="체크 잠금 상태">🔒 잠김</span>
         <!-- 뷰어 목차: 로그인 여부 무관하게 표시 -->
         <button class="btn btn-sm" id="btn-toc-viewer" onclick="toggleViewerToc()" style="display:none;" title="목차">📑 목차</button>
         {% if user and user.role in ('editor', 'admin') %}
@@ -920,6 +957,7 @@ let _dirty              = false;
 let _autoSaveTimer      = null;
 let _editMode           = false;
 let _lockedByOther      = false;
+let _contentLocked      = false;
 let _heartbeatInterval  = null;
 let _pollTimer          = null;
 let _pollUpdatedAt      = null;
@@ -1060,6 +1098,17 @@ function selectProject(proj) {
 }
 
 // ── 체크리스트 목록 렌더링 ─────────────────────────────────
+function _pubBadge(isPub, project) {
+  if (isPub === null || isPub === undefined) {
+    // 프로젝트 연동: 소속 프로젝트의 is_private로 실효 공개 여부 판단
+    const proj = ALL_PROJECTS.find(p => p.name === project);
+    isPub = proj?.is_private ? 0 : 1;
+  }
+  if (isPub === 1) return '<span class="ck-pub-badge pub">공개</span>';
+  if (isPub === 0) return '<span class="ck-pub-badge priv">비공개</span>';
+  return '';
+}
+
 function renderList() {
   const filtered = _curProj
     ? _allChecklists.filter(c => c.project === _curProj)
@@ -1075,7 +1124,7 @@ function renderList() {
   }
   container.innerHTML = sorted.map(c => `
     <div class="ck-item ${_curId === c.id ? 'active' : ''}" onclick="openChecklist(${c.id})">
-      <div class="ck-item-title">${CURRENT_USER && c.is_public ? '<span style="font-size:0.72rem;color:var(--accent);font-weight:600;margin-right:4px;">(공개 중)</span>' : ''}${escHtml(c.title)}</div>
+      <div class="ck-item-title">${IS_EDITOR ? _pubBadge(c.is_public, c.project) : ''}${escHtml(c.title)}</div>
       <div class="ck-item-meta">
         ${c.project ? `<span class="ck-item-proj" style="border-left:3px solid ${projColor(c.project)};padding-left:5px;">${escHtml(c.project)}</span>` : ''}
         <span>${c.updated_at.replace('T',' ').substring(0,16)}</span>
@@ -1117,6 +1166,7 @@ async function openChecklist(id, forceEdit = false) {
   // 잠금 상태 반영
   const lockData = lockRes.ok ? await lockRes.json() : { locked_by: null };
   _setLockState(lockData.locked_by);
+  _applyContentLockUi(_curItem.is_locked);
 
   document.getElementById('ck-placeholder').style.display = 'none';
   document.getElementById('ck-right-header').style.display = '';
@@ -1129,7 +1179,7 @@ async function openChecklist(id, forceEdit = false) {
     _showEditorMode();
   } else {
     _showViewerMode();
-    if (CURRENT_USER) _startPoll(id);
+    if (CURRENT_USER && !_curItem.is_locked) _startPoll(id);
   }
 }
 
@@ -1158,6 +1208,17 @@ function _setLockState(lockedBy) {
     const editBtn = document.getElementById('ck-edit-btn');
     if (editBtn) editBtn.style.display = _lockedByOther ? 'none' : '';
   }
+}
+
+function _applyContentLockUi(isLocked) {
+  _contentLocked = !!isLocked;
+  const badge = document.getElementById('ck-content-lock-badge');
+  if (badge) {
+    badge.style.display = isLocked ? 'inline-flex' : 'none';
+  }
+  const viewerEl = document.getElementById('ck-viewer');
+  if (viewerEl) viewerEl.classList.toggle('no-check-interaction', isLocked);
+  if (isLocked) _stopPoll();
 }
 
 async function refreshLockStatus() {
@@ -1265,9 +1326,11 @@ async function _showEditorMode() {
   }, 120000);
 
   const _initContent = (_curItem.content || '');
-  const _editorMd = /^\s*#\s/.test(_initContent)
+  let _editorMd = /^\s*#\s/.test(_initContent)
     ? _initContent
     : ((_curItem.title ? '# ' + _curItem.title + '\n\n' : '') + _initContent);
+  // 연동 체크박스 상태를 칸반 API 기준으로 맞춰 편집화면에도 올바르게 반영
+  _editorMd = await _syncLinkedMd(_editorMd);
   initEditor(_editorMd);
 }
 
@@ -1289,7 +1352,14 @@ async function _doPoll(id) {
     _pollUpdatedAt = data.updated_at;
     _curItem = data;
 
-    // 잠금 상태도 재확인
+    // 체크 잠금 변경 반영 (다른 사용자가 잠금 걸면 폴링 중단)
+    if (data.is_locked) {
+      _applyContentLockUi(true);
+      return;
+    }
+    _applyContentLockUi(false);
+
+    // 편집 잠금 상태도 재확인
     const lockRes = await fetch(`/api/checklists/${_curId}/lock`);
     const lockData = lockRes.ok ? await lockRes.json() : { locked_by: null };
     _setLockState(lockData.locked_by);
@@ -1446,7 +1516,9 @@ function renderViewer(content) {
     customHTMLSanitizer: html => html,
   });
 
-  // 체크박스 클릭 인터랙션 — 읽기 전용 뷰어에서도 토글 가능하게
+  // 잠금/비로그인 시 체크박스 클릭 차단 (시각적 반응 포함)
+  container.classList.toggle('no-check-interaction', !CURRENT_USER || _contentLocked);
+  // 연동 체크박스 상태 동기화는 로그인 여부 무관하게 항상 실행
   setTimeout(() => attachCheckboxHandlers(displayContent), 100);
 }
 
@@ -1463,6 +1535,32 @@ function _parseLinkedCheckboxes(mdContent) {
     }
   }
   return linked;
+}
+
+// ── 연동 체크박스의 칸반 상태를 마크다운 텍스트에 반영 (편집화면 진입 시 사용)
+async function _syncLinkedMd(md) {
+  const linked = _parseLinkedCheckboxes(md);
+  if (!Object.keys(linked).length) return md;
+
+  const eventIds = [...new Set(Object.values(linked))];
+  const eventMap = {};
+  await Promise.all(eventIds.map(async eid => {
+    try {
+      const r = await fetch(`/api/events/${eid}`);
+      if (r.ok) eventMap[eid] = await r.json();
+    } catch {}
+  }));
+
+  let count = 0;
+  return md.replace(/^([ \t]*[-*+] \[)([xX ]?)(\])/gm, (match, pre, state, post) => {
+    const eventId = linked[count++];
+    if (eventId !== undefined) {
+      const ev = eventMap[eventId];
+      const isChecked = !!(ev && (ev.kanban_status === 'peer_review' || ev.kanban_status === 'done'));
+      return pre + (isChecked ? 'x' : ' ') + post;
+    }
+    return match;
+  });
 }
 
 // ── 연동 체크박스의 칸반 상태를 뷰어에 동기화
@@ -1508,39 +1606,39 @@ async function _syncLinkedCheckboxes(mdContent, viewerEl) {
 }
 
 function attachCheckboxHandlers(mdContent) {
-  if (!CURRENT_USER) return; // 비로그인 시 체크박스 인터랙션 비활성
   const viewerEl = document.getElementById('ck-viewer');
   const linked = _parseLinkedCheckboxes(mdContent);
+  const canInteract = !!(CURRENT_USER && !_lockedByOther && !_contentLocked);
 
   viewerEl.querySelectorAll('li.task-list-item').forEach((li, idx) => {
-    if (li.dataset.ckBound) return; // 중복 바인딩 방지
-    li.dataset.ckBound = '1';
-    li.style.cursor = _lockedByOther ? 'not-allowed' : 'pointer';
-    li.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (_lockedByOther) return;
+    if (canInteract) {
+      if (li.dataset.ckBound) return; // 중복 바인딩 방지
+      li.dataset.ckBound = '1';
+      li.style.cursor = 'pointer';
+      li.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (_lockedByOther || _contentLocked) return;
 
-      const eventId = linked[idx];
-      if (eventId) {
-        // 연동 체크박스: 칸반 상태 업데이트
-        const isChecked = li.dataset.linkedChecked === '1';
-        toggleLinkedCheckbox(li, eventId, !isChecked);
-      } else {
-        // 일반 체크박스: 마크다운 토글
-        let count = 0, isChecked = false;
-        const re = /^[ \t]*[-*+] \[([xX ]?)\]/gm;
-        let m;
-        while ((m = re.exec(mdContent)) !== null) {
-          if (count === idx) { isChecked = m[1].toLowerCase() === 'x'; break; }
-          count++;
+        const eventId = linked[idx];
+        if (eventId) {
+          const isChecked = li.dataset.linkedChecked === '1';
+          toggleLinkedCheckbox(li, eventId, !isChecked);
+        } else {
+          let count = 0, isChecked = false;
+          const re = /^[ \t]*[-*+] \[([xX ]?)\]/gm;
+          let m;
+          while ((m = re.exec(mdContent)) !== null) {
+            if (count === idx) { isChecked = m[1].toLowerCase() === 'x'; break; }
+            count++;
+          }
+          toggleCheckbox(idx, !isChecked, mdContent);
         }
-        toggleCheckbox(idx, !isChecked, mdContent);
-      }
-    });
+      });
+    }
   });
 
-  // 연동 체크박스 칸반 상태 동기화 (비동기)
+  // 연동 체크박스 칸반 상태 동기화 — 로그인 여부 무관하게 항상 실행
   _syncLinkedCheckboxes(mdContent, viewerEl);
 }
 

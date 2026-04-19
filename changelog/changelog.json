@@ -2,6 +2,66 @@
   "groups": [
     {
       "date": "2026-04-20",
+      "phase": "22차 19단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 편집화면 연동 체크박스 언싱크 수정",
+          "detail_html": "<ul>\n              <li><b>근본 원인</b> — '편집' 버튼은 <code>check_editor.html</code>로 페이지 이동하므로 <code>check.html</code>의 <code>_showEditorMode</code> fix가 실제로 적용되지 않던 문제</li>\n              <li><b>check_editor.html 수정</b> — <code>DOMContentLoaded</code>를 <code>async</code>로 전환, 에디터 초기화 전 <code>_syncLinkedMdForEditor()</code>를 호출해 연동 체크박스의 마크다운 <code>[ ]</code>/<code>[x]</code> 상태를 칸반 API 기준으로 교정 후 로드</li>\n              <li><b>_syncLinkedMdForEditor()</b> — <code>_parseLinkedIdxMap()</code>으로 연동 마커 파싱, <code>/api/events/{eid}</code> 일괄 조회, <code>peer_review·done → [x]</code> / 그 외 → <code>[ ]</code>로 마크다운 텍스트 치환 후 반환</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-20",
+      "phase": "22차 18단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 비로그인 연동 체크박스 상태 미동기화 수정",
+          "detail_html": "<ul>\n              <li><b>기존 문제</b> — <code>attachCheckboxHandlers()</code> 첫 줄 <code>if (!CURRENT_USER) return;</code>으로 비로그인 시 함수 전체가 조기 종료, <code>_syncLinkedCheckboxes()</code>도 실행되지 않아 🔗 배지 미표시·체크 상태 불일치 발생</li>\n              <li><b>클릭 핸들러·상태 동기화 분리</b> — <code>canInteract</code>(로그인+잠금해제) 변수로 클릭 바인딩 여부를 제어하되, <code>_syncLinkedCheckboxes()</code>는 로그인 여부 무관하게 항상 실행</li>\n              <li>비로그인 공개 체크리스트에서도 연동 체크박스 칸반 상태 및 🔗 뱃지가 올바르게 표시됨</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-20",
+      "phase": "22차 17단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 잠금·비로그인 시 체크박스 시각 반응 완전 차단",
+          "detail_html": "<ul>\n              <li><b>기존 문제</b> — <code>li</code> 클릭 핸들러에서 저장은 막았지만, 브라우저가 <code>input[type=checkbox]</code> 상태를 JS 이전에 토글해 시각적으로 체크가 켜졌다 꺼지는 현상 발생</li>\n              <li><b>CSS pointer-events 차단</b> — <code>.no-check-interaction</code> 클래스를 <code>#ck-viewer</code>에 추가하면 <code>input[type=checkbox]</code>에 <code>pointer-events: none</code> 적용 → 브라우저 단계에서 클릭 자체를 차단</li>\n              <li><code>renderViewer()</code>에서 <code>!CURRENT_USER || _contentLocked</code> 조건으로 클래스 자동 적용; <code>_applyContentLockUi()</code>에서 잠금 토글 시 즉시 반영</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-20",
+      "phase": "22차 16단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 항목 리스트 공개/비공개 배지 표시 수정",
+          "detail_html": "<ul>\n              <li><b>기존 문제</b> — <code>c.is_public</code> truthy 여부로만 표시해 <code>is_public=0</code>(비공개)·<code>null</code>(프로젝트 연동) 항목은 배지가 전혀 표시되지 않던 문제</li>\n              <li><b>IS_EDITOR 전용 배지</b> — editor/admin 로그인 시 각 항목 제목 왼쪽에 초록 <b>공개</b> / 회색 <b>비공개</b> 배지 표시</li>\n              <li><b>프로젝트 연동(null) 처리</b> — <code>is_public=null</code>일 때 <code>ALL_PROJECTS</code>에서 소속 프로젝트의 <code>is_private</code> 값을 참조해 실효 공개 여부를 계산, 뷰어 오른쪽 visibility segment와 동일한 로직 적용</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-20",
+      "phase": "22차 15단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>체크 — 체크 잠금 기능 신설",
+          "detail_html": "<ul>\n              <li><b>DB 컬럼 추가</b> — <code>checklists.is_locked</code> (INTEGER DEFAULT 0) 마이그레이션; 기존 편집 충돌 방지용 <code>checklist_locks</code> 테이블과 완전히 분리된 영구 플래그</li>\n              <li><b>편집 모드 버튼</b> — '수정 이력' 버튼 왼쪽에 🔒 체크 잠금 / 🔓 체크 잠금 해제 토글 버튼 추가; <code>PATCH /api/checklists/{id}/is-locked</code> 호출로 즉시 전환</li>\n              <li><b>뷰어 잠금 배지</b> — '📑 목차' 버튼 왼쪽에 🔒 잠김 인라인 배지 표시 (editor/admin 여부 무관)</li>\n              <li><b>폴링 차단</b> — 잠금 상태면 10초 자동 새로고침 중단; 폴링 중 다른 사용자가 잠금을 걸면 다음 폴링 응답에서 즉시 감지 후 중단</li>\n              <li><b>체크박스 저장 차단</b> — 잠금 시 클릭 무반응(CSS pointer-events + JS guard); 서버에서도 <code>PATCH /api/checklists/{id}/content</code>에서 <code>is_locked=1</code>이면 HTTP 423 반환</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-20",
       "phase": "22차 14단계",
       "phase_class": "phase-7",
       "entries": [

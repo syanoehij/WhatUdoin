@@ -110,6 +110,11 @@
 
     <div class="btn-group">
       {% if checklist.id %}
+      <button class="btn btn-sm" id="btn-toggle-content-lock"
+              onclick="toggleContentLock()"
+              data-locked="{{ '1' if checklist.is_locked else '0' }}">
+        {{ '🔓 체크 잠금 해제' if checklist.is_locked else '🔒 체크 잠금' }}
+      </button>
       <a href="/check/{{ checklist.id }}/history" class="btn btn-sm">수정 이력</a>
       <a href="/api/checklists/{{ checklist.id }}/export" class="btn btn-sm" rel="noopener" title="옵시디언 호환 마크다운으로 내보내기">⬇ 내보내기</a>
       {% endif %}
@@ -229,7 +234,44 @@ window._autoSaveAndRefresh = async () => {
 
 function toggleTocPanel() { wuInst?.toggleToc(); }
 
-document.addEventListener('DOMContentLoaded', () => {
+function _parseLinkedIdxMap(md) {
+  const linked = {};
+  const lines = (md || '').split('\n');
+  let idx = 0;
+  for (const line of lines) {
+    if (/^[ \t]*[-*+] \[[ xX]?\]/.test(line)) {
+      const m = line.match(/\[[^\]]*\]\(eid:(\d+)\)/);
+      if (m) linked[idx] = parseInt(m[1]);
+      idx++;
+    }
+  }
+  return linked;
+}
+
+async function _syncLinkedMdForEditor(md) {
+  const linked = _parseLinkedIdxMap(md);
+  if (!Object.keys(linked).length) return md;
+  const eventIds = [...new Set(Object.values(linked))];
+  const eventMap = {};
+  await Promise.all(eventIds.map(async eid => {
+    try {
+      const r = await fetch(`/api/events/${eid}`);
+      if (r.ok) eventMap[eid] = await r.json();
+    } catch {}
+  }));
+  let count = 0;
+  return md.replace(/^([ \t]*[-*+] \[)([xX ]?)(\])/gm, (match, pre, state, post) => {
+    const eventId = linked[count++];
+    if (eventId !== undefined) {
+      const ev = eventMap[eventId];
+      const isChecked = !!(ev && (ev.kanban_status === 'peer_review' || ev.kanban_status === 'done'));
+      return pre + (isChecked ? 'x' : ' ') + post;
+    }
+    return match;
+  });
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
   const backBtn = document.getElementById('btn-back');
   if (backBtn) backBtn.href = CKE_IS_NEW ? '/check' : `/check?id=${CKE_ID}`;
 
@@ -249,7 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // AI 초안 주입: ?ai_draft=1 쿼리 + sessionStorage 에 check_ai_draft 있을 때
-  let initialMd = window.INITIAL_MD || '';
+  let initialMd = await _syncLinkedMdForEditor(window.INITIAL_MD || '');
   if (CKE_IS_NEW && new URLSearchParams(location.search).get('ai_draft') === '1') {
     try {
       const draft = JSON.parse(sessionStorage.getItem('check_ai_draft') || 'null');
@@ -315,6 +357,22 @@ document.addEventListener('DOMContentLoaded', () => {
     wuInst.setLeaveMsg('항목이 저장되지 않았습니다', '저장하지 않으면 작성 내용이 사라집니다.');
   }
 });
+
+async function toggleContentLock() {
+  if (!CKE_ID) return;
+  const btn = document.getElementById('btn-toggle-content-lock');
+  const cur = btn.dataset.locked === '1';
+  const res = await fetch(`/api/checklists/${CKE_ID}/is-locked`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ locked: !cur }),
+  });
+  if (res.ok) {
+    const data = await res.json();
+    btn.dataset.locked = data.is_locked ? '1' : '0';
+    btn.textContent = data.is_locked ? '🔓 체크 잠금 해제' : '🔒 체크 잠금';
+  }
+}
 
 async function saveContent(auto = false, leaveTarget = null) {
   const project = document.getElementById('ck-edit-project')?.value || '';

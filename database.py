@@ -210,6 +210,7 @@ def init_db():
             ("deleted_by", "TEXT DEFAULT NULL"),
             ("team_id",    "INTEGER DEFAULT NULL"),
             ("is_public",  "INTEGER DEFAULT 0"),
+            ("is_locked",  "INTEGER NOT NULL DEFAULT 0"),
         ])
         _migrate(conn, "projects", [
             ("deleted_at", "TEXT DEFAULT NULL"),
@@ -273,7 +274,8 @@ def init_db():
                 created_by TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                is_public  INTEGER NOT NULL DEFAULT 0
+                is_public  INTEGER NOT NULL DEFAULT 0,
+                is_locked  INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS checklist_locks (
                 checklist_id INTEGER PRIMARY KEY,
@@ -2009,19 +2011,28 @@ def get_checklists(project: str = None, viewer=None) -> list:
     with get_conn() as conn:
         if project is None:
             rows = conn.execute(
-                f"SELECT id, project, title, created_by, created_at, updated_at, is_public FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter} ORDER BY updated_at DESC"
+                f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter} ORDER BY updated_at DESC"
             ).fetchall()
         elif project == "":
             # 미지정 (project가 NULL 또는 빈 문자열인 항목)
             rows = conn.execute(
-                f"SELECT id, project, title, created_by, created_at, updated_at, is_public FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter} ORDER BY updated_at DESC"
+                f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter} ORDER BY updated_at DESC"
             ).fetchall()
         else:
             rows = conn.execute(
-                f"SELECT id, project, title, created_by, created_at, updated_at, is_public FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter} ORDER BY updated_at DESC",
+                f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter} ORDER BY updated_at DESC",
                 (project,)
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+def set_checklist_is_locked(checklist_id: int, locked: int) -> None:
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE checklists SET is_locked = ?, updated_at = ? WHERE id = ?",
+            (1 if locked else 0, now, checklist_id)
+        )
 
 
 def update_checklist_visibility(checklist_id: int, is_public) -> None:
