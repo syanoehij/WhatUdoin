@@ -51,7 +51,7 @@
     </div>
     <div id="weekly-loading" class="hidden" style="text-align:center;padding:48px 0;">
       <div class="ai-spinner"></div>
-      <p style="margin-top:16px;color:var(--text-faint);">AI가 보고서를 작성 중입니다…<br><span style="font-size:12px;">잠시 기다려 주세요 (보통 10~30초)</span></p>
+      <p style="margin-top:16px;color:var(--text-faint);">AI가 보고서를 작성 중입니다…<br><span style="font-size:12px;">잠시 기다려 주세요 (최대 2분 소요)</span></p>
     </div>
     <div id="weekly-error" class="hidden" style="margin-top:16px;padding:12px;background:var(--danger-bg,#fee);border-radius:6px;color:var(--danger,#c00);"></div>
   </div>
@@ -65,6 +65,7 @@
     <div class="month-nav-header">
       <span class="page-title" style="font-size:1rem;font-weight:700;">📋 메모장</span>
     </div>
+    {% if user %}
     <!-- 문서 종류 필터 -->
     <div class="author-filter-section" id="doctype-filter-section">
       <!-- JS 렌더링 -->
@@ -73,6 +74,7 @@
     <div class="author-filter-section" id="visibility-filter-section">
       <!-- JS 렌더링 -->
     </div>
+    {% endif %}
     <!-- 작성자 필터 -->
     <div class="author-filter-section" id="author-filter-section">
       <!-- JS 렌더링 -->
@@ -101,8 +103,8 @@
     <table class="meeting-table" id="meetings-table">
       <thead>
         <tr>
-          <th class="col-doc-type">문서 종류</th>
-          <th class="col-visibility">공개 여부</th>
+          {% if user %}<th class="col-doc-type">문서 종류</th>
+          <th class="col-visibility">공개 여부</th>{% endif %}
           <th class="col-author">작성자</th>
           <th class="col-title">제목</th>
           <th class="col-team">소속 팀</th>
@@ -428,8 +430,7 @@ function renderRow(m, showYear) {
 
   return `
   <tr class="meeting-row ${isMine ? 'mine' : ''}" onclick="location.href='/memo/${m.id}?from=memo'">
-    <td class="col-doc-type">${docBadge}</td>
-    <td class="col-visibility">${visBadge}</td>
+    ${IS_LOGGED_IN ? `<td class="col-doc-type">${docBadge}</td><td class="col-visibility">${visBadge}</td>` : ''}
     <td class="col-author ${isMine ? 'author-me' : ''}">${escHtml(m.author_name || '-')}</td>
     <td class="col-title">
       <div class="meeting-title-wrap">
@@ -600,7 +601,8 @@ async function generateWeeklyReport() {
     });
     if (!res.ok) { const err = await res.json(); throw new Error(err.detail || '서버 오류'); }
     const data = await res.json();
-    location.href = `/memo/${data.meeting_id}?from=memo`;
+    sessionStorage.setItem('weekly_ai_report_draft', JSON.stringify({ title: data.title, content: data.content }));
+    location.href = '/memo/new?ai_draft=1';
   } catch (err) {
     document.getElementById('weekly-loading').classList.add('hidden');
     document.getElementById('weekly-form').style.display = '';

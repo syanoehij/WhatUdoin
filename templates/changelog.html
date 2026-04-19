@@ -130,6 +130,60 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-19 UX 개선 — 메모장 비로그인 정보 축소 / AI 초안 흐름 개선 / 이탈 모달 (16차) ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-6">16차</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">👁</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">fix</span>메모장 — 비로그인 뷰어에게 불필요한 정보 숨김</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>목록 테이블의 <b>문서 종류</b>·<b>공개 여부</b> 컬럼을 비로그인 상태에서 숨김 (헤더·행 일괄)</li>
+              <li>왼쪽 사이드바의 <b>문서 종류</b>·<b>공개 여부</b> 필터 섹션도 비로그인 시 미노출</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">📊</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span>주간 업무 작성(AI) — 초안 흐름으로 변경 (자동 저장 제거)</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>AI 보고서 생성 후 DB에 즉시 저장하던 방식 제거 — 사용자가 편집기에서 직접 저장해야 기록됨</li>
+              <li>생성 결과를 <code>sessionStorage</code>에 임시 보관 후 <code>/memo/new?ai_draft=1</code>로 이동, 편집기에서 초안 주입</li>
+              <li>로딩 안내 문구 <i>"보통 10~30초"</i> → <i>"최대 2분 소요"</i>로 현실화</li>
+              <li>초안 상태에서 페이지를 이탈하려 하면 저장 여부 모달 표시</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🚪</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span>메모장 편집기 — 이탈 확인 모달 전면 적용</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>이전: <b>← 목록</b> 버튼만 예쁜 모달, 그 외 메뉴 링크는 브라우저 시스템 팝업</li>
+              <li>변경: 모든 내부 링크 클릭 시 동일한 <b>예쁜 모달</b>로 통일 — "이 페이지가 추가적인 대화를 생성하지 않도록 차단" 옵션 노출 문제 해소</li>
+              <li>이탈 확인 모달에서 <b>ESC</b> 키로 취소(현재 페이지 유지) 가능</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ── 2026-04-19 주간 보고서 AI e2b 품질 개선 (15차) ── -->
   <div class="cl-group">
     <div class="cl-group-header">

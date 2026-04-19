@@ -1819,11 +1819,11 @@ async def ai_weekly_report(request: Request):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")
 
-    title      = f"주간 업무 보고 ({base_date})"
-    meeting_id = db.create_meeting(title, report, team_id, user["id"], base_date)
+    title = f"주간 업무 보고 ({base_date})"
 
     return {
-        "meeting_id":       meeting_id,
+        "title":            title,
+        "content":          report,
         "past_count":       len(past_events),
         "today_count":      len(today_events),
         "future_count":     len(future_events),

@@ -285,23 +285,35 @@
 
     function _initLeaveConfirm() {
       if (!_leaveOverlay) return;
-      const backEl = feat.leaveConfirm.backBtnSelector
-        ? sel(feat.leaveConfirm.backBtnSelector) : null;
 
-      if (backEl) {
-        on(backEl, 'click', e => {
-          if (!_dirty) return;
-          e.preventDefault();
-          _leaveTarget = backEl.href || backEl.dataset.href || '/';
-          _leaveOverlay.style.display = 'flex';
-        });
-      }
+      // 페이지를 벗어나는 모든 <a> 클릭을 가로채 예쁜 모달로 처리
+      on(document, 'click', e => {
+        const anchor = e.target.closest('a[href]');
+        if (!anchor || anchor.target === '_blank') return;
+        const rawHref = anchor.getAttribute('href');
+        if (!rawHref || rawHref.startsWith('javascript:') || rawHref === '#' || rawHref.startsWith('#')) return;
+        try {
+          const url = new URL(anchor.href, location.href);
+          if (url.origin !== location.origin) return; // 외부 링크
+          if (url.pathname === location.pathname && url.search === location.search) return; // 같은 페이지
+        } catch (_) { return; }
+        if (!_dirty) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        _leaveTarget = anchor.href;
+        _leaveOverlay.style.display = 'flex';
+      }, true);
 
       const cancelBtn  = _leaveOverlay.querySelector('#wu-leave-cancel');
       const nosaveBtn  = _leaveOverlay.querySelector('#wu-leave-nosave');
       const saveBtn    = _leaveOverlay.querySelector('#wu-leave-save');
 
       cancelBtn.addEventListener('click', () => { _leaveOverlay.style.display = 'none'; });
+      on(document, 'keydown', e => {
+        if (e.key === 'Escape' && _leaveOverlay.style.display !== 'none') {
+          _leaveOverlay.style.display = 'none';
+        }
+      });
       nosaveBtn.addEventListener('click', () => {
         _setDirty(false);
         _releaseLock();

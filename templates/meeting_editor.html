@@ -121,7 +121,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/wu-editor.js"></script>
+<script src="/static/js/wu-editor.js?v={{ range(1000,9999) | random }}"></script>
 <script>
 const MEETING_ID     = {{ meeting.id if meeting else 'null' }};
 const IS_EDITOR      = {{ 'true' if can_edit else 'false' }};
@@ -159,6 +159,20 @@ window._autoSaveAndRefresh = async () => {
 
 /* ── 초기화 ─────────────────────────────────────────── */
 function initMeetingEditor() {
+  // AI 초안 주입 (주간 보고서 생성 후 저장 없이 편집기 진입 시)
+  let initialMd = INITIAL_MD || '';
+  let _aiDraftLoaded = false;
+  if (!MEETING_ID && new URLSearchParams(location.search).get('ai_draft') === '1') {
+    try {
+      const draft = JSON.parse(sessionStorage.getItem('weekly_ai_report_draft') || 'null');
+      if (draft && draft.title && typeof draft.content === 'string') {
+        initialMd = `# ${draft.title}\n\n${draft.content}`;
+        _aiDraftLoaded = true;
+      }
+    } catch (_) {}
+    sessionStorage.removeItem('weekly_ai_report_draft');
+  }
+
   // 뒤로가기 버튼
   const from = new URLSearchParams(location.search).get('from');
   const btnBack = document.getElementById('btn-back');
@@ -251,7 +265,7 @@ function initMeetingEditor() {
     el: '#editor-container',
     bodyEl: '#editor-body',
     canEdit: true,
-    initialMarkdown: INITIAL_MD || '',
+    initialMarkdown: initialMd,
     toolbarItems: [
       ['heading', 'bold', 'italic', 'strike'],
       ['hr', 'quote'],
@@ -284,6 +298,8 @@ function initMeetingEditor() {
       shouldWarnOnUnload: () => !!(IS_EDITOR && !LOCKED_BY && wuInst?.dirty),
     },
   });
+  // AI 초안이면 create() 반환 후 바로 dirty 마킹 (onReady 안에서는 wuInst가 undefined)
+  if (_aiDraftLoaded) wuInst.setDirty(true);
 
   // 리사이저 드래그
   const resizer    = document.getElementById('editor-resizer');
