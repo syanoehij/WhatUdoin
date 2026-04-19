@@ -1784,6 +1784,8 @@ async def ai_confirm(request: Request):
             payload["meeting_id"] = meeting_id
             db.create_event(payload)
             saved += 1
+        else:
+            skipped.append({"index": i, "title": e.get("title", ""), "reason": "날짜를 입력해주세요."})
     return {"saved": saved, "blocked": [], "skipped": skipped, "requires_force": False}
 
 

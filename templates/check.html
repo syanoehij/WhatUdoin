@@ -680,7 +680,13 @@ function renderProjList() {
   // 프로젝트 항목 — ALL_PROJECTS(서버 전달) + 체크리스트에 사용된 프로젝트 합산
   const fromServer = ALL_PROJECTS.map(p => p.name).filter(Boolean);
   const fromCklists = _allChecklists.map(c => c.project).filter(Boolean);
-  const projs = [...new Set([...fromServer, ...fromCklists])].sort();
+  const allProjSet = [...new Set([...fromServer, ...fromCklists])];
+  // '미지정'은 맨 앞으로 고정, 나머지는 알파벳순
+  const hasUnassigned = allProjSet.includes('미지정');
+  const projs = [
+    ...(hasUnassigned ? ['미지정'] : []),
+    ...allProjSet.filter(p => p !== '미지정').sort(),
+  ];
   projs.forEach(proj => {
     const el = document.createElement('div');
     el.className = 'ck-proj-item ck-proj-dyn' + (_curProj === proj ? ' active' : '');

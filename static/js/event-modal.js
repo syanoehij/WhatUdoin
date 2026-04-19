@@ -259,9 +259,11 @@ function openModal(dateStr = '', eventData = null, dragOpts = null, options = nu
 
     const [startDate, startTime] = splitDatetime(eventData.start_datetime);
     const [endDate,   endTime]   = splitDatetime(eventData.end_datetime);
-    _fpInstance.setDate([startDate, endDate || startDate], true);
-    document.getElementById('f-start-date').value = startDate;
-    document.getElementById('f-end-date').value   = endDate || startDate;
+    const resolvedStart = startDate || today;
+    const resolvedEnd   = endDate || resolvedStart;
+    _fpInstance.setDate([resolvedStart, resolvedEnd], true);
+    document.getElementById('f-start-date').value = resolvedStart;
+    document.getElementById('f-end-date').value   = resolvedEnd;
     document.getElementById('f-start-time').value = allDay ? '' : startTime;
     document.getElementById('f-end-time').value   = allDay ? '' : endTime;
     toggleAllDay();

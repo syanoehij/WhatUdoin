@@ -2,6 +2,33 @@
   "groups": [
     {
       "date": "2026-04-19",
+      "phase": "20차",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "📑",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>문서 비로그인 유저에게 목차(TOC) 버튼 노출",
+          "detail_html": "<ul>\n              <li>공개 문서 열람 시 비로그인 유저에게도 <b>📑 목차</b> 버튼 표시 — <code>{% if user and doc %}</code> 게이트에서 목차 버튼만 <code>{% if doc %}</code>로 분리</li>\n              <li>수정 이력 링크는 로그인자 전용 유지, TOC 패널 DOM·JS 로직은 변경 없음 (비로그인 경로에서 이미 활성화된 상태였음)</li>\n            </ul>"
+        },
+        {
+          "icon": "🛡️",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>AI 일정 제안 '건너뜀→등록' 토글 버그 수정 — 프론트엔드 3단 방어 + 백엔드 누락 보고",
+          "detail_html": "<ul>\n              <li><b>버그</b> — 담당자·날짜 누락 카드의 체크박스를 수동으로 눌러 '등록'으로 바꾸면 <b>모두 등록</b> 버튼이 활성화되고, 실제 등록 시 데이터 손실 또는 오류가 발생</li>\n              <li><code>_aiHasRequired(e)</code> 헬퍼 추출 — <code>date + title + assignee</code> 세 필드 충족 여부를 단일 함수로 통합 (기존 중복 로직 L463, L580 교체)</li>\n              <li><b>1단 (카드 렌더)</b> — 필수 필드 미충족 카드의 체크박스에 <code>disabled</code> + <code>.is-locked</code> CSS 클래스 + 안내 툴팁 적용</li>\n              <li><b>2단 (토글 가드)</b> — <code>toggleAiInclude</code>에서 <code>checked=true</code> 전환 시 <code>_aiHasRequired</code> 검증, 미충족이면 체크박스 롤백</li>\n              <li><b>3단 (카운트·버튼)</b> — <code>updateAiConfirmCount</code>의 선택 집계와 <b>모두 등록</b> <code>disabled</code> 조건에 <code>_aiHasRequired</code> 필터 추가</li>\n              <li><b>4단 (제출 직전)</b> — <code>confirmAiEvents</code>의 <code>toSave</code> 필터에도 <code>_aiHasRequired</code> 최종 방어선 추가</li>\n              <li><b>백엔드</b> — <code>/api/ai/confirm</code>에서 <code>start_datetime=None</code>인 이벤트를 조용히 버리던 동작 수정, <code>skipped</code> 리스트에 &quot;날짜를 입력해주세요.&quot; 사유로 포함해 사용자에게 알림</li>\n            </ul>"
+        },
+        {
+          "icon": "🛠️",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>날짜 없는 AI 일정 카드 편집 모달 flatpickr 오류 수정",
+          "detail_html": "<ul>\n              <li><b>버그</b> — <code>date</code> 필드가 비어있는 AI 일정 카드를 클릭하면 <code>flatpickr-range.js</code>에서 <code>TypeError: Cannot read properties of undefined (reading 'getTime')</code>가 발생해 편집 모달이 열리지 않음</li>\n              <li><code>event-modal.js</code> <code>openModal</code>에서 <code>startDate</code>가 빈 문자열일 경우 <code>today</code>로 fallback 처리 — 날짜 없는 카드를 열면 오늘 날짜가 기본값으로 설정되어 사용자가 직접 수정 가능</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크리스트 '미지정' 프로젝트 순서 및 프로젝트 관리 레이아웃 깨짐 수정",
+          "detail_html": "<ul>\n              <li><b>체크리스트 프로젝트 필터</b> — <code>renderProjList()</code>에서 단순 <code>.sort()</code> 대신 <b>미지정</b>을 알파벳 정렬 대상에서 분리해 항상 <b>전체 → 미지정 → 프로젝트(알파벳순)</b> 순서로 표시</li>\n              <li><b>프로젝트 관리 레이아웃</b> — 템플릿에서 참조하던 <code>.meetings-layout</code>, <code>.meetings-content</code> CSS 클래스가 정의되지 않아 오른쪽 패널이 아래로 떨어지던 문제 수정 — <code>style.css</code>에 두 클래스를 <code>docs-layout</code>과 동일한 flex 레이아웃으로 추가</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
       "phase": "19차 2단계",
       "phase_class": "phase-7",
       "entries": [

@@ -33,6 +33,8 @@
       {% endif %}
       {% if user and doc %}
       <a href="/doc/{{ doc.id }}/history" class="btn btn-sm">수정 이력</a>
+      {% endif %}
+      {% if doc %}
       <button id="btn-toc-toggle" class="btn btn-sm" onclick="toggleTocPanel()" title="목차">📑 목차</button>
       {% endif %}
       {% if can_edit and not locked_by %}
@@ -460,7 +462,7 @@ async function runAiParse() {
     parsedEvents = finalEvents.map(e => {
       const eventType = e.event_type || 'schedule';
       const kanbanStatus = e.kanban_status || (eventType === 'schedule' ? 'backlog' : null);
-      const hasRequired = !!(e.date && e.title && e.assignee);
+      const hasRequired = _aiHasRequired(e);
       return {
         ...e,
         _include:      hasRequired,
@@ -577,7 +579,7 @@ async function aiReviewConflicts(model) {
           parsedEvents[i]._conflict = null;
           // 중복 없어도 필수 필드 미충족이면 등록 대상에서 제외
           const e2 = parsedEvents[i];
-          parsedEvents[i]._include = !!(e2.date && e2.title && e2.assignee);
+          parsedEvents[i]._include = _aiHasRequired(e2);
         }
       }
     });
@@ -589,12 +591,17 @@ function setLoadingMsg(msg) {
   if (el) el.textContent = msg;
 }
 
+function _aiHasRequired(e) {
+  return !!(e && e.date && e.title && e.assignee);
+}
+
 function updateAiConfirmCount() {
   const total    = parsedEvents.filter(Boolean).length;
   const selected = parsedEvents.filter((e, i) => {
     if (!e) return false;
     const chk = document.getElementById(`ai-include-${i}`);
-    return chk ? chk.checked : e._include !== false;
+    const isOn = chk ? chk.checked : e._include !== false;
+    return isOn && _aiHasRequired(e);
   }).length;
   document.getElementById('ai-result-count').textContent =
     selected === total ? `${total}건` : `${selected}/${total}건 선택`;
@@ -603,7 +610,14 @@ function updateAiConfirmCount() {
 }
 
 function toggleAiInclude(i, checked) {
-  if (parsedEvents[i]) parsedEvents[i]._include = checked;
+  const e = parsedEvents[i];
+  if (!e) return;
+  if (checked && !_aiHasRequired(e)) {
+    const chk = document.getElementById(`ai-include-${i}`);
+    if (chk) chk.checked = false;
+    return;
+  }
+  e._include = checked;
   const label = document.querySelector(`#ai-item-${i} .ai-include-label`);
   if (label) {
     label.classList.toggle('is-included', checked);
@@ -634,6 +648,7 @@ function renderAiResults() {
 
   function _buildCard(e, i) {
     const included = e._include !== false;
+    const hasRequired = _aiHasRequired(e);
     const missingDate     = !e.date;
     const missingTitle    = !e.title;
     const missingAssignee = !e.assignee;
@@ -669,10 +684,10 @@ function renderAiResults() {
         <span class="item-type-icon" title="${e.event_type === 'meeting' ? '회의' : '일정'}">${typeIcon}</span>
         <span class="item-summary">${summary}</span>
         <div class="btn-group" onclick="event.stopPropagation()">
-          <label class="ai-include-label ${included ? 'is-included' : 'is-excluded'}" title="${included ? '클릭하면 등록에서 제외됩니다' : '클릭하면 등록 대상에 포함됩니다'}">
-            <input type="checkbox" id="ai-include-${i}" ${included ? 'checked' : ''} onchange="toggleAiInclude(${i},this.checked)" />
-            <span class="include-icon">${included ? '✓' : '✗'}</span>
-            <span class="include-text">${included ? '등록' : '건너뜀'}</span>
+          <label class="ai-include-label ${included && hasRequired ? 'is-included' : 'is-excluded'}${hasRequired ? '' : ' is-locked'}" title="${hasRequired ? (included ? '클릭하면 등록에서 제외됩니다' : '클릭하면 등록 대상에 포함됩니다') : '필수 정보(제목/날짜/담당자)가 채워지면 등록할 수 있습니다 — 카드를 클릭해 편집하세요'}">
+            <input type="checkbox" id="ai-include-${i}" ${included && hasRequired ? 'checked' : ''} ${hasRequired ? '' : 'disabled'} onchange="toggleAiInclude(${i},this.checked)" />
+            <span class="include-icon">${included && hasRequired ? '✓' : '✗'}</span>
+            <span class="include-text">${included && hasRequired ? '등록' : '건너뜀'}</span>
           </label>
           <button class="btn btn-sm btn-danger" onclick="removeAiItem(${i})">제거</button>
         </div>
@@ -711,7 +726,8 @@ async function confirmAiEvents(force = false) {
   const toSave = parsedEvents.filter((e, i) => {
     if (!e) return false;
     const chk = document.getElementById(`ai-include-${i}`);
-    return chk ? chk.checked : e._include !== false;
+    const isOn = chk ? chk.checked : e._include !== false;
+    return isOn && _aiHasRequired(e);
   });
   if (!toSave.length) { alert('등록할 일정이 없습니다. 체크박스를 확인하세요.'); return; }
 

@@ -839,11 +839,19 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
 .page-title { font-size: 1.15rem; font-weight: 700; color: var(--text); }
 
 /* ── 회의록 좌우 레이아웃 ── */
-.docs-layout {
+.docs-layout,
+.meetings-layout {
   display: flex;
   flex: 1;           /* main의 남은 높이 전부 차지 */
   min-height: 0;     /* flex shrink 허용 */
   overflow: hidden;
+}
+.meetings-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* 왼쪽: 월 네비게이터 */
@@ -1646,6 +1654,10 @@ mark.search-hl {
 }
 .ai-include-label.is-excluded .include-text {
   opacity: 0.7;
+}
+.ai-include-label.is-locked {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 .ai-include-label .include-icon {
   font-size: 0.85rem;
