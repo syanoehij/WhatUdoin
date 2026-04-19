@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-04-19",
+      "phase": "22차 8단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "📦",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>프로젝트 ZIP 내보내기 — 회의 포함 및 폴더 분리",
+          "detail_html": "<ul>\n              <li><b>회의 포함</b> — 옵시디언 ZIP 저장 시 <code>event_type='meeting'</code> 일정을 별도 <code>회의/</code> 폴더로 내보내기</li>\n              <li><code>index.md</code>에 <b>🗓️ 회의 섹션</b> 추가 — <code>[[회의/{stem}]]</code> 위키링크 목록 포함</li>\n              <li>기존 <code>일정/</code> 폴더에는 <code>event_type='schedule'</code>만 포함되도록 분리</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
       "phase": "22차 7단계",
       "phase_class": "phase-7",
       "entries": [

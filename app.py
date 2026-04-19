@@ -1323,8 +1323,10 @@ def _esc(v) -> str:
     return str(v).replace("\r\n", "\n").strip()
 
 
-def _build_index_md(name: str, proj: dict | None, events: list[dict], checklists: list[dict],
-                    event_files: list[str], checklist_files: list[str], exported_at: str) -> str:
+def _build_index_md(name: str, proj: dict | None,
+                    events: list[dict], checklists: list[dict],
+                    event_files: list[str], checklist_files: list[str], exported_at: str,
+                    meetings: list[dict] | None = None, meeting_files: list[str] | None = None) -> str:
     lines = ["---", f"project: {_yaml_str(name)}", "type: project"]
     if proj:
         if proj.get("color"):      lines.append(f"color: {_yaml_str(proj.get('color'))}")
@@ -1344,6 +1346,15 @@ def _build_index_md(name: str, proj: dict | None, events: list[dict], checklists
     else:
         lines.append("_연결된 일정 없음_")
     lines.append("")
+    if meetings is not None:
+        lines.append(f"## 🗓️ 회의 ({len(meetings)}개)")
+        lines.append("")
+        if meeting_files:
+            for stem in meeting_files:
+                lines.append(f"- [[회의/{stem}]]")
+        else:
+            lines.append("_연결된 회의 없음_")
+        lines.append("")
     lines.append(f"## ✅ 체크리스트 ({len(checklists)}개)")
     lines.append("")
     if checklist_files:
@@ -1512,23 +1523,32 @@ def _build_project_zip(name: str) -> bytes:
     is_unset = (name == "미지정")
     if is_unset:
         proj = None
-        events = db.get_unassigned_events()
+        all_events = db.get_unassigned_events()
         cl_metas = db.get_unassigned_checklists()
     else:
         proj = db.get_project(name)
-        events = db.get_events_by_project(name)
+        all_events = db.get_events_by_project(name)
         cl_metas = db.get_checklists(project=name)
     checklists = [db.get_checklist(c["id"]) for c in cl_metas]
     checklists = [c for c in checklists if c]
+
+    schedules = [e for e in all_events if e.get("event_type") != "meeting"]
+    meetings  = [e for e in all_events if e.get("event_type") == "meeting"]
 
     exported_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     root = _safe_filename(name, "project")
 
     event_entries = []
     used_ev_stems: set[str] = set()
-    for ev in events:
+    for ev in schedules:
         stem = _uniq_filename(_safe_filename(ev.get("title") or "일정", "일정"), used_ev_stems)
         event_entries.append((stem, ev))
+
+    meeting_entries = []
+    used_mt_stems: set[str] = set()
+    for ev in meetings:
+        stem = _uniq_filename(_safe_filename(ev.get("title") or "회의", "회의"), used_mt_stems)
+        meeting_entries.append((stem, ev))
 
     cl_entries = []
     used_cl_stems: set[str] = set()
@@ -1543,14 +1563,18 @@ def _build_project_zip(name: str) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         index_md = _build_index_md(
-            name, proj, events, checklists,
+            name, proj, schedules, checklists,
             [s for s, _ in event_entries],
             [s for s, _ in cl_entries],
             exported_at,
+            meetings=meetings,
+            meeting_files=[s for s, _ in meeting_entries],
         )
         zf.writestr(f"{root}/index.md", index_md)
         for stem, ev in event_entries:
             zf.writestr(f"{root}/일정/{stem}.md", _build_event_md(proj_arg, ev, exported_at))
+        for stem, ev in meeting_entries:
+            zf.writestr(f"{root}/회의/{stem}.md", _build_event_md(proj_arg, ev, exported_at))
         for stem, md_text in cl_mds:
             zf.writestr(f"{root}/체크리스트/{stem}.md", md_text)
         seen_archive: set[str] = set()
