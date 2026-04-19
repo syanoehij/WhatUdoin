@@ -151,6 +151,8 @@ window._blockAutoRefresh = () => aiPanelOpen || parsedEvents.some(Boolean);
 window._autoSaveAndRefresh = async () => {
   if (IS_EDITOR && !LOCKED_BY && wuInst?.dirty) {
     await saveDoc();
+    // 저장 후에도 dirty가 남아있으면 저장 실패 — reload 취소
+    if (wuInst?.dirty) return;
   }
   location.reload();
 };
@@ -420,7 +422,6 @@ async function runAiParse() {
   if (!content) { alert('문서 내용을 먼저 입력하세요.'); return; }
 
   const model = document.getElementById('ai-model-select').value;
-  window._blockAutoRefresh = true;
   document.getElementById('ai-loading').classList.remove('hidden');
   document.getElementById('ai-error').classList.add('hidden');
   document.getElementById('ai-result-section').classList.add('hidden');
@@ -481,7 +482,8 @@ async function runAiParse() {
   } catch (e) {
     showAiError(e.message);
   } finally {
-    window._blockAutoRefresh = false;
+    // boolean으로 덮어쓴 _blockAutoRefresh를 원래 함수로 복원
+    window._blockAutoRefresh = () => aiPanelOpen || parsedEvents.some(Boolean);
     document.getElementById('ai-loading').classList.add('hidden');
     document.getElementById('btn-run-ai').disabled = false;
   }
@@ -629,8 +631,8 @@ function renderAiResults() {
   const cnt  = parsedEvents.filter(Boolean).length;
   document.getElementById('ai-result-count').textContent = `${cnt}건`;
   const list = document.getElementById('ai-result-list');
-  list.innerHTML = parsedEvents.map((e, i) => {
-    if (e === null) return '';
+
+  function _buildCard(e, i) {
     const included = e._include !== false;
     const missingDate     = !e.date;
     const missingTitle    = !e.title;
@@ -646,7 +648,6 @@ function renderAiResults() {
       e.assignee ? `<span style="color:#666;font-size:12px">담당: ${esc(e.assignee)}</span>` : '',
       e.project  ? `<span style="color:#666;font-size:12px">[${esc(e.project)}]</span>` : '',
     ].filter(Boolean).join(' · ');
-
     const hasConflict = !!(e._conflict || e._conflict_batch);
     const conflictBadge = _buildConflictBadge(e);
     const batchBadge = e._conflict_batch
@@ -662,7 +663,6 @@ function renderAiResults() {
       ? `<span class="done-project-warn">⚠ 완료된 프로젝트 선택</span>` : '';
     const badgeRow = (conflictBadge || batchBadge || warnBadges || doneProjectBadge)
       ? `<div class="item-badges">${warnBadges}${doneProjectBadge}${conflictBadge}${batchBadge}</div>` : '';
-
     return `
     <div class="result-item" id="ai-item-${i}" onclick="openEditForAi(${i})" title="클릭하면 상세 내용 확인 및 편집">
       <div class="item-header">
@@ -679,7 +679,21 @@ function renderAiResults() {
       </div>
       ${badgeRow}
     </div>`;
-  }).join('');
+  }
+
+  const meetings  = parsedEvents.map((e, i) => ({ e, i })).filter(({ e }) => e && e.event_type === 'meeting');
+  const schedules = parsedEvents.map((e, i) => ({ e, i })).filter(({ e }) => e && e.event_type !== 'meeting');
+
+  let html = '';
+  if (meetings.length) {
+    html += `<div class="ai-result-section-header">💬 회의 (${meetings.length}개)</div>`;
+    html += meetings.map(({ e, i }) => _buildCard(e, i)).join('');
+  }
+  if (schedules.length) {
+    html += `<div class="ai-result-section-header">📅 업무 일정 (${schedules.length}개)</div>`;
+    html += schedules.map(({ e, i }) => _buildCard(e, i)).join('');
+  }
+  list.innerHTML = html;
   document.getElementById('ai-result-section').classList.remove('hidden');
   updateAiConfirmCount();
 }
@@ -723,6 +737,11 @@ async function confirmAiEvents(force = false) {
     msg += `\n\n건너뜀 ${data.skipped.length}건:\n${skipNames}`;
   }
   alert(msg);
+  // reload 전 미저장 문서 내용 저장 시도, 저장 실패해도 팝업 방지를 위해 dirty 해제
+  if (IS_EDITOR && !LOCKED_BY && wuInst?.dirty) {
+    await saveDoc();
+  }
+  if (wuInst) wuInst.setDirty(false);
   location.reload();
 }
 
@@ -830,20 +849,18 @@ function renderLinkedEvents() {
   if (!linkedEvents.length) { sec.classList.add('hidden'); return; }
   sec.classList.remove('hidden');
 
-  sec.innerHTML = `
-    <h4 class="linked-events-title">📅 연결된 일정 <span class="count-badge">${linkedEvents.length}개</span></h4>
-    ${linkedEvents.map((e, i) => {
-      const typeIcon = e.event_type === 'meeting' ? '💬' : '📅';
-      const datePart = (e.start_datetime || '').slice(0, 10);
-      const timePart = !e.all_day && e.start_datetime && e.start_datetime.length > 10
-        ? ' ' + e.start_datetime.slice(11, 16) : '';
-      const summary = [
-        e.title ? esc(e.title) : '<em style="color:#aaa">제목 없음</em>',
-        datePart ? `<span style="color:#666;font-size:12px">${esc(datePart)}${esc(timePart)}</span>` : '',
-        e.assignee ? `<span style="color:#666;font-size:12px">담당: ${esc(e.assignee)}</span>` : '',
-        e.project  ? `<span style="color:#666;font-size:12px">[${esc(e.project)}]</span>` : '',
-      ].filter(Boolean).join(' · ');
-      return `
+  function _buildLinkedCard(e, i) {
+    const typeIcon = e.event_type === 'meeting' ? '💬' : '📅';
+    const datePart = (e.start_datetime || '').slice(0, 10);
+    const timePart = !e.all_day && e.start_datetime && e.start_datetime.length > 10
+      ? ' ' + e.start_datetime.slice(11, 16) : '';
+    const summary = [
+      e.title ? esc(e.title) : '<em style="color:#aaa">제목 없음</em>',
+      datePart ? `<span style="color:#666;font-size:12px">${esc(datePart)}${esc(timePart)}</span>` : '',
+      e.assignee ? `<span style="color:#666;font-size:12px">담당: ${esc(e.assignee)}</span>` : '',
+      e.project  ? `<span style="color:#666;font-size:12px">[${esc(e.project)}]</span>` : '',
+    ].filter(Boolean).join(' · ');
+    return `
     <div class="result-item linked-item" id="linked-item-${i}" onclick="openEditForLinked(${i})" title="클릭하면 수정">
       <div class="item-header">
         <span class="item-type-icon" title="${e.event_type === 'meeting' ? '회의' : '일정'}">${typeIcon}</span>
@@ -853,7 +870,24 @@ function renderLinkedEvents() {
         </div>
       </div>
     </div>`;
-    }).join('')}
+  }
+
+  const meetings  = linkedEvents.map((e, i) => ({ e, i })).filter(({ e }) => e.event_type === 'meeting');
+  const schedules = linkedEvents.map((e, i) => ({ e, i })).filter(({ e }) => e.event_type !== 'meeting');
+
+  let body = '';
+  if (meetings.length) {
+    body += `<div class="ai-result-section-header">💬 회의 (${meetings.length}개)</div>`;
+    body += meetings.map(({ e, i }) => _buildLinkedCard(e, i)).join('');
+  }
+  if (schedules.length) {
+    body += `<div class="ai-result-section-header">📅 업무 일정 (${schedules.length}개)</div>`;
+    body += schedules.map(({ e, i }) => _buildLinkedCard(e, i)).join('');
+  }
+
+  sec.innerHTML = `
+    <h4 class="linked-events-title">연결된 일정 <span class="count-badge">${linkedEvents.length}개</span></h4>
+    ${body}
   `;
 }
 

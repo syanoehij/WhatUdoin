@@ -61,7 +61,7 @@ def parse_schedule(text: str, model: str = DEFAULT_MODEL) -> list[dict]:
 오늘 날짜: {today}
 
 출력 형식:
-[{{"title":"제목","project":"프로젝트명","date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","start_time":"HH:MM","end_time":"HH:MM","all_day":false,"location":"장소","assignee":"담당자","description":"설명"}}]
+[{{"title":"제목","project":"프로젝트명","date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","start_time":"HH:MM","end_time":"HH:MM","all_day":false,"location":"장소","assignee":"담당자","description":"설명","event_type":"schedule"}}]
 
 규칙:
 - 날짜가 "이번 주", "다음 주 화요일", "4월 말" 처럼 상대적이면 오늘 날짜 기준으로 계산하세요
@@ -69,7 +69,8 @@ def parse_schedule(text: str, model: str = DEFAULT_MODEL) -> list[dict]:
 - 날짜가 전혀 언급되지 않거나 "언제까지인지 모른다", "마감 미정", "가능한 빨리" 같은 표현이면 date를 null로 쓰세요 (임의로 오늘 날짜를 넣지 마세요)
 - 모르는 값은 null로 쓰세요
 - 담당자는 assignee 필드에, 프로젝트명은 project 필드에 넣으세요
-- 회의·미팅 자체도 일정으로 추출하되, 회의 참석자 전원이 담당자인 경우 가장 대표 담당자 1명만 쓰세요
+- event_type 분류: "meeting" = 회의·미팅·리뷰·스탠드업·데일리·킥오프처럼 여러 사람이 동시에 참석하는 모임(회의실·화상 등 특정 장소/링크 또는 참석자 다수). "schedule" = 1인 담당자가 기한까지 수행하는 업무·태스크·마감·제출·출장·이동·교육. 모호하면 "schedule"로 하세요
+- 회의 참석자 전원이 담당자인 경우 가장 대표 담당자 1명만 쓰세요
 - 시간 정보가 없으면 all_day를 true로 설정하세요
 - 종료 날짜가 시작 날짜와 같으면 end_date는 null로 쓰세요
 - 여러 날에 걸치는 일정이면 end_date에 종료 날짜를 쓰세요
@@ -77,16 +78,16 @@ def parse_schedule(text: str, model: str = DEFAULT_MODEL) -> list[dict]:
 
 예시:
 입력: 다음주 월요일 오후 3시에 회의실A에서 팀 회의, 담당 홍길동
-출력: [{{"title":"팀 회의","project":null,"date":"2026-04-13","end_date":null,"start_time":"15:00","end_time":null,"all_day":false,"location":"회의실A","assignee":"홍길동","description":null}}]
+출력: [{{"title":"팀 회의","project":null,"date":"2026-04-13","end_date":null,"start_time":"15:00","end_time":null,"all_day":false,"location":"회의실A","assignee":"홍길동","description":null,"event_type":"meeting"}}]
 
 입력: 이번달 말에 워크샵 예정, 담당 홍길동
-출력: [{{"title":"워크샵","project":null,"date":"2026-04-30","end_date":null,"start_time":null,"end_time":null,"all_day":true,"location":null,"assignee":"홍길동","description":null}}]
+출력: [{{"title":"워크샵","project":null,"date":"2026-04-30","end_date":null,"start_time":null,"end_time":null,"all_day":true,"location":null,"assignee":"홍길동","description":null,"event_type":"schedule"}}]
 
 입력: 4월 21일부터 23일까지 출장
-출력: [{{"title":"출장","project":null,"date":"2026-04-21","end_date":"2026-04-23","start_time":null,"end_time":null,"all_day":true,"location":null,"assignee":null,"description":null}}]
+출력: [{{"title":"출장","project":null,"date":"2026-04-21","end_date":"2026-04-23","start_time":null,"end_time":null,"all_day":true,"location":null,"assignee":null,"description":null,"event_type":"schedule"}}]
 
 입력: 김민준이 결제 모듈 테스트를 맡기로 했습니다. 언제까지라는 말은 없었고 가능한 빨리 해달라고 했습니다.
-출력: [{{"title":"결제 모듈 테스트","project":null,"date":null,"end_date":null,"start_time":null,"end_time":null,"all_day":true,"location":null,"assignee":"김민준","description":"마감일 미정, 가능한 빨리 완료"}}]
+출력: [{{"title":"결제 모듈 테스트","project":null,"date":null,"end_date":null,"start_time":null,"end_time":null,"all_day":true,"location":null,"assignee":"김민준","description":"마감일 미정, 가능한 빨리 완료","event_type":"schedule"}}]
 
 이제 아래 텍스트를 분석하세요:
 {text}
@@ -129,9 +130,10 @@ def refine_schedule(text: str, first_pass: list[dict], model: str = DEFAULT_MODE
 5. 원본에 없는 내용을 추가하지 마세요
 6. 날짜가 언급되지 않은 일정은 date를 null로 유지하세요
 7. 1차 결과가 맞으면 그대로 유지하세요 — 멀쩡한 항목을 굳이 바꾸지 마세요
+8. event_type이 적절한지 재확인하세요 — 여러 사람이 모이는 회의·미팅·리뷰는 "meeting", 개인 업무·마감·태스크·출장은 "schedule"
 
 출력 형식: JSON 배열만. 설명 없이.
-필드: title, project, date(YYYY-MM-DD|null), end_date(YYYY-MM-DD|null), start_time(HH:MM|null), end_time(HH:MM|null), all_day(bool), location, assignee, description
+필드: title, project, date(YYYY-MM-DD|null), end_date(YYYY-MM-DD|null), start_time(HH:MM|null), end_time(HH:MM|null), all_day(bool), location, assignee, description, event_type(meeting|schedule)
 
 --- 원본 회의록 ---
 {text}
@@ -246,6 +248,9 @@ def validate_and_normalize(items: list) -> list[dict]:
         if start_time:
             all_day = False
 
+        et_raw = str(item.get("event_type") or "").strip().lower()
+        event_type = "meeting" if et_raw == "meeting" else "schedule"
+
         result.append({
             "title":       title,
             "project":     canon_project(item.get("project")),
@@ -257,6 +262,7 @@ def validate_and_normalize(items: list) -> list[dict]:
             "location":    canon_location(item.get("location")),
             "assignee":    canon_assignee(item.get("assignee")),
             "description": item.get("description") or None,
+            "event_type":  event_type,
         })
     return result
 

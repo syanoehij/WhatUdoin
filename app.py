@@ -748,12 +748,14 @@ def list_events():
             except Exception:
                 pass
 
+        evt_type = e.get("event_type", "schedule")
         ev = {
             "id": e["id"],
             "title": e["title"],
             "start": e["start_datetime"],
             "end": ev_end,
             "allDay": is_all_day,
+            "classNames": ["ev-meeting"] if evt_type == "meeting" else ["ev-schedule"],
             "extendedProps": {
                 "project":               proj_name,
                 "description":           e["description"],
@@ -765,7 +767,7 @@ def list_events():
                 "meeting_id":            e["meeting_id"],
                 "kanban_status":         e.get("kanban_status"),
                 "priority":              e.get("priority", "normal"),
-                "event_type":            e.get("event_type", "schedule"),
+                "event_type":            evt_type,
                 "recurrence_rule":       e.get("recurrence_rule"),
                 "recurrence_parent_id":  e.get("recurrence_parent_id"),
             },
@@ -792,6 +794,8 @@ def _validate_event_payload(payload: dict) -> list:
         errors.append("제목을 입력해주세요.")
     if not (payload.get("assignee") or "").strip():
         errors.append("담당자를 입력해주세요.")
+    if payload.get("event_type") not in (None, "schedule", "meeting"):
+        payload["event_type"] = "schedule"
     return errors
 
 

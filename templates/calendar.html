@@ -290,11 +290,18 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     eventDidMount(info) {
       applyStickyAllDay();
-      // 반복 일정에 🔁 뱃지 추가
       const p = info.event.extendedProps;
-      if (p.recurrence_rule || p.recurrence_parent_id) {
-        const titleEl = info.el.querySelector('.fc-event-title');
-        if (titleEl && !titleEl.querySelector('.rec-badge')) {
+      const titleEl = info.el.querySelector('.fc-event-title');
+      if (titleEl) {
+        // 회의 이벤트에 💬 뱃지 추가
+        if (p.event_type === 'meeting' && !titleEl.querySelector('.meeting-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'meeting-badge';
+          badge.textContent = '💬 ';
+          titleEl.insertBefore(badge, titleEl.firstChild);
+        }
+        // 반복 일정에 🔁 뱃지 추가
+        if ((p.recurrence_rule || p.recurrence_parent_id) && !titleEl.querySelector('.rec-badge')) {
           const badge = document.createElement('span');
           badge.className = 'rec-badge';
           badge.textContent = ' 🔁';

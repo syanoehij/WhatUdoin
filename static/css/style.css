@@ -2192,6 +2192,27 @@ select.form-input {
   font-size: 0.7em;
 }
 
+/* ── 회의 이벤트 구분 (캘린더) ── */
+.fc-event.ev-meeting {
+  border-left: 4px solid #6c5ce7 !important;
+}
+.meeting-badge {
+  font-size: 0.78em;
+  opacity: 0.9;
+}
+
+/* ── AI 결과 섹션 헤더 (문서 편집 화면) ── */
+.ai-result-section-header {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 6px 4px 4px;
+  margin-top: 8px;
+  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.02em;
+}
+.ai-result-section-header:first-child { margin-top: 0; }
+
 /* ── 반복 일정 수정/삭제 다이얼로그 ── */
 .recurrence-dialog {
   background: var(--surface); border-radius: 12px;

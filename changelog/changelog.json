@@ -2,6 +2,30 @@
   "groups": [
     {
       "date": "2026-04-19",
+      "phase": "19차 2단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🛡️",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>문서 편집 화면 자동 새로고침 팝업 3종 버그 수정",
+          "detail_html": "<ul>\n              <li><b>버그 1</b> — <code>runAiParse</code> <code>finally</code> 블록이 <code>_blockAutoRefresh</code>를 <code>false</code>로 덮어써 AI 파싱 완료 후 결과 검토 중에도 5분 자동 새로고침이 허용되던 문제 수정 — <code>finally</code>에서 원래 차단 함수 <code>() =&gt; aiPanelOpen || parsedEvents.some(Boolean)</code> 복원</li>\n              <li><b>버그 2</b> — <code>_autoSaveAndRefresh</code>에서 <code>saveDoc()</code> 실패 후에도 <code>location.reload()</code>를 강행해 &quot;사이트에서 나가겠습니까?&quot; 팝업이 뜨던 문제 수정 — 저장 후 <code>wuInst.dirty</code> 재확인, <code>true</code>이면 reload 취소</li>\n              <li><b>버그 3</b> — <code>confirmAiEvents</code> 완료 후 reload 시 에디터 미저장 상태이면 beforeunload 팝업이 뜨던 문제 수정 — reload 전 저장 시도 후 <code>setDirty(false)</code> 강제 해제</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
+      "phase": "19차 1단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "💬",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>문서 AI 일정 생성 — 회의/업무 자동 분류 및 전체 화면 시각 구분",
+          "detail_html": "<ul>\n              <li><b>AI 프롬프트 개선</b> — 1차·2차 추출 프롬프트 스키마에 <code>event_type</code> 필드 추가. &quot;여러 사람이 동시에 참석하는 모임&quot;은 <code>meeting</code>, &quot;1인 담당 업무·마감&quot;은 <code>schedule</code>로 AI가 자동 판정하도록 분류 규칙·예시 4개 적용</li>\n              <li><code>validate_and_normalize</code> 함수에 whitelist 적용 — <code>&quot;meeting&quot;</code> 외 모든 값을 <code>&quot;schedule&quot;</code>로 정규화해 AI 오출력 방어</li>\n              <li><b>문서 편집 화면</b> — AI 추출 결과와 연결된 일정 패널을 <b>💬 회의 (N개) / 📅 업무 일정 (N개)</b> 두 섹션으로 분리 렌더링</li>\n              <li><b>메인 캘린더</b> — <code>/api/events</code> 응답에 <code>classNames: [&quot;ev-meeting&quot;]</code> 주입, <code>eventDidMount</code>에서 회의 이벤트 제목 앞 💬 뱃지 삽입, CSS <code>.fc-event.ev-meeting</code> 보라 왼쪽 테두리 추가</li>\n              <li><b>홈·칸반 카드</b> — <code>cardHTML</code>에서 <code>event_type === &#39;meeting&#39;</code>이면 제목 앞 💬 프리픽스 추가 (칸반은 회의 제외 SQL 유지)</li>\n              <li><code>_validate_event_payload</code>에 <code>event_type</code> whitelist 검증 추가 — 허용값 외 입력 시 <code>&quot;schedule&quot;</code>로 교정</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
       "phase": "18차 2단계",
       "phase_class": "phase-7",
       "entries": [
