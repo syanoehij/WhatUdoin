@@ -106,8 +106,17 @@
       {% endif %}
       {% if not locked_by %}
       {% if checklist.id %}
+      <div class="visibility-segment" id="ck-vis-seg" data-cid="{{ checklist.id }}">
+        <button type="button" class="vis-btn {% if checklist.is_public == 0 %}active{% endif %}" data-val="0">외부 비공개</button>
+        <button type="button" class="vis-btn {% if checklist.is_public == 1 %}active{% endif %}" data-val="1">외부 공개</button>
+      </div>
       <button class="btn btn-sm" id="btn-toc-toggle" onclick="toggleTocPanel()" title="목차">📑 목차</button>
       <button class="btn btn-sm btn-danger" onclick="deleteChecklist()">삭제</button>
+      {% else %}
+      <div class="visibility-segment" id="ck-vis-seg-new">
+        <button type="button" class="vis-btn active" data-val="0" onclick="toggleNewVisibility(this)">외부 비공개</button>
+        <button type="button" class="vis-btn" data-val="1" onclick="toggleNewVisibility(this)">외부 공개</button>
+      </div>
       {% endif %}
       <button class="btn btn-sm btn-primary" id="cke-save-btn" onclick="saveContent()">저장</button>
       {% endif %}
@@ -161,6 +170,12 @@ const CKE_IS_NEW   = (CKE_ID === null);
 })();
 
 let wuInst = null;
+let _newIsPublic = 0;
+
+function toggleNewVisibility(btn) {
+  _newIsPublic = parseInt(btn.dataset.val);
+  document.querySelectorAll('#ck-vis-seg-new .vis-btn').forEach(b => b.classList.toggle('active', b === btn));
+}
 
 window._autoSaveAndRefresh = async () => {
   if (!CKE_LOCKED && wuInst?.dirty && !CKE_IS_NEW) { await saveContent(true); }
@@ -172,6 +187,21 @@ function toggleTocPanel() { wuInst?.toggleToc(); }
 document.addEventListener('DOMContentLoaded', () => {
   const backBtn = document.getElementById('btn-back');
   if (backBtn) backBtn.href = CKE_IS_NEW ? '/check' : `/check?id=${CKE_ID}`;
+
+  // 편집 상태 공개 범위 토글 (명시적 값 전송)
+  document.querySelectorAll('#ck-vis-seg .vis-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (btn.classList.contains('active')) return;
+      const val = parseInt(btn.dataset.val);
+      const res = await fetch(`/api/checklists/${CKE_ID}/visibility`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ is_public: val }),
+      });
+      if (!res.ok) { alert('변경 실패'); return; }
+      document.querySelectorAll('#ck-vis-seg .vis-btn').forEach(b => b.classList.toggle('active', b === btn));
+    });
+  });
 
   // AI 초안 주입: ?ai_draft=1 쿼리 + sessionStorage 에 check_ai_draft 있을 때
   let initialMd = window.INITIAL_MD || '';
@@ -254,7 +284,7 @@ async function saveContent(auto = false, leaveTarget = null) {
     const res = await fetch('/api/checklists', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, project, content }),
+      body: JSON.stringify({ title, project, content, is_public: _newIsPublic }),
     });
     if (res.ok) {
       const data = await res.json();

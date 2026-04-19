@@ -282,7 +282,7 @@
       {% if user %}<a href="/" class="nav-link {% if request.url.path == '/' %}nav-active{% endif %}">🏠 내 스케줄</a>{% endif %}
       <a href="/doc" class="nav-link {% if request.url.path.startswith('/doc') %}nav-active{% endif %}">📄 문서</a>
       <a href="/check" class="nav-link {% if request.url.path.startswith('/check') %}nav-active{% endif %}">✅ 체크</a>
-      <a href="/calendar" class="nav-link {% if request.url.path == '/calendar' %}nav-active{% endif %}">📅 캘린더</a>
+      {% if user %}<a href="/calendar" class="nav-link {% if request.url.path == '/calendar' %}nav-active{% endif %}">📅 캘린더</a>{% endif %}
       <a href="/kanban" class="nav-link {% if request.url.path.startswith('/kanban') %}nav-active{% endif %}">📌 칸반</a>
       <a href="/gantt" class="nav-link {% if request.url.path.startswith('/gantt') %}nav-active{% endif %}">📊 간트</a>
       {% if user %}<a href="/project-manage" class="nav-link {% if request.url.path.startswith('/project-manage') %}nav-active{% endif %}">🗂 프로젝트 관리</a>{% endif %}

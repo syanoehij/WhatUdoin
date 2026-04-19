@@ -1018,13 +1018,17 @@ mark.search-hl {
   display: block;
   width: 100%;
 }
-/* ★ 컬럼 폭의 유일한 진실: 공개여부(100) | 제목(1fr) | 작성자(80) | 팀(80) | 수정가능(84) | 날짜(72)
-   HTML thead, JS tbody 컬럼 순서와 반드시 일치해야 함. th { width } 는 무시됨. */
+/* ★ 컬럼 폭의 유일한 진실 — HTML thead, JS tbody 순서와 반드시 일치해야 함. th { width } 는 무시됨.
+   비로그인: 제목(1fr) | 연결일정(64px) | 작성자(80px) | 팀(80px) | 날짜(72px)
+   로그인:   공개여부(100px) | 제목(1fr) | 연결일정(64px) | 작성자(80px) | 팀(80px) | 수정가능(84px) | 날짜(72px) */
 .docs-content .doc-table tr {
   display: grid;
-  grid-template-columns: 100px 1fr 80px 80px 84px 72px;
+  grid-template-columns: 1fr 64px 80px 80px 72px;
   width: 100%;
   align-items: center;
+}
+.docs-content .doc-table.logged-in tr {
+  grid-template-columns: 100px 1fr 64px 80px 80px 84px 72px;
 }
 .docs-content .empty-state {
   padding: 60px 28px;
@@ -1070,9 +1074,11 @@ mark.search-hl {
 .doc-table tbody .col-title      { text-align: left; min-width: 0; }
 .doc-table tbody .col-doc-type   { display: flex; justify-content: center; align-items: center; padding-left: 4px; padding-right: 4px; }
 .doc-table tbody .col-visibility { display: flex; justify-content: center; align-items: center; padding-left: 4px; padding-right: 4px; }
-.doc-table tbody .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.doc-table tbody .col-team   { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.doc-table tbody .col-date   { white-space: nowrap; font-size: 0.8rem; color: var(--text-faint); }
+.doc-table tbody .col-author     { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-table tbody .col-team       { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-table tbody .col-date       { white-space: nowrap; font-size: 0.8rem; color: var(--text-faint); }
+.doc-table tbody .col-event-count { font-size: 0.82rem; color: var(--text-muted); }
+.doc-table th.col-event-count    { text-align: center; }
 
 .doc-title-wrap { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .doc-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); transition: color 0.12s; }
@@ -1120,6 +1126,8 @@ mark.search-hl {
 .dark .vis-badge.vis-public  { background: #3d2900; color: #fde047; }
 .vis-badge.vis-team    { background: var(--accent-bg); color: var(--accent); }
 .vis-badge.vis-private { background: var(--surface-3); color: var(--text-muted); }
+.vis-badge.clickable   { cursor: pointer; transition: filter 0.15s; }
+.vis-badge.clickable:hover { filter: brightness(0.88); }
 
 .event-count-badge {
   display: inline-block;

@@ -130,6 +130,12 @@ def _can_write_doc(user, doc: dict) -> bool:
     return doc.get("created_by") == user["id"]
 
 
+def _can_read_checklist(user, cl: dict) -> bool:
+    if user:
+        return True
+    return int(cl.get("is_public") or 0) == 1
+
+
 # ── 페이지 ──────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -140,6 +146,8 @@ def index(request: Request):
 
 @app.get("/calendar", response_class=HTMLResponse)
 def calendar_page(request: Request):
+    if auth.get_current_user(request) is None:
+        return RedirectResponse("/", status_code=303)
     teams = db.get_all_teams()
     return templates.TemplateResponse(request, "calendar.html", _ctx(request, teams=teams))
 
@@ -285,8 +293,13 @@ def notice_history_page(request: Request):
 
 @app.get("/check", response_class=HTMLResponse)
 def check_page(request: Request):
+    user = auth.get_current_user(request)
     all_projs = db.get_all_projects_with_events()
-    projects = [p for p in all_projs if p.get("is_active", 1)]
+    projects = [
+        p for p in all_projs
+        if p.get("is_active", 1)
+        and (user or not p.get("is_private", 0))
+    ]
     return templates.TemplateResponse(request, "check.html", _ctx(request, projects=projects))
 
 
@@ -324,6 +337,9 @@ def check_editor_page(request: Request, checklist_id: int):
 
 @app.get("/check/{checklist_id}/history", response_class=HTMLResponse)
 def check_history_page(request: Request, checklist_id: int):
+    user = auth.get_current_user(request)
+    if not user or user.get("role") not in ("editor", "admin"):
+        return RedirectResponse("/check")
     item = db.get_checklist(checklist_id)
     if not item:
         return RedirectResponse("/check")
@@ -337,8 +353,9 @@ def check_history_page(request: Request, checklist_id: int):
 # ── 체크리스트 API ────────────────────────────────────────────
 
 @app.get("/api/checklists")
-def list_checklists(project: str = None):
-    return db.get_checklists(project=project)
+def list_checklists(request: Request, project: str = None):
+    viewer = auth.get_current_user(request)
+    return db.get_checklists(project=project, viewer=viewer)
 
 
 @app.post("/api/checklists")
@@ -350,16 +367,61 @@ async def create_checklist(request: Request):
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
     project = data.get("project", "").strip()
     content = data.get("content", "").strip()
-    cid = db.create_checklist(project, title, content, user["name"])
+    is_public = 1 if data.get("is_public") else 0
+    cid = db.create_checklist(project, title, content, user["name"], is_public=is_public)
     return {"id": cid}
 
 
 @app.get("/api/checklists/{checklist_id}")
-def get_checklist(checklist_id: int):
+def get_checklist(checklist_id: int, request: Request):
     item = db.get_checklist(checklist_id)
     if not item:
         raise HTTPException(status_code=404)
+    user = auth.get_current_user(request)
+    if not _can_read_checklist(user, item):
+        raise HTTPException(status_code=404)
     return item
+
+
+@app.patch("/api/checklists/bulk-visibility")
+async def bulk_checklist_visibility(request: Request):
+    _require_editor(request)
+    data = await request.json()
+    project  = data.get("project")   # None 또는 "" → 미지정, 문자열 → 해당 프로젝트
+    raw = data.get("is_public", 1)
+    is_public = None if raw is None else (1 if raw else 0)
+    count = db.bulk_update_checklist_visibility(project, is_public)
+    return {"ok": True, "updated": count}
+
+
+@app.patch("/api/events/bulk-visibility")
+async def bulk_event_visibility(request: Request):
+    _require_editor(request)
+    data = await request.json()
+    project  = data.get("project")   # None 또는 "" → 미지정, 문자열 → 해당 프로젝트
+    raw = data.get("is_public", 1)
+    is_public = None if raw is None else (1 if raw else 0)
+    count = db.bulk_update_event_visibility(project, is_public)
+    return {"ok": True, "updated": count}
+
+
+@app.patch("/api/checklists/{checklist_id}/visibility")
+async def rotate_checklist_visibility(checklist_id: int, request: Request):
+    _require_editor(request)
+    cl = db.get_checklist(checklist_id)
+    if not cl:
+        raise HTTPException(status_code=404)
+    body = await request.body()
+    data = await request.json() if body else {}
+    if "is_public" in data:
+        raw = data["is_public"]
+        new_pub = None if raw is None else (1 if raw else 0)
+    else:
+        # legacy toggle (check.html 2-state vis-seg 호환): None→1, 1→0, 0→None
+        cur = cl.get("is_public")
+        new_pub = 1 if cur is None else (0 if cur == 1 else None)
+    db.update_checklist_visibility(checklist_id, new_pub)
+    return {"ok": True, "is_public": new_pub}
 
 
 @app.patch("/api/checklists/{checklist_id}")
@@ -372,8 +434,13 @@ async def update_checklist(checklist_id: int, request: Request):
     title = data.get("title", item["title"]).strip()
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
-    project = data.get("project", item["project"]).strip()
+    old_proj = (item.get("project") or "").strip()
+    project  = data.get("project", item["project"])
+    project  = "" if project is None else str(project).strip()
     db.update_checklist(checklist_id, title, project)
+    # 프로젝트에서 미지정으로 이동 → 항상 외부 비공개
+    if old_proj and not project:
+        db.update_checklist_visibility(checklist_id, 0)
     return {"ok": True}
 
 
@@ -895,8 +962,9 @@ def delete_event(event_id: int, request: Request, delete_mode: str = "this"):
 
 
 @app.get("/api/kanban")
-def get_kanban_events(team_id: int = None):
-    return db.get_kanban_events(team_id)
+def get_kanban_events(request: Request, team_id: int = None):
+    viewer = auth.get_current_user(request)
+    return db.get_kanban_events(team_id, viewer=viewer)
 
 
 @app.get("/api/my-meetings")
@@ -1117,8 +1185,9 @@ def list_projects():
 
 
 @app.get("/api/project-timeline")
-def project_timeline(team_id: int = None):
-    return db.get_project_timeline(team_id)
+def project_timeline(request: Request, team_id: int = None):
+    viewer = auth.get_current_user(request)
+    return db.get_project_timeline(team_id, viewer=viewer)
 
 
 # ── 통합 프로젝트 목록 API ──────────────────────────────────
@@ -1176,6 +1245,15 @@ async def manage_project_status(name: str, request: Request):
     data = await request.json()
     is_active = 1 if data.get("is_active", True) else 0
     db.update_project_status(name, is_active)
+    return {"ok": True}
+
+
+@app.patch("/api/manage/projects/{name:path}/privacy")
+async def manage_project_privacy(name: str, request: Request):
+    _require_editor(request)
+    data = await request.json()
+    is_private = 1 if data.get("is_private") else 0
+    db.update_project_privacy(name, is_private)
     return {"ok": True}
 
 
@@ -1514,9 +1592,9 @@ def export_doc(meeting_id: int, request: Request):
 
 @app.get("/api/checklists/{checklist_id}/export")
 def export_checklist(checklist_id: int, request: Request):
-    _require_editor(request)
+    user = auth.get_current_user(request)
     cl = db.get_checklist(checklist_id)
-    if not cl:
+    if not cl or not _can_read_checklist(user, cl):
         raise HTTPException(status_code=404, detail="체크리스트를 찾을 수 없습니다.")
     exported_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     project_name = cl.get("project") or None
@@ -1586,6 +1664,13 @@ async def manage_update_event(event_id: int, request: Request):
                   "all_day", "start_datetime", "end_datetime", "kanban_status", "priority"):
         if field in data:
             updated[field] = data[field]
+    # 프로젝트에서 미지정으로 이동 + is_public=NULL(연동) → 프로젝트 설정에 따라 확정
+    old_proj = (event.get("project") or "").strip()
+    new_proj = (updated.get("project") or "")
+    new_proj = "" if new_proj is None else str(new_proj).strip()
+    if old_proj and not new_proj and event.get("is_public") is None:
+        proj = db.get_project(old_proj)
+        updated["is_public"] = 0 if (proj and proj.get("is_private")) else 1
     db.update_event(event_id, updated)
     return {"ok": True}
 
@@ -1606,6 +1691,24 @@ async def manage_event_kanban_hidden(event_id: int, request: Request):
     hidden = bool(data.get("hidden", False))
     db.update_event_kanban_hidden(event_id, hidden)
     return {"ok": True}
+
+
+@app.patch("/api/events/{event_id}/visibility")
+async def update_event_visibility_api(event_id: int, request: Request):
+    _require_editor(request)
+    body = await request.body()
+    data = await request.json() if body else {}
+    # is_public: null=프로젝트 연동, 0=비공개, 1=공개
+    if "is_public" in data:
+        raw = data["is_public"]
+        is_public = None if raw is None else (1 if raw else 0)
+    else:
+        # 값 없으면 서버에서 cycling: None→1→0→None
+        ev = db.get_event(event_id)
+        cur = ev.get("is_public") if ev else None
+        is_public = 1 if cur is None else (0 if cur == 1 else None)
+    db.update_event_visibility(event_id, is_public)
+    return {"ok": True, "is_public": is_public}
 
 
 @app.delete("/api/manage/events/{event_id}")
@@ -1723,6 +1826,27 @@ async def update_doc(meeting_id: int, request: Request):
     # 저장 완료 시 잠금 해제
     db.release_meeting_lock(meeting_id, user["name"])
     return {"ok": True}
+
+
+@app.patch("/api/doc/{meeting_id}/visibility")
+async def rotate_doc_visibility(meeting_id: int, request: Request):
+    user = _require_editor(request)
+    doc = db.get_meeting(meeting_id)
+    if not doc:
+        raise HTTPException(status_code=404)
+    if not _can_write_doc(user, doc):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+    is_team = int(doc.get("is_team_doc") or 0)
+    is_pub  = int(doc.get("is_public")   or 0)
+    t_share = int(doc.get("team_share")  or 0)
+    if is_team:
+        new_pub, new_share = (0 if is_pub else 1), 0
+    else:
+        if   (is_pub, t_share) == (0, 0): new_pub, new_share = 0, 1
+        elif (is_pub, t_share) == (0, 1): new_pub, new_share = 1, 0
+        else:                              new_pub, new_share = 0, 0
+    db.update_meeting_visibility(meeting_id, is_team, new_pub, new_share)
+    return {"ok": True, "is_team_doc": is_team, "is_public": new_pub, "team_share": new_share}
 
 
 # ── 문서 편집 잠금 ────────────────────────────────────────

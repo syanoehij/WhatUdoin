@@ -113,6 +113,7 @@ def init_db():
             ("end_date",   "TEXT"),
             ("is_active",  "INTEGER DEFAULT 1"),
             ("memo",       "TEXT"),
+            ("is_private", "INTEGER DEFAULT 0"),
         ])
         # ── pending_users ──
         conn.execute("""
@@ -186,7 +187,20 @@ def init_db():
         _migrate(conn, "events", [
             ("deleted_at", "TEXT DEFAULT NULL"),
             ("deleted_by", "TEXT DEFAULT NULL"),
+            ("is_public",  "INTEGER DEFAULT NULL"),
         ])
+        # 기존 이벤트 is_public=1(마이그레이션 기본값) → NULL(프로젝트 연동)으로 1회 초기화
+        if not conn.execute("SELECT 1 FROM settings WHERE key='ev_is_pub_reset_v1'").fetchone():
+            conn.execute("UPDATE events SET is_public = NULL WHERE deleted_at IS NULL")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ev_is_pub_reset_v1', '1')")
+        # 완료된 일정(is_active=0)은 항상 외부 비공개(is_public=0) — 1회 초기화
+        if not conn.execute("SELECT 1 FROM settings WHERE key='ev_done_pub_reset_v1'").fetchone():
+            conn.execute("UPDATE events SET is_public = 0 WHERE is_active = 0 AND deleted_at IS NULL")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ev_done_pub_reset_v1', '1')")
+        # 미지정 체크리스트(project 없음)는 외부 비공개 고정 — 1회 초기화
+        if not conn.execute("SELECT 1 FROM settings WHERE key='ck_unset_priv_reset_v1'").fetchone():
+            conn.execute("UPDATE checklists SET is_public = 0 WHERE (project IS NULL OR project = '') AND deleted_at IS NULL")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ck_unset_priv_reset_v1', '1')")
         _migrate(conn, "meetings", [
             ("deleted_at", "TEXT DEFAULT NULL"),
             ("deleted_by", "TEXT DEFAULT NULL"),
@@ -195,6 +209,7 @@ def init_db():
             ("deleted_at", "TEXT DEFAULT NULL"),
             ("deleted_by", "TEXT DEFAULT NULL"),
             ("team_id",    "INTEGER DEFAULT NULL"),
+            ("is_public",  "INTEGER DEFAULT 0"),
         ])
         _migrate(conn, "projects", [
             ("deleted_at", "TEXT DEFAULT NULL"),
@@ -257,7 +272,8 @@ def init_db():
                 content    TEXT NOT NULL DEFAULT '',
                 created_by TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                is_public  INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS checklist_locks (
                 checklist_id INTEGER PRIMARY KEY,
@@ -380,6 +396,7 @@ def _generate_recurrence_children(conn, parent_id: int, parent_data: dict):
             "priority":            parent_data.get("priority", "normal"),
             "event_type":          parent_data.get("event_type", "schedule"),
             "is_active":           1,
+            "is_public":           None,  # 프로젝트 공개 연동
             "recurrence_rule":     None,
             "recurrence_end":      None,
             "recurrence_parent_id": parent_id,
@@ -388,12 +405,12 @@ def _generate_recurrence_children(conn, parent_id: int, parent_data: dict):
             """INSERT INTO events
                (title, team_id, project, description, location, assignee, all_day,
                 start_datetime, end_datetime, created_by, source, meeting_id,
-                kanban_status, priority, event_type, is_active,
+                kanban_status, priority, event_type, is_active, is_public,
                 recurrence_rule, recurrence_end, recurrence_parent_id)
                VALUES
                (:title, :team_id, :project, :description, :location, :assignee, :all_day,
                 :start_datetime, :end_datetime, :created_by, :source, :meeting_id,
-                :kanban_status, :priority, :event_type, :is_active,
+                :kanban_status, :priority, :event_type, :is_active, :is_public,
                 :recurrence_rule, :recurrence_end, :recurrence_parent_id)""",
             child,
         )
@@ -458,6 +475,7 @@ def create_event(data: dict) -> int:
     data.setdefault("recurrence_rule", None)
     data.setdefault("recurrence_end", None)
     data.setdefault("recurrence_parent_id", None)
+    data.setdefault("is_public", None)  # 기본: 프로젝트 공개 연동
     # 회의 타입은 칸반 등록 안 함
     if data.get("event_type") == "meeting":
         data["kanban_status"] = None
@@ -466,12 +484,12 @@ def create_event(data: dict) -> int:
             """INSERT INTO events
                (title, team_id, project, description, location, assignee, all_day,
                 start_datetime, end_datetime, created_by, source, meeting_id,
-                kanban_status, priority, event_type,
+                kanban_status, priority, event_type, is_public,
                 recurrence_rule, recurrence_end, recurrence_parent_id)
                VALUES
                (:title, :team_id, :project, :description, :location, :assignee, :all_day,
                 :start_datetime, :end_datetime, :created_by, :source, :meeting_id,
-                :kanban_status, :priority, :event_type,
+                :kanban_status, :priority, :event_type, :is_public,
                 :recurrence_rule, :recurrence_end, :recurrence_parent_id)""",
             data,
         )
@@ -702,14 +720,24 @@ def delete_event(event_id: int, delete_mode: str = 'this', deleted_by: str = Non
                 )
 
 
-def get_kanban_events(team_id: int = None) -> list[dict]:
+def get_kanban_events(team_id: int = None, viewer=None) -> list[dict]:
     # 조건:
     #   - kanban_status가 설정된 일정, 또는
     #   - 프로젝트 없는(미지정) 일정 (kanban_status 없어도 Backlog로 표시)
     # 제외:
     #   - 종료된 프로젝트 소속 일정
     #   - 완료 처리된 미지정 일정 (is_active = 0)
-    base_filter = """
+    private_clause = """
+        AND (
+          e.is_public = 1
+          OR (
+            e.is_public IS NULL
+            AND e.project IS NOT NULL AND e.project != ''
+            AND e.project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+          )
+        )
+    """ if viewer is None else ""
+    base_filter = f"""
         AND (
             e.kanban_status IS NOT NULL
             OR (e.project IS NULL OR e.project = '')
@@ -723,6 +751,7 @@ def get_kanban_events(team_id: int = None) -> list[dict]:
         AND (e.event_type IS NULL OR e.event_type = 'schedule')
         AND e.recurrence_parent_id IS NULL
         AND e.deleted_at IS NULL
+        {private_clause}
     """
     with get_conn() as conn:
         if team_id:
@@ -763,7 +792,7 @@ def update_kanban_status(event_id: int, kanban_status=_MISSING, priority=_MISSIN
         )
 
 
-def get_project_timeline(team_id: int = None) -> list[dict]:
+def get_project_timeline(team_id: int = None, viewer=None) -> list[dict]:
     """팀 → 프로젝트 2단계 그룹으로 일정 반환 (프로젝트 없는 일정은 '미지정'으로 묶음)"""
     with get_conn() as conn:
         if team_id:
@@ -783,11 +812,13 @@ def get_project_timeline(team_id: int = None) -> list[dict]:
             ).fetchall()
         # projects 테이블에서 메타 조회
         proj_meta_rows = conn.execute(
-            "SELECT name, color, start_date, end_date, is_active FROM projects WHERE deleted_at IS NULL"
+            "SELECT name, color, start_date, end_date, is_active, is_private FROM projects WHERE deleted_at IS NULL"
         ).fetchall()
     proj_meta = {r["name"]: dict(r) for r in proj_meta_rows}
     # 비활성(종료) 프로젝트 이름 집합
     inactive = {name for name, m in proj_meta.items() if m.get("is_active") == 0}
+    # 비공개 프로젝트 이름 집합 (비로그인 시 제외)
+    private_projs = {name for name, m in proj_meta.items() if m.get("is_private") == 1} if viewer is None else set()
 
     # team_name → project → events (비활성 프로젝트 제외)
     teams: dict[str, dict[str, list]] = {}
@@ -797,6 +828,15 @@ def get_project_timeline(team_id: int = None) -> list[dict]:
         p = d["project"] if d.get("project") and d["project"].strip() else "미지정"
         if p in inactive:
             continue  # 종료된 프로젝트 건너뜀
+        if viewer is None:
+            ep_public = d.get("is_public")
+            if ep_public == 0:
+                continue  # 명시적 비공개
+            elif ep_public is None:
+                # 프로젝트 연동: 미지정이거나 비공개 프로젝트면 숨김
+                if p in private_projs or p == "미지정":
+                    continue
+            # ep_public == 1: 프로젝트 공개 여부 무관하게 항상 노출
         if p == "미지정" and d.get("is_active") == 0:
             continue  # 완료 처리된 미지정 일정 건너뜀
         if d.get("kanban_hidden") == 1:
@@ -1025,7 +1065,7 @@ def get_unified_project_list(active_only: bool = True) -> list[dict]:
     with get_conn() as conn:
         # 1. projects 테이블 (삭제 안 된 것)
         proj_rows = conn.execute(
-            "SELECT id, name, color, is_active FROM projects WHERE deleted_at IS NULL"
+            "SELECT id, name, color, is_active, is_private FROM projects WHERE deleted_at IS NULL"
         ).fetchall()
         # 2. events.project 에서 프로젝트 이름 수집 (삭제 안 된 것)
         ev_proj_rows = conn.execute(
@@ -1043,6 +1083,7 @@ def get_unified_project_list(active_only: bool = True) -> list[dict]:
             "name": r["name"],
             "color": r["color"],
             "is_active": r["is_active"] if r["is_active"] is not None else 1,
+            "is_private": r["is_private"] if r["is_private"] is not None else 0,
         }
 
     # events/checklists 에만 있는 프로젝트 이름도 포함 (orphan — is_active 기본 1)
@@ -1050,7 +1091,7 @@ def get_unified_project_list(active_only: bool = True) -> list[dict]:
         for r in rows:
             name = r[0]
             if name and name not in proj_map:
-                proj_map[name] = {"id": None, "name": name, "color": None, "is_active": 1}
+                proj_map[name] = {"id": None, "name": name, "color": None, "is_active": 1, "is_private": 0}
 
     result = sorted(proj_map.values(), key=lambda x: x["name"])
     if active_only:
@@ -1090,6 +1131,7 @@ def get_all_projects_with_events() -> list[dict]:
             "id": r["id"], "name": r["name"], "color": r["color"],
             "start_date": r["start_date"], "end_date": r["end_date"],
             "is_active": r["is_active"] if r["is_active"] is not None else 1,
+            "is_private": r["is_private"] if r["is_private"] is not None else 0,
             "memo": r["memo"],
             "events": [],
         }
@@ -1100,7 +1142,7 @@ def get_all_projects_with_events() -> list[dict]:
         if name and name not in proj_map:
             proj_map[name] = {"id": None, "name": name, "color": None,
                               "start_date": None, "end_date": None, "is_active": 1,
-                              "memo": None, "events": []}
+                              "is_private": 0, "memo": None, "events": []}
 
     # 이벤트 분류
     unset_events = []
@@ -1111,7 +1153,7 @@ def get_all_projects_with_events() -> list[dict]:
             if p not in proj_map:
                 proj_map[p] = {"id": None, "name": p, "color": None,
                                "start_date": None, "end_date": None, "is_active": 1,
-                               "memo": None, "events": []}
+                               "is_private": 0, "memo": None, "events": []}
             proj_map[p]["events"].append(d)
         else:
             unset_events.append(d)
@@ -1152,6 +1194,14 @@ def get_events_by_project(name: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_unassigned_events() -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM events WHERE project IS NULL AND deleted_at IS NULL ORDER BY start_datetime"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def rename_project(old_name: str, new_name: str):
     with get_conn() as conn:
         conn.execute(
@@ -1188,6 +1238,17 @@ def delete_project(name: str, delete_events: bool = False, deleted_by: str = Non
 def update_event_active_status(event_id: int, is_active: int):
     with get_conn() as conn:
         conn.execute("UPDATE events SET is_active = ? WHERE id = ?", (is_active, event_id))
+        if is_active == 0:
+            conn.execute("UPDATE events SET is_public = 0 WHERE id = ?", (event_id,))
+
+
+def update_project_privacy(name: str, is_private: int):
+    with get_conn() as conn:
+        existing = conn.execute("SELECT id FROM projects WHERE name = ?", (name,)).fetchone()
+        if existing:
+            conn.execute("UPDATE projects SET is_private = ? WHERE name = ?", (is_private, name))
+        else:
+            conn.execute("INSERT INTO projects (name, is_private) VALUES (?, ?)", (name, is_private))
 
 
 def update_project_memo(name: str, memo: str):
@@ -1532,6 +1593,15 @@ def get_meeting(meeting_id: int):
     return dict(row) if row else None
 
 
+def update_meeting_visibility(meeting_id: int, is_team_doc: int, is_public: int, team_share: int) -> None:
+    _team_share = 0 if is_team_doc else team_share
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE meetings SET is_team_doc = ?, is_public = ?, team_share = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (is_team_doc, is_public, _team_share, meeting_id)
+        )
+
+
 def create_meeting(title: str, content: str, team_id, created_by: int,
                    meeting_date: str = None, is_team_doc: int = 1,
                    is_public: int = 0, team_share: int = 0) -> int:
@@ -1783,6 +1853,15 @@ def update_event_kanban_hidden(event_id: int, hidden: bool):
         conn.execute("UPDATE events SET kanban_hidden = ? WHERE id = ?", (1 if hidden else 0, event_id))
 
 
+def update_event_visibility(event_id: int, is_public) -> None:
+    # is_public: None=프로젝트 연동, 0=비공개, 1=공개
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE events SET is_public = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (is_public, event_id)
+        )
+
+
 def get_setting(key: str, default: str = None):
     with get_conn() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
@@ -1885,31 +1964,101 @@ def get_meeting_lock(meeting_id: int) -> dict | None:
 
 # ── Checklists ────────────────────────────────────────────
 
-def create_checklist(project: str, title: str, content: str, created_by: str) -> int:
+def create_checklist(project: str, title: str, content: str, created_by: str, is_public: int = 0) -> int:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO checklists (project, title, content, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?)",
-            (project, title, content, created_by, now, now)
+            "INSERT INTO checklists (project, title, content, created_by, created_at, updated_at, is_public) VALUES (?,?,?,?,?,?,?)",
+            (project, title, content, created_by, now, now, is_public)
         )
     return cur.lastrowid
 
 
-def get_checklists(project: str = None) -> list:
+def get_checklists(project: str = None, viewer=None) -> list:
     inactive_filter = """
         AND (project IS NULL OR project = ''
              OR project NOT IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))
     """
+    # 3상태: is_public=1 항상 공개, is_public=NULL 프로젝트 연동, is_public=0 항상 비공개
+    public_filter = """
+        AND (
+          is_public = 1
+          OR (
+            is_public IS NULL
+            AND project IS NOT NULL AND project != ''
+            AND project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+          )
+        )
+    """ if viewer is None else ""
+    private_proj_filter = ""  # public_filter에 통합됨
     with get_conn() as conn:
-        if project is not None:
+        if project is None:
             rows = conn.execute(
-                f"SELECT id, project, title, created_by, created_at, updated_at FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter} ORDER BY updated_at DESC",
-                (project,)
+                f"SELECT id, project, title, created_by, created_at, updated_at, is_public FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter} ORDER BY updated_at DESC"
+            ).fetchall()
+        elif project == "":
+            # 미지정 (project가 NULL 또는 빈 문자열인 항목)
+            rows = conn.execute(
+                f"SELECT id, project, title, created_by, created_at, updated_at, is_public FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter} ORDER BY updated_at DESC"
             ).fetchall()
         else:
             rows = conn.execute(
-                f"SELECT id, project, title, created_by, created_at, updated_at FROM checklists WHERE deleted_at IS NULL {inactive_filter} ORDER BY updated_at DESC"
+                f"SELECT id, project, title, created_by, created_at, updated_at, is_public FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter} ORDER BY updated_at DESC",
+                (project,)
             ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_checklist_visibility(checklist_id: int, is_public) -> None:
+    # is_public: None=프로젝트 연동, 0=비공개, 1=공개
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE checklists SET is_public = ?, updated_at = ? WHERE id = ?",
+            (is_public, now, checklist_id)
+        )
+
+
+def bulk_update_checklist_visibility(project: str | None, is_public: int) -> int:
+    """특정 프로젝트(또는 미지정) 체크리스트 전체의 is_public을 일괄 변경. 변경된 행 수 반환."""
+    now = __import__('datetime').datetime.now(__import__('datetime').timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        if project:
+            cur = conn.execute(
+                "UPDATE checklists SET is_public = ?, updated_at = ? WHERE project = ? AND deleted_at IS NULL",
+                (is_public, now, project),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE checklists SET is_public = ?, updated_at = ? WHERE (project IS NULL OR project = '') AND deleted_at IS NULL",
+                (is_public, now),
+            )
+    return cur.rowcount
+
+
+def bulk_update_event_visibility(project: str | None, is_public: int) -> int:
+    """특정 프로젝트(또는 미지정) 일정 전체의 is_public을 일괄 변경. 변경된 행 수 반환."""
+    with get_conn() as conn:
+        if project:
+            cur = conn.execute(
+                "UPDATE events SET is_public = ?, updated_at = CURRENT_TIMESTAMP WHERE project = ? AND deleted_at IS NULL",
+                (is_public, project),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE events SET is_public = ?, updated_at = CURRENT_TIMESTAMP WHERE (project IS NULL OR project = '') AND deleted_at IS NULL",
+                (is_public,),
+            )
+    return cur.rowcount
+
+
+def get_unassigned_checklists() -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, project, title, created_by, created_at, updated_at "
+            "FROM checklists WHERE (project IS NULL OR project = '') "
+            "AND deleted_at IS NULL ORDER BY updated_at DESC"
+        ).fetchall()
     return [dict(r) for r in rows]
 
 

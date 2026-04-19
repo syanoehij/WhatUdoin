@@ -2,6 +2,66 @@
   "groups": [
     {
       "date": "2026-04-19",
+      "phase": "22차 5단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "💾",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>프로젝트 관리 — 선택 상태 localStorage 영구 저장",
+          "detail_html": "<ul>\n              <li><b>다른 페이지 이동 후 복귀해도</b> 마지막으로 선택한 프로젝트와 필터(진행중/완료)가 자동 복원</li>\n              <li><code>_pmSave()</code> 헬퍼 추가 — <code>selName</code>·<code>filter</code> 변경 시마다 <code>localStorage</code>에 저장</li>\n              <li>페이지 진입 시 복원 우선순위: <b>sessionStorage</b>(새로고침 후 복원) &gt; <b>localStorage</b>(페이지 이동 복귀) 순서로 처리</li>\n              <li>프로젝트 <b>종료/재개</b> 클릭 시 선택 초기화 후 새로고침 — 완료 처리된 프로젝트가 오른쪽 상세 패널에 잔류하는 불균형 해소</li>\n              <li>프로젝트 <b>삭제</b>·<b>+ 새 프로젝트</b> 패널 열기 시에도 저장값 초기화</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
+      "phase": "22차 4단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🛠️",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>프로젝트 관리 UI 개선 및 버그 수정 모음",
+          "detail_html": "<ul>\n              <li><b>버튼 텍스트 개선</b> — '프로젝트 제외' → '프로젝트에서 제외', '숨기기' → '체크/칸반/간트에서 비노출'로 의미 명확화</li>\n              <li><b>미지정 체크리스트 표시</b> — 미지정 프로젝트 선택 시 연결된 체크리스트 목록도 함께 표시 (기존 숨김 처리 제거)</li>\n              <li><b>버그 수정</b> — 미지정 체크리스트 행에 '프로젝트에서 제외' 버튼이 노출되던 문제 수정 (미지정 뷰에서 제외 버튼 숨김)</li>\n              <li><b>완료 프로젝트</b> 상단 액션에서 '외부 공개/비공개 중' 버튼 제거 (종료된 프로젝트는 공개 설정 변경 불필요)</li>\n              <li><b>완료 필터 + 미지정</b> 뷰에서 '하위 모두 외부 공개/비공개' bulk 버튼 제거</li>\n              <li><b>미지정 체크리스트 일괄 비공개</b> — 프로젝트 미지정 체크리스트 중 공개 상태로 남아있던 항목을 <code>ck_unset_priv_reset_v1</code> 플래그로 1회 일괄 <code>is_public=0</code> 처리</li>\n              <li>체크리스트 <b>프로젝트에서 제외 시</b> 이전 공개 설정 무관하게 항상 <code>is_public=0</code> (외부 비공개) 적용</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
+      "phase": "22차 3단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>완료 일정 자동 외부 비공개 + 프로젝트 제외 시 공개 상태 자동 확정",
+          "detail_html": "<ul>\n              <li><b>완료 처리 자동 비공개</b> — <code>update_event_active_status(is_active=0)</code> 시 <code>is_public=0</code> 동시 설정</li>\n              <li><b>기존 완료 일정 일괄 처리</b> — <code>ev_done_pub_reset_v1</code> 설정 플래그로 1회 실행, 기존 <code>is_active=0</code> 일정 전체 <code>is_public=0</code> 초기화</li>\n              <li><b>UI 고정</b> — 완료된 일정(<code>is_active=0</code>)과 종료된 프로젝트 소속 일정은 공개 설정 버튼이 비활성화(<code>disabled</code>, 반투명)되어 변경 불가</li>\n              <li><b>프로젝트 제외 시 공개 상태 확정</b> (<code>is_public=NULL</code> 항목만) — 이벤트: 기존 프로젝트의 <code>is_private</code> 기반으로 '외부 공개(1)' 또는 '외부 비공개(0)'으로 확정, 체크리스트: 프로젝트 제외 시 항상 <code>is_public=0</code></li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
+      "phase": "22차 2단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔄",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>일정·체크리스트 외부 공개 3상태 전환 (프로젝트 연동 / 외부 공개 / 외부 비공개)",
+          "detail_html": "<ul>\n              <li><b>3상태 모델</b> 도입 — <code>is_public = NULL</code>(프로젝트 연동), <code>0</code>(외부 비공개), <code>1</code>(외부 공개)</li>\n              <li><b>프로젝트 연동</b> 상태: 소속 프로젝트의 <code>is_private</code>를 따름 — 프로젝트 공개 시 노출, 비공개 시 숨김. <code>is_public=1</code>이면 프로젝트가 비공개여도 항상 노출</li>\n              <li><b>기존 데이터 마이그레이션</b> — <code>ev_is_pub_reset_v1</code> 플래그로 1회 실행: 모든 일정 <code>is_public=NULL</code>(프로젝트 연동)으로 초기화</li>\n              <li><code>get_kanban_events</code> · <code>get_project_timeline</code> · <code>get_checklists</code> 비로그인 필터를 3상태 로직으로 업데이트</li>\n              <li><b>check_editor.html · check.html</b> vis-seg — 서버 토글 방식에서 <b>명시적 값 전송</b>(<code>{ is_public: 0 | 1 }</code>)으로 변경, <code>NULL</code> 상태일 때 버튼 비활성 표시</li>\n              <li>새로 생성되는 일정·반복 자식 인스턴스의 기본값을 <code>is_public=NULL</code>로 설정</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
+      "phase": "22차 1단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "👁️",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>프로젝트 관리 — 일정·체크리스트 개별 외부 공개 설정 + 미지정 bulk 일정 적용",
+          "detail_html": "<ul>\n              <li><b>events 테이블</b>에 <code>is_public INTEGER DEFAULT NULL</code> 컬럼 추가 (마이그레이션 자동 적용)</li>\n              <li><b>개별 토글 버튼</b> 추가 — 프로젝트 관리 일정·체크리스트 행 맨 오른쪽에 🔄/🔓/🔒 cycling 버튼 표시</li>\n              <li><code>PATCH /api/events/{id}/visibility</code> · <code>PATCH /api/events/bulk-visibility</code> 신규 엔드포인트 추가</li>\n              <li><code>PATCH /api/checklists/{id}/visibility</code> — 명시적 값(<code>is_public: null|0|1</code>) 수신 지원, body 없으면 기존 cycling 호환 유지</li>\n              <li><b>미지정 bulk 버튼</b> — '미지정 모두 외부 공개/비공개' 버튼이 <b>체크리스트만</b> 처리하던 버그 수정 → 일정도 함께 일괄 변경</li>\n              <li>버튼명 변경: '미지정 모두 외부 공개/비공개' → <b>'하위 모두 외부 공개/비공개'</b></li>\n              <li><code>get_checklists(project=&quot;&quot;)</code> — <code>NULL</code>과 빈 문자열 프로젝트를 모두 포함한 미지정 조회로 개선</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
       "phase": "20차",
       "phase_class": "phase-7",
       "entries": [

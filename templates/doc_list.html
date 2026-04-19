@@ -100,11 +100,12 @@
       {% endif %}
     </div>
 
-    <table class="doc-table" id="docs-table">
+    <table class="doc-table {% if user %}logged-in{% endif %}" id="docs-table">
       <thead>
         <tr>
-            {% if user %}<th class="col-visibility">공개 여부</th>{% endif %}
+          {% if user %}<th class="col-visibility">공개 여부</th>{% endif %}
           <th class="col-title">제목</th>
+          <th class="col-event-count">연동 일정</th>
           <th class="col-author">작성자</th>
           <th class="col-team">소속 팀</th>
           {% if user %}<th class="col-doc-type">수정 가능</th>{% endif %}
@@ -117,6 +118,31 @@
     <div class="empty-state hidden" id="docs-empty">
       <p>해당 월에 등록된 문서가 없습니다.</p>
     </div>
+  </div>
+</div>
+
+<!-- 토스트 -->
+<div id="doc-toast" style="
+  position:fixed;bottom:24px;right:24px;
+  background:#333;color:#fff;
+  padding:10px 18px;border-radius:8px;font-size:0.86rem;
+  opacity:0;transition:opacity 0.22s;pointer-events:none;z-index:9999;
+"></div>
+
+<!-- 권한 없음 알림 모달 -->
+<div id="doc-notice-overlay" style="
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,0.45);z-index:3000;
+  display:none;align-items:center;justify-content:center;
+" onclick="closeDocNotice()">
+  <div style="
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:28px 32px;max-width:360px;width:90%;
+    box-shadow:0 8px 24px rgba(0,0,0,0.2);text-align:center;
+  " onclick="event.stopPropagation()">
+    <div id="doc-notice-icon" style="font-size:2rem;margin-bottom:10px;">⚠️</div>
+    <div id="doc-notice-msg" style="font-size:0.95rem;font-weight:600;margin-bottom:20px;"></div>
+    <button class="btn btn-primary btn-sm" onclick="closeDocNotice()">확인</button>
   </div>
 </div>
 {% endblock %}
@@ -420,14 +446,20 @@ function renderRow(m, showYear) {
     : '<span class="doc-badge-lg doc-personal">개인</span>';
   let visBadge;
   if (m.is_public) {
-    visBadge = '<span class="vis-badge vis-public">외부 공개</span>';
+    visBadge = IS_LOGGED_IN
+      ? `<span class="vis-badge vis-public clickable" onclick="rotateVis(${m.id},event)">외부 공개</span>`
+      : '<span class="vis-badge vis-public">외부 공개</span>';
   } else if (!IS_LOGGED_IN) {
     visBadge = '';
   } else if (m.is_team_doc || m.team_share) {
-    visBadge = '<span class="vis-badge vis-team">팀 공유</span>';
+    visBadge = `<span class="vis-badge vis-team clickable" onclick="rotateVis(${m.id},event)">팀 공유</span>`;
   } else {
-    visBadge = '<span class="vis-badge vis-private">비공개</span>';
+    visBadge = `<span class="vis-badge vis-private clickable" onclick="rotateVis(${m.id},event)">비공개</span>`;
   }
+
+  const eventCountCell = m.event_count
+    ? `<span style="font-weight:600;color:var(--accent)">${m.event_count}</span>`
+    : `<span style="color:var(--text-faint)">-</span>`;
 
   return `
   <tr class="doc-row ${isMine ? 'mine' : ''}" onclick="location.href='/doc/${m.id}?from=doc'">
@@ -435,9 +467,9 @@ function renderRow(m, showYear) {
     <td class="col-title">
       <div class="doc-title-wrap">
         <span class="doc-title-text">${titleHtml}</span>
-        ${m.event_count ? `<span class="event-count-badge">${m.event_count}</span>` : ''}
       </div>
     </td>
+    <td class="col-event-count">${eventCountCell}</td>
     <td class="col-author ${isMine ? 'author-me' : ''}">${escHtml(m.author_name || '-')}</td>
     <td class="col-team">${escHtml(m.team_name || '-')}</td>
     ${IS_LOGGED_IN ? `<td class="col-doc-type">${docBadge}</td>` : ''}
@@ -611,6 +643,57 @@ async function generateWeeklyReport() {
     document.getElementById('weekly-error').textContent = '오류: ' + err.message;
     document.getElementById('weekly-error').classList.remove('hidden');
   }
+}
+
+let _docToastTimer = null;
+function docToast(msg) {
+  const el = document.getElementById('doc-toast');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(_docToastTimer);
+  _docToastTimer = setTimeout(() => { el.style.opacity = '0'; }, 2400);
+}
+
+function showDocNotice(icon, msg) {
+  document.getElementById('doc-notice-icon').textContent = icon;
+  document.getElementById('doc-notice-msg').textContent  = msg;
+  const ov = document.getElementById('doc-notice-overlay');
+  ov.style.display = 'flex';
+}
+function closeDocNotice() {
+  document.getElementById('doc-notice-overlay').style.display = 'none';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDocNotice(); });
+
+function _visLabel(is_public, is_team_doc, team_share) {
+  if (is_public)                           return '외부 공개';
+  if (is_team_doc || team_share)           return '팀 공유';
+  return '비공개';
+}
+
+async function rotateVis(docId, ev) {
+  ev.stopPropagation();
+  const res = await fetch(`/api/doc/${docId}/visibility`, { method: 'PATCH' });
+  if (res.status === 403) { showDocNotice('🔒', '공개 범위를 변경할 권한이 없습니다.'); return; }
+  if (res.status === 401) { showDocNotice('🔒', '로그인이 필요합니다.'); return; }
+  if (!res.ok) { showDocNotice('⚠️', '변경에 실패했습니다.'); return; }
+
+  const data = await res.json();
+  // ALL_DOCS 인메모리 업데이트 후 현재 뷰 재렌더
+  const idx = ALL_DOCS.findIndex(m => m.id === docId);
+  if (idx >= 0) {
+    ALL_DOCS[idx].is_public  = data.is_public;
+    ALL_DOCS[idx].team_share = data.team_share;
+  }
+
+  const label = _visLabel(data.is_public, data.is_team_doc, data.team_share);
+  docToast(`공개 범위가 "${label}"(으)로 변경되었습니다.`);
+
+  // 현재 뷰 재렌더
+  const { byMonth, byYear, filtered } = buildGroups();
+  renderMonthNav(byMonth, byYear, filtered);
+  if (selectedYM === '__all__') renderAllList(filtered);
+  else renderDocList(selectedYM, byMonth);
 }
 </script>
 {% endblock %}

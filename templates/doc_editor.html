@@ -36,6 +36,7 @@
       {% endif %}
       {% if doc %}
       <button id="btn-toc-toggle" class="btn btn-sm" onclick="toggleTocPanel()" title="목차">📑 목차</button>
+      <button class="btn btn-sm" onclick="exportDoc()" title="옵시디언 호환 마크다운으로 내보내기">⬇ 내보내기</button>
       {% endif %}
       {% if can_edit and not locked_by %}
       <button id="btn-ai-toggle" class="btn btn-sm" onclick="toggleAiPanel()">{% if doc_events %}일정 관리{% else %}일정 생성(AI){% endif %}</button>
@@ -358,6 +359,14 @@ if (document.readyState === 'loading') {
 
 /* ── TOC 글로벌 래퍼 (HTML onclick에서 호출) ─────────── */
 function toggleTocPanel() { wuInst?.toggleToc(); }
+
+function exportDoc() {
+  if (!DOC_ID) return;
+  const a = document.createElement('a');
+  a.href = `/api/doc/${DOC_ID}/export`;
+  a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+}
 
 /* ── AI 패널 토글 ────────────────────────────────────── */
 function toggleAiPanel() {

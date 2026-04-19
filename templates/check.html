@@ -235,13 +235,19 @@
   /* ── 뷰어 ── */
   .ck-viewer-wrap {
     flex: 1;
+    display: flex;
+    flex-direction: row;
+    min-height: 0;
+  }
+  #ck-viewer {
+    flex: 1;
     overflow-y: auto;
     padding: 20px 28px;
   }
-  .ck-viewer-wrap .toastui-editor-contents { font-size: 0.92rem; }
+  #ck-viewer .toastui-editor-contents { font-size: 0.92rem; }
 
   /* 체크박스 interactive */
-  .ck-viewer-wrap .toastui-editor-contents input[type="checkbox"] {
+  #ck-viewer .toastui-editor-contents input[type="checkbox"] {
     cursor: pointer;
     width: 15px;
     height: 15px;
@@ -465,12 +471,7 @@
     gap: 6px;
     flex-shrink: 0;
   }
-  .ck-ai-btn {
-    background: linear-gradient(135deg, #7c3aed, #4f46e5);
-    color: #fff;
-    border-color: transparent;
-  }
-  .ck-ai-btn:hover { opacity: 0.88; }
+  /* .ck-ai-btn는 .ck-new-btn과 동일 스타일 — 별도 재정의 없음 */
 
   /* ── AI 생성 모달 ── */
   .ck-ai-overlay {
@@ -484,7 +485,7 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px;
-    width: min(560px, 92vw);
+    width: min(860px, 96vw);
     max-height: 88vh;
     display: flex; flex-direction: column;
     box-shadow: 0 16px 40px rgba(0,0,0,0.28);
@@ -501,9 +502,12 @@
     font-size: 1.1rem; color: var(--text-faint); padding: 2px 6px;
   }
   .ck-ai-body {
-    padding: 18px 20px; flex: 1; overflow-y: auto;
-    display: flex; flex-direction: column; gap: 14px;
+    padding: 18px 20px; overflow-y: auto;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    min-height: 420px;
   }
+  .ck-ai-left { display: flex; flex-direction: column; gap: 12px; }
+  .ck-ai-right { display: flex; flex-direction: column; gap: 10px; }
   .ck-ai-label {
     display: flex; flex-direction: column; gap: 5px;
     font-size: 0.85rem; font-weight: 600; color: var(--text-faint);
@@ -515,9 +519,8 @@
     background: var(--bg);
     color: var(--text);
     font-size: 0.9rem;
-    resize: vertical;
   }
-  .ck-ai-textarea { min-height: 90px; }
+  .ck-ai-textarea { flex: 1; resize: none; min-height: 300px; }
   .ck-ai-loading {
     font-size: 0.88rem; color: var(--text-faint);
     display: flex; align-items: center; gap: 8px;
@@ -528,17 +531,21 @@
   }
   .ck-ai-preview-label { font-size: 0.8rem; font-weight: 600; color: var(--text-faint); }
   .ck-ai-preview {
+    flex: 1;
     background: var(--bg); border: 1px solid var(--border);
     border-radius: 7px; padding: 12px 14px;
     font-size: 0.83rem; line-height: 1.6;
-    white-space: pre-wrap; overflow-y: auto; max-height: 260px;
+    white-space: pre-wrap; overflow-y: auto;
     color: var(--text); margin: 0;
   }
+  .ck-ai-preview-placeholder { color: var(--text-faint); font-style: italic; }
   .ck-ai-footer {
     padding: 14px 20px;
     border-top: 1px solid var(--border);
-    display: flex; gap: 8px; flex-wrap: wrap;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
   }
+  .ck-ai-footer-left  { display: flex; gap: 8px; }
+  .ck-ai-footer-right { display: flex; gap: 8px; }
 </style>
 {% endblock %}
 
@@ -563,8 +570,8 @@
       <span class="ck-mid-title" id="ck-mid-title">전체</span>
       {% if user and user.role in ('editor', 'admin') %}
       <div class="ck-new-btn-group">
-        <button class="ck-new-btn" onclick="openNewForm()">+ 새 항목</button>
         <button class="ck-new-btn ck-ai-btn" onclick="openAiForm()">✨ AI 생성</button>
+        <button class="ck-new-btn" onclick="openNewForm()">+ 새 항목</button>
       </div>
       {% endif %}
     </div>
@@ -589,8 +596,14 @@
       <div class="ck-right-actions">
         <span class="ck-save-indicator" id="ck-dirty-indicator"></span>
         {% if user and user.role in ('editor', 'admin') %}
+        <!-- 뷰어 모드 전용: 공개 범위 토글 -->
+        <div class="visibility-segment" id="ck-vis-seg-viewer" style="display:none;" data-cid="">
+          <button type="button" class="vis-btn active" data-val="0">외부 비공개</button>
+          <button type="button" class="vis-btn" data-val="1">외부 공개</button>
+        </div>
         <button class="btn btn-sm" id="ck-export-btn" onclick="exportChecklist()" title="옵시디언 호환 마크다운으로 내보내기">⬇ 내보내기</button>
         <!-- 뷰어 모드 전용 버튼 -->
+        <button class="btn btn-sm" id="btn-toc-viewer" onclick="toggleViewerToc()" style="display:none;" title="목차">📑 목차</button>
         <button class="btn btn-sm btn-primary" id="ck-edit-btn" onclick="switchToEdit()" style="display:none;">편집</button>
         <!-- 편집 모드 전용 목차 버튼 -->
         <button class="btn btn-sm" id="btn-toc-toggle-inline" onclick="toggleTocInline()" style="display:none;" title="목차">📑 목차</button>
@@ -629,6 +642,14 @@
     <!-- 뷰어 (비편집자용 / 편집자도 뷰 모드) -->
     <div class="ck-viewer-wrap" id="ck-viewer-wrap" style="display:none;">
       <div id="ck-viewer"></div>
+      <aside class="toc-panel hidden" id="ck-viewer-toc">
+        <div class="toc-panel-header">
+          <span class="toc-panel-title">목차</span>
+          <button class="toc-close" onclick="toggleViewerToc()" title="닫기">✕</button>
+        </div>
+        <nav class="toc-list" id="ck-viewer-toc-list"></nav>
+        <div class="toc-empty hidden" id="ck-viewer-toc-empty">제목(H1~H3)이 없습니다.</div>
+      </aside>
     </div>
 
     <!-- 편집기 (편집자 전용) -->
@@ -672,25 +693,36 @@
       <button class="ck-ai-close" onclick="closeAiForm()">✕</button>
     </div>
     <div class="ck-ai-body">
-      <label class="ck-ai-label">모델
-        <select id="ck-ai-model" class="ck-ai-select"></select>
-      </label>
-      <label class="ck-ai-label">요청 내용
-        <textarea id="ck-ai-input" class="ck-ai-textarea" rows="5"
-                  placeholder="예) 신제품 출시 D-7 준비 체크리스트를 만들어줘"></textarea>
-      </label>
-      <div id="ck-ai-error" class="ck-ai-error hidden"></div>
-      <div id="ck-ai-loading" class="ck-ai-loading hidden">생성 중…</div>
-      <div id="ck-ai-preview-wrap" class="hidden">
-        <div class="ck-ai-preview-label">미리보기</div>
-        <pre id="ck-ai-preview" class="ck-ai-preview"></pre>
+      <!-- 왼쪽: 모델 선택 + 미리보기 -->
+      <div class="ck-ai-left">
+        <label class="ck-ai-label">모델
+          <select id="ck-ai-model" class="ck-ai-select"></select>
+        </label>
+        <div class="ck-ai-label" style="flex:1; display:flex; flex-direction:column;">
+          <span>미리보기</span>
+          <pre id="ck-ai-preview" class="ck-ai-preview"><span class="ck-ai-preview-placeholder">생성 결과가 여기에 표시됩니다.</span></pre>
+        </div>
+        <div id="ck-ai-loading" class="ck-ai-loading hidden">생성 중…</div>
+        <div id="ck-ai-error" class="ck-ai-error hidden"></div>
+      </div>
+      <!-- 오른쪽: 요청 내용 입력 -->
+      <div class="ck-ai-right">
+        <label class="ck-ai-label" style="flex:1; display:flex; flex-direction:column;">
+          <span>요청 내용</span>
+          <textarea id="ck-ai-input" class="ck-ai-textarea"
+                    placeholder="예) 신제품 출시 D-7 준비 체크리스트를 만들어줘"></textarea>
+        </label>
       </div>
     </div>
     <div class="ck-ai-footer">
-      <button id="ck-ai-gen-btn" class="btn btn-primary btn-sm" onclick="runAiGen()">생성</button>
-      <button id="ck-ai-use-btn" class="btn btn-sm hidden" onclick="useAiDraft()">편집기로 가져가기</button>
-      <button id="ck-ai-retry-btn" class="btn btn-sm hidden" onclick="runAiGen()">다시 생성</button>
-      <button class="btn btn-sm" onclick="closeAiForm()">취소</button>
+      <div class="ck-ai-footer-left">
+        <button id="ck-ai-use-btn" class="btn btn-sm btn-primary hidden" onclick="useAiDraft()">편집기로 가져가기</button>
+      </div>
+      <div class="ck-ai-footer-right">
+        <button id="ck-ai-cancel-btn" class="btn btn-sm hidden" onclick="closeAiForm()">취소</button>
+        <button id="ck-ai-retry-btn" class="btn btn-sm hidden" onclick="runAiGen()">다시 생성</button>
+        <button id="ck-ai-gen-btn" class="btn btn-primary btn-sm" onclick="runAiGen()">생성</button>
+      </div>
     </div>
   </div>
 </div>
@@ -866,7 +898,7 @@ function renderList() {
   }
   container.innerHTML = sorted.map(c => `
     <div class="ck-item ${_curId === c.id ? 'active' : ''}" onclick="openChecklist(${c.id})">
-      <div class="ck-item-title">${escHtml(c.title)}</div>
+      <div class="ck-item-title">${CURRENT_USER && c.is_public ? '<span style="font-size:0.72rem;color:var(--accent);font-weight:600;margin-right:4px;">(공개 중)</span>' : ''}${escHtml(c.title)}</div>
       <div class="ck-item-meta">
         ${c.project ? `<span class="ck-item-proj" style="border-left:3px solid ${projColor(c.project)};padding-left:5px;">${escHtml(c.project)}</span>` : ''}
         <span>${c.updated_at.replace('T',' ').substring(0,16)}</span>
@@ -920,7 +952,7 @@ async function openChecklist(id, forceEdit = false) {
     _showEditorMode();
   } else {
     _showViewerMode();
-    _startPoll(id);
+    if (CURRENT_USER) _startPoll(id);
   }
 }
 
@@ -996,6 +1028,17 @@ function _showViewerMode() {
     document.getElementById('ck-rename-btn').style.display  = 'none';
     document.getElementById('ck-viewer-btn').style.display  = 'none';
     document.getElementById('ck-save-btn').style.display    = 'none';
+    document.getElementById('btn-toc-viewer').style.display = _lockedByOther ? 'none' : '';
+    // 공개 범위 토글 표시 및 초기 상태 반영
+    const visSeg = document.getElementById('ck-vis-seg-viewer');
+    if (visSeg && !_lockedByOther) {
+      visSeg.style.display = '';
+      visSeg.dataset.cid = _curId || '';
+      const isPub = _curItem?.is_public ?? null;  // null=프로젝트 연동, 0=비공개, 1=공개
+      visSeg.querySelectorAll('.vis-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val) === isPub));
+    } else if (visSeg) {
+      visSeg.style.display = 'none';
+    }
   }
 }
 
@@ -1024,6 +1067,10 @@ async function _showEditorMode() {
   document.getElementById('ck-save-btn').style.display    = '';
   const tocToggleBtnShow = document.getElementById('btn-toc-toggle-inline');
   if (tocToggleBtnShow) tocToggleBtnShow.style.display = '';
+  const tocViewerBtn = document.getElementById('btn-toc-viewer');
+  if (tocViewerBtn) tocViewerBtn.style.display = 'none';
+  const visSeg = document.getElementById('ck-vis-seg-viewer');
+  if (visSeg) visSeg.style.display = 'none';
 
   // Heartbeat (2분마다 — LOCK_TIMEOUT_MINUTES=5 이내)
   _stopHeartbeat();
@@ -1162,8 +1209,7 @@ function switchToViewer() {
 function _updateMeta() {
   if (!_curItem) return;
   document.getElementById('ck-right-title').textContent = _curItem.title;
-  document.getElementById('ck-right-meta').textContent =
-    `${_curItem.project ? _curItem.project + ' · ' : ''}수정: ${_curItem.updated_at.replace('T',' ').substring(0,16)} · ${_curItem.created_by}`;
+  document.getElementById('ck-right-meta').textContent = '';
 }
 
 // ── 편집기 초기화 ─────────────────────────────────────────
@@ -1506,8 +1552,30 @@ window.__pageSearch = {
 /* ── AI 체크리스트 생성 ─────────────────────────────────── */
 let _aiLastMd = '', _aiLastInput = '', _aiModelsLoaded = false, _aiAbort = null;
 
+function _setAiState(state) {
+  const genBtn    = document.getElementById('ck-ai-gen-btn');
+  const retryBtn  = document.getElementById('ck-ai-retry-btn');
+  const useBtn    = document.getElementById('ck-ai-use-btn');
+  const cancelBtn = document.getElementById('ck-ai-cancel-btn');
+  const loadingEl = document.getElementById('ck-ai-loading');
+  if (state === 'idle') {
+    genBtn.style.display = ''; genBtn.disabled = false;
+    retryBtn.classList.add('hidden'); useBtn.classList.add('hidden'); cancelBtn.classList.add('hidden');
+    loadingEl.classList.add('hidden');
+  } else if (state === 'loading') {
+    genBtn.style.display = ''; genBtn.disabled = true;
+    retryBtn.classList.add('hidden'); useBtn.classList.add('hidden'); cancelBtn.classList.add('hidden');
+    loadingEl.classList.remove('hidden');
+  } else if (state === 'done') {
+    genBtn.style.display = 'none';
+    retryBtn.classList.remove('hidden'); useBtn.classList.remove('hidden'); cancelBtn.classList.remove('hidden');
+    loadingEl.classList.add('hidden');
+  }
+}
+
 async function openAiForm() {
   document.getElementById('ck-ai-modal').classList.remove('hidden');
+  _setAiState('idle');
   document.getElementById('ck-ai-input').focus();
   if (!_aiModelsLoaded) await _loadAiModels();
 }
@@ -1516,11 +1584,9 @@ function closeAiForm() {
   document.getElementById('ck-ai-modal').classList.add('hidden');
   if (_aiAbort) { _aiAbort.abort(); _aiAbort = null; }
   document.getElementById('ck-ai-error').classList.add('hidden');
-  document.getElementById('ck-ai-loading').classList.add('hidden');
-  document.getElementById('ck-ai-preview-wrap').classList.add('hidden');
-  document.getElementById('ck-ai-use-btn').classList.add('hidden');
-  document.getElementById('ck-ai-retry-btn').classList.add('hidden');
-  document.getElementById('ck-ai-gen-btn').disabled = false;
+  const prev = document.getElementById('ck-ai-preview');
+  prev.innerHTML = '<span class="ck-ai-preview-placeholder">생성 결과가 여기에 표시됩니다.</span>';
+  _setAiState('idle');
 }
 
 async function _loadAiModels() {
@@ -1546,12 +1612,7 @@ async function runAiGen() {
 
   if (_aiAbort) _aiAbort.abort();
   _aiAbort = new AbortController();
-
-  document.getElementById('ck-ai-gen-btn').disabled = true;
-  document.getElementById('ck-ai-retry-btn').classList.add('hidden');
-  document.getElementById('ck-ai-use-btn').classList.add('hidden');
-  document.getElementById('ck-ai-preview-wrap').classList.add('hidden');
-  document.getElementById('ck-ai-loading').classList.remove('hidden');
+  _setAiState('loading');
 
   try {
     const res = await fetch('/api/ai/generate-checklist', {
@@ -1568,17 +1629,14 @@ async function runAiGen() {
     _aiLastMd = markdown;
     _aiLastInput = text;
     document.getElementById('ck-ai-preview').textContent = markdown;
-    document.getElementById('ck-ai-preview-wrap').classList.remove('hidden');
-    document.getElementById('ck-ai-use-btn').classList.remove('hidden');
-    document.getElementById('ck-ai-retry-btn').classList.remove('hidden');
+    _setAiState('done');
   } catch (e) {
     if (e.name !== 'AbortError') {
       errEl.textContent = e.message || '생성 중 오류가 발생했습니다.';
       errEl.classList.remove('hidden');
     }
+    _setAiState('idle');
   } finally {
-    document.getElementById('ck-ai-loading').classList.add('hidden');
-    document.getElementById('ck-ai-gen-btn').disabled = false;
     _aiAbort = null;
   }
 }
@@ -1599,6 +1657,71 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !document.getElementById('ck-ai-modal').classList.contains('hidden')) {
     closeAiForm();
   }
+});
+
+// ── 뷰어 목차 ───────────────────────────────────────────
+function buildViewerToc() {
+  const root  = document.querySelector('#ck-viewer .toastui-editor-contents') || document.getElementById('ck-viewer');
+  const panel = document.getElementById('ck-viewer-toc');
+  const list  = document.getElementById('ck-viewer-toc-list');
+  const empty = document.getElementById('ck-viewer-toc-empty');
+  list.innerHTML = '';
+  const hs = root ? root.querySelectorAll('h1, h2, h3') : [];
+  if (!hs.length) {
+    empty.classList.remove('hidden');
+    panel.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  hs.forEach((h, i) => {
+    if (!h.id) h.id = `vtoc-${i}`;
+    const a = document.createElement('a');
+    a.href = '#' + h.id;
+    a.textContent = h.textContent;
+    a.className = 'toc-h' + h.tagName[1];
+    a.onclick = e => {
+      e.preventDefault();
+      h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    list.appendChild(a);
+  });
+  panel.classList.remove('hidden');
+}
+
+function toggleViewerToc() {
+  const panel = document.getElementById('ck-viewer-toc');
+  if (panel.classList.contains('hidden')) buildViewerToc();
+  else panel.classList.add('hidden');
+}
+
+// ── 뷰어 공개 범위 토글 ─────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const visSeg = document.getElementById('ck-vis-seg-viewer');
+  if (!visSeg) return;
+  visSeg.querySelectorAll('.vis-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (btn.classList.contains('active')) return;
+      const cid = visSeg.dataset.cid;
+      if (!cid) return;
+      const val = parseInt(btn.dataset.val);
+      const res = await fetch(`/api/checklists/${cid}/visibility`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ is_public: val }),
+      });
+      if (!res.ok) { showSaveToast('변경 실패'); return; }
+      const data = await res.json();
+      // 버튼 상태 갱신
+      visSeg.querySelectorAll('.vis-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val) === data.is_public));
+      // 인메모리 데이터 갱신
+      if (_curItem) _curItem.is_public = data.is_public;
+      const listIdx = _allChecklists.findIndex(c => c.id === parseInt(cid));
+      if (listIdx >= 0) _allChecklists[listIdx].is_public = data.is_public;
+      renderList();
+      const label = data.is_public === 1 ? '외부 공개' : data.is_public === 0 ? '외부 비공개' : '프로젝트 연동';
+      showSaveToast(`"${label}"으로 변경되었습니다.`);
+    });
+  });
 });
 </script>
 {% endblock %}

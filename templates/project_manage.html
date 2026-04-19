@@ -519,6 +519,27 @@
 
 <div class="pm-toast" id="pm-toast"></div>
 
+<!-- 비공개 전환 확인 모달 -->
+<div id="pm-confirm-overlay" style="
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,0.45);z-index:3000;
+  align-items:center;justify-content:center;
+" onclick="if(event.target===this)_pmConfirmCancel()">
+  <div style="
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:28px 28px 22px;max-width:400px;width:90%;
+    box-shadow:0 8px 28px rgba(0,0,0,0.22);
+  " onclick="event.stopPropagation()">
+    <div id="pm-confirm-icon" style="font-size:1.8rem;margin-bottom:10px;"></div>
+    <div id="pm-confirm-title" style="font-size:1rem;font-weight:700;margin-bottom:8px;"></div>
+    <div id="pm-confirm-body" style="font-size:0.87rem;color:var(--text-muted);white-space:pre-line;margin-bottom:22px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="pm-btn" onclick="_pmConfirmCancel()">취소</button>
+      <button class="pm-btn pm-btn-accent" id="pm-confirm-ok" onclick="_pmConfirmOk()">확인</button>
+    </div>
+  </div>
+</div>
+
 <script>
 let projects  = [];
 let filter    = 'active';   // 'active' | 'closed'
@@ -582,13 +603,22 @@ function renderList() {
     const active = selIdx === idx;
     const closed = (p.is_active === 0 && p.name !== '미지정') ? ' closed' : '';
     const cnt    = p.name === '미지정' ? unsetVisibleEvents(p).length : p.events.length;
+    const lockIcon = p.is_private ? '<span style="font-size:0.7rem;color:var(--text-muted);margin-left:4px;">🔒</span>' : '';
     return `
       <div class="pm-proj-item${active ? ' active' : ''}${closed}" onclick="selectProjItem(${idx})">
         <span class="pm-proj-dot" ${dot}></span>
-        <span class="pm-proj-label">${escHtml(p.name)}</span>
+        <span class="pm-proj-label">${escHtml(p.name)}${lockIcon}</span>
         <span class="pm-proj-cnt">${cnt}</span>
       </div>`;
   }).join('');
+}
+
+/* ── localStorage 상태 저장/복원 ── */
+function _pmSave() {
+  try {
+    localStorage.setItem('pm_sel_name',   selName  ?? '');
+    localStorage.setItem('pm_sel_filter', filter);
+  } catch(e) {}
 }
 
 /* ── 필터 변경 ── */
@@ -597,6 +627,8 @@ function setFilter(f) {
   document.getElementById('filter-active').classList.toggle('active', f === 'active');
   document.getElementById('filter-closed').classList.toggle('active', f === 'closed');
   selIdx = null;
+  selName = null;
+  _pmSave();
   hideDetail();
   renderList();
 }
@@ -606,6 +638,7 @@ function selectProjItem(idx) {
   document.getElementById('pm-create-panel').classList.remove('visible');
   selIdx  = idx;
   selName = projects[idx].name;
+  _pmSave();
   renderList();
   renderDetail(idx);
 }
@@ -637,14 +670,27 @@ function renderDetail(idx) {
   // 액션 버튼
   const actions = document.getElementById('det-actions');
   if (isUnset) {
-    actions.innerHTML = '';
+    // 완료 필터(완료된 미지정 일정 보기)에서는 bulk 버튼 없음
+    const bulkBtns = filter === 'closed' ? '' : `
+      <button class="pm-btn pm-btn-resume" onclick="bulkUnassignedVisibility(true)"  title="미지정 일정·체크리스트 전체를 외부 공개">🔓 하위 모두 외부 공개</button>
+      <button class="pm-btn pm-btn-danger" onclick="bulkUnassignedVisibility(false)" title="미지정 일정·체크리스트 전체를 외부 비공개">🔒 하위 모두 외부 비공개</button>`;
+    actions.innerHTML = `
+      ${bulkBtns}
+      <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="미지정 일정·체크 항목을 옵시디언 ZIP으로 저장">📦 옵시디언 ZIP으로 저장</button>
+    `;
   } else {
     const statusBtn = isClosed
       ? `<button class="pm-btn pm-btn-resume" onclick="toggleStatus(${idx}, true)">프로젝트 재개</button>`
       : `<button class="pm-btn pm-btn-close"  onclick="toggleStatus(${idx}, false)">프로젝트 종료</button>`;
+    // 완료된 프로젝트는 공개/비공개 전환 버튼 없음
+    const isPrivate = p.is_private ? 1 : 0;
+    const privacyBtn = isClosed ? '' : (isPrivate
+      ? `<button class="pm-btn pm-btn-danger" onclick="togglePrivacy(${idx}, false)" title="비로그인 사용자에게 숨겨져 있음">🔒 외부 비공개 중</button>`
+      : `<button class="pm-btn pm-btn-resume" onclick="togglePrivacy(${idx}, true)" title="비로그인 사용자에게 노출 중">🔓 외부 공개 중</button>`);
     actions.innerHTML = `
       <button class="pm-btn pm-btn-accent" onclick="showEditPanel(${idx})">편집</button>
       ${statusBtn}
+      ${privacyBtn}
       <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="일정·체크 항목을 개별 마크다운 노트로 묶어 ZIP으로 저장">📦 옵시디언 ZIP으로 저장</button>
       <button class="pm-btn pm-btn-warn"   onclick="deleteProject(${idx}, false)">프로젝트만 삭제</button>
       <button class="pm-btn pm-btn-danger" onclick="deleteProject(${idx}, true)">프로젝트+하위 일정 및 체크 항목 삭제</button>
@@ -666,19 +712,29 @@ function renderDetail(idx) {
       let actionBtn;
       const isDone = e.is_active === 0;
       const isHidden = e.kanban_hidden === 1;
+      const evPub = e.is_public;  // null=프로젝트 연동, 0=비공개, 1=공개
+      const visLocked = isDone || isClosed;  // 완료 일정 또는 종료 프로젝트 → 비공개 고정
       const hideBtn = isHidden
         ? `<button class="pm-btn pm-btn-accent" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleKanbanHidden(${e.id}, false)" title="칸반/간트에 다시 표시">👁 보이기</button>`
-        : `<button class="pm-btn" style="padding:2px 8px;font-size:0.74rem;color:var(--text-muted);" onclick="toggleKanbanHidden(${e.id}, true)" title="칸반/간트에서 숨기기">숨기기</button>`;
+        : `<button class="pm-btn" style="padding:2px 8px;font-size:0.74rem;color:var(--text-muted);" onclick="toggleKanbanHidden(${e.id}, true)" title="칸반/간트에서 숨기기">체크/칸반/간트에서 비노출</button>`;
+      const exportEvBtn = `<a class="pm-btn pm-btn-accent" href="/api/events/${e.id}/export" rel="noopener" style="padding:2px 8px;font-size:0.74rem;text-decoration:none;display:inline-block;" title="마크다운으로 내보내기">📄 MD</a>`;
+      const evVisBtn = visLocked
+        ? `<button class="pm-btn pm-btn-danger" style="padding:2px 8px;font-size:0.74rem;opacity:0.5;cursor:not-allowed;" disabled title="완료/종료된 항목은 외부 비공개 고정">🔒 외부 비공개</button>`
+        : evPub === 1
+        ? `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="cycleEventVisibility(${e.id}, 1)" title="클릭: 외부 비공개로 변경">🔓 외부 공개</button>`
+        : evPub === 0
+        ? `<button class="pm-btn pm-btn-danger" style="padding:2px 8px;font-size:0.74rem;" onclick="cycleEventVisibility(${e.id}, 0)" title="클릭: 프로젝트 연동으로 변경">🔒 외부 비공개</button>`
+        : `<button class="pm-btn" style="padding:2px 8px;font-size:0.74rem;color:var(--text-muted);" onclick="cycleEventVisibility(${e.id}, null)" title="클릭: 외부 공개로 변경">🔄 프로젝트 연동</button>`;
       if (isUnset) {
         actionBtn = (!isDone
           ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, false)">완료 처리</button>`
           : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`)
-          + hideBtn;
+          + hideBtn + exportEvBtn + evVisBtn;
       } else {
         const doneBtn = !isDone
           ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, false)">완료 처리</button>`
           : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`;
-        actionBtn = `${doneBtn}${hideBtn}<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeEvent(${e.id})">프로젝트 제외</button>`;
+        actionBtn = `${doneBtn}${hideBtn}${exportEvBtn}<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeEvent(${e.id})">프로젝트에서 제외</button>${evVisBtn}`;
       }
       const rowStyle = isDone ? 'opacity:0.45;' : isHidden ? 'opacity:0.6;' : '';
       const titleStyle = isDone ? 'text-decoration:line-through;' : '';
@@ -692,35 +748,45 @@ function renderDetail(idx) {
     }).join('');
   }
 
-  // 체크리스트 목록 (미지정은 제외)
+  // 체크리스트 목록
   const clTitleEl = document.getElementById('det-checklists-title');
   const clEl = document.getElementById('det-checklists');
-  if (isUnset) {
-    clTitleEl.style.display = 'none';
-    clEl.style.display = 'none';
-  } else {
-    clTitleEl.style.display = '';
-    clEl.style.display = '';
-    clEl.innerHTML = '<div class="pm-empty">로딩 중...</div>';
-    loadChecklistsForProject(p.name, clEl);
-  }
+  clTitleEl.style.display = '';
+  clEl.style.display = '';
+  clEl.innerHTML = '<div class="pm-empty">로딩 중...</div>';
+  loadChecklistsForProject(isUnset ? null : p.name, clEl);
 }
 
 async function loadChecklistsForProject(projectName, clEl) {
   try {
-    const res = await fetch(`/api/checklists?project=${encodeURIComponent(projectName)}`);
+    const url = projectName == null
+      ? `/api/checklists?project=`
+      : `/api/checklists?project=${encodeURIComponent(projectName)}`;
+    const res = await fetch(url);
     const items = await res.json();
     if (!items.length) {
       clEl.innerHTML = '<div class="pm-empty">연결된 체크리스트 없음</div>';
       return;
     }
-    clEl.innerHTML = items.map(c => `
-      <div class="pm-ev-row">
-        <span class="pm-ev-title" title="${escHtml(c.title)}">${escHtml(c.title)}</span>
-        <span class="pm-ev-date">${(c.updated_at || '').slice(0, 10)}</span>
-        <button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeChecklist(${c.id})">프로젝트 제외</button>
-      </div>
-    `).join('');
+    clEl.innerHTML = items.map(c => {
+      const ckPub = c.is_public;
+      const ckVisBtn = ckPub === 1
+        ? `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="cycleChecklistVisibility(${c.id}, 1)" title="클릭: 외부 비공개로 변경">🔓 외부 공개</button>`
+        : ckPub === 0
+        ? `<button class="pm-btn pm-btn-danger" style="padding:2px 8px;font-size:0.74rem;" onclick="cycleChecklistVisibility(${c.id}, 0)" title="클릭: 프로젝트 연동으로 변경">🔒 외부 비공개</button>`
+        : `<button class="pm-btn" style="padding:2px 8px;font-size:0.74rem;color:var(--text-muted);" onclick="cycleChecklistVisibility(${c.id}, null)" title="클릭: 외부 공개로 변경">🔄 프로젝트 연동</button>`;
+      const excludeBtn = projectName != null
+        ? `<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeChecklist(${c.id})">프로젝트에서 제외</button>`
+        : '';
+      return `
+        <div class="pm-ev-row">
+          <span class="pm-ev-title" title="${escHtml(c.title)}">${escHtml(c.title)}</span>
+          <span class="pm-ev-date">${(c.updated_at || '').slice(0, 10)}</span>
+          <a class="pm-btn pm-btn-accent" href="/api/checklists/${c.id}/export" rel="noopener" style="padding:2px 8px;font-size:0.74rem;text-decoration:none;display:inline-block;" title="마크다운/ZIP으로 내보내기">📄 MD</a>
+          ${excludeBtn}
+          ${ckVisBtn}
+        </div>`;
+    }).join('');
   } catch(e) {
     clEl.innerHTML = '<div class="pm-empty">로드 실패</div>';
   }
@@ -852,6 +918,45 @@ async function toggleEventStatus(id, activate) {
   location.reload();
 }
 
+/* ── 공개 상태 cycling 헬퍼: null→1→0→null ── */
+function _nextVis(cur) {
+  if (cur === null || cur === undefined) return 1;
+  if (cur === 1) return 0;
+  return null;
+}
+function _visLabel(v) {
+  return v === 1 ? '외부 공개' : v === 0 ? '외부 비공개' : '프로젝트 연동';
+}
+
+async function cycleEventVisibility(id, cur) {
+  const next = _nextVis(cur);
+  const res = await fetch(`/api/events/${id}/visibility`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ is_public: next }),
+  });
+  if (!res.ok) { toast('변경 실패'); return; }
+  toast(`"${_visLabel(next)}"으로 변경됨`);
+  await loadProjectList();
+}
+
+async function cycleChecklistVisibility(id, cur) {
+  const next = _nextVis(cur);
+  const res = await fetch(`/api/checklists/${id}/visibility`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ is_public: next }),
+  });
+  if (!res.ok) { toast('변경 실패'); return; }
+  toast(`"${_visLabel(next)}"으로 변경됨`);
+  if (selIdx !== null) {
+    const p = projects[selIdx];
+    const isUnsetNow = p.name === '미지정';
+    const clEl = document.getElementById('det-checklists');
+    if (clEl && clEl.style.display !== 'none') loadChecklistsForProject(isUnsetNow ? null : p.name, clEl);
+  }
+}
+
 /* ── 칸반/간트 숨기기 토글 ── */
 async function toggleKanbanHidden(id, hidden) {
   const res = await fetch(`/api/manage/events/${id}/kanban-hidden`, {
@@ -904,7 +1009,80 @@ async function toggleStatus(idx, activate) {
     body: JSON.stringify({ is_active: activate }),
   });
   if (!res.ok) { toast('변경 실패'); return; }
+  // 필터가 바뀌면 선택이 유효하지 않으므로 저장된 선택 초기화
+  selName = null;
+  _pmSave();
   location.reload();
+}
+
+let _pmConfirmCallback = null;
+function _pmConfirm(icon, title, body, okLabel, okClass, callback) {
+  document.getElementById('pm-confirm-icon').textContent  = icon;
+  document.getElementById('pm-confirm-title').textContent = title;
+  document.getElementById('pm-confirm-body').textContent  = body;
+  const btn = document.getElementById('pm-confirm-ok');
+  btn.textContent  = okLabel;
+  btn.className    = `pm-btn ${okClass}`;
+  _pmConfirmCallback = callback;
+  const ov = document.getElementById('pm-confirm-overlay');
+  ov.style.display = 'flex';
+}
+function _pmConfirmOk() {
+  document.getElementById('pm-confirm-overlay').style.display = 'none';
+  if (_pmConfirmCallback) { _pmConfirmCallback(); _pmConfirmCallback = null; }
+}
+function _pmConfirmCancel() {
+  document.getElementById('pm-confirm-overlay').style.display = 'none';
+  _pmConfirmCallback = null;
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') _pmConfirmCancel(); });
+
+async function bulkUnassignedVisibility(makePublic) {
+  const icon  = makePublic ? '🔓' : '🔒';
+  const title = makePublic ? '하위 모두 외부 공개' : '하위 모두 외부 비공개';
+  const body  = makePublic
+    ? '미지정 일정·체크리스트 항목을 모두 외부 공개로 전환합니다.\n비로그인 사용자에게 노출됩니다.'
+    : '미지정 일정·체크리스트 항목을 모두 외부 비공개로 전환합니다.\n비로그인 사용자에게 숨겨집니다.';
+  const okClass = makePublic ? 'pm-btn-resume' : 'pm-btn-danger';
+  _pmConfirm(icon, title, body, '전환', okClass, async () => {
+    const [r1, r2] = await Promise.all([
+      fetch('/api/checklists/bulk-visibility', {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ project: null, is_public: makePublic }),
+      }),
+      fetch('/api/events/bulk-visibility', {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ project: null, is_public: makePublic }),
+      }),
+    ]);
+    if (!r1.ok || !r2.ok) { toast('일부 변경 실패'); return; }
+    const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
+    const total = (d1.updated || 0) + (d2.updated || 0);
+    toast(`${total}개 항목이 ${makePublic ? '외부 공개' : '외부 비공개'}로 변경되었습니다.`);
+    await loadProjectList();
+  });
+}
+
+async function togglePrivacy(idx, makePrivate) {
+  const p = projects[idx];
+  const icon  = makePrivate ? '🔒' : '🔓';
+  const title = makePrivate ? '외부 비공개로 전환' : '외부 공개로 전환';
+  const body  = makePrivate
+    ? `"${p.name}" 프로젝트를 외부 비공개로 전환합니다.\n비로그인 사용자에게 이 프로젝트의 체크·칸반·간트 항목이 숨겨집니다.`
+    : `"${p.name}" 프로젝트를 외부 공개로 전환합니다.\n비로그인 사용자에게 이 프로젝트의 외부 공개 항목이 노출됩니다.`;
+  const okClass = makePrivate ? 'pm-btn-danger' : 'pm-btn-resume';
+  _pmConfirm(icon, title, body, '전환', okClass, async () => {
+    const res = await fetch(`/api/manage/projects/${encodeURIComponent(p.name)}/privacy`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ is_private: makePrivate }),
+    });
+    if (!res.ok) { toast('변경 실패'); return; }
+    toast(makePrivate ? '외부 비공개로 전환되었습니다.' : '외부 공개로 전환되었습니다.');
+    await loadProjectList();
+  });
 }
 
 /* ── 옵시디언 ZIP 내보내기 ── */
@@ -941,6 +1119,7 @@ async function deleteProject(idx, withEvents) {
   if (!res.ok) { toast('삭제 실패'); return; }
   selIdx  = null;
   selName = null;
+  _pmSave();
   hideDetail();
   toast(withEvents ? '프로젝트 및 하위 항목 삭제됨' : '프로젝트 삭제됨');
   await loadProjectList();
@@ -1054,19 +1233,32 @@ document.getElementById('cr-name').addEventListener('keydown', e => {
   if (e.key === 'Escape') hideCreatePanel();
 });
 
-// 새로고침 후 선택 복원 (미지정 완료/재개 등)
+// 페이지 진입 시 선택 복원: sessionStorage(새로고침) 우선, 없으면 localStorage(페이지 이동)
 (async () => {
-  const restoreName   = sessionStorage.getItem('pm_restore_name');
-  const restoreFilter = sessionStorage.getItem('pm_restore_filter');
-  if (restoreName !== null) {
+  const ssName   = sessionStorage.getItem('pm_restore_name');
+  const ssFilter = sessionStorage.getItem('pm_restore_filter');
+  if (ssName !== null) {
+    // location.reload() 후 복원
     sessionStorage.removeItem('pm_restore_name');
     sessionStorage.removeItem('pm_restore_filter');
-    if (restoreFilter) {
-      filter = restoreFilter;
+    if (ssFilter) {
+      filter = ssFilter;
       document.getElementById('filter-active').classList.toggle('active', filter === 'active');
       document.getElementById('filter-closed').classList.toggle('active', filter === 'closed');
     }
-    if (restoreName) selName = restoreName;
+    if (ssName) selName = ssName;
+  } else {
+    // 다른 페이지에서 돌아온 경우: localStorage 복원
+    try {
+      const lsName   = localStorage.getItem('pm_sel_name');
+      const lsFilter = localStorage.getItem('pm_sel_filter');
+      if (lsFilter && lsFilter !== filter) {
+        filter = lsFilter;
+        document.getElementById('filter-active').classList.toggle('active', filter === 'active');
+        document.getElementById('filter-closed').classList.toggle('active', filter === 'closed');
+      }
+      if (lsName) selName = lsName;
+    } catch(e) {}
   }
   await loadProjectList();
 })();
