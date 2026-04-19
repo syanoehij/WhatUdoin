@@ -34,13 +34,25 @@ def _run_dir() -> str:
 
 
 def _ensure_credentials(run_dir: str) -> None:
-    """credentials.json이 없으면 자동 생성 (crypto_key)."""
+    """credentials.json 준비.
+    1) exe 옆에 이미 있으면 그대로 사용
+    2) 번들 내(_MEIPASS)에 포함된 파일이 있으면 exe 옆으로 복사
+    3) 둘 다 없으면 새 키를 생성"""
     import json
     from cryptography.fernet import Fernet
 
     creds_path = os.path.join(run_dir, "credentials.json")
     if os.path.exists(creds_path):
         return
+
+    # 번들 내 포함된 credentials.json 복사 (PyInstaller frozen 환경)
+    if getattr(sys, "frozen", False):
+        bundled = os.path.join(sys._MEIPASS, "credentials.json")  # type: ignore[attr-defined]
+        if os.path.exists(bundled):
+            shutil.copy2(bundled, creds_path)
+            print(f"[WhatUdoin] credentials.json 복사됨: {creds_path}")
+            return
+
     key = Fernet.generate_key().decode()
     with open(creds_path, "w", encoding="utf-8") as f:
         json.dump({"crypto_key": key}, f, indent=2, ensure_ascii=False)
