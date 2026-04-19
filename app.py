@@ -12,6 +12,7 @@ import zipfile
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request, HTTPException, Response, UploadFile, File
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -210,9 +211,10 @@ def meeting_detail_page(request: Request, meeting_id: int):
     locked_by = None
     if lock and current_user and lock["user_name"] != current_user["name"]:
         locked_by = lock["user_name"]
+    done_projects = db.get_done_project_names()
     return templates.TemplateResponse(request, "meeting_editor.html", _ctx(
         request, meeting=meeting, meeting_events=events,
-        locked_by=locked_by, can_edit=can_edit
+        locked_by=locked_by, can_edit=can_edit, done_projects=done_projects,
     ))
 
 
@@ -236,7 +238,11 @@ def ai_import_page(request: Request):
 # ── 변경 이력 페이지 ──────────────────────────────────────
 @app.get("/changelog", response_class=HTMLResponse)
 def changelog_page(request: Request):
-    return templates.TemplateResponse(request, "changelog.html", _ctx(request))
+    import json as _json
+    from pathlib import Path as _Path
+    _cl_path = _Path(__file__).parent / "changelog" / "changelog.json"
+    cl_data = _json.loads(_cl_path.read_text(encoding="utf-8")) if _cl_path.exists() else {"groups": []}
+    return templates.TemplateResponse(request, "changelog.html", {**_ctx(request), "cl_groups": cl_data["groups"]})
 
 
 # ── 알람 설정 (인증서 다운로드) 페이지 ─────────────────────
@@ -779,6 +785,16 @@ def get_event(event_id: int):
     return event
 
 
+def _validate_event_payload(payload: dict) -> list:
+    """수동·AI 양쪽 경로에서 공통으로 쓰는 필수 필드 검증."""
+    errors = []
+    if not (payload.get("title") or "").strip():
+        errors.append("제목을 입력해주세요.")
+    if not (payload.get("assignee") or "").strip():
+        errors.append("담당자를 입력해주세요.")
+    return errors
+
+
 @app.post("/api/events")
 async def create_event(request: Request):
     user = _require_editor(request)
@@ -796,6 +812,9 @@ async def create_event(request: Request):
     data.setdefault("event_type", "schedule")
     data.setdefault("recurrence_rule", None)
     data.setdefault("recurrence_end", None)
+    errors = _validate_event_payload(data)
+    if errors:
+        raise HTTPException(status_code=422, detail=errors[0])
     data["created_by"] = str(user["id"])
     data["team_id"] = user.get("team_id")
     event_id = db.create_event(data)
@@ -819,6 +838,9 @@ async def update_event(event_id: int, request: Request):
     edit_mode = data.pop("edit_mode", "this")
     data.setdefault("kanban_status", event.get("kanban_status"))
     data.setdefault("priority", event.get("priority", "normal"))
+    errors = _validate_event_payload(data)
+    if errors:
+        raise HTTPException(status_code=422, detail=errors[0])
 
     # 수정 전 담당자 목록
     prev_assignees = set(a.strip() for a in (event.get("assignee") or "").split(",") if a.strip())
@@ -840,6 +862,19 @@ async def update_event(event_id: int, request: Request):
         if name != user["name"]:
             db.create_notification(name, "assigned", f"📌 일정 담당자로 지정됨: {data.get('title', event.get('title',''))}", event_id)
 
+    return {"ok": True}
+
+
+@app.patch("/api/events/{event_id}/unlink")
+def unlink_event(event_id: int, request: Request):
+    user = _require_editor(request)
+    event = db.get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not auth.can_edit_event(user, event):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+    with db.get_conn() as conn:
+        conn.execute("UPDATE events SET meeting_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (event_id,))
     return {"ok": True}
 
 
@@ -1035,7 +1070,9 @@ async def ai_conflict_review(request: Request):
     ai_candidates = [all_events[i] for i in similar_indices]
 
     # AI 검토 호출 (후보마다 top-3만 넘김)
-    ai_raw_results = llm_parser.review_all_conflicts_with_funnel(ai_candidates, ai_funnel_map, model)
+    ai_raw_results = await run_in_threadpool(
+        llm_parser.review_all_conflicts_with_funnel, ai_candidates, ai_funnel_map, model
+    )
 
     # 결과를 전체 이벤트 인덱스로 매핑
     out = [{"is_duplicate": False, "reason": "", "existing_title": None} for _ in all_events]
@@ -1692,7 +1729,7 @@ async def ai_parse(request: Request):
     if not text:
         raise HTTPException(status_code=400, detail="텍스트를 입력하세요.")
     try:
-        events = llm_parser.parse_schedule(text, model)
+        events = await run_in_threadpool(llm_parser.parse_schedule, text, model)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")
     return {"events": events}
@@ -1730,15 +1767,20 @@ async def ai_confirm(request: Request):
             return {"saved": 0, "blocked": blocked, "requires_force": True}
 
     saved = 0
-    for e in events:
+    skipped = []
+    for i, e in enumerate(events):
         payload = llm_parser.to_event_payload(e)
+        val_errors = _validate_event_payload(payload)
+        if val_errors:
+            skipped.append({"index": i, "title": e.get("title", ""), "reason": val_errors[0]})
+            continue
         if payload["start_datetime"]:
             payload["team_id"]    = team_id
             payload["created_by"] = str(user["id"])
             payload["meeting_id"] = meeting_id
             db.create_event(payload)
             saved += 1
-    return {"saved": saved, "blocked": [], "requires_force": False}
+    return {"saved": saved, "blocked": [], "skipped": skipped, "requires_force": False}
 
 
 @app.post("/api/ai/refine")
@@ -1751,7 +1793,7 @@ async def ai_refine(request: Request):
     if not text:
         raise HTTPException(status_code=400, detail="텍스트를 입력하세요.")
     try:
-        refined = llm_parser.refine_schedule(text, events, model)
+        refined = await run_in_threadpool(llm_parser.refine_schedule, text, events, model)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")
     return {"events": refined}
@@ -1811,10 +1853,13 @@ async def ai_weekly_report(request: Request):
             prev = None
 
     try:
-        report = llm_parser.generate_weekly_report(
+        report = await run_in_threadpool(
+            llm_parser.generate_weekly_report,
             past_events, future_events, base_date, model,
             today_events=today_events,
-            meetings=meetings, checklists=checklists, previous_report=prev,
+            meetings=meetings,
+            checklists=checklists,
+            previous_report=prev,
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")

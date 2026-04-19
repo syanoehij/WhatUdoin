@@ -24,6 +24,7 @@ let _fpSavedDates = ['', ''];
 let _currentEditKanbanStatus = null;
 let _currentEventType = 'schedule';
 let _currentIsRecurring = false;  // 현재 편집 중인 이벤트가 반복 시리즈인지
+let _currentOnSaveCallback = null; // AI 경로: fetch 대신 payload를 콜백으로 전달
 
 // ── 프로젝트 자동완성 ─────────────────────────────────────
 async function loadProjects() {
@@ -184,8 +185,10 @@ function initDatePicker() {
 }
 
 // ── 모달 열기/닫기 ────────────────────────────────────────
-function openModal(dateStr = '', eventData = null, dragOpts = null) {
+function openModal(dateStr = '', eventData = null, dragOpts = null, options = null) {
   if (!CURRENT_USER) { openLoginModal(); return; }
+
+  _currentOnSaveCallback = (options && options.onSave) || null;
 
   const today = dateStr || getToday();
 
@@ -215,7 +218,7 @@ function openModal(dateStr = '', eventData = null, dragOpts = null) {
   // 담당자 기본값: 현재 로그인 유저
   if (CURRENT_USER) setAssigneeTags(CURRENT_USER.name);
   document.getElementById('btn-delete').classList.add('hidden');
-  document.getElementById('modal-title').textContent = '일정 추가';
+  document.getElementById('modal-title').textContent = (options && options.title) || '일정 추가';
   toggleAllDay();
 
   // 드래그 선택 구간 반영 (드래그-투-크리에이트)
@@ -290,6 +293,7 @@ function openModal(dateStr = '', eventData = null, dragOpts = null) {
 function closeModal(e) {
   if (e && e.target !== document.getElementById('modal-overlay')) return;
   document.getElementById('modal-overlay').classList.add('hidden');
+  _currentOnSaveCallback = null;
 }
 
 // ── 종일 토글 ─────────────────────────────────────────────
@@ -404,6 +408,15 @@ async function saveEvent(e) {
     recurrence_rule:  recurrenceRule,
     recurrence_end:   recurrenceEnd,
   };
+
+  // AI 경로: DB 저장 대신 payload를 콜백으로 전달
+  if (_currentOnSaveCallback) {
+    const cb = _currentOnSaveCallback;
+    _currentOnSaveCallback = null;
+    document.getElementById('modal-overlay').classList.add('hidden');
+    cb(payload);
+    return;
+  }
 
   const method = id ? 'PUT' : 'POST';
   const url    = id ? `/api/events/${id}` : '/api/events';

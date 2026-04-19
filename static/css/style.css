@@ -346,10 +346,13 @@ main { padding: 20px 24px; width: 100%; flex: 1; }
   align-items: center;
 }
 .btn:hover { background: var(--border); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 .btn-primary { background: var(--accent); color: white; }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-danger { background: #d63031; color: white; }
 .btn-danger:hover { background: #b71c1c; }
+.btn-secondary { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); }
+.btn-secondary:hover { background: var(--accent-bg); }
 .btn-sm { padding: 5px 10px; font-size: 0.82rem; }
 .icon-btn {
   background: none;
@@ -1574,17 +1577,22 @@ mark.search-hl {
 }
 .result-item {
   border: 1px solid var(--accent-bg); border-radius: 10px;
-  padding: 14px; margin-bottom: 12px; background: var(--surface-2);
+  padding: 12px 14px; margin-bottom: 12px; background: var(--surface-2);
+  cursor: pointer; transition: background 0.15s;
 }
+.result-item:hover { background: var(--surface-3, #e8eaf0); }
 .item-header {
-  display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
-  padding: 2px 0; margin-bottom: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0; margin-bottom: 0; width: 100%;
 }
 .item-header:hover .item-title { color: var(--accent); }
 .item-toggle { font-size: 0.7rem; color: var(--text-muted); flex-shrink: 0; transition: transform 0.18s; line-height: 1; }
 .result-item.open .item-toggle { transform: rotate(90deg); }
 .item-title { flex: 1; font-weight: 600; font-size: 0.9rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.item-header .btn-group { flex-shrink: 0; }
+.item-summary { flex: 1; font-size: 0.88rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.item-type-icon { flex-shrink: 0; font-size: 1rem; }
+.item-header .btn-group { flex-shrink: 0; margin-left: auto; }
+.item-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; padding-left: 22px; }
 
 /* 충돌 경고 뱃지 */
 .conflict-warn {
@@ -1597,6 +1605,20 @@ mark.search-hl {
   white-space: nowrap;
   flex-shrink: 0;
   cursor: help;
+}
+
+/* 완료 프로젝트 경고 뱃지 */
+.done-project-warn {
+  font-size: 0.72rem;
+  color: #92400e;
+  background: rgba(251,191,36,0.10);
+  border: 1px solid rgba(251,191,36,0.5);
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: default;
+  font-weight: 500;
 }
 
 /* 날짜 미입력 경고 뱃지 */
@@ -1621,16 +1643,17 @@ mark.search-hl {
 
 /* 등록 체크 토글 */
 .ai-include-label {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
-  padding: 3px 9px;
+  padding: 5px 10px;
   border-radius: 5px;
   border: 1px solid var(--border);
   user-select: none;
+  white-space: nowrap;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .ai-include-label input[type="checkbox"] {

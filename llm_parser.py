@@ -827,17 +827,23 @@ def to_event_payload(parsed: dict) -> dict:
     start_datetime = f"{date_str}T{start_time}" if date_str else None
     end_datetime   = f"{end_date}T{end_time}" if (end_date and end_time) else None
 
+    event_type = parsed.get("event_type") or "schedule"
+    kanban_status = parsed.get("kanban_status") or ("backlog" if event_type == "schedule" else None)
+
     return {
-        "title":          parsed.get("title") or "제목 없음",
-        "project":        parsed.get("project") or None,
-        "description":    parsed.get("description") or "",
-        "location":       parsed.get("location") or "",
-        "assignee":       parsed.get("assignee") or None,
-        "all_day":        1 if all_day else 0,
-        "start_datetime": start_datetime,
-        "end_datetime":   end_datetime,
-        "priority":       parsed.get("priority") or "normal",
-        "kanban_status":  parsed.get("kanban_status") or None,
-        "created_by":     "editor",
-        "source":         "ai_parsed",
+        "title":            parsed.get("title") or None,
+        "project":          parsed.get("project") or None,
+        "description":      parsed.get("description") or "",
+        "location":         parsed.get("location") or "",
+        "assignee":         parsed.get("assignee") or None,
+        "all_day":          1 if all_day else 0,
+        "start_datetime":   start_datetime,
+        "end_datetime":     end_datetime,
+        "priority":         parsed.get("priority") or "normal",
+        "kanban_status":    kanban_status,
+        "event_type":       event_type,
+        "recurrence_rule":  parsed.get("recurrence_rule") or None,
+        "recurrence_end":   parsed.get("recurrence_end") or None,
+        "created_by":       "editor",
+        "source":           "ai_parsed",
     }

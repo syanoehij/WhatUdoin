@@ -1632,6 +1632,15 @@ def get_events_by_meeting(meeting_id: int):
     return [dict(r) for r in rows]
 
 
+def get_done_project_names() -> list[str]:
+    """완료(is_active=0) 처리된 프로젝트 이름 목록."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL"
+        ).fetchall()
+    return [r["name"] for r in rows]
+
+
 def get_events_for_conflict_check(team_id: int | None = None) -> list[dict]:
     """중복 감지용: 과거 3개월 ~ 미래 12개월 이벤트 반환.
 
