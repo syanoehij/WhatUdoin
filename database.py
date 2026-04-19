@@ -1690,6 +1690,55 @@ def get_events_by_date_range(start_date: str, end_date: str, team_id: int = None
     return [dict(r) for r in rows]
 
 
+def get_meetings_by_date_range(start_date: str, end_date: str,
+                                team_id: int = None, created_by: int = None) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT id, title, content, meeting_date, created_at, created_by, team_id
+               FROM meetings
+               WHERE meeting_date BETWEEN ? AND ?
+                 AND deleted_at IS NULL
+                 AND title NOT LIKE '주간 업무 보고 (%)'
+                 AND (
+                   (is_team_doc = 1 AND team_id = ?)
+                   OR created_by = ?
+                 )
+               ORDER BY meeting_date""",
+            (start_date, end_date, team_id, created_by)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_checklists_by_date_range(start_date: str, end_date: str) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT id, project, title, content, created_by, updated_at
+               FROM checklists
+               WHERE substr(updated_at, 1, 10) BETWEEN ? AND ?
+                 AND deleted_at IS NULL
+               ORDER BY updated_at DESC""",
+            (start_date, end_date)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_previous_weekly_report(base_date: str, team_id: int, created_by: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT id, title, content, meeting_date
+               FROM meetings
+               WHERE title LIKE '주간 업무 보고 (%)'
+                 AND team_id = ?
+                 AND created_by = ?
+                 AND meeting_date < ?
+                 AND deleted_at IS NULL
+               ORDER BY meeting_date DESC
+               LIMIT 1""",
+            (team_id, created_by, base_date)
+        ).fetchone()
+    return dict(row) if row else None
+
+
 # ── Project Colors ──────────────────────────────────────
 
 def get_project_colors() -> dict:
