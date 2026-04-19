@@ -18,7 +18,12 @@ from pathlib import Path
 from typing import Optional
 from cryptography.fernet import Fernet, InvalidToken
 
-_CREDS_PATH = Path(__file__).parent / "credentials.json"
+# PyInstaller 번들에서는 __file__이 _MEIPASS 임시 폴더를 가리키므로 exe 옆 디렉토리를 사용
+_CREDS_PATH = (
+    Path(sys.executable).parent / "credentials.json"
+    if getattr(sys, "frozen", False)
+    else Path(__file__).parent / "credentials.json"
+)
 _fernet: Optional[Fernet] = None
 
 

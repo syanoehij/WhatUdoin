@@ -145,6 +145,14 @@ def init_db():
             )
         """)
 
+        # ── settings (마이그레이션 체크에서 사용하므로 먼저 생성) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """)
+
         # ── 기존 테이블 마이그레이션 ──
         _migrate(conn, "events", [
             ("project",              "TEXT"),
@@ -163,13 +171,14 @@ def init_db():
             ("recurrence_parent_id", "INTEGER DEFAULT NULL"),
         ])
         # 기존 done 상태 일정에 done_at 백필
-        conn.execute(
-            "UPDATE events SET done_at = updated_at WHERE kanban_status = 'done' AND done_at IS NULL"
-        )
-        # 기존 이벤트에 event_type 백필 (NULL → 'schedule')
-        conn.execute(
-            "UPDATE events SET event_type = 'schedule' WHERE event_type IS NULL"
-        )
+        if _table_exists(conn, "events"):
+            conn.execute(
+                "UPDATE events SET done_at = updated_at WHERE kanban_status = 'done' AND done_at IS NULL"
+            )
+            # 기존 이벤트에 event_type 백필 (NULL → 'schedule')
+            conn.execute(
+                "UPDATE events SET event_type = 'schedule' WHERE event_type IS NULL"
+            )
         _migrate(conn, "users", [
             ("password",    "TEXT NOT NULL DEFAULT ''"),
             ("team_id",     "INTEGER"),
@@ -190,15 +199,15 @@ def init_db():
             ("is_public",  "INTEGER DEFAULT NULL"),
         ])
         # 기존 이벤트 is_public=1(마이그레이션 기본값) → NULL(프로젝트 연동)으로 1회 초기화
-        if not conn.execute("SELECT 1 FROM settings WHERE key='ev_is_pub_reset_v1'").fetchone():
+        if _table_exists(conn, "events") and not conn.execute("SELECT 1 FROM settings WHERE key='ev_is_pub_reset_v1'").fetchone():
             conn.execute("UPDATE events SET is_public = NULL WHERE deleted_at IS NULL")
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ev_is_pub_reset_v1', '1')")
         # 완료된 일정(is_active=0)은 항상 외부 비공개(is_public=0) — 1회 초기화
-        if not conn.execute("SELECT 1 FROM settings WHERE key='ev_done_pub_reset_v1'").fetchone():
+        if _table_exists(conn, "events") and not conn.execute("SELECT 1 FROM settings WHERE key='ev_done_pub_reset_v1'").fetchone():
             conn.execute("UPDATE events SET is_public = 0 WHERE is_active = 0 AND deleted_at IS NULL")
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ev_done_pub_reset_v1', '1')")
         # 미지정 체크리스트(project 없음)는 외부 비공개 고정 — 1회 초기화
-        if not conn.execute("SELECT 1 FROM settings WHERE key='ck_unset_priv_reset_v1'").fetchone():
+        if _table_exists(conn, "checklists") and not conn.execute("SELECT 1 FROM settings WHERE key='ck_unset_priv_reset_v1'").fetchone():
             conn.execute("UPDATE checklists SET is_public = 0 WHERE (project IS NULL OR project = '') AND deleted_at IS NULL")
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ck_unset_priv_reset_v1', '1')")
         _migrate(conn, "meetings", [
@@ -219,16 +228,18 @@ def init_db():
         ])
         # 삭제된 프로젝트를 참조하는 활성 체크리스트/이벤트의 project 필드 정리
         # (프로젝트 삭제 시 체크리스트 이동 로직 추가 이전 데이터 호환)
-        conn.execute("""
-            UPDATE checklists SET project = ''
-            WHERE project != '' AND deleted_at IS NULL
-              AND project IN (SELECT name FROM projects WHERE deleted_at IS NOT NULL)
-        """)
-        conn.execute("""
-            UPDATE events SET project = NULL
-            WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL
-              AND project IN (SELECT name FROM projects WHERE deleted_at IS NOT NULL)
-        """)
+        if _table_exists(conn, "checklists"):
+            conn.execute("""
+                UPDATE checklists SET project = ''
+                WHERE project != '' AND deleted_at IS NULL
+                  AND project IN (SELECT name FROM projects WHERE deleted_at IS NOT NULL)
+            """)
+        if _table_exists(conn, "events"):
+            conn.execute("""
+                UPDATE events SET project = NULL
+                WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL
+                  AND project IN (SELECT name FROM projects WHERE deleted_at IS NOT NULL)
+            """)
         # ── settings ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -418,8 +429,17 @@ def _generate_recurrence_children(conn, parent_id: int, parent_data: dict):
         )
 
 
+def _table_exists(conn, table: str) -> bool:
+    return bool(conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone())
+
+
 def _migrate(conn, table: str, columns: list):
     existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if not existing:
+        # 테이블이 아직 없으면 CREATE TABLE IF NOT EXISTS가 최신 스키마로 생성하므로 건너뜀
+        return
     for col, definition in columns:
         if col not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
