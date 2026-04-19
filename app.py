@@ -1771,8 +1771,14 @@ async def ai_weekly_report(request: Request):
     from datetime import date as _date, datetime as _dt, timedelta as _td
     body = await request.json()
     base_date = (body.get("base_date") or _date.today().isoformat()).strip()
-    team_id   = body.get("team_id") or None
     model     = body.get("model", llm_parser.DEFAULT_MODEL)
+
+    # P2-1: 요청된 team_id가 본인 팀이 아니면 본인 팀으로 강제 (admin 제외)
+    requested_team_id = body.get("team_id") or None
+    if auth.is_admin(user):
+        team_id = requested_team_id
+    else:
+        team_id = user.get("team_id") or None
 
     base_dt      = _dt.strptime(base_date, "%Y-%m-%d")
     past_start   = (base_dt - _td(days=7)).strftime("%Y-%m-%d")
@@ -1780,6 +1786,7 @@ async def ai_weekly_report(request: Request):
     future_start = (base_dt + _td(days=1)).strftime("%Y-%m-%d")
     future_end   = (base_dt + _td(days=6)).strftime("%Y-%m-%d")
 
+    # 겹침 쿼리로 변경됐으므로 7일 이전 시작 이벤트도 포함됨
     past_events   = db.get_events_by_date_range(past_start, past_end,   team_id)
     future_events = db.get_events_by_date_range(future_start, future_end, team_id)
 
@@ -1789,6 +1796,8 @@ async def ai_weekly_report(request: Request):
         return start <= base_date and (not end or end >= base_date)
 
     today_events = [e for e in past_events if _is_today_active(e)]
+    today_ids    = {e.get("id") for e in today_events}
+    future_events = [e for e in future_events if e.get("id") not in today_ids]
 
     meetings   = db.get_meetings_by_date_range(past_start, past_end,
                                                 team_id=team_id, created_by=user["id"])
@@ -1811,7 +1820,7 @@ async def ai_weekly_report(request: Request):
         raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")
 
     title      = f"주간 업무 보고 ({base_date})"
-    meeting_id = db.create_meeting(title, report, user.get("team_id"), user["id"], base_date)
+    meeting_id = db.create_meeting(title, report, team_id, user["id"], base_date)
 
     return {
         "meeting_id":       meeting_id,

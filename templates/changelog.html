@@ -130,6 +130,131 @@
   <h1>📋 변경 이력</h1>
   <p class="cl-desc">WhatUDoin의 기능 개발 및 수정 이력입니다.</p>
 
+  <!-- ── 2026-04-19 주간 보고서 AI e2b 품질 개선 (15차) ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-5">15차</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🤖</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span>주간 보고서 AI 품질 개선 (gemma4:e2b 대응)</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>few-shot 예시 1개를 프롬프트 최상단에 고정 — 작은 모델도 출력 형식을 모방해 분류 일관성 향상</li>
+              <li>작성 규칙을 [반드시 지킬 것] / [절대 하지 말 것] / [분량 가이드] 3블록으로 재구조화</li>
+              <li><code>_is_bad_report</code>에 <code>## **프로젝트명**</code> 형식 필수 검사 및 중복 섹션 감지 추가</li>
+              <li><code>_post_generate</code> 샘플링을 temperature 0.2→0.1→0.05 / top_p 0.8→0.6→0.4 점진 하향으로 변경</li>
+              <li>이전 보고서 truncate 한계 3000자 → 1500자로 축소 (컨텍스트 예산 확보)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🔒</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag fix">fix</span>주간 보고서 team_id 보안 강화 및 이벤트 겹침 쿼리 개선</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>비-admin 사용자가 다른 팀의 보고서를 생성할 수 없도록 <code>team_id</code>를 본인 팀으로 강제</li>
+              <li><code>get_events_by_date_range</code>를 겹침 방식으로 변경 — 기간 중 시작·진행 중인 이벤트 모두 포함</li>
+              <li>예정 일정에서 오늘 진행 중 이벤트 중복 제거</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 2026-04-19 주간 보고서 AI 생성 강화 (14차 2단계) ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-4">14차 2단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">📊</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span>주간 보고서 AI 생성 강화 — 회의록·체크리스트·이전 보고서 통합</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li>회의록·체크리스트·이전 주 보고서를 AI 생성 시 컨텍스트로 주입</li>
+              <li>섹션별 포맷 헬퍼 (<code>_fmt_meetings</code> / <code>_fmt_checklists</code> / <code>_fmt_events_section</code>) 추가</li>
+              <li>컨텍스트 예산 4000자 절사, <code>_post_generate</code> 3회 재시도 + 불량 응답 감지</li>
+              <li><code>past_end</code> 당일 포함 버그 수정, <code>future_start</code> 다음날부터 조정</li>
+              <li>오늘 진행 중 멀티데이 겹침 필터 적용</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 2026-04-19 주간 보고서 DB 헬퍼 3종 추가 (14차 1단계) ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-4">14차 1단계</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🗄️</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span>주간 보고서 DB 헬퍼 3종 추가</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li><code>get_meetings_by_date_range</code> — 팀/작성자 기준 회의록 조회, 주간 보고서 자체 제외</li>
+              <li><code>get_checklists_by_date_range</code> — 날짜 범위 체크리스트 조회</li>
+              <li><code>get_previous_weekly_report</code> — 이전 주 보고서 최신 1건 조회 (14일 스테일 컷오프)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 2026-04-19 AI 일정 중복 검사 아키텍처 개선 (13차) ── -->
+  <div class="cl-group">
+    <div class="cl-group-header">
+      <span class="cl-date">2026-04-19</span>
+      <span class="cl-phase-badge phase-4">13차</span>
+      <div class="cl-rule"></div>
+    </div>
+    <div class="cl-items">
+
+      <div class="cl-item">
+        <div class="cl-item-icon">🔍</div>
+        <div class="cl-item-body">
+          <div class="cl-item-title"><span class="cl-tag feat">feat</span>AI 일정 중복 검사 아키텍처 개선</div>
+          <div class="cl-item-detail">
+            <ul>
+              <li><code>text_utils.py</code> 신규 — <code>canon_title/assignee/project/location</code> 정규화 함수 (공백 표기 흔들림 대응)</li>
+              <li><code>score_conflict</code>를 순수 함수(필드별 가중치 합산)로 리팩토링, <code>time_overlap</code> 추가</li>
+              <li><code>review_all_conflicts_with_funnel</code> 도입 — 저비용 필터 → AI 호출 단계화</li>
+              <li><code>_extract_json</code>을 브라켓 밸런스 스캐너로 교체 (파싱 안정성 향상)</li>
+              <li>AI 중복 검사 결과를 서버가 DB 직접 재조회로 검증, 저장 직전 재검사 (<code>blocked/requires_force</code>)</li>
+              <li><code>rapidfuzz</code> 의존성 추가</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ── 2026-04-19 AI 일정 생성 중 자동 새로고침 차단 ── -->
   <div class="cl-group">
     <div class="cl-group-header">

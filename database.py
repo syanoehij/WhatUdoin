@@ -1665,27 +1665,29 @@ def get_events_for_conflict_check(team_id: int | None = None) -> list[dict]:
     return [dict(r) for r in rows]
 
 def get_events_by_date_range(start_date: str, end_date: str, team_id: int = None) -> list[dict]:
-    """날짜 범위로 이벤트 조회 (start_date ~ end_date 포함)"""
+    """날짜 범위와 겹치는 이벤트 조회 (시작일·진행 중·종료일 모두 포함)"""
     with get_conn() as conn:
         if team_id:
             rows = conn.execute(
                 """SELECT e.*, t.name as team_name
                    FROM events e LEFT JOIN teams t ON e.team_id = t.id
-                   WHERE date(e.start_datetime) >= ? AND date(e.start_datetime) <= ?
+                   WHERE date(e.start_datetime) <= ?
+                   AND COALESCE(date(e.end_datetime), date(e.start_datetime)) >= ?
                    AND e.team_id = ? AND e.deleted_at IS NULL
                    AND (e.event_type IS NULL OR e.event_type = 'schedule')
                    ORDER BY e.start_datetime""",
-                (start_date, end_date, team_id)
+                (end_date, start_date, team_id)
             ).fetchall()
         else:
             rows = conn.execute(
                 """SELECT e.*, t.name as team_name
                    FROM events e LEFT JOIN teams t ON e.team_id = t.id
-                   WHERE date(e.start_datetime) >= ? AND date(e.start_datetime) <= ?
+                   WHERE date(e.start_datetime) <= ?
+                   AND COALESCE(date(e.end_datetime), date(e.start_datetime)) >= ?
                    AND e.deleted_at IS NULL
                    AND (e.event_type IS NULL OR e.event_type = 'schedule')
                    ORDER BY e.start_datetime""",
-                (start_date, end_date)
+                (end_date, start_date)
             ).fetchall()
     return [dict(r) for r in rows]
 

@@ -12,7 +12,7 @@ logger = logging.getLogger("whatudoin.llm")
 
 OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_URL = OLLAMA_BASE_URL + "/api/generate"
-DEFAULT_MODEL = "gemma4:e2b"
+DEFAULT_MODEL = "gemma4:e4b"
 
 # 회사 프록시 환경에서 localhost(Ollama) 요청이 프록시를 경유하지 않도록
 # trust_env=False 로 시스템/환경변수 프록시 설정을 무시하는 전용 세션 사용
@@ -427,6 +427,25 @@ def score_conflict(cand: dict, ex: dict) -> dict:
 
 CONTEXT_BUDGET = 4000
 
+_FEW_SHOT_WEEKLY_REPORT = """[작성 예시 — 반드시 이 형식을 따르세요]
+<입력 예>
+## 완료 일정 (지난 주)
+- [백엔드] API 인증 수정 (2026-04-10)
+- [프론트] 로그인 UI 개편 (2026-04-11)
+## 예정 일정 (이번 주)
+- [백엔드] 알림 서버 안정화 (2026-04-18)
+
+<출력 예>
+## **백엔드**
+- API 인증 수정 (완료)
+  : JWT 만료 처리 보강, QA 검증 완료
+- 알림 서버 안정화 (예정: 4/18)
+
+## **프론트**
+- 로그인 UI 개편 (완료)
+  : 디자인 시스템 v2 반영, 반응형 레이아웃 개선
+"""
+
 
 def _fmt_events_section(events, max_desc=300):
     if not events:
@@ -478,32 +497,40 @@ def _fmt_checklists(checklists, max_items=10):
     return "\n".join(lines)
 
 
-def _truncate_report(content, max_chars=3000):
+def _truncate_report(content, max_chars=1500):
     if len(content) <= max_chars:
         return content
-    return content[:1500] + "\n…(중략)…\n" + content[-500:]
+    head = max(max_chars - 500, 500)
+    return content[:head] + "\n…(중략)…\n" + content[-500:]
 
 
 def _is_bad_report(text):
     t = text.strip()
     if len(t) < 50:
         return True
-    if len(re.findall(r"^##", t, re.MULTILINE)) >= 2:
-        return False
-    if len(re.findall(r"^- ", t, re.MULTILINE)) >= 3:
+    bold_sections = re.findall(r"^## \*\*(.+?)\*\*", t, re.MULTILINE)
+    if len(bold_sections) < 1:
+        return True
+    if len(bold_sections) != len(set(bold_sections)):
+        return True
+    if len(re.findall(r"^- ", t, re.MULTILINE)) >= 2:
         return False
     return True
 
 
 def _post_generate(model, prompt, timeout=180):
     import logging
+    _sampling = [
+        {"temperature": 0.2, "top_p": 0.8},
+        {"temperature": 0.1, "top_p": 0.6},
+        {"temperature": 0.05, "top_p": 0.4},
+    ]
     for attempt in range(3):
-        temperature = 0.3 if attempt == 0 else 0.1
         try:
             resp = _session.post(
                 OLLAMA_URL,
                 json={"model": model, "prompt": prompt, "stream": False,
-                      "options": {"temperature": temperature}},
+                      "options": _sampling[attempt]},
                 timeout=timeout,
             )
             resp.raise_for_status()
@@ -529,8 +556,10 @@ def generate_weekly_report(
     checklists: list[dict] | None = None,
     previous_report: dict | None = None,
 ) -> str:
+    today_ids = {e.get("id") for e in (today_events or [])}
     past_only = [e for e in past_events
-                 if (e.get("start_datetime") or "")[:10] < base_date]
+                 if (e.get("start_datetime") or "")[:10] < base_date
+                 and e.get("id") not in today_ids]
 
     meetings_text   = _fmt_meetings(meetings or [])
     checklists_text = _fmt_checklists(checklists or [])
@@ -545,14 +574,18 @@ def generate_weekly_report(
     if previous_report:
         remaining    = budget - len(meetings_text) - len(checklists_text)
         prev_content = _truncate_report(previous_report.get("content") or "",
-                                        max_chars=min(3000, max(500, remaining)))
+                                        max_chars=min(1500, max(500, remaining)))
         prev_date    = previous_report.get("meeting_date", "")
         prev_section = (
             f"## 이전 주 보고서 ({prev_date}, 참고용 — 연속성 표현에만 활용)\n"
             f"{prev_content}\n\n"
         )
 
-    prompt = f"""{prev_section}## 완료 일정 (지난 주)
+    prompt = f"""{_FEW_SHOT_WEEKLY_REPORT}
+---
+아래 데이터를 바탕으로 위 예시와 같은 형식의 주간 업무 보고서를 작성하세요.
+
+{prev_section}## 완료 일정 (지난 주)
 {_fmt_events_section(past_only)}
 
 ## 오늘 진행 중 ({base_date})
@@ -561,21 +594,28 @@ def generate_weekly_report(
 ## 예정 일정 (이번 주)
 {_fmt_events_section(future_events)}
 
-## 이번 주 회의록 (참고용 — 팀 문서 + 본인 메모만 포함, public/team_share 제외)
+## 이번 주 회의록 (액션 아이템 추출용 — 회의 참석 자체는 업무가 아님)
 {meetings_text}
 
 ## 체크리스트 현황 (참고용 — 조직 전체, 팀 경계 없이 참고, team_id 미분류)
 {checklists_text}
 
-[작성 규칙]
-1. 제목 줄(# 으로 시작)은 절대 출력하지 마세요.
-2. 각 프로젝트는 ## **프로젝트명** (~MM/DD) 형식으로 시작하세요.
-3. 항목은 - 일정명 (완료) / (진행 중) / (예정: M/D) 형식으로 나열하세요.
-4. 설명이 있으면 바로 아래 두 칸 들여쓰기 + 콜론으로 시작하는 1~2문장 요약.
-5. 오늘 일정은 반드시 (진행 중) 표기.
-6. 이전 보고서가 있으면 "지난 주 예정이었던 X → 이번 주 완료" 형태로 연속성 표현.
-7. 회의록·체크리스트는 직접 나열하지 말고 관련 프로젝트 항목 설명에 녹일 것.
-8. 담당자 이름 포함 금지. 서두·결론 없이 본문만 출력."""
+[반드시 지킬 것]
+- 각 프로젝트는 ## **프로젝트명** 형식으로 시작 (굵게 강조 필수).
+- 항목은 - 일정명 (완료) / (진행 중) / (예정: M/D) 형식으로 나열.
+- 오늘 일정({base_date})은 반드시 (진행 중) 표기.
+- 이전 보고서가 있으면 "지난 주 예정이었던 X → 이번 주 완료" 형태로 연속성 표현.
+
+[절대 하지 말 것]
+- # 으로 시작하는 제목 줄 금지.
+- "오늘 진행 중", "예정 일정" 같은 별도 섹션 생성 금지.
+- 회의 참석 자체를 업무로 기재 금지 (회의록에서 결정 사항·완료 내용만 관련 프로젝트 항목 설명에 녹일 것).
+- 체크리스트 항목 직접 나열 금지 (관련 프로젝트 항목 설명에 녹일 것).
+- 입력에 없는 내용 추가 금지. 담당자 이름 포함 금지.
+
+[분량 가이드]
+- 항목 설명은 바로 아래 두 칸 들여쓰기 + 콜론으로 시작하는 1~2문장.
+- 서두·결론 없이 ## **프로젝트명** 섹션 본문만 출력."""
 
     return _post_generate(model, prompt)
 
