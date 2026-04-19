@@ -117,6 +117,13 @@
         <span class="toggle-track"></span>
       </span>
     </label>
+    <label class="wheel-toggle-wrap" title="팀 공유 문서를 캘린더에 표시">
+      <span class="cal-toolbar-label">📄 문서 표시</span>
+      <span class="toggle-switch">
+        <input type="checkbox" id="doc-toggle-chk" onchange="toggleShowDocs(this.checked)" />
+        <span class="toggle-track"></span>
+      </span>
+    </label>
   </div>
   {% if user and user.role in ('editor', 'admin') %}
   <button class="btn btn-primary btn-sm" onclick="openModal()">+ 일정 추가</button>
@@ -153,6 +160,7 @@ let currentDetailEventId = null;
 let currentDetailEventTeamId = null;
 let _myOnly = false;
 let _wheelNav = localStorage.getItem('cal_wheel') === '1';  // 기본 OFF
+let _showDocs = localStorage.getItem('cal_show_docs') !== '0';  // 기본 ON
 let _projFilter = '';  // '' = 전체, '__unassigned__' = 미지정, 그 외 = 프로젝트명
 
 function toggleMyOnly() {
@@ -169,6 +177,12 @@ function toggleMyOnly() {
 function toggleWheelNav(val) {
   _wheelNav = val;
   localStorage.setItem('cal_wheel', _wheelNav ? '1' : '0');
+}
+
+function toggleShowDocs(val) {
+  _showDocs = val;
+  localStorage.setItem('cal_show_docs', _showDocs ? '1' : '0');
+  calendar.getEventSourceById('doc-events').refetch();
 }
 
 function applyProjFilter() {
@@ -243,7 +257,19 @@ document.addEventListener('DOMContentLoaded', () => {
           } catch(err) { failureCb(err); }
         },
       },
-      { url: '/api/doc/calendar', color: '#00b894', textColor: 'white', editable: false },
+      {
+        id: 'doc-events',
+        events: async function(fetchInfo, successCb, failureCb) {
+          if (!_showDocs) { successCb([]); return; }
+          try {
+            const res = await fetch('/api/doc/calendar');
+            successCb(await res.json());
+          } catch(err) { failureCb(err); }
+        },
+        color: '#00b894',
+        textColor: 'white',
+        editable: false,
+      },
     ],
     editable: !!(CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor')),
     selectable: !!(CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor')),
@@ -329,9 +355,11 @@ document.addEventListener('DOMContentLoaded', () => {
   calendar.render();
   applyStickyAllDay();
 
-  // 휠 토글 체크박스 초기 상태
+  // 토글 체크박스 초기 상태
   const wChk = document.getElementById('wheel-toggle-chk');
   if (wChk) wChk.checked = _wheelNav;
+  const dChk = document.getElementById('doc-toggle-chk');
+  if (dChk) dChk.checked = _showDocs;
 
   // 캘린더 페이지 전용 콜백 설정
   window.onEventSaved = () => calendar.refetchEvents();

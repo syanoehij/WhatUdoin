@@ -857,6 +857,11 @@ def list_events():
     return result
 
 
+@app.get("/api/events/by-project-range")
+def events_by_project_range(project: str, start: str, end: str):
+    return db.get_events_by_project_range(project, start, end)
+
+
 @app.get("/api/events/{event_id}")
 def get_event(event_id: int):
     event = db.get_event(event_id)
@@ -2084,6 +2089,38 @@ def ai_models():
     if not ok:
         raise HTTPException(status_code=502, detail=f"Ollama 서버({llm_parser.OLLAMA_BASE_URL})에 연결할 수 없습니다.")
     return {"models": models}
+
+
+@app.post("/api/ai/generate-event-checklist")
+async def ai_generate_event_checklist(request: Request):
+    _require_editor(request)
+    body = await request.json()
+    event_ids = body.get("event_ids", [])
+    model = body.get("model", llm_parser.DEFAULT_MODEL)
+    project = body.get("project", "")
+
+    events = [db.get_event(eid) for eid in event_ids]
+    events = [e for e in events if e]
+
+    if not events:
+        from datetime import date as _d
+        return {"markdown": f"# {project} 일정 체크\n\n"}
+
+    items = await run_in_threadpool(
+        llm_parser.generate_event_checklist_items, events, model
+    )
+
+    from datetime import date as _d
+    today = _d.today().strftime("%Y-%m-%d")
+    lines = [f"# {project} 일정 체크 ({today})", ""]
+    for item in items:
+        lines.append(f"- [ ] {item['title']} [🔗](eid:{item['event_id']})")
+        for sub in item["sub_items"]:
+            lines.append(f"  - [ ] {sub}")
+        if item["sub_items"]:
+            lines.append("")
+
+    return {"markdown": "\n".join(lines)}
 
 
 @app.post("/api/ai/generate-checklist")

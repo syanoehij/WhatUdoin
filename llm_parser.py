@@ -900,3 +900,50 @@ def generate_checklist(text: str, model: str = DEFAULT_MODEL) -> str:
         except requests.RequestException as exc:
             logger.warning("generate_checklist: 요청 오류 (시도 %d): %s", attempt + 1, exc)
     raise RuntimeError("AI 체크리스트 생성 실패 (3회 재시도 후에도 유효한 응답 없음)")
+
+
+def generate_event_checklist_items(events: list[dict], model: str = DEFAULT_MODEL) -> list[dict]:
+    """이벤트 목록 → 체크리스트 항목 생성. 내용 있으면 AI가 세부 항목 분류."""
+    results = []
+    for event in events:
+        title = (event.get("title") or "").strip()
+        description = (event.get("description") or "").strip()
+
+        if not description:
+            results.append({"event_id": event["id"], "title": title, "sub_items": []})
+            continue
+
+        prompt = f"""다음 일정의 내용을 읽고 실행 가능한 세부 할 일 목록을 추출하라.
+일정: {title}
+내용:
+{description}
+
+규칙:
+- 한 줄에 하나씩, 순수 텍스트만 출력 (기호/번호 없이)
+- 최대 5개
+- 구체적 행동 중심으로 표현
+- 분류 불가하거나 내용이 단순하면 빈 줄만 출력
+
+출력:"""
+
+        sub_items = []
+        try:
+            resp = _session.post(
+                OLLAMA_URL,
+                json={"model": model, "prompt": prompt, "stream": False,
+                      "options": {"temperature": 0.2, "top_p": 0.8}},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            raw = resp.json().get("response", "").strip()
+            lines = [
+                l.strip().lstrip("-•*").lstrip("0123456789.").strip()
+                for l in raw.split("\n") if l.strip()
+            ]
+            sub_items = [l for l in lines if l][:5]
+        except Exception as exc:
+            logger.warning("generate_event_checklist_items event=%s: %s", event["id"], exc)
+
+        results.append({"event_id": event["id"], "title": title, "sub_items": sub_items})
+
+    return results

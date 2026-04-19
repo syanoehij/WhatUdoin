@@ -448,6 +448,25 @@ def get_all_events():
     return [dict(r) for r in rows]
 
 
+def get_events_by_project_range(project: str, start_date: str, end_date: str) -> list[dict]:
+    """특정 프로젝트의 날짜 범위 일정 조회 (schedule 타입, 반복 원본만, 완료 프로젝트 제외)"""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT e.* FROM events e
+               LEFT JOIN projects p ON p.name = e.project AND p.deleted_at IS NULL
+               WHERE e.project = ?
+                 AND e.deleted_at IS NULL
+                 AND (e.event_type IS NULL OR e.event_type = 'schedule')
+                 AND e.recurrence_parent_id IS NULL
+                 AND date(e.start_datetime) BETWEEN ? AND ?
+                 AND (e.is_active IS NULL OR e.is_active != 0)
+                 AND (p.id IS NULL OR p.is_active = 1)
+               ORDER BY e.start_datetime""",
+            (project, start_date, end_date)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_event(event_id: int):
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()

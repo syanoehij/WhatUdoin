@@ -546,6 +546,127 @@
   }
   .ck-ai-footer-left  { display: flex; gap: 8px; }
   .ck-ai-footer-right { display: flex; gap: 8px; }
+
+  /* ── 생성 마법사 드롭다운 ── */
+  .ck-wizard-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+  .ck-wizard-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    z-index: 300;
+    min-width: 130px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .ck-wizard-menu.hidden { display: none; }
+  .ck-wizard-menu button {
+    background: none;
+    border: none;
+    padding: 9px 14px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.88rem;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .ck-wizard-menu button:hover { background: var(--hover, rgba(0,0,0,0.06)); }
+  .ck-wizard-menu button:disabled {
+    color: var(--text-faint);
+    cursor: not-allowed;
+  }
+
+  /* ── 일정 체크 모달 ── */
+  .ck-sched-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: min(560px, 96vw);
+    max-height: 88vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.28);
+    overflow: hidden;
+  }
+  .ck-sched-form {
+    padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 12px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .sched-row {
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .ck-sched-date {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.88rem;
+    width: 100%;
+  }
+  .ck-sched-event-list {
+    display: flex; flex-direction: column; gap: 6px;
+    max-height: 300px; overflow-y: auto;
+  }
+  .ck-sched-placeholder {
+    color: var(--text-faint);
+    font-size: 0.88rem;
+    text-align: center;
+    padding: 24px 0;
+  }
+  .ck-sched-event-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    transition: background 0.12s;
+  }
+  .ck-sched-event-item:hover { background: var(--hover, rgba(0,0,0,0.04)); }
+  .sched-ev-date {
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .sched-ev-title { flex: 1; }
+  .sched-ev-has-desc { flex-shrink: 0; font-size: 0.82rem; }
+  .sched-ev-status {
+    font-size: 0.72rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-faint);
+  }
+
+  /* eid: 연동 마커 링크 — 뷰어에서 숨김 (.ck-linked-badge 로 대체 표시) */
+  #ck-viewer a[href^="eid:"] { display: none !important; }
+
+  /* ── 연동 체크박스 뱃지 ── */
+  .ck-linked-badge {
+    display: inline-block;
+    font-size: 0.68rem;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: #a29bfe22;
+    border: 1px solid #a29bfe55;
+    color: #a29bfe;
+    margin-left: 4px;
+    vertical-align: middle;
+    cursor: pointer;
+    user-select: none;
+  }
 </style>
 {% endblock %}
 
@@ -570,7 +691,13 @@
       <span class="ck-mid-title" id="ck-mid-title">전체</span>
       {% if user and user.role in ('editor', 'admin') %}
       <div class="ck-new-btn-group">
-        <button class="ck-new-btn ck-ai-btn" onclick="openAiForm()">✨ AI 생성</button>
+        <div class="ck-wizard-wrap">
+          <button class="ck-new-btn ck-ai-btn" onclick="toggleWizardMenu(event)">✨ 생성 마법사 ▾</button>
+          <div class="ck-wizard-menu hidden" id="ck-wizard-menu">
+            <button onclick="openAiForm(); closeWizardMenu()">✨ AI 생성</button>
+            <button id="ck-sched-check-btn" onclick="openScheduleCheck()" disabled title="이름이 있는 프로젝트를 선택해야 사용할 수 있습니다.">📅 일정 체크</button>
+          </div>
+        </div>
         <button class="ck-new-btn" onclick="openNewForm()">+ 새 항목</button>
       </div>
       {% endif %}
@@ -726,6 +853,55 @@
     </div>
   </div>
 </div>
+<!-- ── 일정 체크 생성 모달 ── -->
+<div id="ck-sched-modal" class="ck-ai-overlay hidden" role="dialog" aria-modal="true">
+  <div class="ck-sched-card">
+    <div class="ck-ai-header">
+      <span class="ck-ai-title">📅 일정 체크 생성</span>
+      <button class="ck-ai-close" onclick="closeScheduleCheck()">✕</button>
+    </div>
+    <!-- 폼 영역 -->
+    <div id="sched-form" class="ck-sched-form">
+      <!-- Row 1: 날짜 범위 + 조회 -->
+      <div class="sched-row">
+        <label class="ck-ai-label" style="flex:1;">시작일
+          <input type="date" id="sched-start" class="ck-sched-date">
+        </label>
+        <label class="ck-ai-label" style="flex:1;">종료일
+          <input type="date" id="sched-end" class="ck-sched-date">
+        </label>
+        <button class="btn btn-sm btn-primary" onclick="queryScheduleEvents()" style="align-self:flex-end;">조회</button>
+      </div>
+      <!-- Row 2: 모델 + 선택 제어 -->
+      <div class="sched-row" style="align-items:flex-end;">
+        <label class="ck-ai-label" style="flex:1;">AI 모델
+          <select id="sched-model" class="ck-ai-select"></select>
+        </label>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="btn btn-sm" onclick="selectAllSchedEvents(true)">모두 선택</button>
+          <button class="btn btn-sm" onclick="selectAllSchedEvents(false)">모두 해제</button>
+        </div>
+      </div>
+      <!-- 일정 목록 -->
+      <div id="sched-loading" class="ck-ai-loading hidden">불러오는 중…</div>
+      <div id="sched-event-list" class="ck-sched-event-list">
+        <div class="ck-sched-placeholder">조회 버튼을 눌러 일정을 불러오세요.</div>
+      </div>
+      <!-- 오류 -->
+      <div id="sched-gen-error" class="hidden" style="padding:10px 12px;background:#fef2f2;border-radius:6px;color:#e74c3c;font-size:0.88rem;"></div>
+      <!-- 액션 버튼 -->
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:8px;border-top:1px solid var(--border);margin-top:8px;">
+        <button class="btn btn-sm" onclick="closeScheduleCheck()">취소</button>
+        <button id="sched-gen-btn" class="btn btn-primary btn-sm" onclick="generateScheduleCheck()" disabled>생성</button>
+      </div>
+    </div>
+    <!-- 생성 중 로딩 영역 -->
+    <div id="sched-gen-loading" class="hidden" style="text-align:center;padding:48px 24px;">
+      <div class="ai-spinner"></div>
+      <p style="margin-top:16px;color:var(--text-faint);">AI가 체크리스트를 생성 중입니다…<br><span style="font-size:0.8rem;">잠시 기다려 주세요</span></p>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -858,6 +1034,7 @@ function selectProject(proj) {
   document.getElementById('ck-mid-title').textContent = proj || '전체';
   // localStorage에 마지막 선택 프로젝트 저장
   localStorage.setItem('ck_last_proj', proj || '');
+  updateWizardBtnState();
   renderList();
 
   // 현재 선택된 항목이 새 필터에 없으면 우측 패널 초기화
@@ -1273,9 +1450,68 @@ function renderViewer(content) {
   setTimeout(() => attachCheckboxHandlers(displayContent), 100);
 }
 
+// ── 연동 체크박스 파싱: mdContent에서 체크박스 인덱스 → event_id 맵 반환
+function _parseLinkedCheckboxes(mdContent) {
+  const linked = {}; // {checkboxIndex: eventId}
+  const lines = (mdContent || '').split('\n');
+  let idx = 0;
+  for (const line of lines) {
+    if (/^[ \t]*[-*+] \[[ xX]?\]/.test(line)) {
+      const m = line.match(/\[[^\]]*\]\(eid:(\d+)\)/);
+      if (m) linked[idx] = parseInt(m[1]);
+      idx++;
+    }
+  }
+  return linked;
+}
+
+// ── 연동 체크박스의 칸반 상태를 뷰어에 동기화
+async function _syncLinkedCheckboxes(mdContent, viewerEl) {
+  const linked = _parseLinkedCheckboxes(mdContent);
+  if (!Object.keys(linked).length) return;
+
+  const items = viewerEl.querySelectorAll('li.task-list-item');
+
+  // 이벤트 상태 일괄 조회
+  const eventIds = [...new Set(Object.values(linked))];
+  const eventMap = {};
+  await Promise.all(eventIds.map(async eid => {
+    try {
+      const r = await fetch(`/api/events/${eid}`);
+      if (r.ok) eventMap[eid] = await r.json();
+    } catch {}
+  }));
+
+  // 각 연동 체크박스에 상태 적용 + 뱃지 추가
+  Object.entries(linked).forEach(([idxStr, eventId]) => {
+    const idx = parseInt(idxStr);
+    const li = items[idx];
+    if (!li) return;
+    const ev = eventMap[eventId];
+    const isChecked = ev && (ev.kanban_status === 'peer_review' || ev.kanban_status === 'done');
+
+    // ToastUI Viewer는 input 없이 .checked 클래스로 체크 표시
+    li.classList.toggle('checked', isChecked);
+
+    // 연동 뱃지 — <p> 안에 인라인으로 추가해 1줄 유지
+    const para = li.querySelector('p') || li;
+    if (!para.querySelector('.ck-linked-badge')) {
+      const badge = document.createElement('span');
+      badge.className = 'ck-linked-badge';
+      badge.title = `연동 일정: ${ev?.title || '#' + eventId}`;
+      badge.textContent = '🔗';
+      para.appendChild(badge);
+    }
+    li.dataset.linkedEvent = eventId;
+    li.dataset.linkedChecked = isChecked ? '1' : '0';
+  });
+}
+
 function attachCheckboxHandlers(mdContent) {
   if (!CURRENT_USER) return; // 비로그인 시 체크박스 인터랙션 비활성
   const viewerEl = document.getElementById('ck-viewer');
+  const linked = _parseLinkedCheckboxes(mdContent);
+
   viewerEl.querySelectorAll('li.task-list-item').forEach((li, idx) => {
     if (li.dataset.ckBound) return; // 중복 바인딩 방지
     li.dataset.ckBound = '1';
@@ -1283,18 +1519,43 @@ function attachCheckboxHandlers(mdContent) {
     li.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (_lockedByOther) return; // 다른 사람이 편집 중이면 체크박스 비활성
-      // mdContent에서 idx번째 체크박스의 원래 상태를 읽음
-      let count = 0, isChecked = false;
-      const re = /^[ \t]*[-*+] \[([xX ]?)\]/gm;
-      let m;
-      while ((m = re.exec(mdContent)) !== null) {
-        if (count === idx) { isChecked = m[1].toLowerCase() === 'x'; break; }
-        count++;
+      if (_lockedByOther) return;
+
+      const eventId = linked[idx];
+      if (eventId) {
+        // 연동 체크박스: 칸반 상태 업데이트
+        const isChecked = li.dataset.linkedChecked === '1';
+        toggleLinkedCheckbox(li, eventId, !isChecked);
+      } else {
+        // 일반 체크박스: 마크다운 토글
+        let count = 0, isChecked = false;
+        const re = /^[ \t]*[-*+] \[([xX ]?)\]/gm;
+        let m;
+        while ((m = re.exec(mdContent)) !== null) {
+          if (count === idx) { isChecked = m[1].toLowerCase() === 'x'; break; }
+          count++;
+        }
+        toggleCheckbox(idx, !isChecked, mdContent);
       }
-      toggleCheckbox(idx, !isChecked, mdContent);
     });
   });
+
+  // 연동 체크박스 칸반 상태 동기화 (비동기)
+  _syncLinkedCheckboxes(mdContent, viewerEl);
+}
+
+async function toggleLinkedCheckbox(li, eventId, toChecked) {
+  const newStatus = toChecked ? 'peer_review' : 'todo';
+  const res = await fetch(`/api/events/${eventId}/kanban`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kanban_status: newStatus }),
+  });
+  if (res.ok) {
+    showSaveToast(toChecked ? '피어 리뷰로 변경되었습니다.' : 'Todo로 변경되었습니다.');
+    // 동일 이벤트 중복 체크박스 동기화를 위해 뷰어 즉시 새로고침
+    if (_curId) openChecklist(_curId);
+  }
 }
 
 async function toggleCheckbox(index, checked, mdContent) {
@@ -1581,6 +1842,162 @@ function _setAiState(state) {
   }
 }
 
+// ── 생성 마법사 드롭다운 ──────────────────────────────────
+function toggleWizardMenu(e) {
+  e.stopPropagation();
+  document.getElementById('ck-wizard-menu').classList.toggle('hidden');
+}
+function closeWizardMenu() {
+  document.getElementById('ck-wizard-menu')?.classList.add('hidden');
+}
+document.addEventListener('click', closeWizardMenu);
+
+function updateWizardBtnState() {
+  const btn = document.getElementById('ck-sched-check-btn');
+  if (!btn) return;
+  const enabled = !!_curProj && _curProj !== '미지정';
+  btn.disabled = !enabled;
+  btn.title = enabled ? '' : '이름이 있는 프로젝트를 선택해야 사용할 수 있습니다.';
+}
+
+// ── 일정 체크 모달 ──────────────────────────────────────
+let _schedModelsLoaded = false;
+let _schedEvents = [];
+
+function openScheduleCheck() {
+  closeWizardMenu();
+  document.getElementById('ck-sched-modal').classList.remove('hidden');
+  if (!_schedModelsLoaded) _loadSchedModels();
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0, 10);
+  const s = new Date(today); s.setDate(today.getDate() - 30);
+  const e = new Date(today); e.setDate(today.getDate() + 60);
+  document.getElementById('sched-start').value = fmt(s);
+  document.getElementById('sched-end').value   = fmt(e);
+}
+
+function closeScheduleCheck() {
+  document.getElementById('ck-sched-modal').classList.add('hidden');
+  _schedEvents = [];
+  document.getElementById('sched-event-list').innerHTML =
+    '<div class="ck-sched-placeholder">조회 버튼을 눌러 일정을 불러오세요.</div>';
+  document.getElementById('sched-gen-btn').disabled = true;
+  document.getElementById('sched-gen-loading').classList.add('hidden');
+  document.getElementById('sched-form').style.display = '';
+  document.getElementById('sched-gen-error').classList.add('hidden');
+}
+
+async function _loadSchedModels() {
+  const sel = document.getElementById('sched-model');
+  try {
+    const res = await fetch('/api/ai/models');
+    if (!res.ok) throw new Error();
+    const { models } = await res.json();
+    sel.innerHTML = models.map(m => `<option value="${escHtml(m)}">${escHtml(m)}</option>`).join('');
+    _schedModelsLoaded = true;
+  } catch {
+    sel.innerHTML = '<option value="">모델 로드 실패</option>';
+  }
+}
+
+async function queryScheduleEvents() {
+  const start = document.getElementById('sched-start').value;
+  const end   = document.getElementById('sched-end').value;
+  if (!start || !end) { alert('날짜를 선택하세요.'); return; }
+  if (!_curProj || _curProj === '미지정') return;
+
+  const listEl   = document.getElementById('sched-event-list');
+  const loadEl   = document.getElementById('sched-loading');
+  listEl.innerHTML = '';
+  loadEl.classList.remove('hidden');
+
+  const res = await fetch(
+    `/api/events/by-project-range?project=${encodeURIComponent(_curProj)}&start=${start}&end=${end}`
+  );
+  loadEl.classList.add('hidden');
+  if (!res.ok) {
+    listEl.innerHTML = '<div class="ck-sched-placeholder">조회 실패. 다시 시도해주세요.</div>';
+    return;
+  }
+  _schedEvents = await res.json();
+
+  if (!_schedEvents.length) {
+    listEl.innerHTML = '<div class="ck-sched-placeholder">해당 기간에 일정이 없습니다.</div>';
+    document.getElementById('sched-gen-btn').disabled = true;
+    return;
+  }
+
+  const STATUS_LABEL = {
+    todo: 'Todo', in_progress: '진행중', peer_review: '피어리뷰', done: '완료', blocked: '차단', backlog: 'Backlog'
+  };
+  listEl.innerHTML = _schedEvents.map(ev => `
+    <label class="ck-sched-event-item">
+      <input type="checkbox" class="sched-ev-chk" value="${ev.id}" onchange="updateSchedGenBtn()">
+      <span class="sched-ev-date">${ev.start_datetime.slice(0,10)}</span>
+      <span class="sched-ev-title">${escHtml(ev.title)}</span>
+      ${ev.description ? '<span class="sched-ev-has-desc" title="내용 있음 — AI가 세부 항목 생성">📝</span>' : ''}
+      ${ev.kanban_status ? `<span class="sched-ev-status">${STATUS_LABEL[ev.kanban_status] || ev.kanban_status}</span>` : ''}
+    </label>
+  `).join('');
+  // 기본 전체 선택
+  selectAllSchedEvents(true);
+}
+
+function selectAllSchedEvents(checked) {
+  document.querySelectorAll('.sched-ev-chk').forEach(c => c.checked = checked);
+  updateSchedGenBtn();
+}
+
+function updateSchedGenBtn() {
+  const any = [...document.querySelectorAll('.sched-ev-chk')].some(c => c.checked);
+  document.getElementById('sched-gen-btn').disabled = !any;
+}
+
+async function generateScheduleCheck() {
+  const selectedIds = [...document.querySelectorAll('.sched-ev-chk:checked')].map(c => parseInt(c.value));
+  if (!selectedIds.length) return;
+  const model = document.getElementById('sched-model').value;
+
+  // 주간 업무 보고와 동일한 UX: 폼 숨김 → 스피너 표시
+  document.getElementById('sched-form').style.display = 'none';
+  document.getElementById('sched-gen-error').classList.add('hidden');
+  document.getElementById('sched-gen-loading').classList.remove('hidden');
+
+  try {
+    const res = await fetch('/api/ai/generate-event-checklist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_ids: selectedIds, model, project: _curProj }),
+    });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || '생성 실패'); }
+    const { markdown } = await res.json();
+
+    const selectedTitles = [...document.querySelectorAll('.sched-ev-chk:checked')]
+      .map(c => {
+        const item = c.closest('.ck-sched-event-item');
+        const date  = item?.querySelector('.sched-ev-date')?.textContent || '';
+        const title = item?.querySelector('.sched-ev-title')?.textContent || '';
+        return `${date} ${title}`.trim();
+      })
+      .filter(Boolean)
+      .join('\n');
+    sessionStorage.setItem('check_ai_draft', JSON.stringify({
+      markdown,
+      sourcePrompt: selectedTitles,
+      project: _curProj || '',
+    }));
+    const q = new URLSearchParams({ ai_draft: '1' });
+    if (_curProj) q.set('proj', _curProj);
+    location.href = '/check/new/edit?' + q.toString();
+  } catch (err) {
+    document.getElementById('sched-gen-loading').classList.add('hidden');
+    document.getElementById('sched-form').style.display = '';
+    const errEl = document.getElementById('sched-gen-error');
+    errEl.textContent = '오류: ' + (err.message || '생성 중 오류가 발생했습니다.');
+    errEl.classList.remove('hidden');
+  }
+}
+
 async function openAiForm() {
   document.getElementById('ck-ai-modal').classList.remove('hidden');
   _setAiState('idle');
@@ -1662,8 +2079,9 @@ function useAiDraft() {
 
 // ESC 키로 모달 닫기
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !document.getElementById('ck-ai-modal').classList.contains('hidden')) {
-    closeAiForm();
+  if (e.key === 'Escape') {
+    if (!document.getElementById('ck-ai-modal').classList.contains('hidden')) closeAiForm();
+    if (!document.getElementById('ck-sched-modal').classList.contains('hidden')) closeScheduleCheck();
   }
 });
 
