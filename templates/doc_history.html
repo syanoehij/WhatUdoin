@@ -3,8 +3,8 @@
 
 {% block content %}
 <div class="page-header">
-  <a href="/memo/{{ meeting.id }}" class="btn btn-sm">← 메모장으로</a>
-  <h2 class="page-title" style="margin:0">{{ meeting.title }} — 수정 이력 <span style="font-size:0.78rem;font-weight:400;color:var(--text-muted)">(최근 3개)</span></h2>
+  <a href="/doc/{{ doc.id }}" class="btn btn-sm">← 문서로</a>
+  <h2 class="page-title" style="margin:0">{{ doc.title }} — 수정 이력 <span style="font-size:0.78rem;font-weight:400;color:var(--text-muted)">(최근 3개)</span></h2>
 </div>
 
 {% if histories %}
@@ -34,10 +34,10 @@
 <script>
 async function restoreHistory(historyId) {
   if (!confirm('이 버전으로 복원하시겠습니까?\n현재 내용은 이력으로 저장됩니다.')) return;
-  const res = await fetch(`/api/memo/{{ meeting.id }}/histories/${historyId}/restore`, { method: 'POST' });
+  const res = await fetch(`/api/doc/{{ doc.id }}/histories/${historyId}/restore`, { method: 'POST' });
   if (res.ok) {
     alert('복원됐습니다.');
-    location.href = '/memo/{{ meeting.id }}';
+    location.href = '/doc/{{ doc.id }}';
   } else {
     const err = await res.json();
     alert(err.detail || '복원 실패');

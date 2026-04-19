@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}WhatUDoin — 메모장{% endblock %}
+{% block title %}WhatUDoin — 문서{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -39,7 +39,7 @@
         </select>
       </div>
       <p class="text-muted" style="font-size:12px;margin-bottom:16px;">
-        기준 날짜 이전 7일(지난 주)과 이후 6일(이번 주)의 일정을 바탕으로 보고서를 작성 후 메모장 편집기로 이동합니다.
+        기준 날짜 이전 7일(지난 주)과 이후 6일(이번 주)의 일정을 바탕으로 보고서를 작성 후 문서 편집기로 이동합니다.
       </p>
       <div class="modal-actions">
         <div></div>
@@ -58,12 +58,12 @@
 </div>
 
 <!-- 좌우 분할 레이아웃 -->
-<div class="meetings-layout">
+<div class="docs-layout">
 
   <!-- ── 왼쪽: 월 네비게이터 ── -->
   <aside class="month-nav" style="width:300px;min-width:260px;">
     <div class="month-nav-header">
-      <span class="page-title" style="font-size:1rem;font-weight:700;">📋 메모장</span>
+      <span class="page-title" style="font-size:1rem;font-weight:700;">📄 문서</span>
     </div>
     {% if user %}
     <!-- 문서 종류 필터 -->
@@ -84,23 +84,23 @@
     </div>
   </aside>
 
-  <!-- ── 오른쪽: 메모장 리스트 ── -->
-  <div class="meetings-content">
-    <div class="meetings-content-header" id="meetings-header">
+  <!-- ── 오른쪽: 문서 리스트 ── -->
+  <div class="docs-content">
+    <div class="docs-content-header" id="docs-header">
       <div style="display:flex;align-items:center;gap:10px;">
-        <span id="current-month-label" class="meetings-month-label"></span>
+        <span id="current-month-label" class="docs-month-label"></span>
         <span id="current-month-count" class="count-badge"></span>
       </div>
       {% if user and user.role in ('editor', 'admin') %}
       <div style="display:flex;gap:8px;">
         <button class="btn btn-outline btn-sm" onclick="openWeeklyReportModal()">📊 주간 업무 작성(AI)</button>
-        <a href="/memo/new" class="btn btn-outline btn-sm">+ 새 메모(팀)</a>
-        <a href="/memo/new?personal=1" class="btn btn-primary btn-sm">+ 새 메모(개인)</a>
+        <a href="/doc/new" class="btn btn-outline btn-sm">+ 새 문서(팀 공용)</a>
+        <a href="/doc/new?personal=1" class="btn btn-primary btn-sm">+ 새 문서(개인)</a>
       </div>
       {% endif %}
     </div>
 
-    <table class="meeting-table" id="meetings-table">
+    <table class="doc-table" id="docs-table">
       <thead>
         <tr>
             {% if user %}<th class="col-visibility">공개 여부</th>{% endif %}
@@ -111,11 +111,11 @@
           <th class="col-date">작성 날짜</th>
         </tr>
       </thead>
-      <tbody id="meetings-tbody"></tbody>
+      <tbody id="docs-tbody"></tbody>
     </table>
 
-    <div class="empty-state hidden" id="meetings-empty">
-      <p>해당 월에 등록된 메모가 없습니다.</p>
+    <div class="empty-state hidden" id="docs-empty">
+      <p>해당 월에 등록된 문서가 없습니다.</p>
     </div>
   </div>
 </div>
@@ -123,7 +123,7 @@
 
 {% block scripts %}
 <script>
-const ALL_MEETINGS  = {{ meetings | tojson | safe }};
+const ALL_DOCS      = {{ docs | tojson | safe }};
 const CURRENT_UID   = {{ user.id if user else 'null' }};
 const CURRENT_UNAME = {{ (user.name or user.username) | tojson | safe if user else 'null' }};
 const IS_LOGGED_IN  = {{ 'true' if user else 'false' }};
@@ -141,7 +141,7 @@ let searchQuery        = '';
 
 // ── 필터 적용 ──────────────────────────────────────────
 function getFiltered() {
-  let list = ALL_MEETINGS;
+  let list = ALL_DOCS;
   // 문서 종류 필터
   if (selectedDocType === 'team')     list = list.filter(m => m.is_team_doc);
   else if (selectedDocType === 'personal') list = list.filter(m => !m.is_team_doc);
@@ -231,18 +231,19 @@ function renderAuthorFilter() {
   if (!section) return;
 
   const authorMap = {};
-  ALL_MEETINGS.forEach(m => {
+  ALL_DOCS.forEach(m => {
     if (m.author_name && m.author_id !== CURRENT_UID)
       authorMap[m.author_name] = true;
   });
   const others = Object.keys(authorMap).sort();
 
   const items = [
+    { key: null, label: '전체', cls: selectedAuthor === null ? 'active' : '' },
     ...(CURRENT_UID ? [{ key: '__me__', label: '내가 작성', cls: selectedAuthor === '__me__' ? 'active' : '' }] : []),
     ...others.map(name => ({ key: name, label: name, cls: selectedAuthor === name ? 'active' : '' })),
   ];
 
-  if (!items.length) { section.innerHTML = ''; return; }
+  if (items.length <= 1) { section.innerHTML = ''; return; }
 
   section.innerHTML = `
     <div class="author-filter-label">작성자</div>
@@ -257,7 +258,7 @@ function renderAuthorFilter() {
 // ── 문서 종류 선택 ──────────────────────────────────────
 function selectDocType(key) {
   selectedDocType = key;
-  localStorage.setItem('meeting_doctype', key === null ? '' : key);
+  localStorage.setItem('doc_doctype', key === null ? '' : key);
   const { byMonth, byYear, filtered } = buildGroups();
   renderDocTypeFilter();
   renderVisibilityFilter();
@@ -266,7 +267,7 @@ function selectDocType(key) {
   if (selectedYM === '__all__') {
     renderAllList(filtered);
   } else if (selectedYM && byMonth[selectedYM]) {
-    renderMeetingList(selectedYM, byMonth);
+    renderDocList(selectedYM, byMonth);
   } else {
     const allYMs = Object.keys(byMonth).sort().reverse();
     if (allYMs.length) selectMonth(allYMs[0]);
@@ -277,7 +278,7 @@ function selectDocType(key) {
 // ── 작성자 선택 (클릭 재선택 시 해제) ───────────────────
 function selectAuthor(key) {
   selectedAuthor = (selectedAuthor === key) ? null : key;
-  localStorage.setItem('meeting_author', selectedAuthor === null ? '' : selectedAuthor);
+  localStorage.setItem('doc_author', selectedAuthor === null ? '' : selectedAuthor);
   const { byMonth, byYear, filtered } = buildGroups();
   renderDocTypeFilter();
   renderAuthorFilter();
@@ -287,7 +288,7 @@ function selectAuthor(key) {
   if (selectedYM === '__all__') {
     renderAllList(filtered);
   } else if (selectedYM && byMonth[selectedYM]) {
-    renderMeetingList(selectedYM, byMonth);
+    renderDocList(selectedYM, byMonth);
   } else {
     const allYMs = Object.keys(byMonth).sort().reverse();
     if (allYMs.length) selectMonth(allYMs[0]);
@@ -298,7 +299,7 @@ function selectAuthor(key) {
 // ── 공개 여부 선택 ──────────────────────────────────────
 function selectVisibility(key) {
   selectedVisibility = key;
-  localStorage.setItem('meeting_visibility', key === null ? '' : key);
+  localStorage.setItem('doc_visibility', key === null ? '' : key);
   const { byMonth, byYear, filtered } = buildGroups();
   renderDocTypeFilter();
   renderVisibilityFilter();
@@ -308,7 +309,7 @@ function selectVisibility(key) {
   if (selectedYM === '__all__') {
     renderAllList(filtered);
   } else if (selectedYM && byMonth[selectedYM]) {
-    renderMeetingList(selectedYM, byMonth);
+    renderDocList(selectedYM, byMonth);
   } else {
     const allYMs = Object.keys(byMonth).sort().reverse();
     if (allYMs.length) selectMonth(allYMs[0]);
@@ -329,7 +330,7 @@ function renderMonthNav(byMonth, byYear, filtered) {
     </div>`;
 
   if (!Object.keys(byYear).length) {
-    body.innerHTML = allItem + '<p class="text-muted" style="padding:8px 16px;font-size:0.82rem;">회의록이 없습니다.</p>';
+    body.innerHTML = allItem + '<p class="text-muted" style="padding:8px 16px;font-size:0.82rem;">등록된 문서가 없습니다.</p>';
     return;
   }
 
@@ -352,54 +353,54 @@ function renderMonthNav(byMonth, byYear, filtered) {
 
 // ── 전체 목록 렌더링 ─────────────────────────────────────
 function renderAllList(filtered) {
-  const meetings = [...filtered].sort((a, b) => {
+  const docs = [...filtered].sort((a, b) => {
     const da = a.meeting_date || a.updated_at || '';
     const db = b.meeting_date || b.updated_at || '';
     return db.localeCompare(da);
   });
 
-  document.getElementById('meetings-header').style.display = '';
+  document.getElementById('docs-header').style.display = '';
   document.getElementById('current-month-label').textContent = '전체';
-  document.getElementById('current-month-count').textContent = `${meetings.length}건`;
+  document.getElementById('current-month-count').textContent = `${docs.length}건`;
 
-  const tbody = document.getElementById('meetings-tbody');
-  const empty = document.getElementById('meetings-empty');
+  const tbody = document.getElementById('docs-tbody');
+  const empty = document.getElementById('docs-empty');
 
-  if (!meetings.length) {
+  if (!docs.length) {
     tbody.innerHTML = '';
-    document.getElementById('meetings-table').style.display = 'none';
+    document.getElementById('docs-table').style.display = 'none';
     empty.classList.remove('hidden');
-    empty.querySelector('p').textContent = searchQuery ? '검색 결과가 없습니다.' : '등록된 메모가 없습니다.';
+    empty.querySelector('p').textContent = searchQuery ? '검색 결과가 없습니다.' : '등록된 문서가 없습니다.';
     return;
   }
 
-  document.getElementById('meetings-table').style.display = '';
+  document.getElementById('docs-table').style.display = '';
   empty.classList.add('hidden');
-  tbody.innerHTML = meetings.map(m => renderRow(m, true)).join('');
+  tbody.innerHTML = docs.map(m => renderRow(m, true)).join('');
 }
 
 // ── 월별 목록 렌더링 ─────────────────────────────────────
-function renderMeetingList(ym, byMonth) {
-  const meetings = byMonth[ym] || [];
+function renderDocList(ym, byMonth) {
+  const docs = byMonth[ym] || [];
   const [yr, mo] = ym.split('-');
-  document.getElementById('meetings-header').style.display = '';
+  document.getElementById('docs-header').style.display = '';
   document.getElementById('current-month-label').textContent = `${yr}년 ${parseInt(mo)}월`;
-  document.getElementById('current-month-count').textContent = `${meetings.length}건`;
+  document.getElementById('current-month-count').textContent = `${docs.length}건`;
 
-  const tbody = document.getElementById('meetings-tbody');
-  const empty = document.getElementById('meetings-empty');
+  const tbody = document.getElementById('docs-tbody');
+  const empty = document.getElementById('docs-empty');
 
-  if (!meetings.length) {
+  if (!docs.length) {
     tbody.innerHTML = '';
-    document.getElementById('meetings-table').style.display = 'none';
+    document.getElementById('docs-table').style.display = 'none';
     empty.classList.remove('hidden');
-    empty.querySelector('p').textContent = '해당 월에 등록된 메모가 없습니다.';
+    empty.querySelector('p').textContent = '해당 월에 등록된 문서가 없습니다.';
     return;
   }
 
-  document.getElementById('meetings-table').style.display = '';
+  document.getElementById('docs-table').style.display = '';
   empty.classList.add('hidden');
-  tbody.innerHTML = meetings.map(m => renderRow(m, false)).join('');
+  tbody.innerHTML = docs.map(m => renderRow(m, false)).join('');
 }
 
 // ── 행 HTML 생성 ─────────────────────────────────────────
@@ -429,11 +430,11 @@ function renderRow(m, showYear) {
   }
 
   return `
-  <tr class="meeting-row ${isMine ? 'mine' : ''}" onclick="location.href='/memo/${m.id}?from=memo'">
+  <tr class="doc-row ${isMine ? 'mine' : ''}" onclick="location.href='/doc/${m.id}?from=doc'">
     ${IS_LOGGED_IN ? `<td class="col-visibility">${visBadge}</td>` : ''}
     <td class="col-title">
-      <div class="meeting-title-wrap">
-        <span class="meeting-title-text">${titleHtml}</span>
+      <div class="doc-title-wrap">
+        <span class="doc-title-text">${titleHtml}</span>
         ${m.event_count ? `<span class="event-count-badge">${m.event_count}</span>` : ''}
       </div>
     </td>
@@ -447,13 +448,13 @@ function renderRow(m, showYear) {
 // ── 월/전체 선택 ─────────────────────────────────────────
 function selectMonth(ym) {
   selectedYM = ym;
-  localStorage.setItem('meeting_ym', ym);
+  localStorage.setItem('doc_ym', ym);
   const { byMonth, byYear, filtered } = buildGroups();
   renderMonthNav(byMonth, byYear, filtered);
   if (ym === '__all__') {
     renderAllList(filtered);
   } else {
-    renderMeetingList(ym, byMonth);
+    renderDocList(ym, byMonth);
   }
 }
 
@@ -472,10 +473,10 @@ function applySearch(q) {
       selectedYM = allYMs[0] || null;
     }
     if (selectedYM && byMonth[selectedYM]) {
-      renderMeetingList(selectedYM, byMonth);
+      renderDocList(selectedYM, byMonth);
     } else {
       const allYMs = Object.keys(byMonth).sort().reverse();
-      if (allYMs.length) { selectedYM = allYMs[0]; renderMeetingList(selectedYM, byMonth); }
+      if (allYMs.length) { selectedYM = allYMs[0]; renderDocList(selectedYM, byMonth); }
       else showEmpty();
     }
     renderMonthNav(byMonth, byYear, filtered);
@@ -484,16 +485,16 @@ function applySearch(q) {
 
 window.__pageSearch = {
   enabled: true,
-  placeholder: '메모 제목·내용·작성자 검색…',
+  placeholder: '문서 제목·내용·작성자 검색…',
   onSearch: applySearch,
 };
 
 function showEmpty() {
-  document.getElementById('meetings-header').style.display = 'none';
-  document.getElementById('meetings-table').style.display = 'none';
-  const el = document.getElementById('meetings-empty');
+  document.getElementById('docs-header').style.display = 'none';
+  document.getElementById('docs-table').style.display = 'none';
+  const el = document.getElementById('docs-empty');
   el.classList.remove('hidden');
-  el.querySelector('p').textContent = '등록된 메모가 없습니다.';
+  el.querySelector('p').textContent = '등록된 문서가 없습니다.';
 }
 
 function escHtml(s) {
@@ -506,28 +507,28 @@ function escRegex(s) {
 // ── 초기화 ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   // localStorage에서 문서 종류 복원
-  const savedDocType = localStorage.getItem('meeting_doctype');
+  const savedDocType = localStorage.getItem('doc_doctype');
   if (savedDocType === 'team' || savedDocType === 'personal') selectedDocType = savedDocType;
 
   // localStorage에서 공개 여부 복원
-  const savedVis = localStorage.getItem('meeting_visibility');
+  const savedVis = localStorage.getItem('doc_visibility');
   if (['public','team-shared','private'].includes(savedVis)) selectedVisibility = savedVis;
 
   // localStorage에서 작성자 복원
-  const savedAuthor = localStorage.getItem('meeting_author');
+  const savedAuthor = localStorage.getItem('doc_author');
   if (savedAuthor !== null) {
     if (savedAuthor === '') {
       selectedAuthor = null;
     } else if (savedAuthor === '__me__') {
       if (CURRENT_UID) selectedAuthor = '__me__';
     } else {
-      const authorNames = [...new Set(ALL_MEETINGS.map(m => m.author_name).filter(Boolean))];
+      const authorNames = [...new Set(ALL_DOCS.map(m => m.author_name).filter(Boolean))];
       if (authorNames.includes(savedAuthor)) selectedAuthor = savedAuthor;
     }
   }
 
   // localStorage에서 선택 월 복원
-  const savedYM = localStorage.getItem('meeting_ym');
+  const savedYM = localStorage.getItem('doc_ym');
   if (savedYM) selectedYM = savedYM;
 
   renderDocTypeFilter();
@@ -542,17 +543,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     renderMonthNav(byMonth, byYear, filtered);
     if (selectedYM === '__all__') renderAllList(filtered);
-    else renderMeetingList(selectedYM, byMonth);
+    else renderDocList(selectedYM, byMonth);
   } else {
     renderMonthNav(byMonth, byYear, filtered);
-    document.getElementById('meetings-header').style.display = 'none';
-    document.getElementById('meetings-table').style.display = 'none';
-    const el = document.getElementById('meetings-empty');
+    document.getElementById('docs-header').style.display = 'none';
+    document.getElementById('docs-table').style.display = 'none';
+    const el = document.getElementById('docs-empty');
     el.classList.remove('hidden');
     el.innerHTML = `
-      <p>등록된 메모가 없습니다.</p>
+      <p>등록된 문서가 없습니다.</p>
       {% if user and user.role in ('editor', 'admin') %}
-      <a href="/memo/new?personal=1" class="btn btn-primary" style="margin-top:12px">첫 메모 작성하기</a>
+      <a href="/doc/new?personal=1" class="btn btn-primary" style="margin-top:12px">첫 문서 작성하기</a>
       {% endif %}
     `;
   }
@@ -603,7 +604,7 @@ async function generateWeeklyReport() {
     if (!res.ok) { const err = await res.json(); throw new Error(err.detail || '서버 오류'); }
     const data = await res.json();
     sessionStorage.setItem('weekly_ai_report_draft', JSON.stringify({ title: data.title, content: data.content }));
-    location.href = '/memo/new?ai_draft=1';
+    location.href = '/doc/new?ai_draft=1';
   } catch (err) {
     document.getElementById('weekly-loading').classList.add('hidden');
     document.getElementById('weekly-form').style.display = '';

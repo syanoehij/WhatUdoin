@@ -408,7 +408,7 @@ let _selectedCat = null;
 let _listItems   = [];   // 현재 가운데 패널 항목 배열
 let _selectedItem = null;
 
-const TYPE_LABEL = { event: '일정', meeting: '메모', checklist: '체크' };
+const TYPE_LABEL = { event: '일정', meeting: '문서', checklist: '체크' };
 const TYPE_CLASS  = { event: 'tr-type-event', meeting: 'tr-type-meeting', checklist: 'tr-type-checklist' };
 
 async function loadTrash() {
@@ -456,8 +456,8 @@ function renderCats() {
   const mtCnt = _trashData.meetings.length;
   el.insertAdjacentHTML('beforeend', `
     <div class="tr-cat-item${_selectedCat === 'meeting' ? ' active' : ''}" onclick="selectCat('meeting')">
-      <span class="tr-cat-icon">📝</span>
-      <span class="tr-cat-label">메모장</span>
+      <span class="tr-cat-icon">📄</span>
+      <span class="tr-cat-label">문서</span>
       <span class="tr-cat-cnt">${mtCnt}</span>
     </div>
   `);
@@ -532,7 +532,7 @@ function selectCat(catId) {
   let title = '';
 
   if (catId === 'meeting') {
-    title = '메모장';
+    title = '문서';
     items = _trashData.meetings.map(x => ({ ...x, _type: 'meeting' }));
 
   } else if (catId === 'unset') {

@@ -100,34 +100,34 @@ def _require_admin(request: Request):
     return user
 
 
-def _can_read_meeting(user, meeting: dict) -> bool:
-    if not meeting:
+def _can_read_doc(user, doc: dict) -> bool:
+    if not doc:
         return False
     if user and user.get("role") == "admin":
         return True
-    if meeting.get("is_public"):
+    if doc.get("is_public"):
         return True
     if not user:
         return False
-    if meeting.get("created_by") == user["id"]:
+    if doc.get("created_by") == user["id"]:
         return True
-    if meeting.get("is_team_doc") and meeting.get("team_id") == user.get("team_id"):
+    if doc.get("is_team_doc") and doc.get("team_id") == user.get("team_id"):
         return True
-    if not meeting.get("is_team_doc") and meeting.get("team_share") and meeting.get("team_id") == user.get("team_id"):
+    if not doc.get("is_team_doc") and doc.get("team_share") and doc.get("team_id") == user.get("team_id"):
         return True
     return False
 
 
-def _can_write_meeting(user, meeting: dict) -> bool:
-    if not user or not meeting:
+def _can_write_doc(user, doc: dict) -> bool:
+    if not user or not doc:
         return False
     if user.get("role") == "admin":
         return True
     if not auth.is_editor(user):
         return False
-    if meeting.get("is_team_doc"):
-        return meeting.get("team_id") == user.get("team_id")
-    return meeting.get("created_by") == user["id"]
+    if doc.get("is_team_doc"):
+        return doc.get("team_id") == user.get("team_id")
+    return doc.get("created_by") == user["id"]
 
 
 # ── 페이지 ──────────────────────────────────────────────
@@ -180,53 +180,53 @@ def project_manage_page(request: Request):
     return templates.TemplateResponse(request, "project_manage.html", _ctx(request))
 
 
-@app.get("/memo", response_class=HTMLResponse)
-def meetings_page(request: Request):
+@app.get("/doc", response_class=HTMLResponse)
+def docs_page(request: Request):
     user = auth.get_current_user(request)
-    meetings = db.get_all_meetings(viewer=user)
-    teams    = db.get_all_teams()
-    return templates.TemplateResponse(request, "meeting_list.html", _ctx(
-        request, meetings=meetings, teams=teams,
+    docs = db.get_all_meetings(viewer=user)
+    teams = db.get_all_teams()
+    return templates.TemplateResponse(request, "doc_list.html", _ctx(
+        request, docs=docs, teams=teams,
         default_model=llm_parser.DEFAULT_MODEL,
     ))
 
 
-@app.get("/memo/new", response_class=HTMLResponse)
-def meeting_new_page(request: Request):
+@app.get("/doc/new", response_class=HTMLResponse)
+def doc_new_page(request: Request):
     user = auth.get_current_user(request)
     if not auth.is_editor(user):
         return RedirectResponse("/")
-    return templates.TemplateResponse(request, "meeting_editor.html", _ctx(request, meeting=None, meeting_events=[], can_edit=True))
+    return templates.TemplateResponse(request, "doc_editor.html", _ctx(request, doc=None, doc_events=[], can_edit=True))
 
 
-@app.get("/memo/{meeting_id}", response_class=HTMLResponse)
-def meeting_detail_page(request: Request, meeting_id: int):
-    meeting = db.get_meeting(meeting_id)
+@app.get("/doc/{meeting_id}", response_class=HTMLResponse)
+def doc_detail_page(request: Request, meeting_id: int):
+    doc = db.get_meeting(meeting_id)
     current_user = auth.get_current_user(request)
-    if not _can_read_meeting(current_user, meeting):
+    if not _can_read_doc(current_user, doc):
         raise HTTPException(status_code=404)
     events = db.get_events_by_meeting(meeting_id)
-    can_edit = _can_write_meeting(current_user, meeting)
+    can_edit = _can_write_doc(current_user, doc)
     lock = db.get_meeting_lock(meeting_id)
     locked_by = None
     if lock and current_user and lock["user_name"] != current_user["name"]:
         locked_by = lock["user_name"]
     done_projects = db.get_done_project_names()
-    return templates.TemplateResponse(request, "meeting_editor.html", _ctx(
-        request, meeting=meeting, meeting_events=events,
+    return templates.TemplateResponse(request, "doc_editor.html", _ctx(
+        request, doc=doc, doc_events=events,
         locked_by=locked_by, can_edit=can_edit, done_projects=done_projects,
     ))
 
 
-@app.get("/memo/{meeting_id}/history", response_class=HTMLResponse)
-def meeting_history_page(request: Request, meeting_id: int):
-    meeting = db.get_meeting(meeting_id)
+@app.get("/doc/{meeting_id}/history", response_class=HTMLResponse)
+def doc_history_page(request: Request, meeting_id: int):
+    doc = db.get_meeting(meeting_id)
     current_user = auth.get_current_user(request)
-    if current_user is None or not _can_read_meeting(current_user, meeting):
+    if current_user is None or not _can_read_doc(current_user, doc):
         raise HTTPException(status_code=404)
     histories = db.get_meeting_histories(meeting_id)
-    return templates.TemplateResponse(request, "meeting_history.html", _ctx(
-        request, meeting=meeting, histories=histories
+    return templates.TemplateResponse(request, "doc_history.html", _ctx(
+        request, doc=doc, histories=histories
     ))
 
 
@@ -1549,16 +1549,16 @@ def api_delete_link(link_id: int, request: Request):
     return {"ok": True}
 
 
-# ── 회의록 API ───────────────────────────────────────────
+# ── 문서 API ─────────────────────────────────────────────
 
-@app.get("/api/memo")
-def list_meetings(request: Request):
+@app.get("/api/doc")
+def list_docs(request: Request):
     user = auth.get_current_user(request)
     return db.get_all_meetings(viewer=user)
 
 
-@app.post("/api/memo")
-async def create_meeting(request: Request):
+@app.post("/api/doc")
+async def create_doc(request: Request):
     user = _require_editor(request)
     data = await request.json()
     title = data.get("title", "").strip()
@@ -1576,13 +1576,13 @@ async def create_meeting(request: Request):
     return {"id": meeting_id}
 
 
-@app.put("/api/memo/{meeting_id}")
-async def update_meeting(meeting_id: int, request: Request):
+@app.put("/api/doc/{meeting_id}")
+async def update_doc(meeting_id: int, request: Request):
     user = _require_editor(request)
-    meeting = db.get_meeting(meeting_id)
-    if not meeting:
+    doc = db.get_meeting(meeting_id)
+    if not doc:
         raise HTTPException(status_code=404)
-    if not _can_write_meeting(user, meeting):
+    if not _can_write_doc(user, doc):
         raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
     data = await request.json()
     title = data.get("title", "").strip()
@@ -1599,9 +1599,9 @@ async def update_meeting(meeting_id: int, request: Request):
     return {"ok": True}
 
 
-# ── 회의록 편집 잠금 ────────────────────────────────────────
-@app.post("/api/memo/{meeting_id}/lock")
-def lock_meeting(meeting_id: int, request: Request):
+# ── 문서 편집 잠금 ────────────────────────────────────────
+@app.post("/api/doc/{meeting_id}/lock")
+def lock_doc(meeting_id: int, request: Request):
     user = _require_editor(request)
     ok = db.acquire_meeting_lock(meeting_id, user["name"])
     if not ok:
@@ -1611,41 +1611,41 @@ def lock_meeting(meeting_id: int, request: Request):
     return {"ok": True}
 
 
-@app.put("/api/memo/{meeting_id}/lock")
-def heartbeat_meeting_lock(meeting_id: int, request: Request):
+@app.put("/api/doc/{meeting_id}/lock")
+def heartbeat_doc_lock(meeting_id: int, request: Request):
     user = _require_editor(request)
     db.heartbeat_meeting_lock(meeting_id, user["name"])
     return {"ok": True}
 
 
-@app.delete("/api/memo/{meeting_id}/lock")
-def unlock_meeting(meeting_id: int, request: Request):
+@app.delete("/api/doc/{meeting_id}/lock")
+def unlock_doc(meeting_id: int, request: Request):
     user = auth.get_current_user(request)
     if user:
         db.release_meeting_lock(meeting_id, user["name"])
     return {"ok": True}
 
 
-@app.get("/api/memo/{meeting_id}/lock")
-def get_meeting_lock(meeting_id: int):
+@app.get("/api/doc/{meeting_id}/lock")
+def get_doc_lock(meeting_id: int):
     lock = db.get_meeting_lock(meeting_id)
     return {"locked_by": lock["user_name"] if lock else None}
 
 
-@app.get("/api/memo/calendar")
-def meetings_calendar(request: Request):
+@app.get("/api/doc/calendar")
+def docs_calendar(request: Request):
     user = auth.get_current_user(request)
     if user is None:
         return []
-    meetings = db.get_all_meetings(viewer=user)
+    docs = db.get_all_meetings(viewer=user)
     result = []
-    for m in meetings:
+    for m in docs:
         if not m.get("is_team_doc", 1):  # 개인 문서는 캘린더 미노출
             continue
         date = m.get("meeting_date") or m["created_at"][:10]
         result.append({
             "id": f"meeting-{m['id']}",
-            "title": f"📋 {m['title']}",
+            "title": f"📄 {m['title']}",
             "start": date,
             "allDay": True,
             "extendedProps": {"type": "meeting", "meeting_id": m["id"]},
@@ -1677,32 +1677,32 @@ def _delete_meeting_images(content: str):
             p.unlink()
 
 
-@app.delete("/api/memo/{meeting_id}")
-def delete_meeting(meeting_id: int, request: Request):
+@app.delete("/api/doc/{meeting_id}")
+def delete_doc(meeting_id: int, request: Request):
     user = _require_editor(request)
-    meeting = db.get_meeting(meeting_id)
-    if not meeting:
+    doc = db.get_meeting(meeting_id)
+    if not doc:
         raise HTTPException(status_code=404)
-    if not _can_write_meeting(user, meeting):
+    if not _can_write_doc(user, doc):
         raise HTTPException(status_code=403, detail="삭제 권한이 없습니다.")
     db.delete_meeting(meeting_id, deleted_by=user["name"])
     return {"ok": True}
 
 
-@app.get("/api/memo/{meeting_id}/histories")
-def meeting_histories(meeting_id: int, request: Request):
+@app.get("/api/doc/{meeting_id}/histories")
+def doc_histories(meeting_id: int, request: Request):
     user = auth.get_current_user(request)
-    meeting = db.get_meeting(meeting_id)
-    if not _can_read_meeting(user, meeting):
+    doc = db.get_meeting(meeting_id)
+    if not _can_read_doc(user, doc):
         raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
     return db.get_meeting_histories(meeting_id)
 
 
-@app.post("/api/memo/{meeting_id}/histories/{history_id}/restore")
-def restore_meeting_history(meeting_id: int, history_id: int, request: Request):
+@app.post("/api/doc/{meeting_id}/histories/{history_id}/restore")
+def restore_doc_history(meeting_id: int, history_id: int, request: Request):
     user = _require_editor(request)
-    meeting = db.get_meeting(meeting_id)
-    if not _can_write_meeting(user, meeting):
+    doc = db.get_meeting(meeting_id)
+    if not _can_write_doc(user, doc):
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
     ok = db.restore_meeting_from_history(meeting_id, history_id, user["id"])
     if not ok:
@@ -1710,11 +1710,11 @@ def restore_meeting_history(meeting_id: int, history_id: int, request: Request):
     return {"ok": True}
 
 
-@app.get("/api/memo/{meeting_id}/events")
-def meeting_events_api(meeting_id: int, request: Request):
+@app.get("/api/doc/{meeting_id}/events")
+def doc_events_api(meeting_id: int, request: Request):
     user = auth.get_current_user(request)
-    meeting = db.get_meeting(meeting_id)
-    if not _can_read_meeting(user, meeting):
+    doc = db.get_meeting(meeting_id)
+    if not _can_read_doc(user, doc):
         raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
     return db.get_events_by_meeting(meeting_id)
 

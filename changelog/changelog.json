@@ -2,6 +2,35 @@
   "groups": [
     {
       "date": "2026-04-19",
+      "phase": "18차 2단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔍",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>문서 작성자 필터에 '전체' 버튼 추가",
+          "detail_html": "<ul>\n              <li>좌측 사이드바 <b>작성자</b> 필터 섹션 최상단에 <b>전체</b> 버튼 추가 — 다른 필터(문서 종류·공개 여부)와 동일한 UX로 통일</li>\n              <li>필터 항목이 없을 때(<code>items.length &lt;= 1</code>) 섹션 자동 숨김 유지</li>\n            </ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>새 문서(개인) 기본 공개 범위 '팀에게만 공개'로 변경",
+          "detail_html": "<ul>\n              <li><b>새 문서(개인)</b> 진입 시 공개 범위 기본값을 <b>외부 비공개</b> → <b>팀에게만 공개</b>로 변경</li>\n              <li>개인 문서도 팀원과 기본 공유되는 방향으로 UX 개선 — 새 문서(팀 공용)는 기존 외부 비공개 유지</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
+      "phase": "18차 1단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "📄",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>메모장 → 문서 전면 리네이밍 (DB 계층 제외)",
+          "detail_html": "<ul>\n              <li>URL: <code>/memo/*</code> → <code>/doc/*</code>, <code>/api/memo/*</code> → <code>/api/doc/*</code> 완전 교체 — 구 경로 리다이렉트 없이 404 반환</li>\n              <li>nav 아이콘 📋 → 📄, 텍스트 <b>메모장</b> → <b>문서</b>, 버튼 <b>새 메모(개인/팀)</b> → <b>새 문서(개인/팀 공용)</b></li>\n              <li>템플릿 파일명: <code>meeting_list/editor/history.html</code> → <code>doc_list/editor/history.html</code></li>\n              <li>Python 뷰·헬퍼 함수, JS 상수(<code>ALL_DOCS</code>, <code>DOC_ID</code>), DOM id(<code>docs-layout</code> 등), CSS 클래스(<code>.doc-row</code>, <code>.doc-table</code> 등) 전면 통일</li>\n              <li>localStorage 키: <code>meeting_*</code> → <code>doc_*</code> (기존 키 1회 초기화)</li>\n              <li>DB 계층(테이블명·함수명·<code>event_type=&#39;meeting&#39;</code>·<code>/uploads/meetings/</code> 경로) 및 홈 화면 <b>예정 회의</b> 카드(<code>.meeting-item*</code>)는 변경 없음</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
       "phase": "17차 7단계",
       "phase_class": "phase-7",
       "entries": [

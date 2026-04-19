@@ -243,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
           } catch(err) { failureCb(err); }
         },
       },
-      { url: '/api/memo/calendar', color: '#00b894', textColor: 'white', editable: false },
+      { url: '/api/doc/calendar', color: '#00b894', textColor: 'white', editable: false },
     ],
     editable: !!(CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor')),
     selectable: !!(CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor')),
@@ -306,7 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
     eventClick(info) {
       if (!CURRENT_USER) return;
       if (info.event.extendedProps.type === 'meeting') {
-        location.href = `/memo/${info.event.extendedProps.meeting_id}?from=calendar`;
+        location.href = `/doc/${info.event.extendedProps.meeting_id}?from=calendar`;
         return;
       }
       // 상세 모달 없이 바로 수정 모달 열기
@@ -494,13 +494,13 @@ function showDetail(fcEvent) {
   ];
 
   if (p.source === 'ai_parsed' && p.meeting_id) {
-    rows.push(['메모장', `<a href="/memo/${p.meeting_id}" class="link">원본 메모 보기</a>`]);
+    rows.push(['문서', `<a href="/doc/${p.meeting_id}" class="link">원본 문서 보기</a>`]);
   }
 
   document.getElementById('detail-body').innerHTML = rows.map(([label, val]) => `
     <div class="detail-row">
       <span class="detail-label">${label}</span>
-      <span class="detail-val">${label === '메모장' ? val : esc(val)}</span>
+      <span class="detail-val">${label === '문서' ? val : esc(val)}</span>
     </div>
   `).join('');
 

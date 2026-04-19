@@ -839,7 +839,7 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
 .page-title { font-size: 1.15rem; font-weight: 700; color: var(--text); }
 
 /* ── 회의록 좌우 레이아웃 ── */
-.meetings-layout {
+.docs-layout {
   display: flex;
   flex: 1;           /* main의 남은 높이 전부 차지 */
   min-height: 0;     /* flex shrink 허용 */
@@ -897,7 +897,7 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
 }
 
 /* 내가 작성한 행 — 작성자 셀 강조 */
-.meeting-row .author-me { color: var(--accent); font-weight: 500; }
+.doc-row .author-me { color: var(--accent); font-weight: 500; }
 
 .month-nav-header {
   padding: 20px 16px 14px;
@@ -949,7 +949,7 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
 }
 
 /* 오른쪽: 리스트 영역 */
-.meetings-content {
+.docs-content {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -965,7 +965,7 @@ mark.search-hl {
   border-radius: 2px;
   padding: 0 1px;
 }
-.meetings-content-header {
+.docs-content-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -989,51 +989,51 @@ mark.search-hl {
   background: var(--border-faint);
   margin: 4px 12px 6px;
 }
-.meetings-month-label {
+.docs-month-label {
   font-size: 1.05rem;
   font-weight: 700;
 }
-.meetings-content .meeting-table {
+.docs-content .doc-table {
   flex: 1;
   overflow-y: auto;
   display: block;
 }
-.meetings-content .meeting-table thead {
+.docs-content .doc-table thead {
   position: sticky;
   top: 0;
   background: var(--surface);
   z-index: 1;
 }
-.meetings-content .meeting-table,
-.meetings-content .meeting-table thead,
-.meetings-content .meeting-table tbody {
+.docs-content .doc-table,
+.docs-content .doc-table thead,
+.docs-content .doc-table tbody {
   display: block;
   width: 100%;
 }
 /* ★ 컬럼 폭의 유일한 진실: 공개여부(100) | 제목(1fr) | 작성자(80) | 팀(80) | 수정가능(84) | 날짜(72)
    HTML thead, JS tbody 컬럼 순서와 반드시 일치해야 함. th { width } 는 무시됨. */
-.meetings-content .meeting-table tr {
+.docs-content .doc-table tr {
   display: grid;
   grid-template-columns: 100px 1fr 80px 80px 84px 72px;
   width: 100%;
   align-items: center;
 }
-.meetings-content .empty-state {
+.docs-content .empty-state {
   padding: 60px 28px;
 }
 
 /* ── 회의록 목록 (게시판 테이블) ── */
-/* 실제 컬럼 폭은 grid-template-columns 가 결정 (아래 .meetings-content .meeting-table tr 참고).
+/* 실제 컬럼 폭은 grid-template-columns 가 결정 (아래 .docs-content .doc-table tr 참고).
    th { width } 는 display:grid 환경에서 무시됨. */
-.meeting-table {
+.doc-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.88rem;
 }
-.meeting-table thead tr {
+.doc-table thead tr {
   border-bottom: 2px solid var(--border);
 }
-.meeting-table th {
+.doc-table th {
   padding: 11px 14px;
   text-align: center;
   font-size: 0.74rem;
@@ -1044,30 +1044,30 @@ mark.search-hl {
   white-space: nowrap;
   min-width: 0;
 }
-.meeting-table th.col-title { text-align: left; }
-.meeting-row {
+.doc-table th.col-title { text-align: left; }
+.doc-row {
   cursor: pointer;
   border-bottom: 1px solid var(--border-faint);
   transition: background 0.12s;
 }
-.meeting-row:hover { background: var(--surface-2); }
-.meeting-row:hover .meeting-title-text { color: var(--accent); }
-.meeting-row td {
+.doc-row:hover { background: var(--surface-2); }
+.doc-row:hover .doc-title-text { color: var(--accent); }
+.doc-row td {
   padding: 13px 14px;
   vertical-align: middle;
   overflow: hidden;
   min-width: 0;
 }
-.meeting-table tbody td { text-align: center; }
-.meeting-table tbody .col-title      { text-align: left; min-width: 0; }
-.meeting-table tbody .col-doc-type   { display: flex; justify-content: center; align-items: center; padding-left: 4px; padding-right: 4px; }
-.meeting-table tbody .col-visibility { display: flex; justify-content: center; align-items: center; padding-left: 4px; padding-right: 4px; }
-.meeting-table tbody .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.meeting-table tbody .col-team   { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.meeting-table tbody .col-date   { white-space: nowrap; font-size: 0.8rem; color: var(--text-faint); }
+.doc-table tbody td { text-align: center; }
+.doc-table tbody .col-title      { text-align: left; min-width: 0; }
+.doc-table tbody .col-doc-type   { display: flex; justify-content: center; align-items: center; padding-left: 4px; padding-right: 4px; }
+.doc-table tbody .col-visibility { display: flex; justify-content: center; align-items: center; padding-left: 4px; padding-right: 4px; }
+.doc-table tbody .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-table tbody .col-team   { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-table tbody .col-date   { white-space: nowrap; font-size: 0.8rem; color: var(--text-faint); }
 
-.meeting-title-wrap { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.meeting-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); transition: color 0.12s; }
+.doc-title-wrap { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.doc-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); transition: color 0.12s; }
 .event-count-badge  { flex-shrink: 0; }
 
 /* 팀 이름 배지 (회의록 리스트) */
@@ -1318,8 +1318,8 @@ mark.search-hl {
 }
 #btn-toc-toggle.active { background: var(--accent); color: white; border-color: var(--accent); }
 
-.meeting-date-wrap { flex: 1; display: flex; justify-content: center; }
-.meeting-date-wrap input[type="date"] {
+.doc-date-wrap { flex: 1; display: flex; justify-content: center; }
+.doc-date-wrap input[type="date"] {
   border: none;
   border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
@@ -1329,9 +1329,9 @@ mark.search-hl {
   cursor: pointer;
   padding: 2px 4px;
 }
-.meeting-date-wrap input[type="date"]:focus { border-bottom-color: var(--accent); color: var(--text); }
-.meeting-date-label { font-size: 0.9rem; color: var(--text-muted); }
-.meeting-title-input {
+.doc-date-wrap input[type="date"]:focus { border-bottom-color: var(--accent); color: var(--text); }
+.doc-date-label { font-size: 0.9rem; color: var(--text-muted); }
+.doc-title-input {
   width: 100%;
   border: none;
   border-bottom: 2px solid var(--border);
@@ -1343,8 +1343,8 @@ mark.search-hl {
   color: var(--text);
   transition: border-color 0.2s;
 }
-.meeting-title-input:focus { border-bottom-color: var(--accent); }
-.meeting-content-input {
+.doc-title-input:focus { border-bottom-color: var(--accent); }
+.doc-content-input {
   width: 100%;
   min-height: 300px;
   border: 1px solid var(--border);
@@ -1359,9 +1359,9 @@ mark.search-hl {
   color: var(--text);
   transition: border-color 0.2s;
 }
-.meeting-content-input:focus { border-color: var(--accent); }
+.doc-content-input:focus { border-color: var(--accent); }
 
-.meeting-content-view {
+.doc-content-view {
   width: 100%;
   flex: 1;
   min-height: 0;

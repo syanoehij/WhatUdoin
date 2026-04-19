@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}WhatUDoin — {% if meeting %}{{ meeting.title }}{% else %}새 메모{% endif %}{% endblock %}
+{% block title %}WhatUDoin — {% if doc %}{{ doc.title }}{% else %}새 문서{% endif %}{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
@@ -21,7 +21,7 @@
 
   <!-- ── 상단 헤더 ── -->
   <div class="editor-header">
-    <a id="btn-back" href="/memo" class="btn btn-sm">← 목록</a>
+    <a id="btn-back" href="/doc" class="btn btn-sm">← 목록</a>
 
     <div class="btn-group">
       {% if can_edit and not locked_by %}
@@ -29,18 +29,18 @@
       {% endif %}
       {% if can_edit and not locked_by %}
       <div class="visibility-segment" id="doc-type-segment" role="radiogroup" aria-label="수정 권한"
-           data-initial="{{ 'team' if (not meeting or meeting.is_team_doc) else 'personal' }}"></div>
+           data-initial="{{ 'team' if (not doc or doc.is_team_doc) else 'personal' }}"></div>
       {% endif %}
-      {% if user and meeting %}
-      <a href="/memo/{{ meeting.id }}/history" class="btn btn-sm">수정 이력</a>
+      {% if user and doc %}
+      <a href="/doc/{{ doc.id }}/history" class="btn btn-sm">수정 이력</a>
       <button id="btn-toc-toggle" class="btn btn-sm" onclick="toggleTocPanel()" title="목차">📑 목차</button>
       {% endif %}
       {% if can_edit and not locked_by %}
-      <button id="btn-ai-toggle" class="btn btn-sm" onclick="toggleAiPanel()">{% if meeting_events %}일정 관리{% else %}일정 생성(AI){% endif %}</button>
-      {% if meeting %}
-      <button class="btn btn-sm btn-danger" onclick="deleteMeeting()">삭제</button>
+      <button id="btn-ai-toggle" class="btn btn-sm" onclick="toggleAiPanel()">{% if doc_events %}일정 관리{% else %}일정 생성(AI){% endif %}</button>
+      {% if doc %}
+      <button class="btn btn-sm btn-danger" onclick="deleteDoc()">삭제</button>
       {% endif %}
-      <button class="btn btn-sm btn-primary" onclick="saveMeeting()">저장</button>
+      <button class="btn btn-sm btn-primary" onclick="saveDoc()">저장</button>
       {% endif %}
     </div>
   </div>
@@ -53,7 +53,7 @@
       {% if can_edit and not locked_by %}
       <div id="editor-container"></div>
       {% else %}
-      <div id="meeting-content-view" class="meeting-content-view markdown-body"></div>
+      <div id="doc-content-view" class="doc-content-view markdown-body"></div>
       {% endif %}
     </div>
 
@@ -72,7 +72,7 @@
           <select id="ai-model-select" class="form-input" style="flex:1;min-width:0;"></select>
           <button class="btn btn-primary" onclick="runAiParse()" id="btn-run-ai">일정 생성</button>
         </div>
-        <p class="ai-panel-desc">메모 내용을 분석해서 일정을 자동으로 추출합니다.</p>
+        <p class="ai-panel-desc">문서 내용을 분석해서 일정을 자동으로 추출합니다.</p>
         <div id="ai-loading" class="loading hidden"><span id="ai-loading-msg">⏳ AI가 분석 중입니다...</span></div>
         <div id="ai-error" class="form-error hidden"></div>
       </div>
@@ -99,7 +99,7 @@
     {% endif %}
 
     <!-- 오른쪽: ToC 패널 (기본 숨김) -->
-    {% if meeting %}
+    {% if doc %}
     <aside class="toc-panel hidden" id="toc-panel">
       <div class="toc-panel-header">
         <span class="toc-panel-title">목차</span>
@@ -118,11 +118,11 @@
 {% block scripts %}
 <script src="/static/js/wu-editor.js?v={{ range(1000,9999) | random }}"></script>
 <script>
-const MEETING_ID     = {{ meeting.id if meeting else 'null' }};
+const DOC_ID         = {{ doc.id if doc else 'null' }};
 const IS_EDITOR      = {{ 'true' if can_edit else 'false' }};
 const LOCKED_BY      = {{ (locked_by | tojson) if locked_by else 'null' }};
-const INITIAL_MD     = {{ (('# ' + meeting.title + '\n\n' + (meeting.content or '')) if meeting else '') | tojson | safe }};
-const MEETING_EVENTS  = {{ (meeting_events if meeting_events else []) | tojson | safe }};
+const INITIAL_MD     = {{ (('# ' + doc.title + '\n\n' + (doc.content or '')) if doc else '') | tojson | safe }};
+const DOC_EVENTS      = {{ (doc_events if doc_events else []) | tojson | safe }};
 const DONE_PROJECTS   = new Set({{ (done_projects if done_projects else []) | tojson | safe }});
 const KANBAN_STATUSES = [
   ['backlog',     'Backlog'],
@@ -140,7 +140,7 @@ const PRIORITIES = [
 ];
 
 let parsedEvents  = [];
-let linkedEvents  = MEETING_EVENTS.map(e => ({...e}));
+let linkedEvents  = DOC_EVENTS.map(e => ({...e}));
 let wuInst        = null;
 let editor        = null;   // WUEditor onReady에서 채워짐
 let aiPanelOpen   = false;
@@ -150,17 +150,17 @@ window._blockAutoRefresh = () => aiPanelOpen || parsedEvents.some(Boolean);
 // 자동 새로고침 훅: dirty 상태면 저장 후 reload, 아니면 그냥 reload
 window._autoSaveAndRefresh = async () => {
   if (IS_EDITOR && !LOCKED_BY && wuInst?.dirty) {
-    await saveMeeting();
+    await saveDoc();
   }
   location.reload();
 };
 
 /* ── 초기화 ─────────────────────────────────────────── */
-function initMeetingEditor() {
+function initDocEditor() {
   // AI 초안 주입 (주간 보고서 생성 후 저장 없이 편집기 진입 시)
   let initialMd = INITIAL_MD || '';
   let _aiDraftLoaded = false;
-  if (!MEETING_ID && new URLSearchParams(location.search).get('ai_draft') === '1') {
+  if (!DOC_ID && new URLSearchParams(location.search).get('ai_draft') === '1') {
     try {
       const draft = JSON.parse(sessionStorage.getItem('weekly_ai_report_draft') || 'null');
       if (draft && draft.title && typeof draft.content === 'string') {
@@ -182,13 +182,13 @@ function initMeetingEditor() {
   if (!IS_EDITOR || LOCKED_BY) {
     // 뷰어 모드: WUEditor로 TOC 포함 렌더
     wuInst = WUEditor.create({
-      el: '#meeting-content-view',
+      el: '#doc-content-view',
       bodyEl: '#editor-body',
       canEdit: false,
       initialMarkdown: INITIAL_MD || '',
       features: {
         sanitizerOff: true,
-        toc: MEETING_ID ? { storageKey: 'meeting_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
+        toc: DOC_ID ? { storageKey: 'doc_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
       },
       hooks: {},
     });
@@ -235,9 +235,9 @@ function initMeetingEditor() {
   }
 
   function deriveInitialVisibility() {
-    {% if meeting %}
-    if ({{ 'true' if meeting.is_public else 'false' }}) return 'public';
-    if ({{ 'true' if (not meeting.is_team_doc and meeting.team_share) else 'false' }}) return 'team';
+    {% if doc %}
+    if ({{ 'true' if doc.is_public else 'false' }}) return 'public';
+    if ({{ 'true' if (not doc.is_team_doc and doc.team_share) else 'false' }}) return 'team';
     return 'private';
     {% else %}
     return 'private';
@@ -246,11 +246,11 @@ function initMeetingEditor() {
 
   if (docTypeSeg) {
     const initDocType = docTypeSeg.dataset.initial || 'team';
-    if (!MEETING_ID) {
+    if (!DOC_ID) {
       const isPersonal = new URLSearchParams(location.search).get('personal') === '1';
       renderSegment(docTypeSeg, DOC_OPTS, isPersonal ? 'personal' : 'team');
       renderSegment(visSeg, VIS_OPTS.filter(o => !isPersonal ? o.v !== 'team' : true),
-        isPersonal ? 'private' : 'private');
+        isPersonal ? 'team' : 'private');
     } else {
       renderSegment(docTypeSeg, DOC_OPTS, initDocType);
       const initVis = deriveInitialVisibility();
@@ -278,19 +278,19 @@ function initMeetingEditor() {
       imageResize: true,
       imageUpload: { endpoint: '/api/upload/image' },
       sanitizerOff: true,
-      toc: MEETING_ID ? { storageKey: 'meeting_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
+      toc: DOC_ID ? { storageKey: 'doc_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
       shortcutSave: true,
-      autosave: MEETING_ID ? { intervalMs: 120000, respectCooldown: true } : false,
-      saveCooldown: { seconds: 10, saveBtnSelector: 'button[onclick="saveMeeting()"]' },
-      editLock: MEETING_ID ? {
-        endpoint: `/api/memo/${MEETING_ID}/lock`,
+      autosave: DOC_ID ? { intervalMs: 120000, respectCooldown: true } : false,
+      saveCooldown: { seconds: 10, saveBtnSelector: 'button[onclick="saveDoc()"]' },
+      editLock: DOC_ID ? {
+        endpoint: `/api/doc/${DOC_ID}/lock`,
         heartbeatMs: 30000,
         onLockFailed: () => location.reload(),
       } : false,
       leaveConfirm: { backBtnSelector: '#btn-back' },
     },
     hooks: {
-      onSave: (md, { leaveTarget } = {}) => saveMeeting(leaveTarget),
+      onSave: (md, { leaveTarget } = {}) => saveDoc(leaveTarget),
       onReady: (ed) => {
         editor = ed;
         renderLinkedEvents();
@@ -347,9 +347,9 @@ function initMeetingEditor() {
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initMeetingEditor);
+  document.addEventListener('DOMContentLoaded', initDocEditor);
 } else {
-  initMeetingEditor();
+  initDocEditor();
 }
 
 /* ── TOC 글로벌 래퍼 (HTML onclick에서 호출) ─────────── */
@@ -368,20 +368,20 @@ function toggleAiPanel() {
 }
 
 /* ── 저장 / 삭제 ─────────────────────────────────────── */
-function getMeetingContent() {
+function getDocContent() {
   return wuInst ? wuInst.getMarkdown().trim() : '';
 }
 
-async function saveMeeting(leaveTarget) {
+async function saveDoc(leaveTarget) {
   if (wuInst?.cooldown) return;
-  const raw   = getMeetingContent();
+  const raw   = getDocContent();
   const lines = raw.split('\n');
   const title = lines[0].replace(/^#+\s*/, '').trim();
   const content = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd();
   if (!title) { alert('첫 줄에 제목(H1)을 입력하세요.'); return; }
 
-  const method = MEETING_ID ? 'PUT' : 'POST';
-  const url    = MEETING_ID ? `/api/memo/${MEETING_ID}` : '/api/memo';
+  const method = DOC_ID ? 'PUT' : 'POST';
+  const url    = DOC_ID ? `/api/doc/${DOC_ID}` : '/api/doc';
   const isTeamDoc   = document.getElementById('doc-type-segment')?.querySelector('.vis-btn.active')?.dataset.value === 'team';
   const vis         = document.getElementById('visibility-segment')?.querySelector('.vis-btn.active')?.dataset.value || 'private';
   const isPublic    = vis === 'public';
@@ -396,8 +396,8 @@ async function saveMeeting(leaveTarget) {
   if (res.ok) {
     const data = await res.json();
     if (typeof window._checkNotifications === 'function') window._checkNotifications();
-    if (!MEETING_ID) {
-      location.href = `/memo/${data.id}`;
+    if (!DOC_ID) {
+      location.href = `/doc/${data.id}`;
     } else {
       wuInst?.afterSave();
       if (leaveTarget) location.href = leaveTarget;
@@ -408,16 +408,16 @@ async function saveMeeting(leaveTarget) {
   }
 }
 
-async function deleteMeeting() {
-  if (!confirm('이 메모를 삭제하시겠습니까?')) return;
-  const res = await fetch(`/api/memo/${MEETING_ID}`, { method: 'DELETE' });
-  if (res.ok) location.href = '/memo';
+async function deleteDoc() {
+  if (!confirm('이 문서를 삭제하시겠습니까?')) return;
+  const res = await fetch(`/api/doc/${DOC_ID}`, { method: 'DELETE' });
+  if (res.ok) location.href = '/doc';
 }
 
 /* ── AI 파싱 ─────────────────────────────────────────── */
 async function runAiParse() {
-  const content = getMeetingContent();
-  if (!content) { alert('메모 내용을 먼저 입력하세요.'); return; }
+  const content = getDocContent();
+  if (!content) { alert('문서 내용을 먼저 입력하세요.'); return; }
 
   const model = document.getElementById('ai-model-select').value;
   window._blockAutoRefresh = true;
@@ -428,7 +428,7 @@ async function runAiParse() {
 
   try {
     // ── 1단계: AI 일정 추출 ──
-    setLoadingMsg('📋 1단계: AI가 일정을 추출하는 중...');
+    setLoadingMsg('📄 1단계: AI가 일정을 추출하는 중...');
     const res1  = await fetch('/api/ai/parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -650,7 +650,7 @@ function renderAiResults() {
     const hasConflict = !!(e._conflict || e._conflict_batch);
     const conflictBadge = _buildConflictBadge(e);
     const batchBadge = e._conflict_batch
-      ? `<span class="batch-conflict-warn" title="같은 메모에서 추출된 #${e._conflict_batch.batch_index + 1}번 일정과 유사 (${e._conflict_batch.similarity}%)">⚠ 같은 메모 내 중복</span>`
+      ? `<span class="batch-conflict-warn" title="같은 문서에서 추출된 #${e._conflict_batch.batch_index + 1}번 일정과 유사 (${e._conflict_batch.similarity}%)">⚠ 같은 문서 내 중복</span>`
       : '';
     const doneProject = e.project && DONE_PROJECTS.has(e.project);
     const warnBadges = hasConflict ? '' : [
@@ -693,7 +693,7 @@ function removeAiItem(i) {
 }
 
 async function confirmAiEvents(force = false) {
-  if (!MEETING_ID) { alert('메모를 먼저 저장하세요.'); return; }
+  if (!DOC_ID) { alert('문서를 먼저 저장하세요.'); return; }
   const toSave = parsedEvents.filter((e, i) => {
     if (!e) return false;
     const chk = document.getElementById(`ai-include-${i}`);
@@ -704,7 +704,7 @@ async function confirmAiEvents(force = false) {
   const res = await fetch('/api/ai/confirm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ events: toSave, meeting_id: MEETING_ID, force }),
+    body: JSON.stringify({ events: toSave, meeting_id: DOC_ID, force }),
   });
   const data = await res.json();
 
@@ -881,7 +881,7 @@ function openEditForLinked(i) {
 
 async function unlinkLinkedEvent(i) {
   const e = linkedEvents[i];
-  if (!confirm(`"${e.title}" 일정을 이 메모에서 연결 해제하시겠습니까?\n(일정은 삭제되지 않고 캘린더에 그대로 남습니다.)`)) return;
+  if (!confirm(`"${e.title}" 일정을 이 문서에서 연결 해제하시겠습니까?\n(일정은 삭제되지 않고 캘린더에 그대로 남습니다.)`)) return;
   const res = await fetch(`/api/events/${e.id}/unlink`, { method: 'PATCH' });
   if (res.ok) {
     linkedEvents.splice(i, 1);
