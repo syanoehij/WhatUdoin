@@ -1848,10 +1848,6 @@ def count_active_admins() -> int:
 
 # ── Settings ─────────────────────────────────────────────
 
-def update_event_kanban_hidden(event_id: int, hidden: bool):
-    with get_conn() as conn:
-        conn.execute("UPDATE events SET kanban_hidden = ? WHERE id = ?", (1 if hidden else 0, event_id))
-
 
 def update_event_visibility(event_id: int, is_public) -> None:
     # is_public: None=프로젝트 연동, 0=비공개, 1=공개

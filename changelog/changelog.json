@@ -2,6 +2,30 @@
   "groups": [
     {
       "date": "2026-04-19",
+      "phase": "22차 7단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🗓️",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>프로젝트 관리 — 연결된 회의 섹션 추가",
+          "detail_html": "<ul>\n              <li><b>연결된 회의 섹션 신설</b> — 프로젝트 관리 상세 패널에 '연결된 일정'과 별도로 '연결된 회의' 섹션 추가</li>\n              <li><code>event_type='meeting'</code> 이벤트를 일정 목록에서 분리해 독립 표시 (회의는 칸반·간트에 원래 미노출)</li>\n              <li>회의 행은 <b>📄 MD 내보내기</b> + 비활성 <b>🔄 프로젝트 연동</b> 표시만 제공 — 완료 처리·프로젝트 제외 버튼 없음</li>\n              <li>회의가 없는 프로젝트는 '연결된 회의' 섹션 자체가 숨겨짐</li>\n              <li><code>unsetVisibleEvents()</code> 함수 개선 — 미지정 일정 카운트 및 필터에서 회의 타입 제외</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
+      "phase": "22차 6단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "♻️",
+          "title_html": "<span class=\"cl-tag refactor\">refactor</span>프로젝트 관리 — '비노출' 버튼 제거, '완료 처리'로 통합",
+          "detail_html": "<ul>\n              <li><b>'체크/칸반/간트에서 비노출' 버튼 UI 제거</b> — 결과가 '완료 처리'(<code>is_active=0</code>)와 동일하여 중복 기능 통합</li>\n              <li><code>toggleKanbanHidden()</code> JS 핸들러 제거</li>\n              <li><code>PATCH /api/manage/events/{id}/kanban-hidden</code> 엔드포인트 제거</li>\n              <li><code>db.update_event_kanban_hidden()</code> 함수 제거</li>\n              <li><b>DB <code>kanban_hidden</code> 컬럼 및 칸반·간트 필터 로직은 유지</b> — 기존 <code>kanban_hidden=1</code> 레코드가 갑자기 재노출되지 않도록 보존</li>\n              <li>[숨김] 배지 및 <code>opacity:0.6</code> 스타일 제거</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
       "phase": "22차 5단계",
       "phase_class": "phase-7",
       "entries": [

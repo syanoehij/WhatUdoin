@@ -510,6 +510,8 @@
       <div class="pm-events-wrap">
         <div class="pm-events-title">연결된 일정</div>
         <div id="det-events"></div>
+        <div class="pm-events-title" style="margin-top:18px;" id="det-meetings-title">연결된 회의</div>
+        <div id="det-meetings"></div>
         <div class="pm-events-title" style="margin-top:18px;" id="det-checklists-title">연결된 체크리스트</div>
         <div id="det-checklists"></div>
       </div>
@@ -570,10 +572,11 @@ async function loadProjectList() {
 
 /* ── 왼쪽 목록 렌더 ── */
 function unsetVisibleEvents(p) {
-  // 미지정 프로젝트에서 현재 필터에 맞는 이벤트 수 반환
+  // 미지정 프로젝트에서 현재 필터에 맞는 일정(회의 제외) 반환
+  const sched = p.events.filter(e => e.event_type !== 'meeting');
   return filter === 'closed'
-    ? p.events.filter(e => e.is_active === 0)
-    : p.events.filter(e => e.is_active !== 0);
+    ? sched.filter(e => e.is_active === 0)
+    : sched.filter(e => e.is_active !== 0);
 }
 
 function renderList() {
@@ -697,9 +700,9 @@ function renderDetail(idx) {
     `;
   }
 
-  // 일정 목록
+  // 일정 목록 (회의 제외)
   const evEl = document.getElementById('det-events');
-  const eventsToShow = isUnset ? unsetVisibleEvents(p) : p.events;
+  const eventsToShow = isUnset ? unsetVisibleEvents(p) : p.events.filter(e => e.event_type !== 'meeting');
   if (!eventsToShow.length) {
     evEl.innerHTML = '<div class="pm-empty">연결된 일정 없음</div>';
   } else {
@@ -711,12 +714,8 @@ function renderDetail(idx) {
         ? `<span class="pm-ev-assignee" title="${escHtml(e.assignee)}">${escHtml(e.assignee)}</span>` : '';
       let actionBtn;
       const isDone = e.is_active === 0;
-      const isHidden = e.kanban_hidden === 1;
       const evPub = e.is_public;  // null=프로젝트 연동, 0=비공개, 1=공개
       const visLocked = isDone || isClosed;  // 완료 일정 또는 종료 프로젝트 → 비공개 고정
-      const hideBtn = isHidden
-        ? `<button class="pm-btn pm-btn-accent" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleKanbanHidden(${e.id}, false)" title="칸반/간트에 다시 표시">👁 보이기</button>`
-        : `<button class="pm-btn" style="padding:2px 8px;font-size:0.74rem;color:var(--text-muted);" onclick="toggleKanbanHidden(${e.id}, true)" title="칸반/간트에서 숨기기">체크/칸반/간트에서 비노출</button>`;
       const exportEvBtn = `<a class="pm-btn pm-btn-accent" href="/api/events/${e.id}/export" rel="noopener" style="padding:2px 8px;font-size:0.74rem;text-decoration:none;display:inline-block;" title="마크다운으로 내보내기">📄 MD</a>`;
       const evVisBtn = visLocked
         ? `<button class="pm-btn pm-btn-danger" style="padding:2px 8px;font-size:0.74rem;opacity:0.5;cursor:not-allowed;" disabled title="완료/종료된 항목은 외부 비공개 고정">🔒 외부 비공개</button>`
@@ -729,21 +728,49 @@ function renderDetail(idx) {
         actionBtn = (!isDone
           ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, false)">완료 처리</button>`
           : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`)
-          + hideBtn + exportEvBtn + evVisBtn;
+          + exportEvBtn + evVisBtn;
       } else {
         const doneBtn = !isDone
           ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, false)">완료 처리</button>`
           : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`;
-        actionBtn = `${doneBtn}${hideBtn}${exportEvBtn}<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeEvent(${e.id})">프로젝트에서 제외</button>${evVisBtn}`;
+        actionBtn = `${doneBtn}${exportEvBtn}<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeEvent(${e.id})">프로젝트에서 제외</button>${evVisBtn}`;
       }
-      const rowStyle = isDone ? 'opacity:0.45;' : isHidden ? 'opacity:0.6;' : '';
+      const rowStyle = isDone ? 'opacity:0.45;' : '';
       const titleStyle = isDone ? 'text-decoration:line-through;' : '';
       return `
         <div class="pm-ev-row" style="${rowStyle}">
-          <span class="pm-ev-title" style="${titleStyle}" title="${escHtml(e.title)}">${escHtml(e.title)}${isHidden ? ' <span style="font-size:0.7rem;color:var(--text-faint);">[숨김]</span>' : ''}</span>
+          <span class="pm-ev-title" style="${titleStyle}" title="${escHtml(e.title)}">${escHtml(e.title)}</span>
           <span class="pm-ev-date">${date}</span>
           ${assignee}
           ${actionBtn}
+        </div>`;
+    }).join('');
+  }
+
+  // 회의 목록
+  const mtTitleEl = document.getElementById('det-meetings-title');
+  const mtEl = document.getElementById('det-meetings');
+  const meetingsToShow = p.events.filter(e => e.event_type === 'meeting');
+  if (!meetingsToShow.length) {
+    mtTitleEl.style.display = 'none';
+    mtEl.style.display = 'none';
+  } else {
+    mtTitleEl.style.display = '';
+    mtEl.style.display = '';
+    mtEl.innerHTML = meetingsToShow.map(e => {
+      const s  = (e.start_datetime || '').slice(0, 10);
+      const en = (e.end_datetime   || '').slice(0, 10);
+      const date     = en && en !== s ? `${s} ~ ${en}` : s;
+      const assignee = e.assignee
+        ? `<span class="pm-ev-assignee" title="${escHtml(e.assignee)}">${escHtml(e.assignee)}</span>` : '';
+      const exportEvBtn = `<a class="pm-btn pm-btn-accent" href="/api/events/${e.id}/export" rel="noopener" style="padding:2px 8px;font-size:0.74rem;text-decoration:none;display:inline-block;" title="마크다운으로 내보내기">📄 MD</a>`;
+      const visLabel = `<button class="pm-btn" style="padding:2px 8px;font-size:0.74rem;color:var(--text-muted);cursor:default;" disabled title="회의 일정은 프로젝트 연동 고정">🔄 프로젝트 연동</button>`;
+      return `
+        <div class="pm-ev-row">
+          <span class="pm-ev-title" title="${escHtml(e.title)}">${escHtml(e.title)}</span>
+          <span class="pm-ev-date">${date}</span>
+          ${assignee}
+          ${exportEvBtn}${visLabel}
         </div>`;
     }).join('');
   }
@@ -955,18 +982,6 @@ async function cycleChecklistVisibility(id, cur) {
     const clEl = document.getElementById('det-checklists');
     if (clEl && clEl.style.display !== 'none') loadChecklistsForProject(isUnsetNow ? null : p.name, clEl);
   }
-}
-
-/* ── 칸반/간트 숨기기 토글 ── */
-async function toggleKanbanHidden(id, hidden) {
-  const res = await fetch(`/api/manage/events/${id}/kanban-hidden`, {
-    method: 'PATCH',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ hidden }),
-  });
-  if (!res.ok) { toast('변경 실패'); return; }
-  toast(hidden ? '칸반/간트에서 숨김' : '칸반/간트에 표시됨');
-  await loadProjectList();
 }
 
 /* ── 일정 프로젝트 제외 (미지정으로 이동) ── */

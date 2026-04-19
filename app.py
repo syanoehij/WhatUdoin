@@ -1684,14 +1684,6 @@ async def manage_event_status(event_id: int, request: Request):
     return {"ok": True}
 
 
-@app.patch("/api/manage/events/{event_id}/kanban-hidden")
-async def manage_event_kanban_hidden(event_id: int, request: Request):
-    _require_editor(request)
-    data = await request.json()
-    hidden = bool(data.get("hidden", False))
-    db.update_event_kanban_hidden(event_id, hidden)
-    return {"ok": True}
-
 
 @app.patch("/api/events/{event_id}/visibility")
 async def update_event_visibility_api(event_id: int, request: Request):
