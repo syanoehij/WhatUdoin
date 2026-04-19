@@ -1034,7 +1034,12 @@ function _showViewerMode() {
     if (visSeg && !_lockedByOther) {
       visSeg.style.display = '';
       visSeg.dataset.cid = _curId || '';
-      const isPub = _curItem?.is_public ?? null;  // null=프로젝트 연동, 0=비공개, 1=공개
+      let isPub = _curItem?.is_public ?? null;
+      if (isPub === null) {
+        // 프로젝트 연동: 소속 프로젝트의 is_private 기준으로 실효 상태 표시
+        const proj = ALL_PROJECTS.find(p => p.name === _curItem?.project);
+        isPub = proj?.is_private ? 0 : 1;
+      }
       visSeg.querySelectorAll('.vis-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.val) === isPub));
     } else if (visSeg) {
       visSeg.style.display = 'none';

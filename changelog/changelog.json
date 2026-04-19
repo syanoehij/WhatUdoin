@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-04-19",
+      "phase": "22차 9단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 프로젝트 연동 상태(<code>is_public=NULL</code>) 공개 버튼 표시 개선",
+          "detail_html": "<ul>\n              <li><b>문제</b> — <code>is_public=NULL</code>(프로젝트 따라가기)일 때 '외부 비공개'·'외부 공개' 버튼이 모두 비활성으로 표시되던 버그</li>\n              <li><b>수정</b> — <code>is_public=NULL</code>이면 소속 프로젝트의 <code>is_private</code>를 기준으로 실효 상태를 계산하여 해당 버튼을 활성 표시</li>\n              <li>체크 읽기 뷰(<code>check.html</code>): JS에서 <code>ALL_PROJECTS</code>로 프로젝트 조회 후 <code>is_private</code> 기반 실효값 적용</li>\n              <li>체크 편집 뷰(<code>check_editor.html</code>): 서버에서 <code>proj_is_private</code> 계산 후 Jinja2 <code>eff_public</code> 변수로 버튼 상태 결정</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
       "phase": "22차 8단계",
       "phase_class": "phase-7",
       "entries": [

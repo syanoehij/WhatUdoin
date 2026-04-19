@@ -329,9 +329,12 @@ def check_editor_page(request: Request, checklist_id: int):
     projects = [p for p in all_projs if p.get("is_active", 1)]
     lock = db.get_checklist_lock(checklist_id)
     locked_by = lock["user_name"] if lock else None
+    proj_name = item.get("project")
+    proj_info = next((p for p in all_projs if p.get("name") == proj_name), None) if proj_name else None
+    proj_is_private = bool(proj_info.get("is_private", 0)) if proj_info else False
     return templates.TemplateResponse(
         request, "check_editor.html",
-        _ctx(request, checklist=item, locked_by=locked_by, projects=projects)
+        _ctx(request, checklist=item, locked_by=locked_by, projects=projects, proj_is_private=proj_is_private)
     )
 
 

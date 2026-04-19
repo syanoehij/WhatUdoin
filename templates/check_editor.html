@@ -106,9 +106,10 @@
       {% endif %}
       {% if not locked_by %}
       {% if checklist.id %}
+      {% set eff_public = checklist.is_public if checklist.is_public is not none else (0 if proj_is_private else 1) %}
       <div class="visibility-segment" id="ck-vis-seg" data-cid="{{ checklist.id }}">
-        <button type="button" class="vis-btn {% if checklist.is_public == 0 %}active{% endif %}" data-val="0">외부 비공개</button>
-        <button type="button" class="vis-btn {% if checklist.is_public == 1 %}active{% endif %}" data-val="1">외부 공개</button>
+        <button type="button" class="vis-btn {% if eff_public == 0 %}active{% endif %}" data-val="0">외부 비공개</button>
+        <button type="button" class="vis-btn {% if eff_public == 1 %}active{% endif %}" data-val="1">외부 공개</button>
       </div>
       <button class="btn btn-sm" id="btn-toc-toggle" onclick="toggleTocPanel()" title="목차">📑 목차</button>
       <button class="btn btn-sm btn-danger" onclick="deleteChecklist()">삭제</button>
