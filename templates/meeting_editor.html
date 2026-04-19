@@ -26,13 +26,10 @@
     <div class="btn-group">
       {% if can_edit and not locked_by %}
       <div class="visibility-segment" id="visibility-segment" role="radiogroup" aria-label="공개 범위"></div>
-      <label class="doc-type-toggle" title="팀 문서면 캘린더/팀원에게 공개됩니다">
-        <input type="checkbox" id="chk-team-doc"
-               {% if not meeting or meeting.is_team_doc %}checked{% endif %} />
-        <span class="doc-type-label" id="doc-type-label">
-          {% if not meeting or meeting.is_team_doc %}팀 문서{% else %}개인 문서{% endif %}
-        </span>
-      </label>
+      {% endif %}
+      {% if can_edit and not locked_by %}
+      <div class="visibility-segment" id="doc-type-segment" role="radiogroup" aria-label="수정 권한"
+           data-initial="{{ 'team' if (not meeting or meeting.is_team_doc) else 'personal' }}"></div>
       {% endif %}
       {% if user and meeting %}
       <a href="/memo/{{ meeting.id }}/history" class="btn btn-sm">수정 이력</a>
@@ -198,33 +195,41 @@ function initMeetingEditor() {
     return;
   }
 
-  // 문서 종류 토글 + 공개 범위 세그먼트 컨트롤 초기화
-  const chkTeamDoc = document.getElementById('chk-team-doc');
-  const lblDocType = document.getElementById('doc-type-label');
+  // 문서 종류 세그먼트 + 공개 범위 세그먼트 컨트롤 초기화
+  const docTypeSeg = document.getElementById('doc-type-segment');
   const visSeg     = document.getElementById('visibility-segment');
 
+  const DOC_OPTS = [
+    { v: 'personal', label: '나만 수정' },
+    { v: 'team',     label: '팀원도 수정' },
+  ];
   const VIS_OPTS = [
     { v: 'private', label: '외부 비공개' },
     { v: 'team',    label: '팀에게만 공개' },
     { v: 'public',  label: '외부 공개' },
   ];
 
-  function renderVisSegment(cur) {
-    if (!visSeg) return;
-    const isTeamDoc = chkTeamDoc ? chkTeamDoc.checked : true;
-    visSeg.innerHTML = VIS_OPTS
-      .filter(o => isTeamDoc ? o.v !== 'team' : true)
-      .map(o => `<button type="button" class="vis-btn${o.v === cur ? ' active' : ''}"
-                          data-value="${o.v}" role="radio" aria-checked="${o.v === cur}">
-                 ${o.label}</button>`).join('');
-    visSeg.querySelectorAll('.vis-btn').forEach(btn => {
+  function isTeamDoc() {
+    return docTypeSeg?.querySelector('.vis-btn.active')?.dataset.value === 'team';
+  }
+
+  function renderSegment(el, opts, cur) {
+    if (!el) return;
+    el.innerHTML = opts.map(o => `<button type="button" class="vis-btn${o.v === cur ? ' active' : ''}"
+                        data-value="${o.v}" role="radio" aria-checked="${o.v === cur}">
+               ${o.label}</button>`).join('');
+    el.querySelectorAll('.vis-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        visSeg.querySelectorAll('.vis-btn').forEach(b => {
-          b.classList.remove('active');
-          b.setAttribute('aria-checked', 'false');
+        el.querySelectorAll('.vis-btn').forEach(b => {
+          b.classList.remove('active'); b.setAttribute('aria-checked', 'false');
         });
-        btn.classList.add('active');
-        btn.setAttribute('aria-checked', 'true');
+        btn.classList.add('active'); btn.setAttribute('aria-checked', 'true');
+        if (el === docTypeSeg) {
+          // 팀 문서 → 팀에게만 공개 옵션 제거, 개인 문서 → 추가
+          const curVis = visSeg?.querySelector('.vis-btn.active')?.dataset.value || 'private';
+          renderSegment(visSeg, VIS_OPTS.filter(o => btn.dataset.value === 'team' ? o.v !== 'team' : true),
+            (btn.dataset.value === 'team' && curVis === 'team') ? 'private' : curVis);
+        }
       });
     });
   }
@@ -239,20 +244,18 @@ function initMeetingEditor() {
     {% endif %}
   }
 
-  if (chkTeamDoc && lblDocType) {
+  if (docTypeSeg) {
+    const initDocType = docTypeSeg.dataset.initial || 'team';
     if (!MEETING_ID) {
       const isPersonal = new URLSearchParams(location.search).get('personal') === '1';
-      chkTeamDoc.checked = !isPersonal;
-      lblDocType.textContent = chkTeamDoc.checked ? '팀 문서' : '개인 문서';
-      renderVisSegment(isPersonal ? 'team' : 'private');
+      renderSegment(docTypeSeg, DOC_OPTS, isPersonal ? 'personal' : 'team');
+      renderSegment(visSeg, VIS_OPTS.filter(o => !isPersonal ? o.v !== 'team' : true),
+        isPersonal ? 'private' : 'private');
     } else {
-      renderVisSegment(deriveInitialVisibility());
+      renderSegment(docTypeSeg, DOC_OPTS, initDocType);
+      const initVis = deriveInitialVisibility();
+      renderSegment(visSeg, VIS_OPTS.filter(o => initDocType === 'team' ? o.v !== 'team' : true), initVis);
     }
-    chkTeamDoc.addEventListener('change', () => {
-      lblDocType.textContent = chkTeamDoc.checked ? '팀 문서' : '개인 문서';
-      const cur = visSeg?.querySelector('.vis-btn.active')?.dataset.value || 'private';
-      renderVisSegment(chkTeamDoc.checked && cur === 'team' ? 'private' : cur);
-    });
   }
 
   // AI 버튼 초기 레이블
@@ -379,7 +382,7 @@ async function saveMeeting(leaveTarget) {
 
   const method = MEETING_ID ? 'PUT' : 'POST';
   const url    = MEETING_ID ? `/api/memo/${MEETING_ID}` : '/api/memo';
-  const isTeamDoc   = document.getElementById('chk-team-doc')?.checked ?? true;
+  const isTeamDoc   = document.getElementById('doc-type-segment')?.querySelector('.vis-btn.active')?.dataset.value === 'team';
   const vis         = document.getElementById('visibility-segment')?.querySelector('.vis-btn.active')?.dataset.value || 'private';
   const isPublic    = vis === 'public';
   const teamShare   = !isTeamDoc && vis === 'team';

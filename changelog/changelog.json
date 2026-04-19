@@ -2,6 +2,47 @@
   "groups": [
     {
       "date": "2026-04-19",
+      "phase": "17차 7단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🎯",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>메모 리스트 배지 중앙 정렬 — flex 방식으로 전환",
+          "detail_html": "<ul>\n              <li><b>공개 여부</b>·<b>수정 가능</b> 셀에 <code>display: flex; justify-content: center</code> 적용 — <code>text-align: center</code>만으로는 좁은 컬럼에서 배지가 왼쪽에 붙는 문제 해결</li>\n              <li>수정 가능 컬럼 폭 60px → 84px, 공개 여부 100px, 작성자·소속 팀 80px, 날짜 72px로 최종 조정</li>\n            </ul>"
+        },
+        {
+          "icon": "📐",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>메모 리스트 CSS Grid 아키텍처 정리",
+          "detail_html": "<ul>\n              <li><code>table-layout: fixed</code>·<code>th { width }</code> 는 <code>display: grid</code> 환경에서 무시됨을 확인 — 해당 사문화 코드 전량 제거</li>\n              <li><code>grid-template-columns</code>을 컬럼 폭의 유일한 진실 소스로 명확히 문서화</li>\n              <li>제목 열만 <code>text-align: left</code>, 나머지 모든 열 기본값 <code>text-align: center</code>로 통일</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
+      "phase": "17차 6단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "📋",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>메모 리스트 컬럼 순서·표현 개선",
+          "detail_html": "<ul>\n              <li>컬럼 순서 변경: <b>공개 여부 / 제목 / 작성자 / 소속 팀 / 수정 가능 / 작성 날짜</b> — 제목이 중앙에 넓게 배치</li>\n              <li>헤더 <b>문서 종류</b> → <b>수정 가능</b>으로 변경, 배지 텍스트 <b>팀 문서</b>→<b>팀</b> / <b>개인 문서</b>→<b>개인</b>으로 축약</li>\n              <li>소속 팀 컬럼에서 배지(<code>team-name-badge</code>) 제거 — 작성자와 동일한 일반 텍스트 스타일로 통일</li>\n              <li>수정 날짜 중앙 정렬, 제목 행 <code>font-weight: 500</code> 굵기 제거</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
+      "phase": "17차 5단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔀",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>메모 에디터 헤더 버튼 배치 조정",
+          "detail_html": "<ul>\n              <li><b>나만 수정 / 팀원도 수정</b> 세그먼트를 공개 범위 세그먼트 오른쪽에서 <b>수정 이력</b> 버튼 바로 왼쪽</b>으로 이동</li>\n              <li>공개 범위 → 수정 권한 → 수정 이력 → 목차 순으로 버튼 순서 재정렬</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-19",
       "phase": "17차 4단계",
       "phase_class": "phase-7",
       "entries": [

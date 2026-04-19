@@ -1010,10 +1010,11 @@ mark.search-hl {
   display: block;
   width: 100%;
 }
-/* grid 레이아웃: 문서종류(88) | 공개여부(90) | 작성자(80) | 제목(1fr) | 팀(80) | 날짜(72) */
+/* ★ 컬럼 폭의 유일한 진실: 공개여부(100) | 제목(1fr) | 작성자(80) | 팀(80) | 수정가능(84) | 날짜(72)
+   HTML thead, JS tbody 컬럼 순서와 반드시 일치해야 함. th { width } 는 무시됨. */
 .meetings-content .meeting-table tr {
   display: grid;
-  grid-template-columns: 88px 90px 80px 1fr 80px 72px;
+  grid-template-columns: 100px 1fr 80px 80px 84px 72px;
   width: 100%;
   align-items: center;
 }
@@ -1022,6 +1023,8 @@ mark.search-hl {
 }
 
 /* ── 회의록 목록 (게시판 테이블) ── */
+/* 실제 컬럼 폭은 grid-template-columns 가 결정 (아래 .meetings-content .meeting-table tr 참고).
+   th { width } 는 display:grid 환경에서 무시됨. */
 .meeting-table {
   width: 100%;
   border-collapse: collapse;
@@ -1032,20 +1035,16 @@ mark.search-hl {
 }
 .meeting-table th {
   padding: 11px 14px;
-  text-align: left;
+  text-align: center;
   font-size: 0.74rem;
   font-weight: 600;
   color: var(--text-faint);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
+  min-width: 0;
 }
-.meeting-table th.col-doc-type   { text-align: center; width: 88px; }
-.meeting-table th.col-visibility { text-align: center; width: 90px; }
-.meeting-table th.col-author { text-align: center; width: 80px; }
-.meeting-table th.col-title  { width: auto; }
-.meeting-table th.col-team   { width: 80px; }
-.meeting-table th.col-date   { text-align: right; padding-right: 20px; width: 72px; }
+.meeting-table th.col-title { text-align: left; }
 .meeting-row {
   cursor: pointer;
   border-bottom: 1px solid var(--border-faint);
@@ -1057,14 +1056,15 @@ mark.search-hl {
   padding: 13px 14px;
   vertical-align: middle;
   overflow: hidden;
+  min-width: 0;
 }
-/* td 전용 — th에 번지지 않도록 tbody로 범위 제한 */
-.meeting-table tbody .col-doc-type   { text-align: center; white-space: nowrap; }
-.meeting-table tbody .col-visibility { text-align: center; white-space: nowrap; }
-.meeting-table tbody .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; max-width: 80px; }
-.meeting-table tbody .col-title  { font-weight: 500; min-width: 0; }
-.meeting-table tbody .col-team   { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
-.meeting-table tbody .col-date   { white-space: nowrap; font-size: 0.8rem; color: var(--text-faint); text-align: right; padding-right: 20px; }
+.meeting-table tbody td { text-align: center; }
+.meeting-table tbody .col-title      { text-align: left; min-width: 0; }
+.meeting-table tbody .col-doc-type   { display: flex; justify-content: center; align-items: center; padding-left: 4px; padding-right: 4px; }
+.meeting-table tbody .col-visibility { display: flex; justify-content: center; align-items: center; padding-left: 4px; padding-right: 4px; }
+.meeting-table tbody .col-author { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meeting-table tbody .col-team   { color: var(--text-muted); font-size: 0.83rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meeting-table tbody .col-date   { white-space: nowrap; font-size: 0.8rem; color: var(--text-faint); }
 
 .meeting-title-wrap { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .meeting-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); transition: color 0.12s; }
@@ -1108,10 +1108,9 @@ mark.search-hl {
   white-space: nowrap;
   letter-spacing: 0.01em;
 }
-.vis-badge.vis-public  { background: #d1fae5; color: #065f46; }
-.dark .vis-badge.vis-public  { background: #064e3b; color: #6ee7b7; }
-.vis-badge.vis-team    { background: #fef3c7; color: #92400e; }
-.dark .vis-badge.vis-team    { background: #451a03; color: #fcd34d; }
+.vis-badge.vis-public  { background: #fef9c3; color: #854d0e; }
+.dark .vis-badge.vis-public  { background: #3d2900; color: #fde047; }
+.vis-badge.vis-team    { background: var(--accent-bg); color: var(--accent); }
 .vis-badge.vis-private { background: var(--surface-3); color: var(--text-muted); }
 
 .event-count-badge {
@@ -1124,31 +1123,6 @@ mark.search-hl {
   font-weight: 600;
 }
 
-/* ── 팀/개인 문서 토글 (에디터 헤더) ── */
-.doc-type-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  user-select: none;
-}
-.doc-type-toggle input[type="checkbox"] { display: none; }
-.doc-type-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 20px;
-  border: 1.5px solid var(--accent);
-  color: var(--accent);
-  background: var(--accent-bg);
-  transition: background 0.15s, color 0.15s;
-  white-space: nowrap;
-}
-.doc-type-toggle input:not(:checked) + .doc-type-label {
-  border-color: var(--border);
-  color: var(--text-muted);
-  background: transparent;
-}
 
 /* ── 공개 범위 세그먼트 컨트롤 (에디터 헤더) ── */
 .visibility-segment {

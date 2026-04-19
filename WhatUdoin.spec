@@ -16,6 +16,7 @@ a = Analysis(
         ('templates', 'templates'),
         ('static',    'static'),
         ('docs',      'docs'),
+        ('changelog', 'changelog'),
     ],
     hiddenimports=[
         # ── uvicorn ──────────────────────────────────────
