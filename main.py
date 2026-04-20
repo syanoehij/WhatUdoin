@@ -8,6 +8,8 @@ import os
 import asyncio
 import shutil
 import multiprocessing
+import threading
+import ctypes
 
 # Windows 콘솔 한글 깨짐 방지
 if sys.platform == "win32":
@@ -72,6 +74,90 @@ def _ensure_admin_guide(run_dir: str) -> None:
             shutil.copy2(os.path.join(src_dir, fn), dst)
 
 
+# ── 트레이 아이콘 / 콘솔창 제어 (frozen 환경 전용) ───────────────
+
+def _console_hwnd() -> int:
+    """PyInstaller 번들 환경에서만 콘솔창 HWND 반환."""
+    if not getattr(sys, "frozen", False) or sys.platform != "win32":
+        return 0
+    return ctypes.windll.kernel32.GetConsoleWindow()
+
+
+def _hide_from_taskbar(hwnd: int) -> None:
+    """WS_EX_TOOLWINDOW 적용으로 작업 표시줄에서 창을 제거."""
+    GWL_EXSTYLE    = -20
+    WS_EX_TOOLWINDOW = 0x00000080
+    WS_EX_APPWINDOW  = 0x00040000
+    SW_HIDE = 0
+    SW_SHOW = 5
+    user32 = ctypes.windll.user32
+    style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+    style = (style | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW
+    user32.ShowWindow(hwnd, SW_HIDE)
+    user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+    user32.ShowWindow(hwnd, SW_SHOW)
+
+
+def _disable_console_close(hwnd: int) -> None:
+    """시스템 메뉴에서 SC_CLOSE 제거 → X 버튼 비활성(회색)."""
+    SC_CLOSE    = 0xF060
+    MF_BYCOMMAND = 0x0
+    user32 = ctypes.windll.user32
+    hmenu = user32.GetSystemMenu(hwnd, 0)
+    if hmenu:
+        user32.DeleteMenu(hmenu, SC_CLOSE, MF_BYCOMMAND)
+
+
+def _watch_minimize(hwnd: int, stop_event: threading.Event) -> None:
+    """최소화 감지 시 창을 숨김으로 전환 (0.4초 폴링)."""
+    import time
+    user32 = ctypes.windll.user32
+    SW_HIDE = 0
+    while not stop_event.is_set():
+        if hwnd and user32.IsIconic(hwnd):
+            user32.ShowWindow(hwnd, SW_HIDE)
+        time.sleep(0.4)
+
+
+def _make_tray(servers: list, hwnd: int, stop_event: threading.Event):
+    """pystray 트레이 아이콘 오브젝트 생성."""
+    import pystray
+    from PIL import Image
+    import webbrowser
+
+    icon_path = os.path.join(_base_dir(), "static", "favicon.ico")
+    image = Image.open(icon_path)
+    user32 = ctypes.windll.user32
+    SW_HIDE    = 0
+    SW_RESTORE = 9
+
+    def toggle_log(icon, item):
+        if not hwnd:
+            return
+        if user32.IsWindowVisible(hwnd):
+            user32.ShowWindow(hwnd, SW_HIDE)
+        else:
+            user32.ShowWindow(hwnd, SW_RESTORE)
+            user32.SetForegroundWindow(hwnd)
+
+    def open_browser(icon, item):
+        webbrowser.open("http://localhost:8000")
+
+    def on_quit(icon, item):
+        for s in servers:
+            s.should_exit = True
+        stop_event.set()
+        icon.stop()
+
+    menu = pystray.Menu(
+        pystray.MenuItem("브라우저에서 열기", open_browser, default=True),
+        pystray.MenuItem("로그 창 표시/숨김", toggle_log),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("종료", on_quit),
+    )
+    return pystray.Icon("WhatUdoin", image, "WhatUdoin 서버", menu)
+
+
 # Windows ProactorEventLoop의 ConnectionResetError 10054 노이즈 억제
 # socket.shutdown()이 이미 닫힌 소켓에 호출될 때 발생하는 Windows 고유 버그
 if sys.platform == "win32":
@@ -114,7 +200,7 @@ if __name__ == "__main__":
         print(f"  HTTPS : https://localhost:{PORT_HTTPS}  (CA 설치 시)")
     else:
         print("  HTTPS : 미적용 (whatudoin-cert.pem / whatudoin-key.pem 없음)")
-    print("  종료: Ctrl+C")
+    print("  종료: 트레이 아이콘 우클릭 → 종료")
     print("=" * 48)
 
     http_cfg = uvicorn.Config(
@@ -131,9 +217,42 @@ if __name__ == "__main__":
     async def _run_all():
         await asyncio.gather(*(s.serve() for s in servers))
 
+    stop_event = threading.Event()
+    server_exc: list = []
+
+    def _server_thread():
+        try:
+            asyncio.run(_run_all())
+        except Exception as e:
+            server_exc.append(e)
+        finally:
+            stop_event.set()
+
+    t = threading.Thread(target=_server_thread, daemon=True, name="uvicorn")
+    t.start()
+
+    # ── 트레이 / 콘솔창 설정 (frozen exe 환경 전용) ──────────────
+    hwnd = _console_hwnd()
+    if hwnd:
+        _hide_from_taskbar(hwnd)
+        _disable_console_close(hwnd)
+        threading.Thread(
+            target=_watch_minimize, args=(hwnd, stop_event),
+            daemon=True, name="minimize-watcher"
+        ).start()
+
+    # 트레이 아이콘은 개발 모드·frozen 모두 실행
+    # (콘솔창 HWND 조작만 frozen 한정이므로 개발 시 터미널에 영향 없음)
     try:
-        asyncio.run(_run_all())
-    except OSError as e:
+        _make_tray(servers, hwnd, stop_event).run()
+    except KeyboardInterrupt:
+        pass
+    for s in servers:
+        s.should_exit = True
+    t.join(timeout=5)
+
+    # ── 포트 충돌 오류 처리 ───────────────────────────────────────
+    for e in server_exc:
         if "10048" in str(e) or "address already in use" in str(e).lower():
             port_str = f"{PORT_HTTP}/{PORT_HTTPS}" if have_https else str(PORT_HTTP)
             print()
@@ -145,7 +264,6 @@ if __name__ == "__main__":
             print("=" * 48)
         else:
             print(f"\n[오류] 서버 시작 실패: {e}")
-        input("\n아무 키나 누르면 종료합니다...")
+        if getattr(sys, "frozen", False):
+            input("\n아무 키나 누르면 종료합니다...")
         sys.exit(1)
-    except KeyboardInterrupt:
-        print("\n서버를 종료합니다.")

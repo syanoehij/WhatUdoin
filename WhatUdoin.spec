@@ -97,6 +97,12 @@ a = Analysis(
         'certifi',
         'charset_normalizer',
         'idna',
+        # ── 시스템 트레이 ────────────────────────────────
+        'pystray',
+        'pystray._win32',
+        'PIL',
+        'PIL.Image',
+        'PIL.ImageDraw',
         # ── APScheduler (알림 스케줄러) ───────────────────
         'apscheduler',
         'apscheduler.schedulers',
@@ -119,7 +125,6 @@ a = Analysis(
         'matplotlib',
         'numpy',
         'pandas',
-        'PIL',
         'PyQt5',
         'PyQt6',
         'wx',

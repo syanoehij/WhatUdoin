@@ -6,3 +6,5 @@ requests
 itsdangerous
 cryptography>=42.0.0
 rapidfuzz>=3.6
+pystray
+Pillow
