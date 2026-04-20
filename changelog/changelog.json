@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-04-20",
+      "phase": "22차 21단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>알림 설정 — 인증서 다운로드 500 오류 수정 및 ZIP 형식 전환",
+          "detail_html": "<ul>\n              <li><b>근본 원인</b> — <code>FileResponse</code>의 <code>Content-Disposition</code> 헤더에 한글 파일명(<code>WhatUdoin-인증서.crt</code>)이 포함되어 Starlette가 latin-1 인코딩 시도 → <code>UnicodeEncodeError</code> 발생해 HTTP 500 반환</li>\n              <li><b>ZIP 전환</b> — <code>/api/cert/rootCA.crt</code> 엔드포인트를 <code>/api/cert/rootCA.zip</code>으로 변경; 서버가 요청마다 <code>whatudoin-rootCA.pem</code>을 메모리에서 즉석으로 ZIP 압축해 전송 (디스크에 파일 생성 없음)</li>\n              <li>ZIP 내부 파일명은 <code>WhatUdoin-rootCA.crt</code>(ASCII)로 저장 → Windows 인증서 설치 마법사 정상 인식</li>\n              <li>기업 보안 정책상 <code>.crt</code> 직접 다운로드가 차단되는 환경에서도 <code>.zip</code>으로 수신 가능</li>\n              <li><code>alarm_setup.html</code> 다운로드 링크·안내 문구 ZIP 기준으로 업데이트 (압축 풀기 → CRT 더블클릭 절차 추가)</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>시스템 트레이 아이콘 — 콘솔 로그창 트레이 연동",
+          "detail_html": "<ul>\n              <li><b>배경</b> — 콘솔 창이 Windows 작업 표시줄에 상시 노출되어 실수로 X 클릭 시 서버 종료, 최소화해도 공간 점유 문제</li>\n              <li><b>트레이 아이콘 추가</b> — <code>pystray</code> 라이브러리로 시스템 트레이에 WhatUdoin 아이콘 상주; 좌클릭 → 브라우저 열기, 우클릭 메뉴 → 로그 창 표시/숨김, 종료</li>\n              <li><b>작업 표시줄 제거</b> — <code>WS_EX_TOOLWINDOW</code> 확장 스타일 적용으로 콘솔창이 작업 표시줄에 노출되지 않음 (frozen exe 빌드 전용)</li>\n              <li><b>X 버튼 비활성화</b> — 시스템 메뉴에서 <code>SC_CLOSE</code> 제거 → X 버튼 회색 처리; 실수 종료 방지</li>\n              <li><b>최소화 → 자동 숨김</b> — 0.4초 폴링으로 <code>IsIconic(hwnd)</code> 감지, 최소화 즉시 창 숨김 처리</li>\n              <li>uvicorn 서버를 별도 스레드로 이동, 메인 스레드에서 트레이 루프 실행; 개발 모드에서는 트레이만 활성(콘솔창 제어 스킵), Ctrl+C 종료 지원</li>\n              <li><code>WhatUdoin.spec</code> — <code>PIL</code> excludes 제거, <code>pystray</code>/<code>PIL</code> hiddenimports 추가</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-20",
       "phase": "22차 20단계",
       "phase_class": "phase-7",
       "entries": [
