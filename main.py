@@ -11,12 +11,10 @@ import multiprocessing
 import threading
 import ctypes
 
-# Windows 콘솔 한글 깨짐 방지
-if sys.platform == "win32":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-    os.system("chcp 65001 > nul 2>&1")
+# 콘솔 HWND 공유 참조 (트레이·minimize-watcher·close-handler 공유)
+_HWND_REF: list = [0]
+# AllocConsole 실패 시 로그 파일 fallback 핸들
+_LOG_FILE = None
 
 
 def _base_dir() -> str:
@@ -74,13 +72,7 @@ def _ensure_admin_guide(run_dir: str) -> None:
             shutil.copy2(os.path.join(src_dir, fn), dst)
 
 
-# ── 트레이 아이콘 / 콘솔창 제어 (frozen 환경 전용) ───────────────
-
-def _console_hwnd() -> int:
-    """PyInstaller 번들 환경에서만 콘솔창 HWND 반환."""
-    if not getattr(sys, "frozen", False) or sys.platform != "win32":
-        return 0
-    return ctypes.windll.kernel32.GetConsoleWindow()
+# ── 트레이 아이콘 / 콘솔창 제어 ───────────────────────────────────
 
 
 def _hide_from_taskbar(hwnd: int) -> None:
@@ -108,11 +100,10 @@ def _disable_console_close(hwnd: int) -> None:
         user32.DeleteMenu(hmenu, SC_CLOSE, MF_BYCOMMAND)
 
 
-def _intercept_console_close(hwnd: int) -> None:
-    """콘솔 창 닫기(Alt+F4·작업표시줄 닫기 등)를 종료 대신 숨김으로 전환.
-    SetConsoleCtrlHandler로 CTRL_CLOSE_EVENT를 가로채 True 반환 → 프로세스 유지."""
-    if not hwnd:
-        return
+def _intercept_console_close(hwnd_ref: list) -> None:
+    """AllocConsole로 만든 보조 콘솔의 닫기를 숨김으로 전환.
+    보조 콘솔은 프로세스 primary console이 아니므로 닫아도
+    OS가 프로세스 종료 신호를 보내지 않음 — ShowWindow(SW_HIDE)만 수행."""
     CTRL_CLOSE_EVENT = 2
     SW_HIDE = 0
     user32 = ctypes.windll.user32
@@ -120,27 +111,28 @@ def _intercept_console_close(hwnd: int) -> None:
     @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)
     def _handler(ctrl_type):
         if ctrl_type == CTRL_CLOSE_EVENT:
-            user32.ShowWindow(hwnd, SW_HIDE)
+            if hwnd_ref[0]:
+                user32.ShowWindow(hwnd_ref[0], SW_HIDE)
             return True
         return False
 
-    # GC 방지: 핸들러 참조를 함수 속성에 보관
     _intercept_console_close._handler = _handler
     ctypes.windll.kernel32.SetConsoleCtrlHandler(_handler, True)
 
 
-def _watch_minimize(hwnd: int, stop_event: threading.Event) -> None:
+def _watch_minimize(hwnd_ref: list, stop_event: threading.Event) -> None:
     """최소화 감지 시 창을 숨김으로 전환 (0.4초 폴링)."""
     import time
     user32 = ctypes.windll.user32
     SW_HIDE = 0
     while not stop_event.is_set():
+        hwnd = hwnd_ref[0]
         if hwnd and user32.IsIconic(hwnd):
             user32.ShowWindow(hwnd, SW_HIDE)
         time.sleep(0.4)
 
 
-def _make_tray(servers: list, hwnd: int, stop_event: threading.Event):
+def _make_tray(servers: list, hwnd_ref: list, stop_event: threading.Event):
     """pystray 트레이 아이콘 오브젝트 생성."""
     import pystray
     from PIL import Image
@@ -153,6 +145,7 @@ def _make_tray(servers: list, hwnd: int, stop_event: threading.Event):
     SW_RESTORE = 9
 
     def toggle_log(icon, item):
+        hwnd = hwnd_ref[0]
         if not hwnd:
             return
         if user32.IsWindowVisible(hwnd):
@@ -169,6 +162,11 @@ def _make_tray(servers: list, hwnd: int, stop_event: threading.Event):
             s.should_exit = True
         stop_event.set()
         icon.stop()
+        if _LOG_FILE:
+            try:
+                _LOG_FILE.close()
+            except Exception:
+                pass
 
     menu = pystray.Menu(
         pystray.MenuItem("브라우저에서 열기", open_browser, default=True),
@@ -196,6 +194,37 @@ if sys.platform == "win32":
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+
+    # ── 콘솔/스트림 초기화 ──────────────────────────────────────────
+    if sys.platform == "win32":
+        if getattr(sys, "frozen", False):
+            # console=False 빌드: AllocConsole로 보조 콘솔 생성
+            # 보조 콘솔은 프로세스 primary console이 아니므로
+            # 닫아도 OS가 프로세스 종료 신호를 보내지 않음
+            if ctypes.windll.kernel32.AllocConsole():
+                sys.stdout = open("CONOUT$", "w", encoding="utf-8",
+                                  errors="replace", buffering=1)
+                sys.stderr = open("CONOUT$", "w", encoding="utf-8",
+                                  errors="replace", buffering=1)
+                sys.stdin  = open("CONIN$",  "r", encoding="utf-8",
+                                  errors="replace")
+                os.system("chcp 65001 > nul 2>&1")
+                _HWND_REF[0] = ctypes.windll.kernel32.GetConsoleWindow()
+            else:
+                # 콘솔 할당 실패 → 로그 파일 fallback
+                _LOG_FILE = open(
+                    os.path.join(_run_dir(), "whatudoin.log"),
+                    "a", encoding="utf-8", buffering=1,
+                )
+                sys.stdout = sys.stderr = _LOG_FILE
+        else:
+            # 개발 모드: UTF-8 래핑
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer,
+                                          encoding="utf-8", errors="replace")
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer,
+                                          encoding="utf-8", errors="replace")
+            os.system("chcp 65001 > nul 2>&1")
 
     # app.py / database.py 가 import 되기 전에 경로 설정
     os.environ.setdefault("WHATUDOIN_BASE_DIR", _base_dir())
@@ -252,21 +281,18 @@ if __name__ == "__main__":
     t = threading.Thread(target=_server_thread, daemon=True, name="uvicorn")
     t.start()
 
-    # ── 트레이 / 콘솔창 설정 (frozen exe 환경 전용) ──────────────
-    hwnd = _console_hwnd()
-    if hwnd:
-        _hide_from_taskbar(hwnd)
-        _disable_console_close(hwnd)
-        _intercept_console_close(hwnd)
+    # ── 트레이 / 콘솔창 설정 ─────────────────────────────────────
+    if _HWND_REF[0]:
+        _hide_from_taskbar(_HWND_REF[0])
+        _disable_console_close(_HWND_REF[0])
+        _intercept_console_close(_HWND_REF)
         threading.Thread(
-            target=_watch_minimize, args=(hwnd, stop_event),
+            target=_watch_minimize, args=(_HWND_REF, stop_event),
             daemon=True, name="minimize-watcher"
         ).start()
 
-    # 트레이 아이콘은 개발 모드·frozen 모두 실행
-    # (콘솔창 HWND 조작만 frozen 한정이므로 개발 시 터미널에 영향 없음)
     try:
-        _make_tray(servers, hwnd, stop_event).run()
+        _make_tray(servers, _HWND_REF, stop_event).run()
     except KeyboardInterrupt:
         pass
     for s in servers:

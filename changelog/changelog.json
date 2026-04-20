@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-04-20",
+      "phase": "23차 5단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>시스템 트레이 — 콘솔 창 닫기 시 프로세스 종료 근본 수정",
+          "detail_html": "<ul>\n              <li><b>이전 수정(23차 4단계) 한계</b> — <code>SetConsoleCtrlHandler</code> 핸들러가 <code>CTRL_CLOSE_EVENT</code>에서 <code>True</code>를 반환해도 Windows는 핸들러 반환 후 프로세스를 강제 종료시킴 (MS 공식 동작). 사용자 테스트 결과 Alt+F4·작업표시줄 닫기 시 여전히 서비스 다운.</li>\n              <li><b>근본 원인</b> — <code>console=True</code> 빌드는 conhost가 프로세스의 primary console로 설정되어, 콘솔 창을 닫으면 OS가 프로세스 종료 신호를 직접 전달하는 구조</li>\n              <li><b>수정 전략</b> — PyInstaller 빌드 옵션을 <code>console=False</code>(windowed)로 변경 후 시작 시 <code>AllocConsole()</code>로 보조 콘솔을 수동 생성. 보조 콘솔은 프로세스 primary console이 아니므로 닫아도 OS가 종료 신호를 보내지 않음</li>\n              <li><code>WhatUdoin.spec</code> — <code>console=True</code> → <code>console=False</code>, bootloader가 <code>runw.exe</code>로 전환</li>\n              <li><code>main.py</code> — <code>__main__</code> 진입 직후 <code>AllocConsole()</code> 호출, 성공 시 <code>sys.stdout/stderr/stdin</code>을 <code>CONOUT$/CONIN$</code>에 재연결; 실패 시 <code>whatudoin.log</code> 파일 fallback</li>\n              <li>콘솔 HWND를 <code>_HWND_REF = [0]</code> 공유 리스트로 관리 — 트레이 토글·minimize-watcher·close-handler 3곳이 동일 참조 사용</li>\n              <li><code>_console_hwnd()</code> 함수 제거; <code>_watch_minimize</code>·<code>_intercept_console_close</code>·<code>_make_tray</code> 모두 <code>hwnd_ref: list</code> 인터페이스로 전환</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-20",
       "phase": "23차 4단계",
       "phase_class": "phase-7",
       "entries": [
