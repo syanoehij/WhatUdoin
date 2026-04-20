@@ -271,17 +271,19 @@ def alarm_setup_page(request: Request):
     )
 
 
-@app.get("/api/cert/rootCA.crt")
+@app.get("/api/cert/rootCA.zip")
 def download_rootca():
     cert_path = _RUN_DIR / "whatudoin-rootCA.pem"
     if not cert_path.is_file():
         raise HTTPException(status_code=404, detail="루트 인증서가 아직 준비되지 않았습니다.")
-    filename = "WhatUdoin-인증서.crt"
-    return FileResponse(
-        cert_path,
-        media_type="application/x-x509-ca-cert",
-        filename=filename,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(cert_path, arcname="WhatUdoin-rootCA.crt")
+    buf.seek(0)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="WhatUdoin-rootCA.zip"'},
     )
 
 

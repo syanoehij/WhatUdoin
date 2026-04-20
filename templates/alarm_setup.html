@@ -121,8 +121,8 @@
 
     {% if cert_ready %}
     <div class="alarm-cert-status ready">✔ 인증서 준비 완료</div>
-    <a class="alarm-download-btn" href="/api/cert/rootCA.crt" download>
-      🔐 인증서 다운로드 (WhatUdoin-인증서.crt)
+    <a class="alarm-download-btn" href="/api/cert/rootCA.zip" download>
+      🔐 인증서 다운로드 (WhatUdoin-rootCA.zip)
     </a>
     {% else %}
     <div class="alarm-cert-status notyet">○ 인증서 미준비 — 서버 관리자에게 문의하세요.</div>
@@ -130,9 +130,9 @@
     {% endif %}
 
     <ol class="alarm-install-steps">
-      <li>위 버튼으로 <code>WhatUdoin-인증서.crt</code> 다운로드</li>
-      <li>파일 더블클릭 → <strong>인증서 설치</strong> 버튼 클릭</li>
-      <li>저장 위치: <strong>현재 사용자</strong> 선택</li>
+      <li>위 버튼으로 <code>WhatUdoin-rootCA.zip</code> 다운로드</li>
+      <li>ZIP 압축 풀기 → <code>WhatUdoin-rootCA.crt</code> 파일 더블클릭</li>
+      <li><strong>인증서 설치</strong> 버튼 클릭 → 저장 위치: <strong>현재 사용자</strong> 선택</li>
       <li>「인증서를 다음 저장소에 모두 저장」→ <strong>찾아보기</strong> → <strong>신뢰할 수 있는 루트 인증 기관</strong> 선택 → 확인</li>
       <li>마법사 완료</li>
     </ol>
