@@ -2,6 +2,33 @@
   "groups": [
     {
       "date": "2026-04-20",
+      "phase": "23차 3단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>주간 업무 작성(AI) — 미완료·기한초과 일정 완료 오표시 수정",
+          "detail_html": "<ul>\n              <li><b>근본 원인</b> — 서버가 LLM에 전달하는 지난 주 이벤트를 날짜 범위만으로 분류, 실제 완료 여부(<code>kanban_status</code>/<code>is_active</code>)를 확인하지 않아 기한이 지난 미완료 일정이 \"완료\" 섹션에 포함됨</li>\n              <li><b>이벤트 분류 개선</b> — <code>app.py</code>에 <code>_is_done()</code> 추가(<code>is_active==0 or kanban_status=='done'</code>), 지난 주 이벤트를 <code>past_done</code>(실제 완료) / <code>past_pending</code>(미완료·지연) 두 그룹으로 분리해 LLM에 각각 별도 섹션으로 전달</li>\n              <li><b>상태 태그 추가</b> — <code>_fmt_events_section</code>이 각 항목에 <code>[상태:완료/미완료(지연)/진행 중/예정]</code> 태그를 붙여 LLM이 섹션 헤더가 아닌 항목별 실제 상태를 기반으로 라벨링하도록 변경</li>\n              <li>프롬프트 지시사항에 \"상태 태그를 그대로 따를 것, 섹션 이름으로 추정 금지\" 규칙 추가</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>주간 업무 작성(AI) — 세부 내용 한 줄 이어 붙이기 가독성 개선",
+          "detail_html": "<ul>\n              <li><b>문제</b> — LLM이 여러 사실을 \"~했으나\", \"~하였고\", \"~했습니다\" 등 접속사로 연결해 한 줄에 길게 출력, 흐름은 자연스럽지만 가독성 저하</li>\n              <li><b>few-shot 형식 변경</b> — 출력 예시를 단일 콜론 요약에서 사실 1개당 한 줄(<code>  : 사실1</code> / <code>  : 사실2</code>) 다중 라인 형식으로 교체</li>\n              <li><code>[절대 하지 말 것]</code>에 접속사로 문장 이어 붙이기 금지 명시, <code>[분량 가이드]</code>에 사실이 2개 이상이면 반드시 줄 나눔 규칙 추가</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>주간 업무 작성(AI) — 내용 없는 항목에 빈 콜론(:) 줄 출력 방지",
+          "detail_html": "<ul>\n              <li><b>문제</b> — 일정에 설명이 없는 경우에도 LLM이 빈 <code>:</code> 줄을 출력해 불필요한 공백 행이 생기는 버그</li>\n              <li>few-shot 출력 예에 설명 없는 완료 항목 케이스 추가 → 항목명 한 줄로만 끝내는 패턴 직접 제시</li>\n              <li><code>[절대 하지 말 것]</code>에 \"입력에 <code>내용:</code>이 없는 항목은 <code>:</code> 줄 절대 출력 금지\" 추가</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>주간 업무 작성(AI) — 요약 내용에 목적·결과/대책 구조 표현",
+          "detail_html": "<ul>\n              <li><b>개선 방향</b> — 기존 단순 사실 나열에서 \"무엇을 왜 했는지(목적/배경)\"와 \"어떤 결과·성과가 나왔는지\" 또는 \"현재 문제 → 대책\"이 드러나는 구조로 변경</li>\n              <li>few-shot 입력 예시 내용을 원인·목적이 담긴 형태로 교체, 출력 예시를 목적+결과 형식으로 변경</li>\n              <li>지연 항목은 <code>→</code>로 문제와 대책을 연결하는 패턴 예시 추가</li>\n              <li><code>[분량 가이드]</code>에 상태별(완료/지연/예정) 요약 구조 기준 명시</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-20",
       "phase": "23차 2단계",
       "phase_class": "phase-7",
       "entries": [
