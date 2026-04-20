@@ -2185,8 +2185,14 @@ async def ai_weekly_report(request: Request):
         end   = (e.get("end_datetime")   or "")[:10]
         return start <= base_date and (not end or end >= base_date)
 
-    today_events = [e for e in past_events if _is_today_active(e)]
-    today_ids    = {e.get("id") for e in today_events}
+    def _is_done(e):
+        return e.get("is_active") == 0 or (e.get("kanban_status") or "") == "done"
+
+    today_events  = [e for e in past_events if _is_today_active(e)]
+    today_ids     = {e.get("id") for e in today_events}
+    past_non_today = [e for e in past_events if e.get("id") not in today_ids]
+    past_done     = [e for e in past_non_today if _is_done(e)]
+    past_pending  = [e for e in past_non_today if not _is_done(e)]
     future_events = [e for e in future_events if e.get("id") not in today_ids]
 
     meetings   = db.get_meetings_by_date_range(past_start, past_end,
@@ -2203,8 +2209,9 @@ async def ai_weekly_report(request: Request):
     try:
         report = await run_in_threadpool(
             llm_parser.generate_weekly_report,
-            past_events, future_events, base_date, model,
+            past_done, future_events, base_date, model,
             today_events=today_events,
+            past_pending=past_pending,
             meetings=meetings,
             checklists=checklists,
             previous_report=prev,
@@ -2215,15 +2222,16 @@ async def ai_weekly_report(request: Request):
     title = f"주간 업무 보고 ({base_date})"
 
     return {
-        "title":            title,
-        "content":          report,
-        "past_count":       len(past_events),
-        "today_count":      len(today_events),
-        "future_count":     len(future_events),
-        "meetings_count":   len(meetings),
-        "checklists_count": len(checklists),
-        "has_previous":     prev is not None,
-        "base_date":        base_date,
+        "title":              title,
+        "content":            report,
+        "past_count":         len(past_done),
+        "past_pending_count": len(past_pending),
+        "today_count":        len(today_events),
+        "future_count":       len(future_events),
+        "meetings_count":     len(meetings),
+        "checklists_count":   len(checklists),
+        "has_previous":       prev is not None,
+        "base_date":          base_date,
     }
 
 

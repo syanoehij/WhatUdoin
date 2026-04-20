@@ -435,25 +435,39 @@ CONTEXT_BUDGET = 4000
 
 _FEW_SHOT_WEEKLY_REPORT = """[작성 예시 — 반드시 이 형식을 따르세요]
 <입력 예>
-## 완료 일정 (지난 주)
-- [백엔드] API 인증 수정 (2026-04-10)
-- [프론트] 로그인 UI 개편 (2026-04-11)
+## 완료 일정 (지난 주 — 실제 완료된 항목만)
+- [백엔드] API 인증 수정 (2026-04-10) [상태:완료]
+  내용: JWT 만료 처리 보강. QA 검증 완료.
+- [프론트] 로그인 UI 개편 (2026-04-11) [상태:완료]
+  내용: 디자인 시스템 v2 반영. 반응형 레이아웃 개선.
+
+## 지난 주 예정이었으나 아직 미완료 (지연/진행 중)
+- [통신] 마스터-슬레이브 통신 (2026-04-14) [상태:미완료(지연)]
+  내용: 송신부 구현 완료. 수신 후 처리 로직 미흡 확인.
+
 ## 예정 일정 (이번 주)
-- [백엔드] 알림 서버 안정화 (2026-04-18)
+- [백엔드] 알림 서버 안정화 (2026-04-18) [상태:예정]
 
 <출력 예>
 ## **백엔드**
 - API 인증 수정 (완료)
-  : JWT 만료 처리 보강, QA 검증 완료
+  : JWT 만료 처리 보강
+  : QA 검증 완료
 - 알림 서버 안정화 (예정: 4/18)
 
 ## **프론트**
 - 로그인 UI 개편 (완료)
-  : 디자인 시스템 v2 반영, 반응형 레이아웃 개선
+  : 디자인 시스템 v2 반영
+  : 반응형 레이아웃 개선
+
+## **통신**
+- 마스터-슬레이브 통신 (지연)
+  : 마스터, 슬레이브간 통신 구현 완료
+  : 수신 후 처리 로직 미흡 확인
 """
 
 
-def _fmt_events_section(events, max_desc=300):
+def _fmt_events_section(events, max_desc=300, default_status=None):
     if not events:
         return "- (없음)"
     lines = []
@@ -463,7 +477,20 @@ def _fmt_events_section(events, max_desc=300):
         project  = e.get("project") or "기타"
         desc     = (e.get("description") or "").strip()
         short    = (desc[:max_desc] + "…") if len(desc) > max_desc else desc
-        line = f"- [{project}] {title} ({date_str})"
+
+        is_done = e.get("is_active") == 0 or (e.get("kanban_status") or "") == "done"
+        if is_done:
+            status = "완료"
+        elif default_status == "today":
+            status = "진행 중"
+        elif default_status == "future":
+            status = "예정"
+        elif default_status == "done":
+            status = "완료"
+        else:
+            status = "미완료(지연)"
+
+        line = f"- [{project}] {title} ({date_str}) [상태:{status}]"
         if short:
             line += f"\n  내용: {short}"
         lines.append(line)
@@ -558,14 +585,13 @@ def generate_weekly_report(
     model: str = DEFAULT_MODEL,
     *,
     today_events: list[dict] | None = None,
+    past_pending: list[dict] | None = None,
     meetings: list[dict] | None = None,
     checklists: list[dict] | None = None,
     previous_report: dict | None = None,
 ) -> str:
-    today_ids = {e.get("id") for e in (today_events or [])}
-    past_only = [e for e in past_events
-                 if (e.get("start_datetime") or "")[:10] < base_date
-                 and e.get("id") not in today_ids]
+    past_done    = past_events   # app.py 가 이미 완료 항목만 전달
+    past_pending = past_pending or []
 
     meetings_text   = _fmt_meetings(meetings or [])
     checklists_text = _fmt_checklists(checklists or [])
@@ -591,14 +617,17 @@ def generate_weekly_report(
 ---
 아래 데이터를 바탕으로 위 예시와 같은 형식의 주간 업무 보고서를 작성하세요.
 
-{prev_section}## 완료 일정 (지난 주)
-{_fmt_events_section(past_only)}
+{prev_section}## 완료 일정 (지난 주 — 실제 완료된 항목만)
+{_fmt_events_section(past_done, default_status="done")}
+
+## 지난 주 예정이었으나 아직 미완료 (지연/진행 중)
+{_fmt_events_section(past_pending, default_status="pending")}
 
 ## 오늘 진행 중 ({base_date})
-{_fmt_events_section(today_events or [])}
+{_fmt_events_section(today_events or [], default_status="today")}
 
 ## 예정 일정 (이번 주)
-{_fmt_events_section(future_events)}
+{_fmt_events_section(future_events, default_status="future")}
 
 ## 이번 주 회의록 (액션 아이템 추출용 — 회의 참석 자체는 업무가 아님)
 {meetings_text}
@@ -608,8 +637,13 @@ def generate_weekly_report(
 
 [반드시 지킬 것]
 - 각 프로젝트는 ## **프로젝트명** 형식으로 시작 (굵게 강조 필수).
-- 항목은 - 일정명 (완료) / (진행 중) / (예정: M/D) 형식으로 나열.
-- 오늘 일정({base_date})은 반드시 (진행 중) 표기.
+- 각 항목 옆 라벨은 입력 데이터의 [상태:...] 를 그대로 따를 것:
+    상태:완료         → (완료)
+    상태:미완료(지연) → (지연)
+    상태:진행 중      → (진행 중)
+    상태:예정         → (예정: M/D)
+- 섹션 이름(지난 주/이번 주)을 보고 상태를 추정하지 말 것. 오직 각 항목의 [상태:…] 태그만 신뢰.
+- [상태:미완료(지연)] 항목은 반드시 (지연)으로 표기. (완료)로 표기 금지.
 - 이전 보고서가 있으면 "지난 주 예정이었던 X → 이번 주 완료" 형태로 연속성 표현.
 
 [절대 하지 말 것]
@@ -618,9 +652,11 @@ def generate_weekly_report(
 - 회의 참석 자체를 업무로 기재 금지 (회의록에서 결정 사항·완료 내용만 관련 프로젝트 항목 설명에 녹일 것).
 - 체크리스트 항목 직접 나열 금지 (관련 프로젝트 항목 설명에 녹일 것).
 - 입력에 없는 내용 추가 금지. 담당자 이름 포함 금지.
+- 여러 사실을 `~했으나`, `~하였고`, `~했습니다`, `~이며` 등 접속사로 한 문장에 합치지 말 것.
 
 [분량 가이드]
-- 항목 설명은 바로 아래 두 칸 들여쓰기 + 콜론으로 시작하는 1~2문장.
+- 세부 내용은 사실 1개당 한 줄, 두 칸 들여쓰기 후 `:` 로 시작.
+  사실이 2개 이상이면 반드시 줄을 나눌 것 (`  : 사실1` 다음 줄에 `  : 사실2`).
 - 서두·결론 없이 ## **프로젝트명** 섹션 본문만 출력."""
 
     return _post_generate(model, prompt)
