@@ -2,6 +2,43 @@
   "groups": [
     {
       "date": "2026-04-20",
+      "phase": "22차 20단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>문서/체크 — 표 헤더 배경색 테마 대응",
+          "detail_html": "<ul>\n              <li><b>근본 원인</b> — Toast UI 벤더 CSS가 <code>table th { background:#555; color:#fff }</code>로 고정, 라이트 테마에서 배경이 어두워 가독성 저하</li>\n              <li><b>style.css 추가</b> — <code>.toastui-editor-contents table th/td</code>에 <code>var(--surface)</code>·<code>var(--text)</code>·<code>var(--border)</code> 테마 변수 적용, 첫 행 <code>thead th</code>는 <code>var(--surface-2)</code>로 구분</li>\n              <li>라이트·다크 테마 전환 시 모두 가독성 있는 표 렌더링</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 뷰어 목차 CSS 미적용 및 언매핑 수정",
+          "detail_html": "<ul>\n              <li><b>CSS 클래스 불일치</b> — 뷰어 TOC 링크가 <code>toc-h1/h2/h3</code> 클래스를 사용해 에디터 TOC 스타일(<code>toc-item toc-lv*</code>)이 미적용되던 문제 수정</li>\n              <li><b>언매핑 방지</b> — <code>toggleCheckbox()</code>에서 <code>renderViewer()</code> 후 TOC 패널이 열려있으면 <code>buildViewerToc()</code>를 재호출, 체크박스 토글 후 목차가 이전 DOM 참조를 가리키던 문제 해결</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 체크 잠금 시 편집 모드 저장 차단 문제 수정",
+          "detail_html": "<ul>\n              <li><b>기존 문제</b> — <code>PATCH /api/checklists/{id}/content</code>가 <code>is_locked=1</code>이면 모든 호출자를 HTTP 423으로 차단해 편집 모드 저장까지 막히던 문제</li>\n              <li><b>source 플래그 도입</b> — 요청 바디에 <code>source: \"viewer_toggle\" | \"editor\"</code> 필드 추가; 서버는 <code>viewer_toggle</code>일 때만 잠금 검사, 편집 저장(<code>editor</code>)은 잠금 상태에서도 정상 통과</li>\n              <li>클라이언트 측 뷰어 가드(<code>no-check-interaction</code> CSS, <code>_contentLocked</code> 변수)는 유지</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>캘린더 — 2주 뷰 이동 단위 1주로 수정",
+          "detail_html": "<ul>\n              <li><b>기존 문제</b> — <code>timeGridTwoWeek</code> 커스텀 뷰에 <code>dateIncrement</code> 미지정으로 이전/다음 이동 시 2주씩 점프해 인접 주 확인 불가</li>\n              <li><b>수정</b> — <code>dateIncrement: { weeks: 1 }</code>, <code>dateAlignment: \"week\"</code> 추가; 툴바 버튼·휠 스크롤 네비게이션 모두 1주 단위로 이동</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>프로젝트 관리 — 페이지 복귀 시 왼쪽 선택 하이라이트 복원",
+          "detail_html": "<ul>\n              <li><b>근본 원인</b> — <code>loadProjectList()</code>가 <code>renderList()</code>를 먼저 호출한 뒤 <code>selIdx</code>를 계산해 첫 렌더에 <code>active</code> 클래스가 빠지고, 이후 <code>renderDetail()</code>만 호출해 하이라이트가 복원되지 않던 문제</li>\n              <li><b>순서 변경</b> — <code>renderList()</code> 이전에 <code>projects.findIndex()</code>로 <code>selIdx</code>를 먼저 계산, 최초 렌더부터 <code>active</code> 클래스 적용</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>칸반/간트 — 소속 팀 기본 선택 및 마지막 선택값 유지",
+          "detail_html": "<ul>\n              <li><b>소속 팀 기본 선택</b> — 첫 진입 시 <code>CURRENT_USER.team_id</code>를 읽어 해당 팀을 자동 선택; 비로그인·팀 미배정이면 '전체'</li>\n              <li><b>선택값 localStorage 유지</b> — <code>loadKanban()</code> / <code>loadData()</code> 호출 시 현재 팀 선택값을 저장; '전체'(<code>\"\"</code>)도 저장 대상이므로 다음 로드 시 '전체' 유지</li>\n              <li>저장값 우선 → 소속 팀 기본 → 전체 순 폴백 적용</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-20",
       "phase": "22차 19단계",
       "phase_class": "phase-7",
       "entries": [

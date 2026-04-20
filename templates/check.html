@@ -1667,12 +1667,15 @@ async function toggleCheckbox(index, checked, mdContent) {
   const res = await fetch(`/api/checklists/${_curId}/content`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content: newMd, save_history: false }),
+    body: JSON.stringify({ content: newMd, save_history: false, source: 'viewer_toggle' }),
   });
   if (res.ok) {
     // 내용 갱신
     _curItem.content = newMd;
     renderViewer(newMd);
+    // TOC가 열려있으면 재빌드하여 언매핑 방지
+    const _tocPanel = document.getElementById('ck-viewer-toc');
+    if (_tocPanel && !_tocPanel.classList.contains('hidden')) buildViewerToc();
     // 목록 갱신 (updated_at 반영)
     const updated = await fetch(`/api/checklists/${_curId}`);
     if (updated.ok) {
@@ -1723,7 +1726,7 @@ async function saveContent(auto = false) {
   const res = await fetch(`/api/checklists/${_curId}/content`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, source: 'editor' }),
   });
   if (res.ok) {
     setDirty(false);
@@ -2199,7 +2202,7 @@ function buildViewerToc() {
     const a = document.createElement('a');
     a.href = '#' + h.id;
     a.textContent = h.textContent;
-    a.className = 'toc-h' + h.tagName[1];
+    a.className = 'toc-item toc-lv' + h.tagName[1];
     a.onclick = e => {
       e.preventDefault();
       h.scrollIntoView({ behavior: 'smooth', block: 'start' });

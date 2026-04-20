@@ -461,9 +461,10 @@ async def update_checklist_content(checklist_id: int, request: Request):
     item = db.get_checklist(checklist_id)
     if not item:
         raise HTTPException(status_code=404)
-    if item.get("is_locked"):
-        raise HTTPException(status_code=423, detail="체크 잠금 상태입니다.")
     data = await request.json()
+    source = data.get("source", "editor")  # "editor" | "viewer_toggle"
+    if source == "viewer_toggle" and item.get("is_locked"):
+        raise HTTPException(status_code=423, detail="체크 잠금 상태입니다.")
     content = data.get("content", "")
     save_history = data.get("save_history", True)
     db.update_checklist_content(checklist_id, content, user["name"], save_history=save_history)

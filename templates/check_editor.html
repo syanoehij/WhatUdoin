@@ -409,7 +409,7 @@ async function saveContent(auto = false, leaveTarget = null) {
   const res = await fetch(`/api/checklists/${CKE_ID}/content`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, save_history: !auto }),
+    body: JSON.stringify({ content, save_history: !auto, source: 'editor' }),
   });
 
   if (res.ok) {

@@ -560,14 +560,15 @@ window._blockAutoRefresh = () => {
 async function loadProjectList() {
   const res = await fetch('/api/manage/projects', { cache: 'no-store' });
   projects  = await res.json();
-  renderList();
   if (selName !== null) {
-    // 선택 유지: 같은 이름 찾기
+    // renderList 전에 selIdx 계산해야 active 클래스가 첫 렌더에 반영됨
     const cur = projects.findIndex(p => p.name === selName);
     selIdx = cur >= 0 ? cur : null;
-    if (selIdx !== null) renderDetail(selIdx);
-    else { selName = null; hideDetail(); }
+    if (selIdx === null) selName = null;
   }
+  renderList();
+  if (selIdx !== null) renderDetail(selIdx);
+  else hideDetail();
 }
 
 /* ── 왼쪽 목록 렌더 ── */

@@ -1510,6 +1510,19 @@ mark.search-hl {
   text-align: left;
 }
 .markdown-body th { background: var(--surface-2); font-weight: 600; }
+/* Toast UI 편집기/뷰어 표: 테마 변수 적용 (벤더 CSS #555 고정값 오버라이드) */
+.toastui-editor-contents table th,
+.toastui-editor-contents table td {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+.toastui-editor-contents table thead th,
+.toastui-editor-contents table tr:first-child th {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  font-weight: 600;
+}
 .markdown-body hr { border: none; border-top: 1px solid var(--border-light); margin: 1em 0; }
 
 /* ── AI 파싱 섹션 ── */

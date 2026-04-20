@@ -409,6 +409,18 @@ function toggleGanttMyOnly() {
 const LS_ZOOM      = 'proj_zoom';
 const LS_COLLAPSED = 'proj_collapsed';
 const LS_DATE      = 'proj_date';
+const LS_TEAM      = 'proj_team_filter';
+
+function _applyInitialTeamFilter() {
+  const sel = document.getElementById('team-filter');
+  if (!sel) return;
+  const saved = localStorage.getItem(LS_TEAM);
+  let target;
+  if (saved !== null) target = saved;
+  else if (CURRENT_USER && CURRENT_USER.team_id != null) target = String(CURRENT_USER.team_id);
+  else target = '';
+  if (sel.querySelector(`option[value="${target}"]`)) sel.value = target;
+}
 
 function saveProjectState() {
   localStorage.setItem(LS_ZOOM, daysShown);
@@ -534,6 +546,7 @@ function navNext() { viewStart = addDays(viewStart, navStep()); saveProjectState
 // ── 데이터 로드 ──────────────────────────────────────────
 async function loadData() {
   const teamId = document.getElementById('team-filter').value;
+  localStorage.setItem(LS_TEAM, teamId);
   const url = '/api/project-timeline' + (teamId ? `?team_id=${teamId}` : '');
   allTeams = await (await fetch(url)).json();
   syncCollapseBtn();
@@ -1099,6 +1112,7 @@ function scrollToToday() {
 // ── 초기화 ───────────────────────────────────────────────
 (function init() {
   loadProjectState();           // localStorage 복원
+  _applyInitialTeamFilter();    // 팀 필터: 저장값 우선, 없으면 소속팀 기본 선택
   syncSlider(); syncViewBtns(); updateZoomLabel();
   if (!viewStart) viewStart = addDays(today(), -Math.floor(daysShown / 3));
   loadData();

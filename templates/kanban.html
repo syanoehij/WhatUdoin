@@ -298,6 +298,17 @@ let allEvents = [];
 let dragSrcId = null;
 let _kanbanMyOnly = false;
 
+function _applyInitialTeamFilter() {
+  const sel = document.getElementById('team-filter');
+  if (!sel) return;
+  const saved = localStorage.getItem('kanban_team_filter');
+  let target;
+  if (saved !== null) target = saved;
+  else if (CURRENT_USER && CURRENT_USER.team_id != null) target = String(CURRENT_USER.team_id);
+  else target = '';
+  if (sel.querySelector(`option[value="${CSS.escape(target)}"]`) || sel.querySelector(`option[value="${target}"]`)) sel.value = target;
+}
+
 function toggleKanbanMyOnly() {
   if (!CURRENT_USER) return;
   _kanbanMyOnly = !_kanbanMyOnly;
@@ -311,6 +322,7 @@ function toggleKanbanMyOnly() {
 
 async function loadKanban() {
   const teamId = document.getElementById('team-filter').value;
+  localStorage.setItem('kanban_team_filter', teamId);
   const url = teamId ? `/api/kanban?team_id=${teamId}` : '/api/kanban';
   const res = await fetch(url);
   allEvents = await res.json();
@@ -467,6 +479,7 @@ window.onEventSaved   = loadKanban;
 window.onKDetailSaved = loadKanban;
 
 // 초기 로드
+_applyInitialTeamFilter();
 loadProjColors().then(() => loadKanban());
 
 // ── 전역 검색 연결 ──────────────────────────────────────
