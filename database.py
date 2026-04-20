@@ -206,6 +206,13 @@ def init_db():
         if _table_exists(conn, "events") and not conn.execute("SELECT 1 FROM settings WHERE key='ev_done_pub_reset_v1'").fetchone():
             conn.execute("UPDATE events SET is_public = 0 WHERE is_active = 0 AND deleted_at IS NULL")
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ev_done_pub_reset_v1', '1')")
+        _migrate(conn, "checklists", [
+            ("deleted_at", "TEXT DEFAULT NULL"),
+            ("deleted_by", "TEXT DEFAULT NULL"),
+            ("team_id",    "INTEGER DEFAULT NULL"),
+            ("is_public",  "INTEGER DEFAULT 0"),
+            ("is_locked",  "INTEGER NOT NULL DEFAULT 0"),
+        ])
         # 미지정 체크리스트(project 없음)는 외부 비공개 고정 — 1회 초기화
         if _table_exists(conn, "checklists") and not conn.execute("SELECT 1 FROM settings WHERE key='ck_unset_priv_reset_v1'").fetchone():
             conn.execute("UPDATE checklists SET is_public = 0 WHERE (project IS NULL OR project = '') AND deleted_at IS NULL")
@@ -213,13 +220,6 @@ def init_db():
         _migrate(conn, "meetings", [
             ("deleted_at", "TEXT DEFAULT NULL"),
             ("deleted_by", "TEXT DEFAULT NULL"),
-        ])
-        _migrate(conn, "checklists", [
-            ("deleted_at", "TEXT DEFAULT NULL"),
-            ("deleted_by", "TEXT DEFAULT NULL"),
-            ("team_id",    "INTEGER DEFAULT NULL"),
-            ("is_public",  "INTEGER DEFAULT 0"),
-            ("is_locked",  "INTEGER NOT NULL DEFAULT 0"),
         ])
         _migrate(conn, "projects", [
             ("deleted_at", "TEXT DEFAULT NULL"),

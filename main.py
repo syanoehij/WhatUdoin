@@ -108,6 +108,27 @@ def _disable_console_close(hwnd: int) -> None:
         user32.DeleteMenu(hmenu, SC_CLOSE, MF_BYCOMMAND)
 
 
+def _intercept_console_close(hwnd: int) -> None:
+    """콘솔 창 닫기(Alt+F4·작업표시줄 닫기 등)를 종료 대신 숨김으로 전환.
+    SetConsoleCtrlHandler로 CTRL_CLOSE_EVENT를 가로채 True 반환 → 프로세스 유지."""
+    if not hwnd:
+        return
+    CTRL_CLOSE_EVENT = 2
+    SW_HIDE = 0
+    user32 = ctypes.windll.user32
+
+    @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)
+    def _handler(ctrl_type):
+        if ctrl_type == CTRL_CLOSE_EVENT:
+            user32.ShowWindow(hwnd, SW_HIDE)
+            return True
+        return False
+
+    # GC 방지: 핸들러 참조를 함수 속성에 보관
+    _intercept_console_close._handler = _handler
+    ctypes.windll.kernel32.SetConsoleCtrlHandler(_handler, True)
+
+
 def _watch_minimize(hwnd: int, stop_event: threading.Event) -> None:
     """최소화 감지 시 창을 숨김으로 전환 (0.4초 폴링)."""
     import time
@@ -236,6 +257,7 @@ if __name__ == "__main__":
     if hwnd:
         _hide_from_taskbar(hwnd)
         _disable_console_close(hwnd)
+        _intercept_console_close(hwnd)
         threading.Thread(
             target=_watch_minimize, args=(hwnd, stop_event),
             daemon=True, name="minimize-watcher"
