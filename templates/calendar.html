@@ -253,6 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initialView: localStorage.getItem('cal_view') || 'dayGridMonth',
     initialDate: localStorage.getItem('cal_date') || undefined,
     locale: 'ko',
+    timeZone: 'Asia/Seoul',
     firstDay: 1,
     height: '100%',
     stickyHeaderDates: true,
@@ -264,7 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     buttonText: { today: '오늘', month: '월', week: '주', day: '일' },
     slotMinTime: '07:00:00',
-    slotMaxTime: '30:00:00',
+    slotMaxTime: '24:00:00',
     scrollTime: '07:00:00',
     views: {
       timeGridTwoWeek: {
