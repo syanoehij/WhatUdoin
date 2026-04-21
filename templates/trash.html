@@ -411,7 +411,9 @@ let _selectedItem = null;
 const TYPE_LABEL = { meeting: '문서', checklist: '체크' };
 const TYPE_CLASS  = { event: 'tr-type-event', meeting: 'tr-type-meeting', checklist: 'tr-type-checklist' };
 function labelForEvent(item) {
-  if (item.event_type === 'journal') return '일지';
+  if (item.event_type === 'journal')  return '일지';
+  if (item.event_type === 'meeting')  return '회의';
+  if (item.event_type === 'subtask')  return '하위';
   return '업무';
 }
 function typeLabel(item) {

@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-04-22",
+      "phase": "25차 2단계",
+      "phase_class": "phase-2",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>일정 — 하위 업무(subtask) 유형 신규 도입",
+          "detail_html": "<ul>\n              <li><b>DB 마이그레이션</b> — <code>events</code> 테이블에 <code>parent_event_id</code>(자기참조 FK) 컬럼 추가. <code>get_subtasks()</code>·<code>has_subtasks()</code> 헬퍼 추가. 상위 삭제·복원 시 하위에 cascade 적용</li>\n              <li><b>API</b> — POST/PUT 검증 확장(부모는 반드시 schedule·비반복, 중첩 금지). 신규 엔드포인트 <code>GET /api/events/search-parent</code>(완료·반복 제외 자동완성) 및 <code>GET /api/events/{id}/subtasks</code> 추가. 상위 project 변경 시 하위에 cascade</li>\n              <li><b>이벤트 모달</b> — 신규 추가 시 하위 업무 pill 숨김(기존 일정 수정 시만 노출). 하위 업무 수정 시 다른 pill 비활성. 상위 업무 수정 시 하위 목록을 왼쪽 패널에 표시·클릭으로 수정 전환. 우선순위 아래 '상위 업무로 이동' 버튼(하위 업무 수정 시만 표시). '하위 일정 생성' 버튼(보라색) 하단 왼쪽 배치</li>\n              <li><b>캘린더</b> — 업무에 📋 아이콘, 하위 업무에 🧩 아이콘 뱃지 추가</li>\n              <li><b>칸반</b> — 하위 업무 서버 측 제외(완전 숨김)</li>\n              <li><b>간트</b> — 상위 업무 아래 하위를 들여쓰기로 렌더. 행 클릭·▾ 캐럿으로 접기/펼치기. 툴바에 '하위 접기/펼치기' 버튼 추가(프로젝트가 열려 있을 때만 활성)</li>\n              <li><b>프로젝트 관리</b> — 상위 업무 행 바로 아래 하위 행을 들여쓰기(보라 left-border)로 렌더</li>\n              <li><b>일정 체크 마법사</b> — <code>include_subtasks=1</code>로 한 번에 로드 후 클라이언트 그룹핑. 각 상위 아래 하위 체크박스 독립 토글</li>\n              <li><b>휴지통</b> — 하위 업무 '하위' 라벨 표시. 개별 삭제된 하위는 독립 항목으로 노출</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>상위 업무 검색 — 완료 일정 제외 및 422 에러 수정",
+          "detail_html": "<ul>\n              <li><code>kanban_status = 'done'</code>인 업무는 상위 업무 오토컴플릿 목록에서 제외</li>\n              <li><code>exclude_id</code> 파라미터에 빈 문자열이 전달될 때 422 에러 발생하던 문제 수정 — <code>str</code>로 수신 후 내부에서 안전하게 <code>int</code> 변환</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-22",
       "phase": "25차 1단계",
       "phase_class": "phase-1",
       "entries": [

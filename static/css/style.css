@@ -2179,6 +2179,10 @@ select.form-input {
 .event-type-pill:hover:not(.active) {
   border-color: var(--accent); color: var(--accent);
 }
+.event-type-pill.pill-locked {
+  opacity: 0.35; pointer-events: none; cursor: default;
+}
+.event-type-pill.pill-locked:hover { border-color: var(--border); color: var(--text-muted); }
 
 /* ── 칸반 상태 선택 pills (일정 유형 선택 시) ── */
 .kanban-status-row {
@@ -2235,6 +2239,47 @@ select.form-input {
   content: ' 🔁';
   font-size: 0.7em;
 }
+
+/* ── 하위 업무 pill 활성 색 ── */
+#pill-subtask.active {
+  background: #a29bfe; color: #fff; border-color: #a29bfe;
+}
+#pill-subtask:hover:not(.active) {
+  border-color: #a29bfe; color: #a29bfe;
+}
+
+/* ── 하위 업무 이벤트 구분 (캘린더) ── */
+.fc-event.ev-subtask {
+  border-left: 4px solid #a29bfe !important;
+  opacity: 0.9;
+}
+
+/* ── 하위 일정 목록 (모달) ── */
+.btn-subtask { background: #6c5ce7; color: white; }
+.btn-subtask:hover { background: #5a4bd1; }
+.btn-parent-goto {
+  font-size: 0.82rem; padding: 5px 12px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; cursor: pointer;
+  transition: background 0.12s; text-align: left;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.btn-parent-goto:hover { background: var(--surface-3); }
+.subtask-list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 200px; overflow-y: auto;
+}
+.subtask-list-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 10px; border-radius: 6px;
+  background: var(--surface-2);
+  cursor: pointer; transition: background 0.12s;
+  font-size: 0.88rem;
+}
+.subtask-list-item:hover { background: var(--surface-3, #e9ecef); }
+.subtask-item-title { font-weight: 500; flex: 1; }
+.subtask-item-date  { color: var(--text-muted); font-size: 0.78rem; margin-left: 8px; white-space: nowrap; }
 
 /* ── 회의 이벤트 구분 (캘린더) ── */
 .fc-event.ev-meeting {

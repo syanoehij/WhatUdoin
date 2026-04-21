@@ -869,6 +869,7 @@ def list_events():
             "allDay": is_all_day,
             "classNames": (["ev-meeting"] if evt_type == "meeting"
                            else ["ev-journal"] if evt_type == "journal"
+                           else ["ev-subtask"] if evt_type == "subtask"
                            else ["ev-schedule"]),
             "extendedProps": {
                 "project":               proj_name,
@@ -884,6 +885,7 @@ def list_events():
                 "event_type":            evt_type,
                 "recurrence_rule":       e.get("recurrence_rule"),
                 "recurrence_parent_id":  e.get("recurrence_parent_id"),
+                "parent_event_id":       e.get("parent_event_id"),
             },
         }
         if proj_color:
@@ -894,8 +896,37 @@ def list_events():
 
 
 @app.get("/api/events/by-project-range")
-def events_by_project_range(project: str, start: str, end: str):
-    return db.get_events_by_project_range(project, start, end)
+def events_by_project_range(project: str, start: str, end: str, include_subtasks: int = 0):
+    return db.get_events_by_project_range(project, start, end, include_subtasks=bool(include_subtasks))
+
+
+@app.get("/api/events/search-parent")
+def search_parent_events(project: str = "", q: str = "", exclude_id: str = None):
+    """하위 업무 모달의 '상위 업무' 오토컴플릿 전용 검색"""
+    with db.get_conn() as conn:
+        params = []
+        where = ["e.event_type = 'schedule'", "e.recurrence_rule IS NULL", "e.deleted_at IS NULL", "e.parent_event_id IS NULL", "(e.kanban_status IS NULL OR e.kanban_status != 'done')"]
+        if project:
+            where.append("e.project = ?")
+            params.append(project)
+        if q:
+            where.append("e.title LIKE ?")
+            params.append(f"%{q}%")
+        exclude_id_int = int(exclude_id) if exclude_id and exclude_id.isdigit() else None
+        if exclude_id_int:
+            where.append("e.id != ?")
+            params.append(exclude_id_int)
+        rows = conn.execute(
+            f"SELECT id, title, project, start_datetime, end_datetime FROM events e WHERE {' AND '.join(where)} ORDER BY e.start_datetime LIMIT 30",
+            params
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/events/{event_id}/subtasks")
+def get_event_subtasks(event_id: int):
+    """특정 이벤트의 하위 업무 목록"""
+    return db.get_subtasks(event_id)
 
 
 @app.get("/api/events/{event_id}")
@@ -913,7 +944,7 @@ def _validate_event_payload(payload: dict) -> list:
         errors.append("제목을 입력해주세요.")
     if not (payload.get("assignee") or "").strip():
         errors.append("담당자를 입력해주세요.")
-    if payload.get("event_type") not in (None, "schedule", "meeting", "journal"):
+    if payload.get("event_type") not in (None, "schedule", "meeting", "journal", "subtask"):
         payload["event_type"] = "schedule"
     return errors
 
@@ -935,14 +966,30 @@ async def create_event(request: Request):
     data.setdefault("event_type", "schedule")
     data.setdefault("recurrence_rule", None)
     data.setdefault("recurrence_end", None)
+    data.setdefault("parent_event_id", None)
     errors = _validate_event_payload(data)
     if errors:
         raise HTTPException(status_code=422, detail=errors[0])
+    # 하위 업무 검증
+    if data.get("event_type") == "subtask":
+        pid = data.get("parent_event_id")
+        if not pid:
+            raise HTTPException(status_code=400, detail="하위 업무는 상위 업무를 지정해야 합니다.")
+        parent = db.get_event(int(pid))
+        if not parent:
+            raise HTTPException(status_code=400, detail="상위 업무를 찾을 수 없습니다.")
+        if parent.get("event_type") != "schedule":
+            raise HTTPException(status_code=400, detail="하위 업무의 상위는 업무 유형이어야 합니다.")
+        if parent.get("recurrence_rule"):
+            raise HTTPException(status_code=400, detail="반복 일정에는 하위 업무를 추가할 수 없습니다.")
+        # 프로젝트 미설정 시 부모에서 상속
+        if not data.get("project"):
+            data["project"] = parent.get("project")
     data["created_by"] = str(user["id"])
     data["team_id"] = user.get("team_id")
     event_id = db.create_event(data)
-    # 일지는 담당자 알림 없음
-    if data.get("event_type") != "journal":
+    # 일지·하위 업무는 담당자 알림 없음
+    if data.get("event_type") not in ("journal", "subtask"):
         assignees = [a.strip() for a in (data.get("assignee") or "").split(",") if a.strip()]
         for name in assignees:
             if name != user["name"]:
@@ -962,9 +1009,30 @@ async def update_event(event_id: int, request: Request):
     edit_mode = data.pop("edit_mode", "this")
     data.setdefault("kanban_status", event.get("kanban_status"))
     data.setdefault("priority", event.get("priority", "normal"))
+    data.setdefault("parent_event_id", event.get("parent_event_id"))
+    # 하위 업무를 가진 업무의 유형 변경 차단
+    existing_type = event.get("event_type", "schedule")
+    new_type = data.get("event_type")
+    if new_type and new_type != existing_type and db.has_subtasks(event_id):
+        raise HTTPException(status_code=400, detail="하위 일정이 있는 업무의 유형은 변경할 수 없습니다.")
     errors = _validate_event_payload(data)
     if errors:
         raise HTTPException(status_code=422, detail=errors[0])
+    # 하위 업무 저장 시 parent 검증
+    if data.get("event_type") == "subtask":
+        pid = data.get("parent_event_id")
+        if not pid:
+            raise HTTPException(status_code=400, detail="하위 업무는 상위 업무를 지정해야 합니다.")
+        pid = int(pid)
+        if pid == event_id:
+            raise HTTPException(status_code=400, detail="자기 자신을 상위로 지정할 수 없습니다.")
+        parent = db.get_event(pid)
+        if not parent or parent.get("event_type") != "schedule":
+            raise HTTPException(status_code=400, detail="상위 업무는 '업무' 유형이어야 합니다.")
+        if parent.get("recurrence_rule"):
+            raise HTTPException(status_code=400, detail="반복 일정에는 하위 업무를 추가할 수 없습니다.")
+        if db.has_subtasks(event_id):
+            raise HTTPException(status_code=400, detail="하위 업무를 가진 업무는 하위 업무가 될 수 없습니다.")
 
     # 수정 전 담당자 목록
     prev_assignees = set(a.strip() for a in (event.get("assignee") or "").split(",") if a.strip())

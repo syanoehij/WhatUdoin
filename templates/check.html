@@ -666,6 +666,12 @@
     transition: background 0.12s;
   }
   .ck-sched-event-item:hover { background: var(--hover, rgba(0,0,0,0.04)); }
+  .ck-sched-event-item.ck-sched-child {
+    margin-left: 24px;
+    border-left: 2px solid #a29bfe;
+    background: var(--surface-1, #f8f9fa);
+    font-size: 0.84rem;
+  }
   .sched-ev-date {
     font-size: 0.78rem;
     color: var(--text-faint);
@@ -2127,16 +2133,23 @@ async function queryScheduleEvents() {
   loadEl.classList.remove('hidden');
 
   const res = await fetch(
-    `/api/events/by-project-range?project=${encodeURIComponent(_curProj)}&start=${start}&end=${end}`
+    `/api/events/by-project-range?project=${encodeURIComponent(_curProj)}&start=${start}&end=${end}&include_subtasks=1`
   );
   loadEl.classList.add('hidden');
   if (!res.ok) {
     listEl.innerHTML = '<div class="ck-sched-placeholder">조회 실패. 다시 시도해주세요.</div>';
     return;
   }
-  _schedEvents = await res.json();
+  const allEvs = await res.json();
+  // 부모/하위 그룹핑
+  const parentEvs = allEvs.filter(e => !e.parent_event_id);
+  const childrenByParent = allEvs.reduce((m, e) => {
+    if (e.parent_event_id) (m[e.parent_event_id] ||= []).push(e);
+    return m;
+  }, {});
+  _schedEvents = allEvs;
 
-  if (!_schedEvents.length) {
+  if (!parentEvs.length) {
     listEl.innerHTML = '<div class="ck-sched-placeholder">해당 기간에 일정이 없습니다.</div>';
     document.getElementById('sched-gen-btn').disabled = true;
     return;
@@ -2145,15 +2158,21 @@ async function queryScheduleEvents() {
   const STATUS_LABEL = {
     todo: 'Todo', in_progress: '진행중', peer_review: '피어리뷰', done: '완료', blocked: '차단', backlog: 'Backlog'
   };
-  listEl.innerHTML = _schedEvents.map(ev => `
-    <label class="ck-sched-event-item">
+  function renderSchedItem(ev, isChild) {
+    const childClass = isChild ? ' ck-sched-child' : '';
+    return `
+    <label class="ck-sched-event-item${childClass}">
       <input type="checkbox" class="sched-ev-chk" value="${ev.id}" onchange="updateSchedGenBtn()">
-      <span class="sched-ev-date">${ev.start_datetime.slice(0,10)}</span>
-      <span class="sched-ev-title">${escHtml(ev.title)}</span>
+      <span class="sched-ev-date">${(ev.start_datetime||'').slice(0,10)}</span>
+      <span class="sched-ev-title">${isChild ? '🧩 ' : ''}${escHtml(ev.title)}</span>
       ${ev.description ? '<span class="sched-ev-has-desc" title="내용 있음 — AI가 세부 항목 생성">📝</span>' : ''}
       ${ev.kanban_status ? `<span class="sched-ev-status">${STATUS_LABEL[ev.kanban_status] || ev.kanban_status}</span>` : ''}
-    </label>
-  `).join('');
+    </label>`;
+  }
+  listEl.innerHTML = parentEvs.map(ev => {
+    const children = (childrenByParent[ev.id] || []).map(s => renderSchedItem(s, true)).join('');
+    return renderSchedItem(ev, false) + children;
+  }).join('');
   // 기본 전체 선택
   selectAllSchedEvents(true);
 }

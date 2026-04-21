@@ -52,6 +52,8 @@ main { padding: 0; }
   transition: background 0.1s;
 }
 .project-toolbar .nav-btn:hover { background: var(--surface-2); }
+.project-toolbar .nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.project-toolbar .nav-btn:disabled:hover { background: var(--surface); }
 .project-toolbar .nav-label {
   font-size: 0.9rem;
   font-weight: 600;
@@ -176,6 +178,21 @@ main { padding: 0; }
   color: var(--text-muted);
 }
 .proj-toggle.collapsed { transform: rotate(-90deg); }
+.event-name-row.has-subtasks {
+  cursor: pointer; user-select: none;
+}
+.event-name-row.has-subtasks:hover { background: var(--surface-2); }
+.task-toggle {
+  font-size: 0.6rem; margin: 0 5px 0 0;
+  flex-shrink: 0; transition: transform 0.15s;
+  color: var(--text-muted);
+}
+.task-toggle.collapsed { transform: rotate(-90deg); }
+.row-subtask-name {
+  background: var(--surface-1, #f8f9fa);
+  font-size: 0.73rem;
+  border-left: 2px solid #a29bfe;
+}
 .proj-color-bar { width: 5px; align-self: stretch; flex-shrink: 0; margin-right: 7px; }
 .proj-name {
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1;
@@ -337,6 +354,7 @@ main { padding: 0; }
     <button class="nav-btn" onclick="navToday()">오늘</button>
   </div>
   <button class="nav-btn" id="btn-collapse-all" onclick="collapseAll()" title="모든 프로젝트 닫기">접기</button>
+  <button class="nav-btn" id="btn-collapse-tasks" onclick="collapseAllTasks()" title="모든 하위 업무 닫기" disabled>하위 접기</button>
   {% if user %}
   <button class="nav-btn" id="gantt-my-only-btn" onclick="toggleGanttMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
   {% endif %}
@@ -394,6 +412,7 @@ let viewStart = null;
 let allTeams  = [];
 let _ganttMyOnly = !!CURRENT_USER;
 const collapsedProjects = new Set(); // "팀이름::프로젝트이름"
+const collapsedTasks    = new Set(); // "teamname::projname::eventid" (하위 업무 2단계 접기)
 
 function _syncGanttMyOnlyBtn() {
   const btn = document.getElementById('gantt-my-only-btn');
@@ -412,6 +431,7 @@ function toggleGanttMyOnly() {
 // ── localStorage 유틸 ────────────────────────────────────
 const LS_ZOOM      = 'proj_zoom';
 const LS_COLLAPSED = 'proj_collapsed';
+const LS_TASKS_COLLAPSED = 'proj_tasks_collapsed';
 const LS_DATE      = 'proj_date';
 const LS_TEAM      = 'proj_team_filter';
 
@@ -429,6 +449,7 @@ function _applyInitialTeamFilter() {
 function saveProjectState() {
   localStorage.setItem(LS_ZOOM, daysShown);
   localStorage.setItem(LS_COLLAPSED, JSON.stringify([...collapsedProjects]));
+  localStorage.setItem(LS_TASKS_COLLAPSED, JSON.stringify([...collapsedTasks]));
   if (viewStart) localStorage.setItem(LS_DATE, viewStart.toISOString().slice(0, 10));
 }
 function loadProjectState() {
@@ -437,6 +458,10 @@ function loadProjectState() {
   try {
     const c = JSON.parse(localStorage.getItem(LS_COLLAPSED) || '[]');
     if (Array.isArray(c)) c.forEach(k => collapsedProjects.add(k));
+  } catch (_) {}
+  try {
+    const tc = JSON.parse(localStorage.getItem(LS_TASKS_COLLAPSED) || '[]');
+    if (Array.isArray(tc)) tc.forEach(k => collapsedTasks.add(k));
   } catch (_) {}
   const d = localStorage.getItem(LS_DATE);
   if (d) {
@@ -553,7 +578,7 @@ async function loadData() {
   localStorage.setItem(LS_TEAM, teamId);
   const url = '/api/project-timeline' + (teamId ? `?team_id=${teamId}` : '');
   allTeams = await (await fetch(url)).json();
-  // 간트는 업무(schedule)만 표시 — 회의·일지는 클라이언트에서 제거
+  // 간트는 업무(schedule) + 하위 업무(subtask)만 표시 — 회의·일지는 제거
   allTeams.forEach(t => t.projects.forEach(p => {
     p.events = (p.events || []).filter(e => e.event_type !== 'meeting' && e.event_type !== 'journal');
   }));
@@ -567,6 +592,16 @@ function toggleProject(key) {
   else collapsedProjects.add(key);
   saveProjectState();
   syncCollapseBtn();
+  render();
+}
+
+// ── 하위 업무 토글 (이벤트 행 아래 하위 접기/펼치기) ─────
+function toggleTask(key) {
+  if (collapsedTasks.has(key)) collapsedTasks.delete(key);
+  else collapsedTasks.add(key);
+  saveProjectState();
+  const anyOpen = allTeams.some(t => t.projects.some(p => !collapsedProjects.has(`${t.team_name}::${p.name}`)));
+  syncTaskCollapseBtn(anyOpen);
   render();
 }
 
@@ -588,6 +623,55 @@ function syncCollapseBtn() {
   const anyOpen = allTeams.some(t => t.projects.some(p => !collapsedProjects.has(`${t.team_name}::${p.name}`)));
   btn.textContent = anyOpen ? '접기' : '펼치기';
   btn.title = anyOpen ? '모든 프로젝트 닫기' : '모든 프로젝트 열기';
+  syncTaskCollapseBtn(anyOpen);
+}
+
+function syncTaskCollapseBtn(anyProjOpen) {
+  const btn = document.getElementById('btn-collapse-tasks');
+  if (!btn) return;
+  btn.disabled = !anyProjOpen;
+  // 펼쳐진 하위가 하나라도 있으면 '하위 접기', 없으면 '하위 펼치기'
+  const hasExpandedTasks = _hasAnySubtaskParent() && collapsedTasks.size < _countSubtaskParents();
+  btn.textContent = hasExpandedTasks ? '하위 접기' : '하위 펼치기';
+  btn.title = hasExpandedTasks ? '모든 하위 업무 닫기' : '모든 하위 업무 열기';
+}
+
+function _hasAnySubtaskParent() {
+  return allTeams.some(t => t.projects.some(p =>
+    (p.events || []).some(e => !e.parent_event_id &&
+      (p.events || []).some(c => c.parent_event_id === e.id))
+  ));
+}
+
+function _countSubtaskParents() {
+  let count = 0;
+  allTeams.forEach(t => t.projects.forEach(p => {
+    (p.events || []).forEach(e => {
+      if (!e.parent_event_id && (p.events || []).some(c => c.parent_event_id === e.id)) count++;
+    });
+  }));
+  return count;
+}
+
+function collapseAllTasks() {
+  const parentCount = _countSubtaskParents();
+  if (collapsedTasks.size < parentCount) {
+    // 펼쳐진 게 있으면 → 모두 접기
+    allTeams.forEach(t => t.projects.forEach(p => {
+      const projKey = `${t.team_name}::${p.name}`;
+      (p.events || []).forEach(e => {
+        if (!e.parent_event_id && (p.events || []).some(c => c.parent_event_id === e.id)) {
+          collapsedTasks.add(`${projKey}::${e.id}`);
+        }
+      });
+    }));
+  } else {
+    // 모두 접혀 있으면 → 모두 펼치기
+    collapsedTasks.clear();
+  }
+  saveProjectState();
+  syncTaskCollapseBtn(allTeams.some(t => t.projects.some(p => !collapsedProjects.has(`${t.team_name}::${p.name}`))));
+  render();
 }
 
 // 행 → 프로젝트 맵 (드래그 드롭에서 참조)
@@ -801,12 +885,38 @@ function render() {
 
       // ── 이벤트 행 (접힘이면 건너뜀) ───────────────
       if (!isCollapsed) {
-        sortedEvs.forEach(ev => {
+        // 부모/하위 업무 그룹핑
+        const subtasksByParent = {};
+        sortedEvs.filter(e => e.parent_event_id).forEach(s => {
+          (subtasksByParent[s.parent_event_id] ||= []).push(s);
+        });
+        const topLevelEvs = sortedEvs.filter(e => !e.parent_event_id);
+
+        // 이벤트 렌더 헬퍼: nameRow + ganttRow 생성
+        function renderEventRow(ev, opts) {
+          const indent    = opts && opts.indent ? 18 : 0;
+          const taskKey   = `${projKey}::${ev.id}`;
+          const evSubs    = subtasksByParent[ev.id] || [];
+          const hasSubEvs = evSubs.length > 0;
+          const isTaskCollapsed = hasSubEvs && collapsedTasks.has(taskKey);
+
           // 이름 컬럼
           const evNameRow = document.createElement('div');
-          evNameRow.className = 'event-name-row';
+          evNameRow.className = 'event-name-row' +
+            (indent ? ' row-subtask-name' : '') +
+            (hasSubEvs ? ' has-subtasks' : '');
           evNameRow.dataset.title = (ev.title || '').toLowerCase();
           evNameRow.style.height = ROW_H + 'px';
+          if (indent) evNameRow.style.paddingLeft = (26 + indent) + 'px';
+          if (hasSubEvs) evNameRow.onclick = () => toggleTask(taskKey);
+
+          // 하위 업무 토글 캐럿 (하위가 있는 부모에만)
+          if (hasSubEvs) {
+            const caret = document.createElement('span');
+            caret.className = 'task-toggle' + (isTaskCollapsed ? ' collapsed' : '');
+            caret.textContent = '▾';
+            evNameRow.appendChild(caret);
+          }
 
           const evText = document.createElement('span');
           evText.className = 'event-name-text';
@@ -885,7 +995,14 @@ function render() {
           ganttRowsEl.appendChild(evGRow);
           teamTotalH += ROW_H;
           totalH     += ROW_H;
-        });
+
+          // 하위 업무 행 (접히지 않은 경우만)
+          if (hasSubEvs && !isTaskCollapsed) {
+            evSubs.forEach(sub => renderEventRow(sub, { indent: true }));
+          }
+        } // end renderEventRow
+
+        topLevelEvs.forEach(ev => renderEventRow(ev, {}));
       }
     });
 

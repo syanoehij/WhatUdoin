@@ -531,6 +531,11 @@
                 <span class="date-events-empty">날짜를 선택하세요</span>
               </div>
             </div>
+            <!-- 하위 일정 목록 (업무 수정 시 하위가 있을 때만 표시, 해당 기간 일정 대체) -->
+            <div id="subtask-panel" style="display:none;">
+              <div class="col-section-label" style="margin-top:16px;">하위 일정</div>
+              <ul id="subtask-list" class="subtask-list"></ul>
+            </div>
           </div>
 
           <!-- ── 오른쪽: 일정 정보 ── -->
@@ -539,14 +544,28 @@
             <div class="left-row" style="margin-bottom:10px; gap:20px;">
               <div style="display:flex;align-items:center;gap:10px;">
                 <div class="col-section-label">일정 유형</div>
-                <div class="event-type-pills">
+                <div class="event-type-pills" id="event-type-pills-wrap">
                   <button type="button" class="event-type-pill active" id="pill-schedule" onclick="setEventType('schedule')">📅 업무</button>
                   <button type="button" class="event-type-pill" id="pill-meeting" onclick="setEventType('meeting')">💬 회의</button>
                   <button type="button" class="event-type-pill" id="pill-journal" onclick="setEventType('journal')">📓 일지</button>
+                  <button type="button" class="event-type-pill" id="pill-subtask" onclick="setEventType('subtask')" style="display:none;">🧩 하위 업무</button>
                 </div>
               </div>
               <div id="kanban-toggle-wrap" style="display:none;align-items:center;gap:8px;">
                 <input type="checkbox" id="f-kanban" checked style="display:none;" />
+              </div>
+            </div>
+            <!-- 상위 업무 선택 (하위 업무 유형 선택 시만 표시) -->
+            <div id="parent-event-row" class="form-row" style="display:none; margin-bottom:10px;">
+              <label>상위 업무</label>
+              <div class="autocomplete-wrap">
+                <input type="text" id="f-parent-event" placeholder="상위 업무 검색..."
+                       autocomplete="off"
+                       oninput="filterParentEvents(this.value)"
+                       onblur="hideParentDropdown()"
+                       onfocus="filterParentEvents(this.value)" />
+                <input type="hidden" id="f-parent-event-id" value="" />
+                <ul id="parent-event-dropdown" class="ac-dropdown hidden"></ul>
               </div>
             </div>
             <!-- 칸반 상태 선택 (일정 유형 시만 표시) -->
@@ -626,6 +645,10 @@
                 <option value="low">⚪ 낮음</option>
               </select>
             </div>
+            <div class="form-row" id="parent-goto-row" style="display:none;">
+              <label>상위 업무</label>
+              <button type="button" class="btn btn-parent-goto" id="btn-goto-parent" onclick="gotoParentEvent()">↑ 상위 업무로 이동</button>
+            </div>
             <div class="form-row" id="doc-link-row" style="display:none;">
               <label>연결 문서</label>
               <a id="doc-link-btn" href="#" target="_blank" class="btn btn-sm" style="text-decoration:none;">📄 문서 보기</a>
@@ -635,6 +658,7 @@
 
         <div class="modal-actions">
           <button type="button" class="btn btn-danger hidden" id="btn-delete" onclick="deleteEvent()">삭제</button>
+          <button type="button" class="btn btn-subtask hidden" id="btn-add-subtask" onclick="openAddSubtaskModal()">하위 일정 생성</button>
           <div>
             <button type="button" class="btn" onclick="closeModal()">취소</button>
             <button type="submit" class="btn btn-primary">저장</button>

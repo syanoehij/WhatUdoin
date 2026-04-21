@@ -370,6 +370,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const p = info.event.extendedProps;
       const titleEl = info.el.querySelector('.fc-event-title');
       if (titleEl) {
+        // 업무 이벤트에 📋 뱃지 추가
+        if ((!p.event_type || p.event_type === 'schedule') && !titleEl.querySelector('.schedule-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'schedule-badge';
+          badge.textContent = '📋 ';
+          titleEl.insertBefore(badge, titleEl.firstChild);
+        }
         // 회의 이벤트에 💬 뱃지 추가
         if (p.event_type === 'meeting' && !titleEl.querySelector('.meeting-badge')) {
           const badge = document.createElement('span');
@@ -382,6 +389,13 @@ document.addEventListener('DOMContentLoaded', () => {
           const badge = document.createElement('span');
           badge.className = 'journal-badge';
           badge.textContent = '📓 ';
+          titleEl.insertBefore(badge, titleEl.firstChild);
+        }
+        // 하위 업무에 🧩 뱃지 추가
+        if (p.event_type === 'subtask' && !titleEl.querySelector('.subtask-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'subtask-badge';
+          badge.textContent = '🧩 ';
           titleEl.insertBefore(badge, titleEl.firstChild);
         }
         // 반복 일정에 🔁 뱃지 추가
