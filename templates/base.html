@@ -540,8 +540,9 @@
               <div style="display:flex;align-items:center;gap:10px;">
                 <div class="col-section-label">일정 유형</div>
                 <div class="event-type-pills">
-                  <button type="button" class="event-type-pill active" id="pill-schedule" onclick="setEventType('schedule')">📅 일정</button>
+                  <button type="button" class="event-type-pill active" id="pill-schedule" onclick="setEventType('schedule')">📅 업무</button>
                   <button type="button" class="event-type-pill" id="pill-meeting" onclick="setEventType('meeting')">💬 회의</button>
+                  <button type="button" class="event-type-pill" id="pill-journal" onclick="setEventType('journal')">📓 일지</button>
                 </div>
               </div>
               <div id="kanban-toggle-wrap" style="display:none;align-items:center;gap:8px;">
@@ -624,6 +625,10 @@
                 <option value="normal" selected>🔵 보통</option>
                 <option value="low">⚪ 낮음</option>
               </select>
+            </div>
+            <div class="form-row" id="doc-link-row" style="display:none;">
+              <label>연결 문서</label>
+              <a id="doc-link-btn" href="#" target="_blank" class="btn btn-sm" style="text-decoration:none;">📄 문서 보기</a>
             </div>
           </div>
         </div>

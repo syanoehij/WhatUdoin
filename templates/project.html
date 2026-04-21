@@ -553,6 +553,10 @@ async function loadData() {
   localStorage.setItem(LS_TEAM, teamId);
   const url = '/api/project-timeline' + (teamId ? `?team_id=${teamId}` : '');
   allTeams = await (await fetch(url)).json();
+  // 간트는 업무(schedule)만 표시 — 회의·일지는 클라이언트에서 제거
+  allTeams.forEach(t => t.projects.forEach(p => {
+    p.events = (p.events || []).filter(e => e.event_type !== 'meeting' && e.event_type !== 'journal');
+  }));
   syncCollapseBtn();
   render(); requestAnimationFrame(scrollToToday);
 }

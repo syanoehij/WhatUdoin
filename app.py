@@ -867,7 +867,9 @@ def list_events():
             "start": e["start_datetime"],
             "end": ev_end,
             "allDay": is_all_day,
-            "classNames": ["ev-meeting"] if evt_type == "meeting" else ["ev-schedule"],
+            "classNames": (["ev-meeting"] if evt_type == "meeting"
+                           else ["ev-journal"] if evt_type == "journal"
+                           else ["ev-schedule"]),
             "extendedProps": {
                 "project":               proj_name,
                 "description":           e["description"],
@@ -911,7 +913,7 @@ def _validate_event_payload(payload: dict) -> list:
         errors.append("제목을 입력해주세요.")
     if not (payload.get("assignee") or "").strip():
         errors.append("담당자를 입력해주세요.")
-    if payload.get("event_type") not in (None, "schedule", "meeting"):
+    if payload.get("event_type") not in (None, "schedule", "meeting", "journal"):
         payload["event_type"] = "schedule"
     return errors
 
@@ -939,11 +941,12 @@ async def create_event(request: Request):
     data["created_by"] = str(user["id"])
     data["team_id"] = user.get("team_id")
     event_id = db.create_event(data)
-    # 담당자 지정 알림 (등록자 본인 제외)
-    assignees = [a.strip() for a in (data.get("assignee") or "").split(",") if a.strip()]
-    for name in assignees:
-        if name != user["name"]:
-            db.create_notification(name, "assigned", f"📌 일정 담당자로 지정됨: {data.get('title','')}", event_id)
+    # 일지는 담당자 알림 없음
+    if data.get("event_type") != "journal":
+        assignees = [a.strip() for a in (data.get("assignee") or "").split(",") if a.strip()]
+        for name in assignees:
+            if name != user["name"]:
+                db.create_notification(name, "assigned", f"📌 담당자로 지정됨: {data.get('title','')}", event_id)
     return {"id": event_id}
 
 
@@ -977,11 +980,12 @@ async def update_event(event_id: int, request: Request):
     else:
         db.update_event(event_id, data)
 
-    # 새로 추가된 담당자에게만 알림 (등록자 본인 제외)
-    new_assignees = set(a.strip() for a in (data.get("assignee") or "").split(",") if a.strip())
-    for name in new_assignees - prev_assignees:
-        if name != user["name"]:
-            db.create_notification(name, "assigned", f"📌 일정 담당자로 지정됨: {data.get('title', event.get('title',''))}", event_id)
+    # 새로 추가된 담당자에게만 알림 (등록자 본인 제외, 일지 제외)
+    if data.get("event_type") != "journal":
+        new_assignees = set(a.strip() for a in (data.get("assignee") or "").split(",") if a.strip())
+        for name in new_assignees - prev_assignees:
+            if name != user["name"]:
+                db.create_notification(name, "assigned", f"📌 담당자로 지정됨: {data.get('title', event.get('title',''))}", event_id)
 
     return {"ok": True}
 

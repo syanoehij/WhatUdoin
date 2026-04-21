@@ -2,6 +2,33 @@
   "groups": [
     {
       "date": "2026-04-22",
+      "phase": "25차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>일정 — '일지(journal)' 유형 추가 및 '일정' → '업무' 라벨 변경",
+          "detail_html": "<ul>\n              <li><b>일지 유형 추가</b> — 이벤트 유형에 <code>journal</code>(📓 일지) 추가. 캘린더에만 노출되며 칸반·간트에서는 제외. 알람(15분 전·담당자 지정) 미발생. 반복 설정 불가</li>\n              <li><b>프로젝트 연동</b> — 프로젝트 관리 업무 리스트에 📓 아이콘과 함께 일지 노출. 휴지통에서 '일지' 라벨로 표시</li>\n              <li><b>주간 AI 보고서</b> — 일지를 보고서 조회에 포함. 프롬프트에 <code>[유형:일지]</code> 태그 주입 후 유사 업무 항목에 자연스럽게 병합되도록 지시 추가</li>\n              <li><b>'일정' → '업무' 라벨</b> — 모달 pill·알람 메시지·담당자 지정 알림 등 <code>event_type='schedule'</code>을 직접 가리키는 UI 텍스트만 '업무'로 변경. 상위 메뉴('일정 관리') 등 포괄 표현은 유지</li>\n              <li><b>캘린더 색상</b> — 일지는 초록 테두리(<code>#00b894</code>) + 📓 배지 표시</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>일정 수정 모달 — 연결 문서 버튼 추가",
+          "detail_html": "<ul>\n              <li>수정 모달 우선순위 필드 아래에 '📄 문서 보기' 버튼 추가</li>\n              <li><code>meeting_id</code>가 있는 이벤트(문서에서 생성된 회의 등)일 때만 노출, 클릭 시 새 탭으로 해당 문서 이동</li>\n              <li><code>meeting_id</code> 없는 이벤트는 버튼 숨김</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>캘린더 — 회의 클릭 버그 2종 수정",
+          "detail_html": "<ul>\n              <li><b>meeting_id 없는 회의 클릭 시 에러</b> — <code>/doc/null</code>로 이동하여 int 파싱 오류 페이지 노출되던 버그 수정. 클릭 시 항상 수정 모달이 열리도록 변경</li>\n              <li><b>meeting_id 있는 회의 클릭 시 문서 리다이렉트</b> — 미사양 동작(버그)으로 제거. 이제 모든 이벤트 타입이 동일하게 수정 모달로 열림. 연결 문서로의 이동은 모달 내 '문서 보기' 버튼으로 제공</li>\n              <li><b><code>extendedProps.type</code> 오타 교정</b> — <code>eventAllow</code>·<code>eventClick</code>·<code>updateDateEvents</code> 3곳에서 잘못된 키 <code>type</code> → 올바른 키 <code>event_type</code>으로 수정</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>프로젝트 관리 — 회의 탭 항상 비어있던 버그 수정",
+          "detail_html": "<ul>\n              <li><b>원인</b> — <code>/api/project-timeline</code>이 서버에서 <code>meeting</code>을 제외하는 WHERE 조건을 적용하여 프로젝트 관리 회의 탭에 데이터가 전달되지 않았음</li>\n              <li><b>수정</b> — 서버 필터 제거 후 클라이언트에서 분기 처리: 간트(<code>project.html</code>)는 수신 후 <code>meeting</code>·<code>journal</code> 제외 필터 적용, 프로젝트 관리 회의 탭은 <code>meeting</code>만 표시</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-22",
       "phase": "24차 3단계",
       "phase_class": "phase-8",
       "entries": [

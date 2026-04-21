@@ -715,7 +715,7 @@ function renderAiResults() {
     const missingDate     = !e.date;
     const missingTitle    = !e.title;
     const missingAssignee = !e.assignee;
-    const typeIcon = e.event_type === 'meeting' ? '💬' : '📅';
+    const typeIcon = e.event_type === 'meeting' ? '💬' : e.event_type === 'journal' ? '📓' : '📅';
     const datePart = e.date
       ? (e.end_date && e.end_date !== e.date ? `${e.date} ~ ${e.end_date}` : e.date)
       : '';
@@ -744,7 +744,7 @@ function renderAiResults() {
     return `
     <div class="result-item" id="ai-item-${i}" onclick="openEditForAi(${i})" title="클릭하면 상세 내용 확인 및 편집">
       <div class="item-header">
-        <span class="item-type-icon" title="${e.event_type === 'meeting' ? '회의' : '일정'}">${typeIcon}</span>
+        <span class="item-type-icon" title="${e.event_type === 'meeting' ? '회의' : e.event_type === 'journal' ? '일지' : '업무'}">${typeIcon}</span>
         <span class="item-summary">${summary}</span>
         <div class="btn-group" onclick="event.stopPropagation()">
           <label class="ai-include-label ${included && hasRequired ? 'is-included' : 'is-excluded'}${hasRequired ? '' : ' is-locked'}" title="${hasRequired ? (included ? '클릭하면 등록에서 제외됩니다' : '클릭하면 등록 대상에 포함됩니다') : '필수 정보(제목/날짜/담당자)가 채워지면 등록할 수 있습니다 — 카드를 클릭해 편집하세요'}">
@@ -929,7 +929,7 @@ function renderLinkedEvents() {
   sec.classList.remove('hidden');
 
   function _buildLinkedCard(e, i) {
-    const typeIcon = e.event_type === 'meeting' ? '💬' : '📅';
+    const typeIcon = e.event_type === 'meeting' ? '💬' : e.event_type === 'journal' ? '📓' : '📅';
     const datePart = (e.start_datetime || '').slice(0, 10);
     const timePart = !e.all_day && e.start_datetime && e.start_datetime.length > 10
       ? ' ' + e.start_datetime.slice(11, 16) : '';
@@ -942,7 +942,7 @@ function renderLinkedEvents() {
     return `
     <div class="result-item linked-item" id="linked-item-${i}" onclick="openEditForLinked(${i})" title="클릭하면 수정">
       <div class="item-header">
-        <span class="item-type-icon" title="${e.event_type === 'meeting' ? '회의' : '일정'}">${typeIcon}</span>
+        <span class="item-type-icon" title="${e.event_type === 'meeting' ? '회의' : e.event_type === 'journal' ? '일지' : '업무'}">${typeIcon}</span>
         <span class="item-summary">${summary}</span>
         <div class="btn-group" onclick="event.stopPropagation()">
           <button class="btn btn-sm btn-secondary" onclick="unlinkLinkedEvent(${i})">연결 해제</button>

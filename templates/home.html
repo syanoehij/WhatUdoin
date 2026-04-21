@@ -269,7 +269,7 @@ function cardHTML(e, draggable) {
          ${draggable ? 'draggable="true"' : ''}
          onclick="openKDetail(${e.id})">
       ${projectBadge}
-      <div class="card-title">${e.event_type === 'meeting' ? '💬 ' : ''}${esc(e.title)}</div>
+      <div class="card-title">${e.event_type === 'meeting' ? '💬 ' : e.event_type === 'journal' ? '📓 ' : ''}${esc(e.title)}</div>
       <div class="card-meta">
         ${e.start_datetime ? `<span class="card-date">${fmtDate(e.start_datetime)}</span>` : ''}
         ${assigneeBadges}

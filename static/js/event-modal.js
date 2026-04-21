@@ -218,6 +218,7 @@ function openModal(dateStr = '', eventData = null, dragOpts = null, options = nu
   // 담당자 기본값: 현재 로그인 유저
   if (CURRENT_USER) setAssigneeTags(CURRENT_USER.name);
   document.getElementById('btn-delete').classList.add('hidden');
+  document.getElementById('doc-link-row').style.display = 'none';
   document.getElementById('modal-title').textContent = (options && options.title) || '일정 추가';
   toggleAllDay();
 
@@ -279,6 +280,15 @@ function openModal(dateStr = '', eventData = null, dragOpts = null, options = nu
     }
     _currentIsRecurring = !!(eventData.recurrence_rule || eventData.recurrence_parent_id);
     document.getElementById('btn-delete').classList.remove('hidden');
+
+    const docLinkRow = document.getElementById('doc-link-row');
+    const docLinkBtn = document.getElementById('doc-link-btn');
+    if (eventData.meeting_id) {
+      docLinkBtn.href = `/doc/${eventData.meeting_id}`;
+      docLinkRow.style.display = '';
+    } else {
+      docLinkRow.style.display = 'none';
+    }
   }
 
   loadProjects();
@@ -581,6 +591,8 @@ function setEventType(type) {
   _currentEventType = type;
   document.getElementById('pill-schedule').classList.toggle('active', type === 'schedule');
   document.getElementById('pill-meeting').classList.toggle('active', type === 'meeting');
+  const pillJournal = document.getElementById('pill-journal');
+  if (pillJournal) pillJournal.classList.toggle('active', type === 'journal');
 
   const kanbanStatusRow = document.getElementById('kanban-status-row');
   const recurrenceRow   = document.getElementById('recurrence-row');
@@ -590,8 +602,14 @@ function setEventType(type) {
     if (kanbanStatusRow) kanbanStatusRow.style.display = 'none';
     document.getElementById('f-kanban').checked = false;
     if (recurrenceRow) recurrenceRow.style.display = 'flex';
+  } else if (type === 'journal') {
+    // 일지: 칸반 상태 선택 숨기고 반복 섹션도 숨김 (단발성 기록)
+    if (kanbanStatusRow) kanbanStatusRow.style.display = 'none';
+    document.getElementById('f-kanban').checked = false;
+    if (recurrenceRow) recurrenceRow.style.display = 'none';
+    setRecurrenceRule('');
   } else {
-    // 일정: 칸반 상태 선택 표시, 반복 섹션 숨기고 선택 초기화
+    // 업무: 칸반 상태 선택 표시, 반복 섹션 숨기고 선택 초기화
     if (kanbanStatusRow) kanbanStatusRow.style.display = 'flex';
     document.getElementById('f-kanban').checked = true;
     if (recurrenceRow) recurrenceRow.style.display = 'none';

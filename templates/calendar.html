@@ -334,7 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     eventAllow(dropInfo, draggedEvent) {
       // 회의록 이벤트는 드래그 불가
-      if (draggedEvent.extendedProps.type === 'meeting') return false;
+      if (draggedEvent.extendedProps.event_type === 'meeting') return false;
       // 진짜 all-day 이벤트는 time grid로 끌어내리는 것 방지
       if (draggedEvent.allDay && !dropInfo.allDay) return false;
       return true;
@@ -377,6 +377,13 @@ document.addEventListener('DOMContentLoaded', () => {
           badge.textContent = '💬 ';
           titleEl.insertBefore(badge, titleEl.firstChild);
         }
+        // 일지 이벤트에 📓 뱃지 추가
+        if (p.event_type === 'journal' && !titleEl.querySelector('.journal-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'journal-badge';
+          badge.textContent = '📓 ';
+          titleEl.insertBefore(badge, titleEl.firstChild);
+        }
         // 반복 일정에 🔁 뱃지 추가
         if ((p.recurrence_rule || p.recurrence_parent_id) && !titleEl.querySelector('.rec-badge')) {
           const badge = document.createElement('span');
@@ -389,10 +396,6 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     eventClick(info) {
       if (!CURRENT_USER) return;
-      if (info.event.extendedProps.type === 'meeting') {
-        location.href = `/doc/${info.event.extendedProps.meeting_id}?from=calendar`;
-        return;
-      }
       // 상세 모달 없이 바로 수정 모달 열기
       fetch(`/api/events/${info.event.id}`)
         .then(r => r.json())
@@ -509,7 +512,7 @@ function updateDateEvents(start, end) {
   endD.setHours(23, 59, 59);
 
   const events = calendar.getEvents().filter(ev => {
-    if (ev.extendedProps.type === 'meeting') return false;
+    if (ev.extendedProps.event_type === 'meeting' || ev.extendedProps.event_type === 'journal') return false;
     if (String(ev.id) === String(currentId)) return false;
     const evStart = ev.start;
     const evEnd   = ev.end || ev.start;

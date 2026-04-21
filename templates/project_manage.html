@@ -757,7 +757,7 @@ function renderDetail(idx) {
       const titleStyle = isDone ? 'text-decoration:line-through;' : '';
       return `
         <div class="pm-ev-row" style="${rowStyle}">
-          <span class="pm-ev-title" style="${titleStyle}" title="${escHtml(e.title)}">${escHtml(e.title)}</span>
+          <span class="pm-ev-title" style="${titleStyle}" title="${escHtml(e.title)}">${e.event_type === 'journal' ? '📓 ' : ''}${escHtml(e.title)}</span>
           ${kbnBadge}
           <span class="pm-ev-date">${date}</span>
           ${assignee}

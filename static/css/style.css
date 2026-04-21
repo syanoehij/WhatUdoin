@@ -2245,6 +2245,15 @@ select.form-input {
   opacity: 0.9;
 }
 
+/* ── 일지 이벤트 구분 (캘린더) ── */
+.fc-event.ev-journal {
+  border-left: 4px solid #00b894 !important;
+}
+.journal-badge {
+  font-size: 0.78em;
+  opacity: 0.9;
+}
+
 /* ── AI 결과 섹션 헤더 (문서 편집 화면) ── */
 .ai-result-section-header {
   font-size: 0.82rem;

@@ -482,7 +482,7 @@ function cardHTML(e) {
   return `
     <div class="kanban-card${overdue ? ' overdue' : ''}" data-id="${e.id}" data-priority="${priority}" draggable="true">
       ${projectBadge}
-      <div class="card-title">${e.event_type === 'meeting' ? '💬 ' : ''}${esc(e.title)}</div>
+      <div class="card-title">${e.event_type === 'meeting' ? '💬 ' : e.event_type === 'journal' ? '📓 ' : ''}${esc(e.title)}</div>
       <div class="card-meta">
         <span class="priority-dot ${priority}"></span>
         <span class="card-date">${dateStr}</span>

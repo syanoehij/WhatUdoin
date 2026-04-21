@@ -478,7 +478,7 @@ def get_events_by_project_range(project: str, start_date: str, end_date: str) ->
                LEFT JOIN projects p ON p.name = e.project AND p.deleted_at IS NULL
                WHERE e.project = ?
                  AND e.deleted_at IS NULL
-                 AND (e.event_type IS NULL OR e.event_type = 'schedule')
+                 AND (e.event_type IS NULL OR e.event_type IN ('schedule', 'journal'))
                  AND e.recurrence_parent_id IS NULL
                  AND date(e.start_datetime) BETWEEN ? AND ?
                  AND (e.is_active IS NULL OR e.is_active != 0)
@@ -517,8 +517,8 @@ def create_event(data: dict) -> int:
     data.setdefault("recurrence_end", None)
     data.setdefault("recurrence_parent_id", None)
     data.setdefault("is_public", None)  # 기본: 프로젝트 공개 연동
-    # 회의 타입은 칸반 등록 안 함
-    if data.get("event_type") == "meeting":
+    # 회의·일지 타입은 칸반 등록 안 함
+    if data.get("event_type") in ("meeting", "journal"):
         data["kanban_status"] = None
     with get_conn() as conn:
         cur = conn.execute(
@@ -552,7 +552,7 @@ def _apply_event_update(conn, event_id: int, data: dict):
     else:
         data.setdefault("done_at", None)
     data.setdefault("event_type", "schedule")
-    if data.get("event_type") == "meeting":
+    if data.get("event_type") in ("meeting", "journal"):
         data["kanban_status"] = None
         data["done_at"] = None
     data.setdefault("recurrence_rule", None)
@@ -668,7 +668,7 @@ def update_event_recurring_from_here(event_id: int, data: dict):
         new_parent.setdefault("kanban_status", existing.get("kanban_status"))
         new_parent.setdefault("priority", existing.get("priority", "normal"))
         new_parent.setdefault("is_active", 1)
-        if new_parent.get("event_type") == "meeting":
+        if new_parent.get("event_type") in ("meeting", "journal"):
             new_parent["kanban_status"] = None
 
         cur = conn.execute(
@@ -882,8 +882,6 @@ def get_project_timeline(team_id: int = None, viewer=None) -> list[dict]:
             continue  # 완료 처리된 미지정 일정 건너뜀
         if d.get("kanban_hidden") == 1:
             continue  # 칸반/간트 숨김 처리된 일정 건너뜀
-        if d.get("event_type") == "meeting":
-            continue  # 회의 타입은 간트에서 제외
         if d.get("recurrence_parent_id"):
             continue  # 반복 자식 인스턴스는 간트에서 제외
         done_at = d.get("done_at")
@@ -1019,12 +1017,13 @@ def check_upcoming_event_alarms():
                FROM events
                WHERE (is_active IS NULL OR is_active = 1)
                AND deleted_at IS NULL
+               AND (event_type IS NULL OR event_type != 'journal')
                AND start_datetime BETWEEN ? AND ?
                AND recurrence_parent_id IS NULL""",
             (window_start, window_end)
         ).fetchall()
         for row in rows:
-            label = "회의" if row["event_type"] == "meeting" else "일정"
+            label = "회의" if row["event_type"] == "meeting" else "업무"
             time_str = row["start_datetime"][11:16] if row["start_datetime"] else ""
             message = f"15분 후 {label} 시작: {row['title']} ({time_str})"
             # 담당자가 있으면 담당자에게, 없으면 생성자에게
@@ -1766,7 +1765,7 @@ def get_events_for_conflict_check(team_id: int | None = None) -> list[dict]:
                    WHERE date(start_datetime) >= date('now', '-3 months')
                      AND date(start_datetime) <= date('now', '+12 months')
                      AND deleted_at IS NULL
-                     AND (event_type IS NULL OR event_type = 'schedule')
+                     AND (event_type IS NULL OR event_type IN ('schedule', 'journal'))
                      AND (team_id = ? OR team_id IS NULL)
                    ORDER BY start_datetime""",
                 (team_id,)
@@ -1779,7 +1778,7 @@ def get_events_for_conflict_check(team_id: int | None = None) -> list[dict]:
                    WHERE date(start_datetime) >= date('now', '-3 months')
                      AND date(start_datetime) <= date('now', '+12 months')
                      AND deleted_at IS NULL
-                     AND (event_type IS NULL OR event_type = 'schedule')
+                     AND (event_type IS NULL OR event_type IN ('schedule', 'journal'))
                    ORDER BY start_datetime"""
             ).fetchall()
     return [dict(r) for r in rows]
@@ -1794,7 +1793,7 @@ def get_events_by_date_range(start_date: str, end_date: str, team_id: int = None
                    WHERE date(e.start_datetime) <= ?
                    AND COALESCE(date(e.end_datetime), date(e.start_datetime)) >= ?
                    AND e.team_id = ? AND e.deleted_at IS NULL
-                   AND (e.event_type IS NULL OR e.event_type = 'schedule')
+                   AND (e.event_type IS NULL OR e.event_type IN ('schedule', 'journal'))
                    ORDER BY e.start_datetime""",
                 (end_date, start_date, team_id)
             ).fetchall()
@@ -1805,7 +1804,7 @@ def get_events_by_date_range(start_date: str, end_date: str, team_id: int = None
                    WHERE date(e.start_datetime) <= ?
                    AND COALESCE(date(e.end_datetime), date(e.start_datetime)) >= ?
                    AND e.deleted_at IS NULL
-                   AND (e.event_type IS NULL OR e.event_type = 'schedule')
+                   AND (e.event_type IS NULL OR e.event_type IN ('schedule', 'journal'))
                    ORDER BY e.start_datetime""",
                 (end_date, start_date)
             ).fetchall()
@@ -2314,7 +2313,7 @@ def get_trash_items(team_id: int = None) -> dict:
     with get_conn() as conn:
         if team_id:
             ev_rows = conn.execute(
-                """SELECT id, title, project, description, deleted_at, deleted_by, team_id, start_datetime, end_datetime
+                """SELECT id, title, project, description, deleted_at, deleted_by, team_id, start_datetime, end_datetime, event_type
                    FROM events
                    WHERE deleted_at IS NOT NULL AND team_id = ? AND recurrence_parent_id IS NULL
                    ORDER BY deleted_at DESC""",
@@ -2343,7 +2342,7 @@ def get_trash_items(team_id: int = None) -> dict:
             ).fetchall()
         else:
             ev_rows = conn.execute(
-                """SELECT id, title, project, description, deleted_at, deleted_by, team_id, start_datetime, end_datetime
+                """SELECT id, title, project, description, deleted_at, deleted_by, team_id, start_datetime, end_datetime, event_type
                    FROM events
                    WHERE deleted_at IS NOT NULL AND recurrence_parent_id IS NULL
                    ORDER BY deleted_at DESC"""

@@ -408,8 +408,16 @@ let _selectedCat = null;
 let _listItems   = [];   // 현재 가운데 패널 항목 배열
 let _selectedItem = null;
 
-const TYPE_LABEL = { event: '일정', meeting: '문서', checklist: '체크' };
+const TYPE_LABEL = { meeting: '문서', checklist: '체크' };
 const TYPE_CLASS  = { event: 'tr-type-event', meeting: 'tr-type-meeting', checklist: 'tr-type-checklist' };
+function labelForEvent(item) {
+  if (item.event_type === 'journal') return '일지';
+  return '업무';
+}
+function typeLabel(item) {
+  if (item._type === 'event') return labelForEvent(item);
+  return TYPE_LABEL[item._type] || item._type;
+}
 
 async function loadTrash() {
   const [trashRes, projRes] = await Promise.all([
@@ -627,7 +635,7 @@ function renderDetail(item) {
 
   document.getElementById('tr-detail-title').textContent = item.title;
   document.getElementById('tr-dv-type').innerHTML =
-    `<span class="tr-type-badge ${TYPE_CLASS[item._type]}">${TYPE_LABEL[item._type]}</span>`;
+    `<span class="tr-type-badge ${TYPE_CLASS[item._type]}">${typeLabel(item)}</span>`;
 
   const projRow = document.getElementById('tr-dv-proj-row');
   if (item._type !== 'meeting') {
