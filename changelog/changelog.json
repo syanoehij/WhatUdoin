@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-04-22",
+      "phase": "24차 3단계",
+      "phase_class": "phase-8",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>체크 — 뷰어에서 표 안 체크박스 클릭 토글 지원",
+          "detail_html": "<ul>\n              <li><b>표 안 체크박스 활성화</b> — ToastUI WYSIWYG에서 표 셀 안에 작성된 체크박스(<code>data-task</code> HTML 직렬화 방식)도 뷰어에서 클릭으로 토글 가능하도록 구현. 기존에는 클릭해도 아무 반응 없었음</li>\n              <li><b>상태 저장 방식</b> — 마크다운 소스의 HTML 속성 기반 토글: 체크 시 <code>class=\"task-list-item checked\"</code> + <code>data-task-checked=\"\"</code> 추가, 해제 시 제거. n번째 순서(idx)로 대상 항목 식별</li>\n              <li><b>이중 토글 버그 수정</b> — 체크박스 아이콘 영역(::before) 클릭 시 ToastUI 내부 핸들러가 DOM 클래스를 먼저 토글하는 문제로 상태가 두 번 반전되던 버그 수정. DOM 클래스 대신 마크다운 소스에서 현재 상태를 직접 읽어 사용</li>\n              <li>표 바깥 일반 체크박스(<code>data-mdline</code> 방식)는 기존 동작 그대로 유지</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-22",
       "phase": "24차 2단계",
       "phase_class": "phase-8",
       "entries": [
