@@ -994,9 +994,11 @@ window._autoSaveAndRefresh = async () => {
   location.reload();
 };
 
+let _wizardBusy = false;
+
 // ── 이탈 방지 / 잠금 해제 ──────────────────────────────────
 window.addEventListener('beforeunload', (e) => {
-  if (IS_EDITOR && _dirty) { e.preventDefault(); e.returnValue = ''; }
+  if ((IS_EDITOR && _dirty) || _wizardBusy) { e.preventDefault(); e.returnValue = ''; }
   if (IS_EDITOR && _curId && _editMode) {
     fetch(`/api/checklists/${_curId}/lock`, { method: 'DELETE', keepalive: true });
   }
@@ -1552,6 +1554,19 @@ function renderViewer(content) {
     initialValue: displayContent,
     usageStatistics: false,
     customHTMLSanitizer: html => html,
+    customHTMLRenderer: {
+      item(node, { entering }) {
+        if (entering) {
+          const attrs = {};
+          if (node.listData && node.listData.task) {
+            attrs['class'] = 'task-list-item' + (node.listData.checked ? ' checked' : '');
+            if (node.sourcepos) attrs['data-mdline'] = String(node.sourcepos[0][0]);
+          }
+          return { type: 'openTag', tagName: 'li', classNames: [], attributes: attrs };
+        }
+        return { type: 'closeTag', tagName: 'li' };
+      },
+    },
   });
 
   // 잠금/비로그인 시 체크박스 클릭 차단 (시각적 반응 포함)
@@ -1560,18 +1575,16 @@ function renderViewer(content) {
   setTimeout(() => attachCheckboxHandlers(displayContent), 100);
 }
 
-// ── 연동 체크박스 파싱: mdContent에서 체크박스 인덱스 → event_id 맵 반환
+// ── 연동 체크박스 파싱: mdContent에서 마크다운 라인번호(1-base) → event_id 맵 반환
 function _parseLinkedCheckboxes(mdContent) {
-  const linked = {}; // {checkboxIndex: eventId}
+  const linked = {}; // {mdLine(1-base): eventId}
   const lines = (mdContent || '').split('\n');
-  let idx = 0;
-  for (const line of lines) {
+  lines.forEach((line, i) => {
     if (/^[ \t]*[-*+] \[[ xX]?\]/.test(line)) {
       const m = line.match(/\[[^\]]*\]\(eid:(\d+)\)/);
-      if (m) linked[idx] = parseInt(m[1]);
-      idx++;
+      if (m) linked[i + 1] = parseInt(m[1]);
     }
-  }
+  });
   return linked;
 }
 
@@ -1589,24 +1602,22 @@ async function _syncLinkedMd(md) {
     } catch {}
   }));
 
-  let count = 0;
-  return md.replace(/^([ \t]*[-*+] \[)([xX ]?)(\])/gm, (match, pre, state, post) => {
-    const eventId = linked[count++];
-    if (eventId !== undefined) {
-      const ev = eventMap[eventId];
+  const lines = md.split('\n');
+  lines.forEach((line, i) => {
+    const mdLine = i + 1;
+    if (/^[ \t]*[-*+] \[[ xX]?\]/.test(line) && linked[mdLine] !== undefined) {
+      const ev = eventMap[linked[mdLine]];
       const isChecked = !!(ev && (ev.kanban_status === 'peer_review' || ev.kanban_status === 'done'));
-      return pre + (isChecked ? 'x' : ' ') + post;
+      lines[i] = line.replace(/^([ \t]*[-*+] \[)[xX ]?(\])/, (_, pre, post) => pre + (isChecked ? 'x' : ' ') + post);
     }
-    return match;
   });
+  return lines.join('\n');
 }
 
 // ── 연동 체크박스의 칸반 상태를 뷰어에 동기화
 async function _syncLinkedCheckboxes(mdContent, viewerEl) {
   const linked = _parseLinkedCheckboxes(mdContent);
   if (!Object.keys(linked).length) return;
-
-  const items = viewerEl.querySelectorAll('li.task-list-item');
 
   // 이벤트 상태 일괄 조회
   const eventIds = [...new Set(Object.values(linked))];
@@ -1618,13 +1629,12 @@ async function _syncLinkedCheckboxes(mdContent, viewerEl) {
     } catch {}
   }));
 
-  // 각 연동 체크박스에 상태 적용 + 뱃지 추가
-  Object.entries(linked).forEach(([idxStr, eventId]) => {
-    const idx = parseInt(idxStr);
-    const li = items[idx];
+  // 각 연동 체크박스에 상태 적용 + 뱃지 추가 (data-mdline 기반)
+  Object.entries(linked).forEach(([lineStr, eventId]) => {
+    const li = viewerEl.querySelector(`li.task-list-item[data-mdline="${lineStr}"]`);
     if (!li) return;
     const ev = eventMap[eventId];
-    const isChecked = ev && (ev.kanban_status === 'peer_review' || ev.kanban_status === 'done');
+    const isChecked = !!(ev && (ev.kanban_status === 'peer_review' || ev.kanban_status === 'done'));
 
     // ToastUI Viewer는 input 없이 .checked 클래스로 체크 표시
     li.classList.toggle('checked', isChecked);
@@ -1636,6 +1646,17 @@ async function _syncLinkedCheckboxes(mdContent, viewerEl) {
       badge.className = 'ck-linked-badge';
       badge.title = `연동 일정: ${ev?.title || '#' + eventId}`;
       badge.textContent = '🔗';
+      // 뱃지 클릭 시 일정 수정 모달 열기 (체크박스 토글 차단)
+      badge.addEventListener('click', async (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        try {
+          const r = await fetch(`/api/events/${eventId}`);
+          if (!r.ok) return;
+          const data = await r.json();
+          window.openModal('', data);
+        } catch {}
+      });
       para.appendChild(badge);
     }
     li.dataset.linkedEvent = eventId;
@@ -1648,7 +1669,7 @@ function attachCheckboxHandlers(mdContent) {
   const linked = _parseLinkedCheckboxes(mdContent);
   const canInteract = !!(CURRENT_USER && !_lockedByOther && !_contentLocked);
 
-  viewerEl.querySelectorAll('li.task-list-item').forEach((li, idx) => {
+  viewerEl.querySelectorAll('li.task-list-item[data-mdline]').forEach((li) => {
     if (canInteract) {
       if (li.dataset.ckBound) return; // 중복 바인딩 방지
       li.dataset.ckBound = '1';
@@ -1657,20 +1678,18 @@ function attachCheckboxHandlers(mdContent) {
         e.preventDefault();
         e.stopPropagation();
         if (_lockedByOther || _contentLocked) return;
+        if (e.target.closest('.ck-linked-badge')) return; // 뱃지 클릭은 별도 처리
 
-        const eventId = linked[idx];
+        const mdLine = parseInt(li.dataset.mdline);
+        const eventId = linked[mdLine];
         if (eventId) {
           const isChecked = li.dataset.linkedChecked === '1';
           toggleLinkedCheckbox(li, eventId, !isChecked);
         } else {
-          let count = 0, isChecked = false;
-          const re = /^[ \t]*[-*+] \[([xX ]?)\]/gm;
-          let m;
-          while ((m = re.exec(mdContent)) !== null) {
-            if (count === idx) { isChecked = m[1].toLowerCase() === 'x'; break; }
-            count++;
-          }
-          toggleCheckbox(idx, !isChecked, mdContent);
+          // 현재 라인의 체크 상태를 마크다운에서 직접 읽음
+          const lineContent = (mdContent.split('\n')[mdLine - 1] || '');
+          const isChecked = /^[ \t]*[-*+] \[[xX]\]/.test(lineContent);
+          toggleCheckboxByLine(mdLine, !isChecked, mdContent);
         }
       });
     }
@@ -1694,16 +1713,13 @@ async function toggleLinkedCheckbox(li, eventId, toChecked) {
   }
 }
 
-async function toggleCheckbox(index, checked, mdContent) {
-  // markdown에서 N번째 - [ ] 또는 - [x] 를 찾아 토글
-  let md = mdContent;
-  let count = 0;
-  const newMd = md.replace(/^([ \t]*[-*+] \[)([xX ]?)(\])/gm, (match, pre, state, post) => {
-    if (count++ === index) {
-      return pre + (checked ? 'x' : ' ') + post;
-    }
-    return match;
-  });
+async function toggleCheckboxByLine(mdLine, checked, mdContent) {
+  // markdown에서 지정된 라인번호(1-base)의 체크박스를 토글
+  const lines = mdContent.split('\n');
+  const i = mdLine - 1;
+  if (i < 0 || i >= lines.length) return;
+  lines[i] = lines[i].replace(/^([ \t]*[-*+] \[)[xX ]?(\])/, (_, pre, post) => pre + (checked ? 'x' : ' ') + post);
+  const newMd = lines.join('\n');
 
   const res = await fetch(`/api/checklists/${_curId}/content`, {
     method: 'PATCH',
@@ -2004,18 +2020,20 @@ let _schedModelsLoaded = false;
 let _schedEvents = [];
 
 function openScheduleCheck() {
+  _wizardBusy = true;
   closeWizardMenu();
   document.getElementById('ck-sched-modal').classList.remove('hidden');
   if (!_schedModelsLoaded) _loadSchedModels();
   const today = new Date();
   const fmt = d => d.toISOString().slice(0, 10);
-  const s = new Date(today); s.setDate(today.getDate() - 30);
-  const e = new Date(today); e.setDate(today.getDate() + 60);
+  const s = new Date(today); s.setDate(today.getDate() - 5);
+  const e = new Date(today); e.setDate(today.getDate() + 14);
   document.getElementById('sched-start').value = fmt(s);
   document.getElementById('sched-end').value   = fmt(e);
 }
 
 function closeScheduleCheck() {
+  _wizardBusy = false;
   document.getElementById('ck-sched-modal').classList.add('hidden');
   _schedEvents = [];
   document.getElementById('sched-event-list').innerHTML =
@@ -2127,6 +2145,7 @@ async function generateScheduleCheck() {
     }));
     const q = new URLSearchParams({ ai_draft: '1' });
     if (_curProj) q.set('proj', _curProj);
+    _wizardBusy = false;
     location.href = '/check/new/edit?' + q.toString();
   } catch (err) {
     document.getElementById('sched-gen-loading').classList.add('hidden');
@@ -2138,6 +2157,7 @@ async function generateScheduleCheck() {
 }
 
 async function openAiForm() {
+  _wizardBusy = true;
   document.getElementById('ck-ai-modal').classList.remove('hidden');
   _setAiState('idle');
   document.getElementById('ck-ai-input').focus();
@@ -2145,6 +2165,7 @@ async function openAiForm() {
 }
 
 function closeAiForm() {
+  _wizardBusy = false;
   document.getElementById('ck-ai-modal').classList.add('hidden');
   if (_aiAbort) { _aiAbort.abort(); _aiAbort = null; }
   document.getElementById('ck-ai-error').classList.add('hidden');
@@ -2213,6 +2234,7 @@ function useAiDraft() {
   }));
   const q = new URLSearchParams({ ai_draft: '1' });
   if (_curProj) q.set('proj', _curProj);
+  _wizardBusy = false;
   location.href = '/check/new/edit?' + q.toString();
 }
 

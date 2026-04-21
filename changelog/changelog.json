@@ -1,8 +1,30 @@
 {
   "groups": [
     {
+      "date": "2026-04-22",
+      "phase": "24차 2단계",
+      "phase_class": "phase-8",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>칸반 — done 카드 자동 완료 처리 (7일 카운트다운 배지)",
+          "detail_html": "<ul>\n              <li><b>자동 완료</b> — <code>done</code> 컬럼에 진입한 일정이 7일 경과 시 <code>is_active=0</code>으로 자동 처리. 기존 <code>done_at</code> 컬럼 재사용(신규 마이그레이션 없음)</li>\n              <li><b>카운트다운 배지</b> — 로그인 상태에서 <code>done</code> 카드에 \"⏳ N일 후 자동완료\" 배지 표시. 0~2일: 빨강, 3~4일: 주황, 5~7일: 회색</li>\n              <li><b>리셋</b> — done에서 다른 컬럼으로 이동 시 <code>done_at = NULL</code>로 자동 리셋 (기존 <code>update_kanban_status()</code> 로직 재사용)</li>\n              <li><b>스케줄러</b> — 서버 시작 시 즉시 1회 + 매일 03:05 cron 실행 (<code>finalize_expired_done()</code>)</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>캘린더 — UX 개선 (nowIndicator·슬롯 07시·팀 공유 문서·헤더 고정)",
+          "detail_html": "<ul>\n              <li><b>현재 시간 표시</b> — 주/2주/일 뷰에서 현재 시각에 빨간 선(<code>nowIndicator: true</code>) 추가</li>\n              <li><b>슬롯 시작 시간</b> — 06:00 → 07:00으로 변경 (<code>slotMinTime</code>, <code>scrollTime</code>)</li>\n              <li><b>팀 공유 문서 포함</b> — <code>team_share=1</code>인 개인 문서도 캘린더 일정에 포함 (<code>/api/doc/calendar</code>)</li>\n              <li><b>헤더·올데이 고정</b> — FullCalendar 내장 <code>stickyHeaderDates: true</code> 적용 및 기존 커스텀 <code>applyStickyAllDay()</code> 제거</li>\n              <li><b>레이아웃</b> — <code>main</code>을 flex column으로 설정, <code>#calendar</code>가 남은 뷰포트를 꽉 채우도록 수정 (<code>height: 100%</code>). <code>.cal-toolbar</code> sticky 제거(항상 상단 고정이므로 불필요)</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 마법사·체크박스·뱃지 UX 4종 수정",
+          "detail_html": "<ul>\n              <li><b>일정 체크 기본 기간</b> — -30/+60일 → -5/+14일로 조정 (현실적인 범위)</li>\n              <li><b>표 안 체크박스 인덱스 드리프트 수정</b> — ToastUI Viewer <code>customHTMLRenderer.item</code>으로 <code>li.task-list-item</code>에 <code>data-mdline</code>(마크다운 라인 번호) 주입. DOM 인덱스 대신 라인 번호 기반으로 토글하여 표 안 체크박스로 인한 인덱스 오차 해소</li>\n              <li><b>마법사 진행 중 새로고침 방지</b> — <code>_wizardBusy</code> 플래그 + <code>beforeunload</code> 이벤트로 마법사 열려 있는 동안 F5/Ctrl+R 시 확인 프롬프트 표시</li>\n              <li><b>연동 뱃지 클릭</b> — 🔗 뱃지 클릭 시 체크박스 토글 대신 일정 수정 모달(<code>window.openModal</code>) 오픈. <code>stopPropagation</code>으로 li 클릭 이벤트 차단</li>\n            </ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-04-21",
-      "phase": "23차 6단계",
+      "phase": "24차 1단계",
       "phase_class": "phase-7",
       "entries": [
         {

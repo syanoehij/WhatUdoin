@@ -2435,6 +2435,20 @@ def restore_trash_item(item_type: str, item_id: int) -> bool:
     return True
 
 
+def finalize_expired_done():
+    """done 상태로 7일 경과한 일정을 is_active=0 으로 자동 완료 처리 (APScheduler에서 호출)"""
+    with get_conn() as conn:
+        conn.execute("""
+            UPDATE events
+            SET is_active = 0, is_public = 0
+            WHERE kanban_status = 'done'
+              AND (is_active IS NULL OR is_active = 1)
+              AND done_at IS NOT NULL
+              AND done_at <= datetime('now', '-7 days')
+              AND deleted_at IS NULL
+        """)
+
+
 def cleanup_old_trash():
     """30일 초과 휴지통 항목 영구 삭제 (APScheduler에서 호출)"""
     threshold = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")

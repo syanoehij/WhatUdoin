@@ -42,11 +42,14 @@ async def lifespan(app: FastAPI):
     saved_url = db.get_setting("ollama_url")
     if saved_url:
         llm_parser.set_ollama_base_url(saved_url)
+    db.finalize_expired_done()  # 서버 시작 시 만료된 done 일정 즉시 처리
     if not scheduler.running:
         # APScheduler: 1분마다 15분 후 일정 알람 체크
         scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)
         # APScheduler: 매일 새벽 3시 휴지통 30일 초과 항목 정리
         scheduler.add_job(db.cleanup_old_trash, "cron", hour=3, minute=0)
+        # APScheduler: 매일 새벽 3시 5분 done 7일 경과 일정 자동 완료 처리
+        scheduler.add_job(db.finalize_expired_done, "cron", hour=3, minute=5)
         scheduler.start()
     yield
     if scheduler.running:
@@ -1953,7 +1956,9 @@ def docs_calendar(request: Request):
     docs = db.get_all_meetings(viewer=user)
     result = []
     for m in docs:
-        if not m.get("is_team_doc", 1):  # 개인 문서는 캘린더 미노출
+        is_team_doc = bool(m.get("is_team_doc", 1))
+        is_team_share = bool(m.get("team_share", 0))
+        if not (is_team_doc or is_team_share):  # 개인(비공유) 문서는 캘린더 미노출
             continue
         date = m.get("meeting_date") or m["created_at"][:10]
         result.append({

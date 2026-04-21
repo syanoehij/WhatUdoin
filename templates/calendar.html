@@ -3,8 +3,9 @@
 
 {% block extra_head %}
 <style>
-  main { max-width: none; padding: 0; }
-  #calendar { padding: 12px 20px 20px; }
+  main { max-width: none; padding: 0; display: flex; flex-direction: column; height: calc(100vh - 45px); overflow: hidden; }
+  .cal-toolbar { flex-shrink: 0; position: static !important; }
+  #calendar { flex: 1; min-height: 0; padding: 8px 20px 12px; overflow: hidden; }
 
   /* ── 캘린더 툴바 (간트 스타일) ── */
   .cal-toolbar {
@@ -253,16 +254,18 @@ document.addEventListener('DOMContentLoaded', () => {
     initialDate: localStorage.getItem('cal_date') || undefined,
     locale: 'ko',
     firstDay: 1,
-    height: 'auto',
+    height: '100%',
+    stickyHeaderDates: true,
+    nowIndicator: true,
     headerToolbar: {
       left: 'prev,next today',
       center: 'title',
       right: 'dayGridMonth,timeGridTwoWeek,timeGridWeek,timeGridDay',
     },
     buttonText: { today: '오늘', month: '월', week: '주', day: '일' },
-    slotMinTime: '06:00:00',
+    slotMinTime: '07:00:00',
     slotMaxTime: '30:00:00',
-    scrollTime: '06:00:00',
+    scrollTime: '07:00:00',
     views: {
       timeGridTwoWeek: {
         type: 'timeGrid',
@@ -344,7 +347,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!ok) info.revert();
     },
     datesSet(info) {
-      applyStickyAllDay();
       localStorage.setItem('cal_view', info.view.type);
       const _d = calendar.getDate();
       const _ds = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
@@ -364,7 +366,6 @@ document.addEventListener('DOMContentLoaded', () => {
       top.insertBefore(badge, top.firstChild);
     },
     eventDidMount(info) {
-      applyStickyAllDay();
       const p = info.event.extendedProps;
       const titleEl = info.el.querySelector('.fc-event-title');
       if (titleEl) {
@@ -402,7 +403,6 @@ document.addEventListener('DOMContentLoaded', () => {
     },
   });
   calendar.render();
-  applyStickyAllDay();
 
   // 토글 체크박스 초기 상태
   const wChk = document.getElementById('wheel-toggle-chk');
@@ -439,45 +439,6 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(r => r.json())
       .then(data => openModal('', data))
       .catch(() => {});
-  }
-
-  // ── 주/일 뷰 all-day 행 sticky 고정 ───────────────────
-  function applyStickyAllDay() {
-    const view = calendar.view.type;
-    const sections = document.querySelectorAll('tr.fc-scrollgrid-section');
-    if (sections.length < 2) return;
-
-    if (view === 'timeGridWeek' || view === 'timeGridDay' || view === 'timeGridTwoWeek') {
-      const headerH = sections[0].getBoundingClientRect().height;
-      const alldayH = sections[1].getBoundingClientRect().height;
-
-      // tr의 직접 자식 셀만 sticky — 중첩 테이블 셀은 건드리지 않음
-      [...sections[1].children].forEach(cell => {
-        cell.style.position = 'sticky';
-        cell.style.top      = headerH + 'px';
-        cell.style.zIndex   = '2';
-        cell.style.background = 'var(--surface)';
-      });
-
-      // 구분선 sticky
-      if (sections[2]) {
-        [...sections[2].children].forEach(cell => {
-          cell.style.position = 'sticky';
-          cell.style.top      = (headerH + alldayH) + 'px';
-          cell.style.zIndex   = '0';
-        });
-      }
-    } else {
-      // 월 뷰 등에서는 원상 복구
-      [sections[1], sections[2]].forEach(sec => {
-        [...(sec?.children ?? [])].forEach(cell => {
-          cell.style.position = '';
-          cell.style.top      = '';
-          cell.style.zIndex   = '';
-          cell.style.background = '';
-        });
-      });
-    }
   }
 
   // ── 마우스 휠로 날짜 이동 ──────────────────────────────
