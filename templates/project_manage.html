@@ -189,6 +189,16 @@
   }
   .pm-ev-row:last-child { border-bottom: none; }
   .pm-ev-row:hover { background: var(--surface-2); }
+  .kbn-badge {
+    font-size: 0.68rem; font-weight: 700; padding: 1px 6px;
+    border-radius: 4px; white-space: nowrap; flex-shrink: 0;
+  }
+  .kbn-backlog    { background: rgba(178,190,195,0.25); color: #b2bec3; }
+  .kbn-todo       { background: rgba(116,185,255,0.25); color: #74b9ff; }
+  .kbn-in_progress{ background: rgba(253,203,110,0.25); color: #e0a800; }
+  .kbn-peer_review{ background: rgba(162,155,254,0.25); color: #a29bfe; }
+  .kbn-done       { background: rgba(85,239,196,0.25);  color: #00b894; }
+  .kbn-blocked    { background: rgba(255,118,117,0.25); color: #ff7675; }
   .pm-ev-title {
     flex: 1;
     font-size: 0.88rem;
@@ -707,12 +717,19 @@ function renderDetail(idx) {
   if (!eventsToShow.length) {
     evEl.innerHTML = '<div class="pm-empty">연결된 일정 없음</div>';
   } else {
+    const KANBAN_LABELS = {
+      backlog: 'Backlog', todo: 'Todo', in_progress: 'In Progress',
+      peer_review: 'Peer Review', done: 'Done', blocked: 'Blocked'
+    };
     evEl.innerHTML = eventsToShow.map(e => {
       const s  = (e.start_datetime || '').slice(0, 10);
       const en = (e.end_datetime   || '').slice(0, 10);
       const date     = en && en !== s ? `${s} ~ ${en}` : s;
       const assignee = e.assignee
         ? `<span class="pm-ev-assignee" title="${escHtml(e.assignee)}">${escHtml(e.assignee)}</span>` : '';
+      const kbnBadge = e.kanban_status
+        ? `<span class="kbn-badge kbn-${e.kanban_status}">${KANBAN_LABELS[e.kanban_status] || e.kanban_status}</span>`
+        : '';
       let actionBtn;
       const isDone = e.is_active === 0;
       const evPub = e.is_public;  // null=프로젝트 연동, 0=비공개, 1=공개
@@ -741,6 +758,7 @@ function renderDetail(idx) {
       return `
         <div class="pm-ev-row" style="${rowStyle}">
           <span class="pm-ev-title" style="${titleStyle}" title="${escHtml(e.title)}">${escHtml(e.title)}</span>
+          ${kbnBadge}
           <span class="pm-ev-date">${date}</span>
           ${assignee}
           ${actionBtn}

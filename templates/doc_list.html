@@ -116,7 +116,7 @@
     </table>
 
     <div class="empty-state hidden" id="docs-empty">
-      <p>해당 월에 등록된 문서가 없습니다.</p>
+      <p>{% if user %}등록된 문서가 없습니다.{% else %}공유된 문서가 없습니다.{% endif %}</p>
     </div>
   </div>
 </div>
@@ -153,6 +153,8 @@ const ALL_DOCS      = {{ docs | tojson | safe }};
 const CURRENT_UID   = {{ user.id if user else 'null' }};
 const CURRENT_UNAME = {{ (user.name or user.username) | tojson | safe if user else 'null' }};
 const IS_LOGGED_IN  = {{ 'true' if user else 'false' }};
+const EMPTY_MSG       = IS_LOGGED_IN ? '등록된 문서가 없습니다.' : '공유된 문서가 없습니다.';
+const EMPTY_MONTH_MSG = IS_LOGGED_IN ? '해당 월에 등록된 문서가 없습니다.' : '공유된 문서가 없습니다.';
 
 // ── 상태 ────────────────────────────────────────────────
 // selectedDocType:    null=전체, 'team'=팀 문서, 'personal'=개인 문서
@@ -356,7 +358,7 @@ function renderMonthNav(byMonth, byYear, filtered) {
     </div>`;
 
   if (!Object.keys(byYear).length) {
-    body.innerHTML = allItem + '<p class="text-muted" style="padding:8px 16px;font-size:0.82rem;">등록된 문서가 없습니다.</p>';
+    body.innerHTML = allItem + `<p class="text-muted" style="padding:8px 16px;font-size:0.82rem;">${EMPTY_MSG}</p>`;
     return;
   }
 
@@ -396,7 +398,7 @@ function renderAllList(filtered) {
     tbody.innerHTML = '';
     document.getElementById('docs-table').style.display = 'none';
     empty.classList.remove('hidden');
-    empty.querySelector('p').textContent = searchQuery ? '검색 결과가 없습니다.' : '등록된 문서가 없습니다.';
+    empty.querySelector('p').textContent = searchQuery ? '검색 결과가 없습니다.' : EMPTY_MSG;
     return;
   }
 
@@ -420,7 +422,7 @@ function renderDocList(ym, byMonth) {
     tbody.innerHTML = '';
     document.getElementById('docs-table').style.display = 'none';
     empty.classList.remove('hidden');
-    empty.querySelector('p').textContent = '해당 월에 등록된 문서가 없습니다.';
+    empty.querySelector('p').textContent = EMPTY_MONTH_MSG;
     return;
   }
 
@@ -526,7 +528,7 @@ function showEmpty() {
   document.getElementById('docs-table').style.display = 'none';
   const el = document.getElementById('docs-empty');
   el.classList.remove('hidden');
-  el.querySelector('p').textContent = '등록된 문서가 없습니다.';
+  el.querySelector('p').textContent = EMPTY_MSG;
 }
 
 function escHtml(s) {
@@ -583,7 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const el = document.getElementById('docs-empty');
     el.classList.remove('hidden');
     el.innerHTML = `
-      <p>등록된 문서가 없습니다.</p>
+      <p>${EMPTY_MSG}</p>
       {% if user and user.role in ('editor', 'admin') %}
       <a href="/doc/new?personal=1" class="btn btn-primary" style="margin-top:12px">첫 문서 작성하기</a>
       {% endif %}

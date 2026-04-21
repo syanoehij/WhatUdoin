@@ -3,33 +3,47 @@
 
 {% block extra_head %}
 <style>
-  main { max-width: none; padding: 20px 28px; }
+  main { max-width: none; padding: 0; }
+  #calendar { padding: 12px 20px 20px; }
 
-  /* ── 캘린더 툴바 (칸반 스타일) ── */
+  /* ── 캘린더 툴바 (간트 스타일) ── */
   .cal-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 10px;
+    padding: 10px 18px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
     flex-wrap: wrap;
+    flex-shrink: 0;
+    position: sticky;
+    top: 45px;
+    z-index: 100;
+  }
+  /* 툴바 내 .btn 높이를 nav-btn 기준으로 통일 */
+  .cal-toolbar .btn {
+    padding: 5px 14px;
+    font-size: 0.83rem;
+    line-height: 1.4;
+    border: 1px solid transparent;
   }
   .cal-toolbar-left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: wrap;
   }
   .cal-toolbar-label {
-    font-size: 0.88rem;
+    font-size: 0.83rem;
     color: var(--text-muted);
     font-weight: 500;
   }
   .cal-toolbar select {
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 6px 28px 6px 10px;
-    font-size: 0.88rem;
+    padding: 5px 28px 5px 10px;
+    font-size: 0.83rem;
     font-family: inherit;
     background: var(--surface);
     color: var(--text);
@@ -95,8 +109,18 @@
     font-family: inherit;
     transition: background 0.1s;
     white-space: nowrap;
+    line-height: 1.4;
   }
   .cal-toolbar .toolbar-btn:hover { background: var(--surface-2); }
+  .cal-toolbar .toolbar-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .member-chip {
+    padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-muted); cursor: pointer;
+    font-size: 0.78rem; font-family: inherit; white-space: nowrap;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .member-chip:hover { background: var(--surface-3); color: var(--text); }
+  .member-chip.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
 </style>
 {% endblock %}
 
@@ -124,6 +148,9 @@
         <span class="toggle-track"></span>
       </span>
     </label>
+    {% if user %}
+    <div id="team-members-strip" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;"></div>
+    {% endif %}
   </div>
   {% if user and user.role in ('editor', 'admin') %}
   <button class="btn btn-primary btn-sm" onclick="openModal()">+ 일정 추가</button>
@@ -158,19 +185,32 @@
 let calendar;
 let currentDetailEventId = null;
 let currentDetailEventTeamId = null;
-let _myOnly = false;
+let _myOnly = !!CURRENT_USER;
 let _wheelNav = localStorage.getItem('cal_wheel') === '1';  // 기본 OFF
 let _showDocs = localStorage.getItem('cal_show_docs') !== '0';  // 기본 ON
 let _projFilter = '';  // '' = 전체, '__unassigned__' = 미지정, 그 외 = 프로젝트명
+let _filterMember = null;
+
+function _syncMyOnlyBtn() {
+  const btn = document.getElementById('my-only-btn');
+  if (!btn) return;
+  btn.textContent = _myOnly ? '👥 팀 일정 보기' : '👤 내 일정만';
+  btn.title = _myOnly ? '전체 팀 일정 보기' : '내 담당 일정만 보기';
+}
 
 function toggleMyOnly() {
   if (!CURRENT_USER) return;
   _myOnly = !_myOnly;
-  const btn = document.getElementById('my-only-btn');
-  if (btn) {
-    btn.textContent = _myOnly ? '👥 팀 일정 보기' : '👤 내 일정만';
-    btn.title = _myOnly ? '전체 팀 일정 보기' : '내 담당 일정만 보기';
-  }
+  _syncMyOnlyBtn();
+  calendar.getEventSourceById('main-events').refetch();
+}
+
+function toggleMemberFilter(name) {
+  _filterMember = (name === null || _filterMember === name) ? null : name;
+  document.querySelectorAll('#team-members-strip .member-chip').forEach(c => {
+    const isAll = c.dataset.name === '__all__';
+    c.classList.toggle('active', isAll ? _filterMember === null : c.dataset.name === _filterMember);
+  });
   calendar.getEventSourceById('main-events').refetch();
 }
 
@@ -246,6 +286,13 @@ document.addEventListener('DOMContentLoaded', () => {
               evs = evs.filter(e => {
                 const assignee = (e.extendedProps?.assignee || '').toLowerCase();
                 return assignee.split(',').map(s => s.trim()).some(a => a && (a.includes(myName) || myName.includes(a)));
+              });
+            }
+            if (_filterMember) {
+              const mName = _filterMember.toLowerCase();
+              evs = evs.filter(e => {
+                const assignee = (e.extendedProps?.assignee || '').toLowerCase();
+                return assignee.split(',').map(s => s.trim()).some(a => a && (a.includes(mName) || mName.includes(a)));
               });
             }
             if (_projFilter) {
@@ -362,6 +409,24 @@ document.addEventListener('DOMContentLoaded', () => {
   if (wChk) wChk.checked = _wheelNav;
   const dChk = document.getElementById('doc-toggle-chk');
   if (dChk) dChk.checked = _showDocs;
+
+  // 내 일정만 버튼 초기 상태 동기화
+  _syncMyOnlyBtn();
+
+  // 팀원 칩 로드
+  if (CURRENT_USER && CURRENT_USER.team_id) {
+    fetch(`/api/teams/members?team_id=${CURRENT_USER.team_id}`)
+      .then(r => r.json())
+      .then(members => {
+        const strip = document.getElementById('team-members-strip');
+        if (!strip) return;
+        const filtered = members.filter(m => m.name !== CURRENT_USER.name);
+        strip.innerHTML =
+          `<button class="member-chip active" data-name="__all__" onclick="toggleMemberFilter(null)">전체</button>` +
+          filtered.map(m => `<button class="member-chip" data-name="${m.name}" onclick="toggleMemberFilter('${m.name.replace(/'/g, "\\'")}')">${m.name}</button>`).join('');
+      })
+      .catch(() => {});
+  }
 
   // 캘린더 페이지 전용 콜백 설정
   window.onEventSaved = () => calendar.refetchEvents();

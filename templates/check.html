@@ -687,6 +687,24 @@
   /* eid: 연동 마커 링크 — 뷰어에서 숨김 (.ck-linked-badge 로 대체 표시) */
   #ck-viewer a[href^="eid:"] { display: none !important; }
 
+  /* ── 내보내기 드롭다운 ── */
+  .export-dropdown { position: relative; display: inline-block; }
+  .export-menu {
+    position: absolute; right: 0; top: calc(100% + 4px);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: var(--shadow); z-index: 200;
+    min-width: 180px; overflow: hidden;
+  }
+  .export-menu.hidden { display: none; }
+  .export-menu button, .export-menu a {
+    display: block; width: 100%; padding: 9px 14px;
+    text-align: left; background: none; border: none;
+    color: var(--text); font-size: 0.85rem; font-family: inherit;
+    cursor: pointer; text-decoration: none;
+    transition: background 0.1s;
+  }
+  .export-menu button:hover, .export-menu a:hover { background: var(--surface-2); }
+
   /* ── 연동 체크박스 뱃지 ── */
   .ck-linked-badge {
     display: inline-block;
@@ -766,7 +784,13 @@
           <button type="button" class="vis-btn active" data-val="0">외부 비공개</button>
           <button type="button" class="vis-btn" data-val="1">외부 공개</button>
         </div>
-        <button class="btn btn-sm" id="ck-export-btn" onclick="exportChecklist()" title="옵시디언 호환 마크다운으로 내보내기">⬇ 내보내기</button>
+        <div class="export-dropdown" id="ck-view-export-dropdown">
+          <button class="btn btn-sm" onclick="toggleCkViewExportMenu(event)" title="내보내기">⬇ 내보내기 ▾</button>
+          <div class="export-menu hidden" id="ck-view-export-menu">
+            <a href="#" onclick="exportChecklist(); closeCkViewExportMenu(); return false;">📄 MD파일로 저장하기</a>
+            <button onclick="ckViewExportLink(); closeCkViewExportMenu()">🔗 링크 내보내기</button>
+          </div>
+        </div>
         <button class="btn btn-sm btn-primary" id="ck-edit-btn" onclick="switchToEdit()" style="display:none;">편집</button>
         <!-- 편집 모드 전용 목차 버튼 -->
         <button class="btn btn-sm" id="btn-toc-toggle-inline" onclick="toggleTocInline()" style="display:none;" title="목차">📑 목차</button>
@@ -1444,6 +1468,23 @@ function exportChecklist() {
   a.href = `/api/checklists/${_curId}/export`;
   a.rel = 'noopener';
   document.body.appendChild(a); a.click(); a.remove();
+}
+
+function toggleCkViewExportMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('ck-view-export-menu');
+  if (!menu) return;
+  menu.classList.toggle('hidden');
+  if (!menu.classList.contains('hidden')) {
+    setTimeout(() => document.addEventListener('click', closeCkViewExportMenu, { once: true }), 0);
+  }
+}
+function closeCkViewExportMenu() {
+  document.getElementById('ck-view-export-menu')?.classList.add('hidden');
+}
+function ckViewExportLink() {
+  const url = `${location.protocol}//${location.hostname}:8000${location.pathname}`;
+  navigator.clipboard.writeText(url).then(() => alert(`링크가 복사되었습니다:\n${url}`)).catch(() => prompt('링크를 복사하세요:', url));
 }
 
 function switchToEdit() {

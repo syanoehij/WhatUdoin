@@ -5,6 +5,22 @@
 <link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
 <link rel="stylesheet" href="/static/css/wu-editor.css" />
 <script src="/static/lib/toastui-editor-all.min.js"></script>
+<style>
+.export-dropdown { position: relative; display: inline-block; }
+.export-menu {
+  position: absolute; right: 0; top: calc(100% + 4px);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: var(--shadow-md);
+  min-width: 180px; z-index: 100; padding: 4px 0;
+}
+.export-menu.hidden { display: none; }
+.export-menu button {
+  display: block; width: 100%; text-align: left;
+  padding: 8px 14px; background: none; border: none;
+  font-size: 0.86rem; color: var(--text); cursor: pointer; font-family: inherit;
+}
+.export-menu button:hover { background: var(--surface-2); }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -36,14 +52,20 @@
       {% endif %}
       {% if doc %}
       <button id="btn-toc-toggle" class="btn btn-sm" onclick="toggleTocPanel()" title="목차">📑 목차</button>
-      <button class="btn btn-sm" onclick="exportDoc()" title="옵시디언 호환 마크다운으로 내보내기">⬇ 내보내기</button>
+      <div class="export-dropdown" id="export-dropdown">
+        <button class="btn btn-sm" onclick="toggleExportMenu(event)" title="내보내기">⬇ 내보내기 ▾</button>
+        <div class="export-menu hidden" id="export-menu">
+          <button onclick="exportMd(); closeExportMenu()">📄 MD파일로 저장하기</button>
+          <button onclick="exportLink(); closeExportMenu()">🔗 링크 내보내기</button>
+        </div>
+      </div>
       {% endif %}
       {% if can_edit and not locked_by %}
       <button id="btn-ai-toggle" class="btn btn-sm" onclick="toggleAiPanel()">{% if doc_events %}일정 관리{% else %}일정 생성(AI){% endif %}</button>
       {% if doc %}
       <button class="btn btn-sm btn-danger" onclick="deleteDoc()">삭제</button>
       {% endif %}
-      <button class="btn btn-sm btn-primary" onclick="saveDoc()">저장</button>
+      <button class="btn btn-sm btn-primary" id="btn-save-doc" onclick="saveDoc()">저장</button>
       {% endif %}
     </div>
   </div>
@@ -360,12 +382,32 @@ if (document.readyState === 'loading') {
 /* ── TOC 글로벌 래퍼 (HTML onclick에서 호출) ─────────── */
 function toggleTocPanel() { wuInst?.toggleToc(); }
 
-function exportDoc() {
+function toggleExportMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('export-menu');
+  menu.classList.toggle('hidden');
+}
+function closeExportMenu() {
+  document.getElementById('export-menu')?.classList.add('hidden');
+}
+document.addEventListener('click', closeExportMenu);
+
+function exportMd() {
   if (!DOC_ID) return;
   const a = document.createElement('a');
   a.href = `/api/doc/${DOC_ID}/export`;
   a.rel = 'noopener';
   document.body.appendChild(a); a.click(); a.remove();
+}
+
+function exportLink() {
+  const loc = window.location;
+  const httpUrl = `http://${loc.hostname}:8000${loc.pathname}${loc.search}${loc.hash}`;
+  navigator.clipboard.writeText(httpUrl).then(() => {
+    alert(`링크가 복사되었습니다:\n${httpUrl}`);
+  }).catch(() => {
+    prompt('링크를 복사하세요:', httpUrl);
+  });
 }
 
 /* ── AI 패널 토글 ────────────────────────────────────── */
@@ -385,8 +427,14 @@ function getDocContent() {
   return wuInst ? wuInst.getMarkdown().trim() : '';
 }
 
+let _docSaving = false;
+
 async function saveDoc(leaveTarget) {
   if (wuInst?.cooldown) return;
+  if (_docSaving) return;
+  _docSaving = true;
+  const saveBtn = document.getElementById('btn-save-doc');
+  if (saveBtn) saveBtn.disabled = true;
   const raw   = getDocContent();
   const lines = raw.split('\n');
   const title = lines[0].replace(/^#+\s*/, '').trim();
@@ -406,18 +454,24 @@ async function saveDoc(leaveTarget) {
     body: JSON.stringify({ title, content, is_team_doc: isTeamDoc, is_public: isPublic, team_share: teamShare }),
   });
 
-  if (res.ok) {
-    const data = await res.json();
-    if (typeof window._checkNotifications === 'function') window._checkNotifications();
-    if (!DOC_ID) {
-      location.href = `/doc/${data.id}`;
+  try {
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof window._checkNotifications === 'function') window._checkNotifications();
+      if (!DOC_ID) {
+        wuInst?.afterSave();
+        location.href = `/doc/${data.id}`;
+      } else {
+        wuInst?.afterSave();
+        if (leaveTarget) location.href = leaveTarget;
+      }
     } else {
-      wuInst?.afterSave();
-      if (leaveTarget) location.href = leaveTarget;
+      const err = await res.json();
+      alert(err.detail || '저장 실패');
     }
-  } else {
-    const err = await res.json();
-    alert(err.detail || '저장 실패');
+  } finally {
+    _docSaving = false;
+    if (saveBtn) saveBtn.disabled = false;
   }
 }
 

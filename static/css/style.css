@@ -1715,6 +1715,17 @@ input[type="date"], input[type="time"] {
   padding: 4px 7px; font-size: 0.85rem; outline: none; color: var(--text); background: var(--surface);
 }
 input[type="date"]:focus, input[type="time"]:focus { border-color: var(--accent); }
+/* 라이트 테마: 아이콘을 검정으로 강제 (OS 테마 무관) */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: brightness(0) opacity(0.55);
+  cursor: pointer;
+}
+/* 다크 테마: 아이콘을 흰색으로 강제 */
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.3);
+}
 
 /* ── 수정 이력 ── */
 .history-list { display: flex; flex-direction: column; gap: 16px; }

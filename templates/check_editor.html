@@ -77,6 +77,21 @@
     display: none; z-index: 9999;
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
   }
+  .export-dropdown { position: relative; display: inline-block; }
+  .export-menu {
+    position: absolute; right: 0; top: calc(100% + 4px);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: var(--shadow-md);
+    min-width: 180px; z-index: 100; padding: 4px 0;
+  }
+  .export-menu.hidden { display: none; }
+  .export-menu a, .export-menu button {
+    display: block; width: 100%; text-align: left;
+    padding: 8px 14px; background: none; border: none;
+    font-size: 0.86rem; color: var(--text); cursor: pointer;
+    font-family: inherit; text-decoration: none;
+  }
+  .export-menu a:hover, .export-menu button:hover { background: var(--surface-2); }
 </style>
 {% endblock %}
 
@@ -116,7 +131,13 @@
         {{ '🔓 체크 잠금 해제' if checklist.is_locked else '🔒 체크 잠금' }}
       </button>
       <a href="/check/{{ checklist.id }}/history" class="btn btn-sm">수정 이력</a>
-      <a href="/api/checklists/{{ checklist.id }}/export" class="btn btn-sm" rel="noopener" title="옵시디언 호환 마크다운으로 내보내기">⬇ 내보내기</a>
+      <div class="export-dropdown" id="ck-export-dropdown">
+        <button class="btn btn-sm" onclick="toggleCkExportMenu(event)" title="내보내기">⬇ 내보내기 ▾</button>
+        <div class="export-menu hidden" id="ck-export-menu">
+          <a href="/api/checklists/{{ checklist.id }}/export" rel="noopener" onclick="closeCkExportMenu()">📄 MD파일로 저장하기</a>
+          <button onclick="ckExportLink(); closeCkExportMenu()">🔗 링크 내보내기</button>
+        </div>
+      </div>
       {% endif %}
       {% if not locked_by %}
       {% if checklist.id %}
@@ -205,6 +226,24 @@
 {% block scripts %}
 <script src="/static/js/wu-editor.js"></script>
 <script>
+function toggleCkExportMenu(e) {
+  e.stopPropagation();
+  document.getElementById('ck-export-menu')?.classList.toggle('hidden');
+}
+function closeCkExportMenu() {
+  document.getElementById('ck-export-menu')?.classList.add('hidden');
+}
+document.addEventListener('click', closeCkExportMenu);
+function ckExportLink() {
+  const loc = window.location;
+  const httpUrl = `http://${loc.hostname}:8000${loc.pathname}${loc.search}${loc.hash}`;
+  navigator.clipboard.writeText(httpUrl).then(() => {
+    alert(`링크가 복사되었습니다:\n${httpUrl}`);
+  }).catch(() => {
+    prompt('링크를 복사하세요:', httpUrl);
+  });
+}
+
 const CKE_ID       = {{ checklist.id if checklist.id else 'null' }};
 const CKE_LOCKED   = {{ 'true' if locked_by else 'false' }};
 const CKE_IS_NEW   = (CKE_ID === null);

@@ -3,7 +3,7 @@
 
 {% block extra_head %}
 <style>
-html, body { overflow-x: hidden; }
+body { overflow-x: clip; }  /* clip은 BFC 안 만들어서 sticky 정상 작동 */
 main { padding: 0; }
 
 /* ── 툴바 ─────────────────────────────────────────────── */
@@ -16,6 +16,9 @@ main { padding: 0; }
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
   flex-shrink: 0;
+  position: sticky;
+  top: 45px;
+  z-index: 100;
 }
 .project-toolbar .view-btns {
   display: flex;
@@ -108,10 +111,9 @@ main { padding: 0; }
 .gantt-outer { display: flex; flex-direction: column; }
 .gantt-scroll { display: flex; overflow: hidden; }
 
-/* ── 페이지 sticky 헤더 ─────────────────────────────── */
+/* ── 페이지 헤더 (project-toolbar가 sticky이므로 별도 sticky 불필요) ── */
 .gantt-sticky-header {
-  position: sticky;
-  top: 0;
+  position: static;
   z-index: 20;
   display: flex;
   flex-shrink: 0;
@@ -390,18 +392,20 @@ const PRESET_DAYS = { month: 180, week: 90, day: 21 };
 let daysShown = ZOOM_STEPS[8]; // 기본 21일 (3주)
 let viewStart = null;
 let allTeams  = [];
-let _ganttMyOnly = false;
+let _ganttMyOnly = !!CURRENT_USER;
 const collapsedProjects = new Set(); // "팀이름::프로젝트이름"
+
+function _syncGanttMyOnlyBtn() {
+  const btn = document.getElementById('gantt-my-only-btn');
+  if (!btn) return;
+  btn.textContent = _ganttMyOnly ? '👥 팀 일정 보기' : '👤 내 일정만';
+  btn.title = _ganttMyOnly ? '전체 팀 일정 보기' : '내 담당 일정만 보기';
+}
 
 function toggleGanttMyOnly() {
   if (!CURRENT_USER) return;
   _ganttMyOnly = !_ganttMyOnly;
-  const btn = document.getElementById('gantt-my-only-btn');
-  if (btn) {
-    btn.classList.toggle('active', _ganttMyOnly);
-    btn.textContent = _ganttMyOnly ? '👥 팀 일정 보기' : '👤 내 일정만';
-    btn.title = _ganttMyOnly ? '전체 팀 일정 보기' : '내 담당 일정만 보기';
-  }
+  _syncGanttMyOnlyBtn();
   render();
 }
 
@@ -1115,6 +1119,7 @@ function scrollToToday() {
   _applyInitialTeamFilter();    // 팀 필터: 저장값 우선, 없으면 소속팀 기본 선택
   syncSlider(); syncViewBtns(); updateZoomLabel();
   if (!viewStart) viewStart = addDays(today(), -Math.floor(daysShown / 3));
+  _syncGanttMyOnlyBtn();        // 내 일정만 버튼 초기 상태 동기화
   loadData();
 })();
 

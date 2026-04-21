@@ -131,6 +131,8 @@ def _can_write_doc(user, doc: dict) -> bool:
 
 
 def _can_read_checklist(user, cl: dict) -> bool:
+    if user and user.get("role") == "admin":
+        return True
     if user:
         return True
     is_pub = cl.get("is_public")
@@ -760,6 +762,18 @@ async def admin_reset_password(user_id: int, request: Request):
         raise HTTPException(status_code=400, detail="새 비밀번호를 입력하세요.")
     db.reset_user_password(user_id, new_pw)
     return {"ok": True}
+
+
+@app.get("/api/teams/members")
+def team_members(request: Request, team_id: int = None):
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401)
+    all_users = db.get_all_users()
+    members = [u for u in all_users if u.get("is_active", 1)]
+    if team_id is not None:
+        members = [u for u in members if u.get("team_id") == team_id]
+    return [{"name": u["name"], "team_id": u.get("team_id"), "team_name": u.get("team_name")} for u in members]
 
 
 @app.get("/api/admin/teams")

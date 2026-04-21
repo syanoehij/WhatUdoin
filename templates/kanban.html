@@ -3,28 +3,41 @@
 
 {% block extra_head %}
 <style>
-  main { max-width: none; padding: 20px 28px; }
+  main { max-width: none; padding: 0; }
 
-  /* ── 칸반 툴바 ── */
+  /* ── 칸반 툴바 (간트 스타일) ── */
   .kanban-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 10px;
+    padding: 10px 18px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
     flex-wrap: wrap;
+    flex-shrink: 0;
+    position: sticky;
+    top: 45px;
+    z-index: 100;
+  }
+  /* 툴바 내 .btn 높이를 nav-btn 기준으로 통일 */
+  .kanban-toolbar .btn {
+    padding: 5px 14px;
+    font-size: 0.83rem;
+    line-height: 1.4;
+    border: 1px solid transparent;
   }
   .kanban-toolbar-left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: wrap;
   }
   .kanban-toolbar select {
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 6px 28px 6px 10px;
-    font-size: 0.88rem;
+    padding: 5px 28px 5px 10px;
+    font-size: 0.83rem;
     font-family: inherit;
     background: var(--surface);
     color: var(--text);
@@ -42,11 +55,11 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238b949e' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   }
   .kanban-toolbar label {
-    font-size: 0.88rem;
+    font-size: 0.83rem;
     color: var(--text-muted);
     font-weight: 500;
   }
-  .kanban-total-label { font-size: 0.85rem; color: var(--text-muted); }
+  .kanban-total-label { font-size: 0.83rem; color: var(--text-muted); }
   .kanban-toolbar .toolbar-btn {
     padding: 5px 10px;
     border: 1px solid var(--border);
@@ -58,14 +71,25 @@
     font-family: inherit;
     transition: background 0.1s;
     white-space: nowrap;
+    line-height: 1.4;
   }
   .kanban-toolbar .toolbar-btn:hover { background: var(--surface-2); }
+  .kanban-toolbar .toolbar-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .member-chip {
+    padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-muted); cursor: pointer;
+    font-size: 0.78rem; font-family: inherit; white-space: nowrap;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .member-chip:hover { background: var(--surface-3); color: var(--text); }
+  .member-chip.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
 
   /* ── 칸반 보드 ── */
   .kanban-board {
     display: flex;
     gap: 12px;
-    align-items: flex-start;
+    align-items: stretch;
+    min-height: calc(100vh - 200px);
     overflow-x: auto;
     padding-bottom: 16px;
   }
@@ -78,8 +102,6 @@
     display: flex;
     flex-direction: column;
   }
-  .kanban-col.blocked { background: rgba(255,118,117,0.08); }
-
   .kanban-col-header {
     display: flex;
     align-items: center;
@@ -89,7 +111,7 @@
     border-radius: 10px 10px 0 0;
     position: sticky;
     top: 0;
-    background: inherit;
+    background: var(--surface-2);
     z-index: 1;
   }
   .kanban-col[data-status="backlog"]     .kanban-col-header { border-color: #b2bec3; }
@@ -97,7 +119,7 @@
   .kanban-col[data-status="in_progress"] .kanban-col-header { border-color: #fdcb6e; }
   .kanban-col[data-status="peer_review"] .kanban-col-header { border-color: #a29bfe; }
   .kanban-col[data-status="done"]        .kanban-col-header { border-color: #55efc4; }
-  .kanban-col[data-status="blocked"]     .kanban-col-header { border-color: #ff7675; }
+  .kanban-col[data-status="blocked"]     .kanban-col-header { border-color: #ff7675; background: rgba(255,118,117,0.15); }
 
   .col-title {
     font-weight: 700;
@@ -116,12 +138,12 @@
 
   .kanban-col-body {
     padding: 8px;
-    flex: 1;
+    flex: 1 1 auto;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr));
     align-content: start;
     gap: 8px;
-    min-height: 60px;
+    min-height: 200px;
   }
   /* ── 칸반 카드 ── */
   .kanban-card {
@@ -220,6 +242,9 @@
     <button class="toolbar-btn" id="kbn-my-only-btn" onclick="toggleKanbanMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
     {% endif %}
     <span id="kanban-total" class="kanban-total-label"></span>
+    {% if user %}
+    <div id="kanban-team-members" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;"></div>
+    {% endif %}
   </div>
   {% if user and user.role in ('editor', 'admin') %}
   <button class="btn btn-primary" onclick="openModal()">+ 일정 추가</button>
@@ -228,7 +253,7 @@
   {% endif %}
 </div>
 
-<div class="kanban-board" id="kanban-board">
+<div class="kanban-board" id="kanban-board" style="margin: 0 20px; padding-top: 16px; padding-bottom: 20px;">
   {% set cols = [
     ('backlog',     'Backlog'),
     ('todo',        'Todo'),
@@ -296,7 +321,8 @@ function fmtDate(str) {
 
 let allEvents = [];
 let dragSrcId = null;
-let _kanbanMyOnly = false;
+let _kanbanMyOnly = !!CURRENT_USER;
+let _kanbanFilterMember = null;
 
 function _applyInitialTeamFilter() {
   const sel = document.getElementById('team-filter');
@@ -309,14 +335,26 @@ function _applyInitialTeamFilter() {
   if (sel.querySelector(`option[value="${CSS.escape(target)}"]`) || sel.querySelector(`option[value="${target}"]`)) sel.value = target;
 }
 
+function _syncKanbanMyOnlyBtn() {
+  const btn = document.getElementById('kbn-my-only-btn');
+  if (!btn) return;
+  btn.textContent = _kanbanMyOnly ? '👥 팀 일정 보기' : '👤 내 일정만';
+  btn.title = _kanbanMyOnly ? '전체 팀 일정 보기' : '내 담당 일정만 보기';
+}
+
 function toggleKanbanMyOnly() {
   if (!CURRENT_USER) return;
   _kanbanMyOnly = !_kanbanMyOnly;
-  const btn = document.getElementById('kbn-my-only-btn');
-  if (btn) {
-    btn.textContent = _kanbanMyOnly ? '👥 팀 일정 보기' : '👤 내 일정만';
-    btn.title = _kanbanMyOnly ? '전체 팀 일정 보기' : '내 담당 일정만 보기';
-  }
+  _syncKanbanMyOnlyBtn();
+  renderBoard();
+}
+
+function toggleKanbanMemberFilter(name) {
+  _kanbanFilterMember = (name === null || _kanbanFilterMember === name) ? null : name;
+  document.querySelectorAll('#kanban-team-members .member-chip').forEach(c => {
+    const isAll = c.dataset.name === '__all__';
+    c.classList.toggle('active', isAll ? _kanbanFilterMember === null : c.dataset.name === _kanbanFilterMember);
+  });
   renderBoard();
 }
 
@@ -353,6 +391,13 @@ function renderBoard() {
     filtered = filtered.filter(e => {
       const assignee = (e.assignee || '').toLowerCase();
       return assignee.split(',').map(s => s.trim()).some(a => a && (a.includes(myName) || myName.includes(a)));
+    });
+  }
+  if (_kanbanFilterMember) {
+    const mName = _kanbanFilterMember.toLowerCase();
+    filtered = filtered.filter(e => {
+      const assignee = (e.assignee || '').toLowerCase();
+      return assignee.split(',').map(s => s.trim()).some(a => a && (a.includes(mName) || mName.includes(a)));
     });
   }
 
@@ -480,7 +525,23 @@ window.onKDetailSaved = loadKanban;
 
 // 초기 로드
 _applyInitialTeamFilter();
+_syncKanbanMyOnlyBtn();
 loadProjColors().then(() => loadKanban());
+
+// 팀원 칩 로드
+if (CURRENT_USER && CURRENT_USER.team_id) {
+  fetch(`/api/teams/members?team_id=${CURRENT_USER.team_id}`)
+    .then(r => r.json())
+    .then(members => {
+      const strip = document.getElementById('kanban-team-members');
+      if (!strip) return;
+      const filtered = members.filter(m => m.name !== CURRENT_USER.name);
+      strip.innerHTML =
+        `<button class="member-chip active" data-name="__all__" onclick="toggleKanbanMemberFilter(null)">전체</button>` +
+        filtered.map(m => `<button class="member-chip" data-name="${m.name}" onclick="toggleKanbanMemberFilter('${m.name.replace(/'/g, "\\'")}')">${m.name}</button>`).join('');
+    })
+    .catch(() => {});
+}
 
 // ── 전역 검색 연결 ──────────────────────────────────────
 window.__pageSearch = {

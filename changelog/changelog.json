@@ -1,6 +1,38 @@
 {
   "groups": [
     {
+      "date": "2026-04-21",
+      "phase": "23차 6단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>캘린더·칸반·간트 — 툴바 고정(sticky) 및 공통 스타일 통일",
+          "detail_html": "<ul>\n              <li><b>툴바 sticky 적용</b> — 캘린더(<code>.cal-toolbar</code>), 칸반(<code>.kanban-toolbar</code>), 간트(<code>.project-toolbar</code>) 모두 <code>position: sticky; top: 45px; z-index: 100</code>으로 고정. 스크롤 시 상단 네비게이션 바 바로 아래에 항상 노출</li>\n              <li><b>간트 overflow 수정</b> — <code>html, body { overflow-x: hidden }</code>이 BFC를 생성해 sticky가 동작하지 않던 문제 → <code>body { overflow-x: clip }</code>으로 교체 (clip은 BFC 비생성)</li>\n              <li><b>간트 날짜 헤더 sticky 제거</b> — 프로젝트 이름·팀 컬럼(좌측)은 sticky 불가한 구조로, 날짜 헤더(<code>.gantt-sticky-header</code>)만 고정 시 좌우 싱크 불일치 발생 → <code>position: static</code>으로 변경해 전체 동시 스크롤</li>\n              <li><b>스타일 통일</b> — 캘린더·칸반 툴바 패딩/폰트/높이를 간트 스타일(<code>padding: 10px 18px; border-bottom: 1px solid var(--border)</code>)에 맞춰 통일. 버튼에 <code>border: 1px solid transparent</code> 추가로 높이 일치</li>\n              <li><b>'팀 일정 보기' 버튼 색상</b> — 캘린더·칸반에서 기존 accent 색상 하이라이트 제거, 간트와 동일한 기본 버튼 스타일로 통일</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>캘린더·칸반 — 팀원 필터 칩 UI 추가",
+          "detail_html": "<ul>\n              <li><b>팀원 칩 표시</b> — 캘린더 및 칸반 툴바에 같은 팀 소속 팀원 이름 칩 렌더링. <code>GET /api/teams/members</code> API 호출로 팀원 목록 조회</li>\n              <li><b>클릭 필터</b> — 칩 클릭 시 해당 담당자 일정·카드만 표시. 다시 클릭 또는 '전체' 클릭 시 해제. <code>_myOnly</code>(내 일정 보기)와 독립적으로 동작(교집합)</li>\n              <li><b>스타일</b> — 문서 목록의 '문서 종류' 필터 버튼(<code>author-filter-item</code>)과 동일한 스타일 적용: <code>border-radius: 12px; border: 1px solid var(--border)</code>, 활성 시 <code>var(--accent-bg)</code> 배경 + accent 테두리/색상</li>\n              <li><b>'전체' 칩</b> — 좌측 첫 번째에 '전체' 칩 추가, 기본 활성 상태. 클릭 시 필터 해제</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>칸반 — 드롭 히트박스 확대 및 Blocked 컬럼 스타일 수정",
+          "detail_html": "<ul>\n              <li><b>드롭 히트박스 확대</b> — <code>.kanban-board { align-items: stretch; min-height: calc(100vh - 200px) }</code>, <code>.kanban-col-body { min-height: 200px; flex: 1 1 auto }</code> 적용으로 카드가 없는 빈 컬럼 하단 영역도 drop target으로 동작</li>\n              <li><b>Blocked 컬럼 배경</b> — 전체 컬럼 배경 강조에서 헤더 영역만 <code>rgba(255,118,117,0.15)</code> 배경 적용으로 변경. 기타 컬럼과 시각적 일관성 유지</li>\n              <li>홈 화면 칸반 미리보기에도 동일 스타일 적용 (<code>templates/home.html</code>)</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>날짜/시간 입력 아이콘 — 다크·라이트 테마 가시성 수정",
+          "detail_html": "<ul>\n              <li><b>근본 원인</b> — <code>color-scheme: light dark</code> 속성이 OS 다크 모드 설정을 따라 아이콘 색을 결정, 페이지 테마와 불일치 발생 (OS 다크 + 페이지 라이트 = 흰색 아이콘)</li>\n              <li><b>수정</b> — <code>color-scheme</code> 제거 후 명시적 CSS filter 적용: 라이트 테마 <code>filter: brightness(0) opacity(0.55)</code>(진한 회색), 다크 테마 <code>[data-theme=\"dark\"] filter: invert(1) brightness(1.3)</code>(밝은 흰색)</li>\n              <li><code>static/css/style.css</code>의 <code>input[type=\"date\"]·input[type=\"time\"]</code> <code>::-webkit-calendar-picker-indicator</code> 선택자에 적용</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>체크리스트 뷰어 — 내보내기 드롭다운 (MD·링크)",
+          "detail_html": "<ul>\n              <li>체크리스트 조회 페이지(<code>check.html</code>) 우측 상단에 '⬇ 내보내기 ▾' 드롭다운 추가</li>\n              <li><b>📄 MD파일로 저장하기</b> — 기존 <code>exportChecklist()</code> 호출, 마크다운 파일 다운로드</li>\n              <li><b>🔗 링크 내보내기</b> — 현재 페이지 URL을 <code>http://localhost:8000</code> 기반으로 정규화 후 클립보드 복사 + 알림 표시</li>\n            </ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-04-20",
       "phase": "23차 5단계",
       "phase_class": "phase-7",
