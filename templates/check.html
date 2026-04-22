@@ -403,28 +403,22 @@
   .btn-warn { background: #64748b; color: #fff; }
   .btn-warn:hover { background: #475569; }
 
-  /* ── 잠금 오버레이 (편집 중 내용 전체 차단) ── */
+  /* ── 잠금 배너 (편집 중 본문 상단 알림) ── */
   .ck-lock-overlay {
-    flex: 1;
+    flex-shrink: 0;
+    padding: 6px 16px;
+    background: rgba(245, 158, 11, 0.12);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.35);
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 14px;
-    background: var(--surface-2);
-    color: var(--text-muted);
-  }
-  .ck-lock-overlay-icon { font-size: 2.4rem; }
-  .ck-lock-overlay-title {
-    font-size: 0.97rem;
-    font-weight: 700;
+    gap: 8px;
     color: var(--text);
+    font-size: 0.88rem;
   }
-  .ck-lock-overlay-sub {
-    font-size: 0.82rem;
-    color: var(--text-faint);
-  }
-  .ck-lock-overlay .btn { margin-top: 4px; }
+  .ck-lock-overlay-icon { font-size: 1rem; }
+  .ck-lock-overlay-title { font-weight: 600; }
+  .ck-lock-overlay-sub { display: none; }
+  .ck-lock-overlay .btn { margin-left: auto; }
 
   /* ── 저장 토스트 ── */
   #ck-save-toast {
@@ -824,7 +818,7 @@
     </div>
     {% endif %}
 
-    <!-- 잠금 오버레이 (다른 사람이 편집 중일 때 내용 전체 차단) -->
+    <!-- 잠금 배너 (다른 사람이 편집 중일 때 상단에 표시, 본문은 정상 노출) -->
     <div class="ck-lock-overlay" id="ck-lock-overlay" style="display:none;">
       <div class="ck-lock-overlay-icon">🔒</div>
       <div class="ck-lock-overlay-title" id="ck-lock-msg">편집 중입니다.</div>
@@ -982,6 +976,7 @@ let _curId              = null;
 let _curItem            = null;
 let wuInst              = null;   // WUEditor 인스턴스
 let _ckViewer           = null;
+let _viewerTocObserver  = null;
 let _dirty              = false;
 let _autoSaveTimer      = null;
 let _editMode           = false;
@@ -1221,21 +1216,24 @@ function _setLockState(lockedBy) {
   const viewer   = document.getElementById('ck-viewer-wrap');
 
   if (_lockedByOther) {
-    document.getElementById('ck-lock-msg').textContent = `🔒 ${lockedBy}님이 편집 중입니다.`;
+    document.getElementById('ck-lock-msg').textContent = `${lockedBy}님이 편집 중입니다.`;
     if (overlay) overlay.style.display = '';
-    if (viewer)  viewer.style.display  = 'none';
-    // 뷰어 인스턴스 파기 (체크박스 핸들러 제거)
-    if (_ckViewer) { _ckViewer.destroy(); _ckViewer = null; }
-    document.getElementById('ck-viewer').innerHTML = '';
   } else {
     if (overlay) overlay.style.display = 'none';
-    // 뷰어는 _showViewerMode()에서 표시
   }
 
-  // 편집 버튼 가시성
+  // 편집/삭제 버튼: 잠금 시 disabled + tooltip
   if (IS_EDITOR) {
     const editBtn = document.getElementById('ck-edit-btn');
-    if (editBtn) editBtn.style.display = _lockedByOther ? 'none' : '';
+    if (editBtn) {
+      editBtn.disabled = _lockedByOther;
+      editBtn.title    = _lockedByOther ? `${lockedBy}님이 편집 중입니다` : '';
+    }
+    const deleteBtn = document.getElementById('ck-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.disabled = _lockedByOther;
+      deleteBtn.title    = _lockedByOther ? `${lockedBy}님이 편집 중입니다` : '';
+    }
   }
 }
 
@@ -1256,11 +1254,8 @@ async function refreshLockStatus() {
   if (res.ok) {
     const data = await res.json();
     _setLockState(data.locked_by);
-    // 잠금 해제된 경우에만 뷰어 렌더링
-    if (!_lockedByOther) {
-      document.getElementById('ck-viewer-wrap').style.display = '';
-      renderViewer(_curItem.content);
-    }
+    document.getElementById('ck-viewer-wrap').style.display = '';
+    if (_curItem) renderViewer(_curItem.content);
   }
 }
 
@@ -1279,23 +1274,18 @@ function _showViewerMode() {
 
   if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
 
-  if (_lockedByOther) {
-    // 다른 사람이 편집 중 → 오버레이 표시, 뷰어 숨김
-    document.getElementById('ck-viewer-wrap').style.display   = 'none';
-    document.getElementById('ck-lock-overlay').style.display  = '';
-  } else {
-    document.getElementById('ck-lock-overlay').style.display  = 'none';
-    document.getElementById('ck-viewer-wrap').style.display   = '';
-    renderViewer(_curItem.content);
-  }
+  // 잠금 배너 + 뷰어 항상 노출 (배너만 표시 여부 다름)
+  document.getElementById('ck-lock-overlay').style.display = _lockedByOther ? '' : 'none';
+  document.getElementById('ck-viewer-wrap').style.display  = '';
+  renderViewer(_curItem.content);
 
-  // 목차 버튼은 로그인 여부와 무관하게 뷰어 모드에서 표시
+  // 목차 버튼은 뷰어 모드에서 항상 표시
   const tocViewerBtn = document.getElementById('btn-toc-viewer');
-  if (tocViewerBtn) tocViewerBtn.style.display = _lockedByOther ? 'none' : '';
+  if (tocViewerBtn) tocViewerBtn.style.display = '';
 
   // 버튼 가시성
   if (IS_EDITOR) {
-    document.getElementById('ck-edit-btn').style.display    = _lockedByOther ? 'none' : '';
+    document.getElementById('ck-edit-btn').style.display    = '';
     document.getElementById('ck-rename-btn').style.display  = 'none';
     document.getElementById('ck-viewer-btn').style.display  = 'none';
     document.getElementById('ck-save-btn').style.display    = 'none';
@@ -1491,7 +1481,8 @@ function closeCkViewExportMenu() {
   document.getElementById('ck-view-export-menu')?.classList.add('hidden');
 }
 function ckViewExportLink() {
-  const url = `${location.protocol}//${location.hostname}:8000${location.pathname}`;
+  if (!_curId) { alert('체크리스트를 먼저 선택하세요.'); return; }
+  const url = `http://${location.hostname}:8000/check?id=${_curId}`;
   navigator.clipboard.writeText(url).then(() => alert(`링크가 복사되었습니다:\n${url}`)).catch(() => prompt('링크를 복사하세요:', url));
 }
 
@@ -1577,8 +1568,23 @@ function renderViewer(content) {
 
   // 잠금/비로그인 시 체크박스 클릭 차단 (시각적 반응 포함)
   container.classList.toggle('no-check-interaction', !CURRENT_USER || _contentLocked);
-  // 연동 체크박스 상태 동기화는 로그인 여부 무관하게 항상 실행
-  setTimeout(() => attachCheckboxHandlers(displayContent), 100);
+
+  // 뷰어 TOC 자동 동기화 — 본문 DOM 변경(체크박스 토글 등) 시 목차 갱신
+  if (_viewerTocObserver) { _viewerTocObserver.disconnect(); _viewerTocObserver = null; }
+  setTimeout(() => {
+    const tocTarget = container.querySelector('.toastui-editor-contents') || container;
+    let _tocDebounce = null;
+    _viewerTocObserver = new MutationObserver(() => {
+      clearTimeout(_tocDebounce);
+      _tocDebounce = setTimeout(() => {
+        const panel = document.getElementById('ck-viewer-toc');
+        if (panel && !panel.classList.contains('hidden')) buildViewerToc();
+      }, 150);
+    });
+    _viewerTocObserver.observe(tocTarget, { childList: true, subtree: true, characterData: true });
+    // 연동 체크박스 상태 동기화
+    attachCheckboxHandlers(displayContent);
+  }, 100);
 }
 
 // ── 연동 체크박스 파싱: mdContent에서 마크다운 라인번호(1-base) → event_id 맵 반환
@@ -2018,7 +2024,12 @@ window.__pageSearch = {
     const term = q.trim().toLowerCase();
     if (!term) { renderList(); return; }
     const filtered = _allChecklists
-      .filter(c => c.title.toLowerCase().includes(term) || (c.project || '').toLowerCase().includes(term))
+      .filter(c =>
+        c.title.toLowerCase().includes(term) ||
+        (c.project || '').toLowerCase().includes(term) ||
+        (c.content || '').toLowerCase().includes(term) ||
+        (c.created_by || '').toLowerCase().includes(term)
+      )
       .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
     const container = document.getElementById('ck-list');
     if (!filtered.length) {

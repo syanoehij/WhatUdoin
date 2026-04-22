@@ -40,12 +40,12 @@
     <a id="btn-back" href="/doc" class="btn btn-sm">← 목록</a>
 
     <div class="btn-group">
-      {% if can_edit and not locked_by %}
-      <div class="visibility-segment" id="visibility-segment" role="radiogroup" aria-label="공개 범위"></div>
+      {% if can_edit %}
+      <div class="visibility-segment" id="visibility-segment" role="radiogroup" aria-label="공개 범위" style="display:none"></div>
       {% endif %}
-      {% if can_edit and not locked_by %}
+      {% if can_edit %}
       <div class="visibility-segment" id="doc-type-segment" role="radiogroup" aria-label="수정 권한"
-           data-initial="{{ 'team' if (not doc or doc.is_team_doc) else 'personal' }}"></div>
+           data-initial="{{ 'team' if (not doc or doc.is_team_doc) else 'personal' }}" style="display:none"></div>
       {% endif %}
       {% if user and doc %}
       <a href="/doc/{{ doc.id }}/history" class="btn btn-sm">수정 이력</a>
@@ -60,12 +60,17 @@
         </div>
       </div>
       {% endif %}
-      {% if can_edit and not locked_by %}
-      <button id="btn-ai-toggle" class="btn btn-sm" onclick="toggleAiPanel()">{% if doc_events %}일정 관리{% else %}일정 생성(AI){% endif %}</button>
+      {% if can_edit %}
+      <button id="btn-ai-toggle" class="btn btn-sm" onclick="toggleAiPanel()" style="display:none">{% if doc_events %}일정 관리{% else %}일정 생성(AI){% endif %}</button>
       {% if doc %}
-      <button class="btn btn-sm btn-danger" onclick="deleteDoc()">삭제</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteDoc()" id="btn-delete-doc" style="display:none">삭제</button>
       {% endif %}
-      <button class="btn btn-sm btn-primary" id="btn-save-doc" onclick="saveDoc()">저장</button>
+      <button class="btn btn-sm btn-primary" id="btn-save-doc" onclick="saveDoc()" style="display:none">저장</button>
+      {% if not locked_by %}
+      <button class="btn btn-sm btn-primary" id="btn-edit-start" onclick="startDocEdit()">편집</button>
+      {% else %}
+      <button class="btn btn-sm" disabled title="{{ locked_by }}님이 편집 중입니다">편집 불가</button>
+      {% endif %}
       {% endif %}
     </div>
   </div>
@@ -75,20 +80,19 @@
 
     <!-- 왼쪽: 에디터 영역 -->
     <div class="editor-main" id="editor-main">
-      {% if can_edit and not locked_by %}
-      <div id="editor-container"></div>
-      {% else %}
-      <div id="doc-content-view" class="doc-content-view markdown-body"></div>
+      {% if can_edit %}
+      <div id="editor-container" style="display:none;"></div>
       {% endif %}
+      <div id="doc-content-view" class="doc-content-view markdown-body"></div>
     </div>
 
     <!-- 드래그 리사이저 -->
-    {% if can_edit and not locked_by %}
-    <div class="editor-resizer" id="editor-resizer"></div>
+    {% if can_edit %}
+    <div class="editor-resizer" id="editor-resizer" style="display:none;"></div>
     {% endif %}
 
     <!-- 오른쪽: AI 패널 (기본 숨김) -->
-    {% if can_edit and not locked_by %}
+    {% if can_edit %}
     <div class="ai-panel hidden" id="ai-panel">
 
       <!-- AI 패널 상단: 컨트롤 -->
@@ -206,8 +210,9 @@ function initDocEditor() {
     btnBack.textContent = '← 캘린더';
   }
 
+  // 편집자이고 잠금 없으면 뷰어 건너뛰고 바로 편집 모드로 진입
+  // 그 외(비편집자 또는 잠금 중)는 뷰어로 렌더 후 종료
   if (!IS_EDITOR || LOCKED_BY) {
-    // 뷰어 모드: WUEditor로 TOC 포함 렌더
     wuInst = WUEditor.create({
       el: '#doc-content-view',
       bodyEl: '#editor-body',
@@ -222,112 +227,113 @@ function initDocEditor() {
     return;
   }
 
-  // 문서 종류 세그먼트 + 공개 범위 세그먼트 컨트롤 초기화
-  const docTypeSeg = document.getElementById('doc-type-segment');
-  const visSeg     = document.getElementById('visibility-segment');
-
-  const DOC_OPTS = [
-    { v: 'personal', label: '나만 수정' },
-    { v: 'team',     label: '팀원도 수정' },
-  ];
-  const VIS_OPTS = [
-    { v: 'private', label: '외부 비공개' },
-    { v: 'team',    label: '팀에게만 공개' },
-    { v: 'public',  label: '외부 공개' },
-  ];
-
-  function isTeamDoc() {
-    return docTypeSeg?.querySelector('.vis-btn.active')?.dataset.value === 'team';
-  }
-
-  function renderSegment(el, opts, cur) {
-    if (!el) return;
-    el.innerHTML = opts.map(o => `<button type="button" class="vis-btn${o.v === cur ? ' active' : ''}"
-                        data-value="${o.v}" role="radio" aria-checked="${o.v === cur}">
-               ${o.label}</button>`).join('');
-    el.querySelectorAll('.vis-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        el.querySelectorAll('.vis-btn').forEach(b => {
-          b.classList.remove('active'); b.setAttribute('aria-checked', 'false');
-        });
-        btn.classList.add('active'); btn.setAttribute('aria-checked', 'true');
-        if (el === docTypeSeg) {
-          // 팀 문서 → 팀에게만 공개 옵션 제거, 개인 문서 → 추가
-          const curVis = visSeg?.querySelector('.vis-btn.active')?.dataset.value || 'private';
-          renderSegment(visSeg, VIS_OPTS.filter(o => btn.dataset.value === 'team' ? o.v !== 'team' : true),
-            (btn.dataset.value === 'team' && curVis === 'team') ? 'private' : curVis);
-        }
-      });
+  // 편집 모드 진입 (잠금 없는 편집자 전용)
+  window.startDocEdit = function() {
+    document.getElementById('btn-edit-start')?.remove();
+    if (wuInst) { wuInst.destroy(); wuInst = null; }
+    document.getElementById('doc-content-view').style.display = 'none';
+    ['editor-container', 'editor-resizer'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.style.display = '';
     });
-  }
+    ['btn-save-doc', 'btn-ai-toggle', 'btn-delete-doc', 'visibility-segment', 'doc-type-segment'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.style.display = '';
+    });
 
-  function deriveInitialVisibility() {
-    {% if doc %}
-    if ({{ 'true' if doc.is_public else 'false' }}) return 'public';
-    if ({{ 'true' if (not doc.is_team_doc and doc.team_share) else 'false' }}) return 'team';
-    return 'private';
-    {% else %}
-    return 'private';
-    {% endif %}
-  }
-
-  if (docTypeSeg) {
-    const initDocType = docTypeSeg.dataset.initial || 'team';
-    if (!DOC_ID) {
-      const isPersonal = new URLSearchParams(location.search).get('personal') === '1';
-      renderSegment(docTypeSeg, DOC_OPTS, isPersonal ? 'personal' : 'team');
-      renderSegment(visSeg, VIS_OPTS.filter(o => !isPersonal ? o.v !== 'team' : true),
-        isPersonal ? 'team' : 'private');
-    } else {
-      renderSegment(docTypeSeg, DOC_OPTS, initDocType);
-      const initVis = deriveInitialVisibility();
-      renderSegment(visSeg, VIS_OPTS.filter(o => initDocType === 'team' ? o.v !== 'team' : true), initVis);
+    // 문서 종류 세그먼트 + 공개 범위 세그먼트 컨트롤 초기화
+    const docTypeSeg = document.getElementById('doc-type-segment');
+    const visSeg     = document.getElementById('visibility-segment');
+    const DOC_OPTS = [
+      { v: 'personal', label: '나만 수정' },
+      { v: 'team',     label: '팀원도 수정' },
+    ];
+    const VIS_OPTS = [
+      { v: 'private', label: '외부 비공개' },
+      { v: 'team',    label: '팀에게만 공개' },
+      { v: 'public',  label: '외부 공개' },
+    ];
+    function renderSegment(el, opts, cur) {
+      if (!el) return;
+      el.innerHTML = opts.map(o => `<button type="button" class="vis-btn${o.v === cur ? ' active' : ''}"
+                          data-value="${o.v}" role="radio" aria-checked="${o.v === cur}">
+                 ${o.label}</button>`).join('');
+      el.querySelectorAll('.vis-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          el.querySelectorAll('.vis-btn').forEach(b => {
+            b.classList.remove('active'); b.setAttribute('aria-checked', 'false');
+          });
+          btn.classList.add('active'); btn.setAttribute('aria-checked', 'true');
+          if (el === docTypeSeg) {
+            const curVis = visSeg?.querySelector('.vis-btn.active')?.dataset.value || 'private';
+            renderSegment(visSeg, VIS_OPTS.filter(o => btn.dataset.value === 'team' ? o.v !== 'team' : true),
+              (btn.dataset.value === 'team' && curVis === 'team') ? 'private' : curVis);
+          }
+        });
+      });
     }
-  }
+    function deriveInitialVisibility() {
+      {% if doc %}
+      if ({{ 'true' if doc.is_public else 'false' }}) return 'public';
+      if ({{ 'true' if (not doc.is_team_doc and doc.team_share) else 'false' }}) return 'team';
+      return 'private';
+      {% else %}
+      return 'private';
+      {% endif %}
+    }
+    if (docTypeSeg) {
+      const initDocType = docTypeSeg.dataset.initial || 'team';
+      if (!DOC_ID) {
+        const isPersonal = new URLSearchParams(location.search).get('personal') === '1';
+        renderSegment(docTypeSeg, DOC_OPTS, isPersonal ? 'personal' : 'team');
+        renderSegment(visSeg, VIS_OPTS.filter(o => !isPersonal ? o.v !== 'team' : true),
+          isPersonal ? 'team' : 'private');
+      } else {
+        renderSegment(docTypeSeg, DOC_OPTS, initDocType);
+        const initVis = deriveInitialVisibility();
+        renderSegment(visSeg, VIS_OPTS.filter(o => initDocType === 'team' ? o.v !== 'team' : true), initVis);
+      }
+    }
+    updateAiBtnLabel();
 
-  // AI 버튼 초기 레이블
-  updateAiBtnLabel();
-
-  // WUEditor 공용 모듈 초기화
-  wuInst = WUEditor.create({
-    el: '#editor-container',
-    bodyEl: '#editor-body',
-    canEdit: true,
-    initialMarkdown: initialMd,
-    toolbarItems: [
-      ['heading', 'bold', 'italic', 'strike'],
-      ['hr', 'quote'],
-      ['ul', 'ol', 'task'],
-      ['table'],
-      ['image'],
-    ],
-    features: {
-      imageResize: true,
-      imageUpload: { endpoint: '/api/upload/image' },
-      sanitizerOff: true,
-      toc: DOC_ID ? { storageKey: 'doc_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
-      shortcutSave: true,
-      autosave: DOC_ID ? { intervalMs: 120000, respectCooldown: true } : false,
-      saveCooldown: { seconds: 10, saveBtnSelector: 'button[onclick="saveDoc()"]' },
-      editLock: DOC_ID ? {
-        endpoint: `/api/doc/${DOC_ID}/lock`,
-        heartbeatMs: 30000,
-        onLockFailed: () => location.reload(),
-      } : false,
-      leaveConfirm: { backBtnSelector: '#btn-back' },
-    },
-    hooks: {
-      onSave: (md, { leaveTarget } = {}) => saveDoc(leaveTarget),
-      onReady: (ed) => {
-        editor = ed;
-        renderLinkedEvents();
-        if (linkedEvents.length) toggleAiPanel();
+    // WUEditor 편집기 초기화
+    wuInst = WUEditor.create({
+      el: '#editor-container',
+      bodyEl: '#editor-body',
+      canEdit: true,
+      initialMarkdown: initialMd,
+      toolbarItems: [
+        ['heading', 'bold', 'italic', 'strike'],
+        ['hr', 'quote'],
+        ['ul', 'ol', 'task'],
+        ['table'],
+        ['image'],
+      ],
+      features: {
+        imageResize: true,
+        imageUpload: { endpoint: '/api/upload/image' },
+        sanitizerOff: true,
+        toc: DOC_ID ? { storageKey: 'doc_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
+        shortcutSave: true,
+        autosave: DOC_ID ? { intervalMs: 120000, respectCooldown: true } : false,
+        saveCooldown: { seconds: 10, saveBtnSelector: 'button[onclick="saveDoc()"]' },
+        editLock: DOC_ID ? {
+          endpoint: `/api/doc/${DOC_ID}/lock`,
+          heartbeatMs: 30000,
+          onLockFailed: () => location.reload(),
+        } : false,
+        leaveConfirm: { backBtnSelector: '#btn-back' },
       },
-      shouldWarnOnUnload: () => !!(IS_EDITOR && !LOCKED_BY && wuInst?.dirty),
-    },
-  });
-  // AI 초안이면 create() 반환 후 바로 dirty 마킹 (onReady 안에서는 wuInst가 undefined)
-  if (_aiDraftLoaded) wuInst.setDirty(true);
+      hooks: {
+        onSave: (md, { leaveTarget } = {}) => saveDoc(leaveTarget),
+        onReady: (ed) => {
+          editor = ed;
+          renderLinkedEvents();
+          if (linkedEvents.length) toggleAiPanel();
+        },
+        shouldWarnOnUnload: () => !!(IS_EDITOR && !LOCKED_BY && wuInst?.dirty),
+      },
+    });
+    if (_aiDraftLoaded) wuInst.setDirty(true);
+  };
 
   // 리사이저 드래그
   const resizer    = document.getElementById('editor-resizer');
@@ -371,6 +377,8 @@ function initDocEditor() {
     const sel = document.getElementById('ai-model-select');
     if (sel) sel.innerHTML = '<option value="gemma4:e2b">gemma4:e2b (빠름)</option>';
   });
+
+  startDocEdit();
 }
 
 if (document.readyState === 'loading') {

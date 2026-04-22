@@ -210,7 +210,9 @@
             return;
           }
           _lockHeartbeat = setInterval(() => {
-            fetch(lk.endpoint, { method: 'PUT' }).catch(() => {});
+            fetch(lk.endpoint, { method: 'PUT' })
+              .then(r => { if (r.status === 423 && lk.onLockLost) lk.onLockLost(); })
+              .catch(() => {});
           }, lk.heartbeatMs || 30000);
         })
         .catch(() => {});

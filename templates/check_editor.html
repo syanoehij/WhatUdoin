@@ -260,6 +260,22 @@ const CKE_IS_NEW   = (CKE_ID === null);
 
 let wuInst = null;
 let _newIsPublic = 0;
+let _lockLost = false;
+
+function _handleLockLost() {
+  _lockLost = true;
+  const saveBtn = document.getElementById('cke-save-btn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.title = '편집 잠금이 만료되었습니다'; }
+  let banner = document.getElementById('lock-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'lock-banner';
+    banner.className = 'lock-banner';
+    document.querySelector('.editor-page')?.prepend(banner);
+  }
+  banner.innerHTML = '<span class="lock-banner-icon">🔒</span><span>편집 잠금이 만료되었습니다. 저장이 불가합니다.</span><button class="lock-banner-refresh" onclick="location.reload()">새로고침</button>';
+  banner.style.display = '';
+}
 
 function toggleNewVisibility(btn) {
   _newIsPublic = parseInt(btn.dataset.val);
@@ -375,7 +391,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       editLock: CKE_ID ? {
         endpoint: `/api/checklists/${CKE_ID}/lock`,
         heartbeatMs: 120000,
-        onLockFailed: () => { alert('편집 잠금을 획득하지 못했습니다. 다른 사람이 편집 중입니다.'); location.href = '/check'; }
+        onLockFailed: () => { alert('편집 잠금을 획득하지 못했습니다. 다른 사람이 편집 중입니다.'); location.href = '/check'; },
+        onLockLost:   () => _handleLockLost(),
       } : false,
       leaveConfirm: { backBtnSelector: '#btn-back' },
     },
@@ -414,6 +431,7 @@ async function toggleContentLock() {
 }
 
 async function saveContent(auto = false, leaveTarget = null) {
+  if (_lockLost) return;
   const project = document.getElementById('ck-edit-project')?.value || '';
   const md      = wuInst ? wuInst.getMarkdown() : '';
   const lines   = md.split('\n');

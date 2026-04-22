@@ -2,6 +2,58 @@
   "groups": [
     {
       "date": "2026-04-22",
+      "phase": "26차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>캘린더 — timeGrid 칸 클릭 시 일정이 저장 후 표시되지 않던 치명 버그 수정",
+          "detail_html": "<ul>\n              <li><b>원인</b> — <code>dateClick</code>이 timeGrid에서 <code>info.dateStr</code>을 ISO datetime 형식(<code>2026-04-22T09:30:00+09:00</code>)으로 넘겼고, 이를 그대로 <code>f-start-date</code>에 박은 뒤 저장 시 <code>2026-04-22T09:30:00+09:00T09:00</code>과 같이 깨진 ISO가 생성되어 DB 파싱 실패</li>\n              <li><b>수정</b> — <code>dateClick</code>에서 <code>slice(0,10)</code>으로 날짜만 추출 후 <code>dragOpts</code>에 원본 시간 정보 전달. <code>endStr</code> 없는 단일 클릭 시 종료 = 시작+1시간으로 자동 채움</li>\n            </ul>"
+        },
+        {
+          "icon": "🗑",
+          "title_html": "<span class=\"cl-tag ux\">ux</span>칸반 — 상세 모달 '완료' 버튼 제거",
+          "detail_html": "<ul>\n              <li>칸반 상세 모달의 '완료' 버튼이 <code>done</code> 상태 카드와 혼동을 일으켜 의도치 않은 아카이브 발생 → 버튼 마크업 및 관련 JS 토글 로직 삭제</li>\n            </ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>캘린더·칸반·간트 — 색상 미설정 프로젝트 자동 색상 배정 통일",
+          "detail_html": "<ul>\n              <li>서버(<code>app.py</code>)에 <code>_project_color(name)</code> 헬퍼 추가 — 간트·칸반과 동일한 31진법 해시 + 15색 팔레트 사용</li>\n              <li>캘린더 API <code>/api/events</code> 응답에서 색상 미설정 프로젝트에도 자동 색상 부여 → 캘린더·칸반·간트 세 곳에서 같은 프로젝트가 동일한 색으로 표시</li>\n              <li>팔레트를 눈에 편한 색 우선으로 재배치 — 붉은 계열(<code>#c0392b</code>·<code>#c62828</code>)·핫핑크(<code>#e84393</code>)·오렌지레드(<code>#e17055</code>) 제거, 파랑·틸·그린·보라 계열로 교체</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>칸반 — URL <code>?status=</code> 파라미터 필터 + 홈 진행상황 chip 클릭 연동",
+          "detail_html": "<ul>\n              <li>칸반 페이지 초기 로드 시 <code>?status=todo|in_progress|done|blocked|overdue</code> 파싱 → 해당 상태 카드만 표시</li>\n              <li>홈 대시보드의 진행상황 chip(예정·진행 중·완료·보류) 클릭 시 해당 상태 칸반으로 바로 이동</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>통합 검색 범위 보강 — 체크·캘린더·칸반·간트",
+          "detail_html": "<ul>\n              <li><b>체크</b> — <code>title</code>·<code>project</code>에 <code>content</code>·<code>created_by</code> 추가</li>\n              <li><b>캘린더</b> — 검색 비활성화 상태에서 활성화. <code>title</code>·<code>project</code>·<code>description</code>·<code>assignee</code> 필드를 <code>calendar.getEvents()</code> 캐시에서 클라이언트 필터</li>\n              <li><b>칸반</b> — 카드 렌더 시 <code>data-description</code> attribute 주입, <code>description</code> 필드를 검색 대상에 추가</li>\n              <li><b>간트</b> — 행 dataset에 <code>project</code>·<code>description</code> 추가 후 검색 필터 확장</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>내 스케줄 — 예정 회의 담당자 매칭 정밀화",
+          "detail_html": "<ul>\n              <li>기존 SQL LIKE 패턴이 콤마·공백 포함 담당자 문자열에서 일부 누락 → Python 레벨에서 <code>split(',') + trim()</code> 후 정확 비교로 교체</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 편집 중 본문 가림 버그 수정 및 잠금 UX 개선",
+          "detail_html": "<ul>\n              <li><b>본문 가림 수정</b> — 다른 사람이 편집 중일 때 전체 화면을 덮던 오버레이를 상단 sticky 배너로 교체. 본문 내용이 항상 표시됨 (<code>flex-shrink:0</code> 적용으로 레이아웃 안정화)</li>\n              <li><b>편집·삭제 버튼 비활성화</b> — 잠금 상태에서 두 버튼 모두 <code>disabled</code> + 누가 편집 중인지 tooltip 표시</li>\n              <li><b>이중 자물쇠 아이콘 버그</b> — HTML의 <code>ck-lock-overlay-icon</code>과 JS <code>textContent</code>에 각각 🔒가 붙어 두 개로 보이던 버그 수정</li>\n              <li><b>뷰어 TOC 자동 동기화</b> — MutationObserver로 체크박스 토글 시 목차 자동 갱신</li>\n              <li><b>공유 URL 수정</b> — <code>http://{host}:8000/check?id=N</code> 형태로 고정 (protocol 자동 감지 제거)</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>체크 편집기 — 편집 잠금 탈취 시 저장 자동 차단",
+          "detail_html": "<ul>\n              <li>하트비트(<code>PUT /api/checklists/{id}/lock</code>) 실패(423) 시 서버에서 오류 반환하도록 수정</li>\n              <li><code>wu-editor.js</code> 하트비트에 423 감지 → <code>onLockLost</code> 콜백 호출</li>\n              <li>잠금 탈취 감지 시: 상단 배너 표시 + 저장 버튼 비활성 + 자동저장·Ctrl+S·이탈 저장 모두 차단(<code>_lockLost</code> 플래그)</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span>문서 — 잠금 없으면 진입 즉시 편집 모드, 잠금 중이면 뷰어+편집불가 버튼",
+          "detail_html": "<ul>\n              <li>기존: 편집자도 항상 뷰어로 열림 → 편집 버튼 클릭 필요</li>\n              <li>변경: 편집자 + 잠금 없음 → 뷰어 렌더 없이 바로 편집 모드 진입(깜빡임 없음)</li>\n              <li>변경: 편집자 + 잠금 중 → 뷰어로 열림 + '편집 불가(OOO이 편집 중)' 버튼 표시</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-22",
       "phase": "25차 2단계",
       "phase_class": "phase-2",
       "entries": [

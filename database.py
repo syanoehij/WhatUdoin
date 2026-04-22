@@ -954,37 +954,28 @@ def get_upcoming_meetings(assignee_name: str = None, limit: int = 7) -> list[dic
     """event_type='meeting'인 일정 중 오늘 이후 최대 limit개 반환 (담당자 필터 가능)"""
     today = datetime.now().strftime("%Y-%m-%d")
     with get_conn() as conn:
-        if assignee_name:
-            rows = conn.execute(
-                """SELECT * FROM events
-                   WHERE event_type = 'meeting'
-                   AND (is_active IS NULL OR is_active = 1)
-                   AND deleted_at IS NULL
-                   AND start_datetime >= ?
-                   AND (assignee LIKE ? OR assignee LIKE ? OR assignee LIKE ? OR assignee = ?)
-                   ORDER BY start_datetime
-                   LIMIT ?""",
-                (
-                    today,
-                    f"%,{assignee_name},%",
-                    f"{assignee_name},%",
-                    f"%,{assignee_name}",
-                    assignee_name,
-                    limit,
-                )
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """SELECT * FROM events
-                   WHERE event_type = 'meeting'
-                   AND (is_active IS NULL OR is_active = 1)
-                   AND deleted_at IS NULL
-                   AND start_datetime >= ?
-                   ORDER BY start_datetime
-                   LIMIT ?""",
-                (today, limit)
-            ).fetchall()
-    return [dict(r) for r in rows]
+        rows = conn.execute(
+            """SELECT * FROM events
+               WHERE event_type = 'meeting'
+               AND (is_active IS NULL OR is_active = 1)
+               AND deleted_at IS NULL
+               AND start_datetime >= ?
+               ORDER BY start_datetime""",
+            (today,)
+        ).fetchall()
+    all_rows = [dict(r) for r in rows]
+    if not assignee_name:
+        return all_rows[:limit]
+    # 콤마 구분 담당자 필드를 split+trim 후 정확 비교 (공백 포함 케이스 커버)
+    name_lower = assignee_name.strip().lower()
+    result = []
+    for row in all_rows:
+        assignees = [s.strip().lower() for s in (row.get('assignee') or '').split(',')]
+        if name_lower in assignees:
+            result.append(row)
+        if len(result) >= limit:
+            break
+    return result
 
 
 def create_notification(user_name: str, type_: str, message: str, event_id: int = None):
@@ -2063,16 +2054,16 @@ def get_checklists(project: str = None, viewer=None) -> list:
     with get_conn() as conn:
         if project is None:
             rows = conn.execute(
-                f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter} ORDER BY updated_at DESC"
+                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter} ORDER BY updated_at DESC"
             ).fetchall()
         elif project == "":
             # 미지정 (project가 NULL 또는 빈 문자열인 항목)
             rows = conn.execute(
-                f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter} ORDER BY updated_at DESC"
+                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter} ORDER BY updated_at DESC"
             ).fetchall()
         else:
             rows = conn.execute(
-                f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter} ORDER BY updated_at DESC",
+                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter} ORDER BY updated_at DESC",
                 (project,)
             ).fetchall()
     return [dict(r) for r in rows]

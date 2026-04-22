@@ -374,15 +374,25 @@ function openModal(dateStr = '', eventData = null, dragOpts = null, options = nu
       document.getElementById('f-end-date').value = endDate;
       document.getElementById('f-allday').checked = true;
       toggleAllDay();
-    } else if (endStr) {
-      // 시간 단위 드래그: 날짜·시간 분리 적용
-      const endDatePart  = endStr.slice(0, 10);
-      const endTimePart  = endStr.slice(11, 16);   // "HH:MM"
+    } else {
+      // 시간 단위 드래그 또는 단일 timeGrid 클릭
       const startTimePart = startStr ? startStr.slice(11, 16) : '';
-      _fpInstance.setDate([today, endDatePart], true);
-      document.getElementById('f-end-date').value = endDatePart;
+      if (endStr) {
+        const endDatePart = endStr.slice(0, 10);
+        const endTimePart = endStr.slice(11, 16);
+        _fpInstance.setDate([today, endDatePart], true);
+        document.getElementById('f-end-date').value = endDatePart;
+        if (endTimePart) document.getElementById('f-end-time').value = endTimePart;
+      } else if (startTimePart) {
+        // 단일 칸 클릭: 종료 = 시작 + 1시간
+        const [sh, sm] = startTimePart.split(':').map(Number);
+        const totalMins = sh * 60 + sm + 60;
+        const eh = Math.floor(totalMins / 60) % 24;
+        const em = totalMins % 60;
+        document.getElementById('f-end-time').value =
+          `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+      }
       if (startTimePart) document.getElementById('f-start-time').value = startTimePart;
-      if (endTimePart)   document.getElementById('f-end-time').value   = endTimePart;
     }
   }
 
@@ -937,8 +947,6 @@ async function openKDetail(id) {
   const canEdit = CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor');
   const editBtn = document.getElementById('kbtn-edit');
   if (editBtn) editBtn.style.display = canEdit ? '' : 'none';
-  const completeBtn = document.getElementById('kbtn-complete');
-  if (completeBtn) completeBtn.style.display = canEdit ? '' : 'none';
 
   document.getElementById('kdetail-overlay').classList.remove('hidden');
 }

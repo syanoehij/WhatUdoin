@@ -380,11 +380,11 @@ async function loadUser() {
   document.getElementById('greeting-sub').textContent = sub;
 
   document.getElementById('user-progress').innerHTML = `
-    <div class="progress-chip"><span class="chip-num">${todo}</span><span class="chip-label">예정</span></div>
-    <div class="progress-chip chip-doing"><span class="chip-num">${doing}</span><span class="chip-label">진행 중</span></div>
-    <div class="progress-chip chip-done"><span class="chip-num">${done}</span><span class="chip-label">완료</span></div>
-    <div class="progress-chip chip-blocked"><span class="chip-num">${blocked}</span><span class="chip-label">보류</span></div>
-    ${(() => { const overdue = mine.filter(e => isOverdue(e)).length; return overdue ? `<div class="progress-chip chip-overdue"><span class="chip-num">${overdue}</span><span class="chip-label">지연</span></div>` : ''; })()}
+    <div class="progress-chip" style="cursor:pointer" onclick="location.href='/kanban?status=todo'"><span class="chip-num">${todo}</span><span class="chip-label">예정</span></div>
+    <div class="progress-chip chip-doing" style="cursor:pointer" onclick="location.href='/kanban?status=in_progress'"><span class="chip-num">${doing}</span><span class="chip-label">진행 중</span></div>
+    <div class="progress-chip chip-done" style="cursor:pointer" onclick="location.href='/kanban?status=done'"><span class="chip-num">${done}</span><span class="chip-label">완료</span></div>
+    <div class="progress-chip chip-blocked" style="cursor:pointer" onclick="location.href='/kanban?status=blocked'"><span class="chip-num">${blocked}</span><span class="chip-label">보류</span></div>
+    ${(() => { const overdue = mine.filter(e => isOverdue(e)).length; return overdue ? `<div class="progress-chip chip-overdue" style="cursor:pointer" onclick="location.href='/kanban?status=overdue'"><span class="chip-num">${overdue}</span><span class="chip-label">지연</span></div>` : ''; })()}
   `;
 
   // 회의 섹션

@@ -519,7 +519,11 @@ def lock_checklist(checklist_id: int, request: Request):
 @app.put("/api/checklists/{checklist_id}/lock")
 def heartbeat_checklist_lock(checklist_id: int, request: Request):
     user = _require_editor(request)
-    db.heartbeat_checklist_lock(checklist_id, user["name"])
+    ok = db.heartbeat_checklist_lock(checklist_id, user["name"])
+    if not ok:
+        lock = db.get_checklist_lock(checklist_id)
+        locked_by = lock["user_name"] if lock else "알 수 없음"
+        raise HTTPException(status_code=423, detail=f"{locked_by}님이 편집 중입니다.")
     return {"ok": True}
 
 
@@ -829,6 +833,20 @@ async def admin_toggle_whitelist(ip_id: int, request: Request):
     return {"ok": True}
 
 
+# ── 프로젝트 자동 색상 (간트와 동일 팔레트·해시) ─────────────
+_PROJECT_COLOR_PALETTE = [
+    '#0984e3', '#00b894', '#00a8a8', '#6c5ce7', '#00875a',
+    '#1565c0', '#00838f', '#7c4dff', '#9b59b6', '#5c35a0',
+    '#546e7a', '#8d6e63', '#7b5e00', '#d48806', '#e67e22',
+]
+
+def _project_color(name: str) -> str:
+    h = 0
+    for ch in (name or ''):
+        h = (h * 31 + ord(ch)) & 0xffff
+    return _PROJECT_COLOR_PALETTE[h % len(_PROJECT_COLOR_PALETTE)]
+
+
 # ── 이벤트 API ───────────────────────────────────────────
 
 @app.get("/api/events")
@@ -888,9 +906,10 @@ def list_events():
                 "parent_event_id":       e.get("parent_event_id"),
             },
         }
-        if proj_color:
-            ev["backgroundColor"] = proj_color
-            ev["borderColor"]     = proj_color
+        color = proj_color or (proj_name and _project_color(proj_name))
+        if color:
+            ev["backgroundColor"] = color
+            ev["borderColor"]     = color
         result.append(ev)
     return result
 

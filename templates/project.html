@@ -481,9 +481,9 @@ const BAR_H  = 26;
 const HEADER_H = 40; // gantt-header 높이 (20+20)
 
 const PROJECT_COLORS = [
-  '#6c5ce7','#00b894','#0984e3','#e17055','#e84393',
-  '#00a8a8','#d48806','#7c4dff','#00875a','#c0392b',
-  '#1565c0','#c62828','#00838f','#7b5e00','#5c35a0',
+  '#0984e3','#00b894','#00a8a8','#6c5ce7','#00875a',
+  '#1565c0','#00838f','#7c4dff','#9b59b6','#5c35a0',
+  '#546e7a','#8d6e63','#7b5e00','#d48806','#e67e22',
 ];
 function projectColor(name) {
   let h = 0;
@@ -905,7 +905,9 @@ function render() {
           evNameRow.className = 'event-name-row' +
             (indent ? ' row-subtask-name' : '') +
             (hasSubEvs ? ' has-subtasks' : '');
-          evNameRow.dataset.title = (ev.title || '').toLowerCase();
+          evNameRow.dataset.title       = (ev.title || '').toLowerCase();
+          evNameRow.dataset.project     = (ev.project || '').toLowerCase();
+          evNameRow.dataset.description = (ev.description || '').toLowerCase();
           evNameRow.style.height = ROW_H + 'px';
           if (indent) evNameRow.style.paddingLeft = (26 + indent) + 'px';
           if (hasSubEvs) evNameRow.onclick = () => toggleTask(taskKey);
@@ -1254,7 +1256,9 @@ window.__pageSearch = {
       row.classList.remove('search-match', 'search-dim');
       if (!lower) return;
       const title = row.dataset.title || '';
-      if (title.includes(lower)) {
+      const proj  = row.dataset.project || '';
+      const desc  = row.dataset.description || '';
+      if (title.includes(lower) || proj.includes(lower) || desc.includes(lower)) {
         row.classList.add('search-match');
       } else {
         row.classList.add('search-dim');

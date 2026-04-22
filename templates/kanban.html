@@ -296,10 +296,9 @@
 {% block scripts %}
 <script>
 const PROJECT_COLORS = [
-  '#0984e3','#00b894','#e17055','#a29bfe','#fd79a8','#fdcb6e',
-  '#6c5ce7','#00cec9','#e84393','#2d3436','#74b9ff','#55efc4',
-  '#fab1a0','#ffeaa7','#81ecec','#dfe6e9','#636e72','#b2bec3',
-  '#d63031','#27ae60',
+  '#0984e3','#00b894','#00a8a8','#6c5ce7','#00875a',
+  '#1565c0','#00838f','#7c4dff','#9b59b6','#5c35a0',
+  '#546e7a','#8d6e63','#7b5e00','#d48806','#e67e22',
 ];
 
 let _storedProjColors = {};
@@ -315,8 +314,8 @@ function projectColor(name) {
   if (!name) return '#b2bec3';
   if (_storedProjColors[name]) return _storedProjColors[name];
   let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
-  return PROJECT_COLORS[Math.abs(h) % PROJECT_COLORS.length];
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  return PROJECT_COLORS[h % PROJECT_COLORS.length];
 }
 
 function badgeTextColor(hex) {
@@ -336,6 +335,7 @@ let allEvents = [];
 let dragSrcId = null;
 let _kanbanMyOnly = !!CURRENT_USER;
 let _kanbanFilterMember = null;
+let _kanbanStatusFilter = null;
 
 function _applyInitialTeamFilter() {
   const sel = document.getElementById('team-filter');
@@ -414,6 +414,18 @@ function renderBoard() {
     });
   }
 
+  if (_kanbanStatusFilter) {
+    if (_kanbanStatusFilter === 'overdue') {
+      filtered = filtered.filter(e => isOverdue(e));
+    } else if (_kanbanStatusFilter === 'todo') {
+      filtered = filtered.filter(e => e.kanban_status === 'todo' || e.kanban_status === 'backlog');
+    } else if (_kanbanStatusFilter === 'in_progress') {
+      filtered = filtered.filter(e => e.kanban_status === 'in_progress' || e.kanban_status === 'peer_review');
+    } else {
+      filtered = filtered.filter(e => e.kanban_status === _kanbanStatusFilter);
+    }
+  }
+
   const grouped = {};
   COLUMNS.forEach(c => grouped[c.status] = []);
   filtered.forEach(e => {
@@ -480,7 +492,7 @@ function cardHTML(e) {
   }
 
   return `
-    <div class="kanban-card${overdue ? ' overdue' : ''}" data-id="${e.id}" data-priority="${priority}" draggable="true">
+    <div class="kanban-card${overdue ? ' overdue' : ''}" data-id="${e.id}" data-priority="${priority}" data-description="${esc(e.description || '')}" draggable="true">
       ${projectBadge}
       <div class="card-title">${e.event_type === 'meeting' ? '💬 ' : e.event_type === 'journal' ? '📓 ' : ''}${esc(e.title)}</div>
       <div class="card-meta">
@@ -548,6 +560,8 @@ window.onKDetailSaved = loadKanban;
 // 초기 로드
 _applyInitialTeamFilter();
 _syncKanbanMyOnlyBtn();
+const _initStatusParam = new URLSearchParams(location.search).get('status');
+if (_initStatusParam) _kanbanStatusFilter = _initStatusParam;
 loadProjColors().then(() => loadKanban());
 
 // 팀원 칩 로드
@@ -576,7 +590,8 @@ window.__pageSearch = {
       if (!lower) return;
       const title = (card.querySelector('.card-title')?.textContent || '').toLowerCase();
       const proj  = (card.querySelector('.card-project-badge')?.textContent || '').toLowerCase();
-      if (title.includes(lower) || proj.includes(lower)) {
+      const desc  = (card.dataset.description || '').toLowerCase();
+      if (title.includes(lower) || proj.includes(lower) || desc.includes(lower)) {
         card.classList.add('search-match');
       } else {
         card.classList.add('search-dim');

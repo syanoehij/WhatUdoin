@@ -367,6 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
       top.insertBefore(badge, top.firstChild);
     },
     eventDidMount(info) {
+      info.el.dataset.eventId = String(info.event.id);
       const p = info.event.extendedProps;
       const titleEl = info.el.querySelector('.fc-event-title');
       if (titleEl) {
@@ -417,7 +418,9 @@ document.addEventListener('DOMContentLoaded', () => {
         .catch(() => {});
     },
     dateClick(info) {
-      if (CURRENT_USER) openModal(info.dateStr);
+      if (!CURRENT_USER) return;
+      const dateOnly = info.dateStr.slice(0, 10);
+      openModal(dateOnly, null, { startStr: info.dateStr, endStr: null, allDay: info.allDay });
     },
   });
   calendar.render();
@@ -641,7 +644,32 @@ function updateWeekLabel(info) {
   titleEl.appendChild(badge);
 }
 
-// 캘린더는 자체 날짜 탐색이 검색 역할 — 검색바 비활성화
-window.__pageSearch = { enabled: false, placeholder: '캘린더에서는 검색이 지원되지 않습니다' };
+// 캘린더 전역 검색 — 제목·프로젝트·내용으로 이벤트 강조
+window.__pageSearch = {
+  enabled: true,
+  placeholder: '일정 제목·프로젝트·내용 검색…',
+  onSearch(q) {
+    const lower = q.trim().toLowerCase();
+    if (!lower) {
+      document.querySelectorAll('.fc-event[data-event-id]').forEach(el => { el.style.opacity = ''; });
+      return;
+    }
+    const matchIds = new Set();
+    if (calendar) {
+      calendar.getEvents().forEach(ev => {
+        const t = (ev.title || '').toLowerCase();
+        const p = (ev.extendedProps?.project || '').toLowerCase();
+        const d = (ev.extendedProps?.description || '').toLowerCase();
+        const a = (ev.extendedProps?.assignee || '').toLowerCase();
+        if (t.includes(lower) || p.includes(lower) || d.includes(lower) || a.includes(lower)) {
+          matchIds.add(String(ev.id));
+        }
+      });
+    }
+    document.querySelectorAll('.fc-event[data-event-id]').forEach(el => {
+      el.style.opacity = matchIds.has(el.dataset.eventId) ? '' : '0.2';
+    });
+  },
+};
 </script>
 {% endblock %}
