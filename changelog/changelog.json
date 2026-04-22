@@ -1,6 +1,23 @@
 {
   "groups": [
     {
+      "date": "2026-04-23",
+      "phase": "27차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>휴지통 — 타입 뱃지 6종 색상 구분",
+          "detail_html": "<ul>\n              <li>가운데 목록 각 항목 제목 앞에 타입 뱃지 노출 — 이전에는 우측 상세 패널에서만 타입 확인 가능했음</li>\n              <li><b>6종 색상 분리</b>: 업무(파랑)·회의 일정(보라)·일지(앰버)·하위 업무(회색)·체크(청록)·문서(인디고) — 기존에는 모든 이벤트가 동일한 파란 뱃지를 공유하고 문서와 회의 일정이 같은 보라 뱃지를 공유해 혼선 유발</li>\n              <li><code>typeBadgeClass(item)</code> 헬퍼 도입 — <code>_type</code> + <code>event_type</code> 조합으로 CSS 클래스 결정. 라이트/다크 모드 모두 적용</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>휴지통 — <code>delete_event()</code> <code>team_id</code> 미보강 버그 수정",
+          "detail_html": "<ul>\n              <li><b>원인</b> — <code>delete_event()</code>가 <code>deleted_at</code>·<code>deleted_by</code>만 세팅하고 <code>team_id</code>를 업데이트하지 않아, <code>team_id=NULL</code>인 레거시 이벤트를 soft-delete해도 <code>get_trash_items(team_id=N)</code> 팀 필터에 걸려 휴지통에서 영원히 보이지 않는 문제 (<code>delete_checklist()</code>는 정상 처리하던 비대칭 버그)</li>\n              <li><b>수정</b> — 3개 브랜치(<code>all</code>·<code>this</code> 단일·<code>this</code> 부모) 모두 <code>team_id = COALESCE(team_id, ?)</code> 추가 — 기존 값 보존, NULL일 때만 호출자 팀 ID로 채움</li>\n              <li><b>레거시 backfill</b> — 앱 시작 마이그레이션에서 1회 실행: 기존 <code>team_id=NULL</code> soft-delete 이벤트를 <code>deleted_by → users.team_id</code> 매핑으로 보강. settings 키(<code>ev_trash_teamid_backfill_v1</code>)로 idempotent 보장</li>\n            </ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-04-22",
       "phase": "26차 2단계",
       "phase_class": "phase-2",

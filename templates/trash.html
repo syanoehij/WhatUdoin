@@ -153,12 +153,21 @@
     font-weight: 600;
     flex-shrink: 0;
   }
-  .tr-type-event     { background: #dbeafe; color: #1e40af; }
-  .tr-type-meeting   { background: #f3e8ff; color: #6d28d9; }
-  .tr-type-checklist { background: #dcfce7; color: #166534; }
-  .dark .tr-type-event     { background: #1e3a5f; color: #93c5fd; }
-  .dark .tr-type-meeting   { background: #3b1a5f; color: #c4b5fd; }
-  .dark .tr-type-checklist { background: #14532d; color: #86efac; }
+  .tr-type-event         { background: #dbeafe; color: #1e40af; }  /* 업무 — 파랑 */
+  .tr-type-event-meeting { background: #f3e8ff; color: #6d28d9; }  /* 회의 일정 — 보라 */
+  .tr-type-journal       { background: #fef9c3; color: #854d0e; }  /* 일지 — 앰버 */
+  .tr-type-subtask       { background: #f3f4f6; color: #374151; }  /* 하위 업무 — 회색 */
+  .tr-type-checklist     { background: #ccfbf1; color: #0f766e; }  /* 체크 — 청록 */
+  .tr-type-doc           { background: #e0e7ff; color: #3730a3; }  /* 문서 — 인디고 */
+  /* 하위 호환 — 기존 .tr-type-meeting은 삭제 없이 유지 (혹시 다른 곳 참조 대비) */
+  .tr-type-meeting       { background: #f3e8ff; color: #6d28d9; }
+  .dark .tr-type-event         { background: #1e3a5f; color: #93c5fd; }
+  .dark .tr-type-event-meeting { background: #3b1a5f; color: #c4b5fd; }
+  .dark .tr-type-journal       { background: #422006; color: #fde68a; }
+  .dark .tr-type-subtask       { background: #1f2937; color: #9ca3af; }
+  .dark .tr-type-checklist     { background: #134e4a; color: #5eead4; }
+  .dark .tr-type-doc           { background: #1e1b4b; color: #a5b4fc; }
+  .dark .tr-type-meeting       { background: #3b1a5f; color: #c4b5fd; }
   .tr-expire-warn { color: #ef4444; font-weight: 600; }
   .tr-proj-bar {
     display: inline-block;
@@ -409,7 +418,6 @@ let _listItems   = [];   // 현재 가운데 패널 항목 배열
 let _selectedItem = null;
 
 const TYPE_LABEL = { meeting: '문서', checklist: '체크' };
-const TYPE_CLASS  = { event: 'tr-type-event', meeting: 'tr-type-meeting', checklist: 'tr-type-checklist' };
 function labelForEvent(item) {
   if (item.event_type === 'journal')  return '일지';
   if (item.event_type === 'meeting')  return '회의';
@@ -419,6 +427,17 @@ function labelForEvent(item) {
 function typeLabel(item) {
   if (item._type === 'event') return labelForEvent(item);
   return TYPE_LABEL[item._type] || item._type;
+}
+function typeBadgeClass(item) {
+  if (item._type === 'meeting')   return 'tr-type-doc';
+  if (item._type === 'checklist') return 'tr-type-checklist';
+  if (item._type === 'event') {
+    if (item.event_type === 'meeting') return 'tr-type-event-meeting';
+    if (item.event_type === 'journal') return 'tr-type-journal';
+    if (item.event_type === 'subtask') return 'tr-type-subtask';
+    return 'tr-type-event';
+  }
+  return 'tr-type-event';
 }
 
 async function loadTrash() {
@@ -601,9 +620,10 @@ function renderList(items) {
       ? `<span class="tr-proj-bar" style="background:${escAttr(projColor)};"></span><span>${escHtml(item.project)}</span>`
       : '';
 
+    const typeBadge = `<span class="tr-type-badge ${typeBadgeClass(item)}">${typeLabel(item)}</span>`;
     el.insertAdjacentHTML('beforeend', `
       <div class="tr-item${active}" onclick="selectItem(${idx})">
-        <div class="tr-item-title">${escHtml(item.title)}</div>
+        <div class="tr-item-title">${typeBadge} ${escHtml(item.title)}</div>
         <div class="tr-item-meta">
           ${projBar}
           ${dateStr}
@@ -637,7 +657,7 @@ function renderDetail(item) {
 
   document.getElementById('tr-detail-title').textContent = item.title;
   document.getElementById('tr-dv-type').innerHTML =
-    `<span class="tr-type-badge ${TYPE_CLASS[item._type]}">${typeLabel(item)}</span>`;
+    `<span class="tr-type-badge ${typeBadgeClass(item)}">${typeLabel(item)}</span>`;
 
   const projRow = document.getElementById('tr-dv-proj-row');
   if (item._type !== 'meeting') {

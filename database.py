@@ -241,6 +241,17 @@ def init_db():
                 WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL
                   AND project IN (SELECT name FROM projects WHERE deleted_at IS NOT NULL)
             """)
+        # 레거시 soft-delete 이벤트 team_id=NULL 보강 (deleted_by → users.team_id 매핑)
+        if _table_exists(conn, "events") and not conn.execute("SELECT 1 FROM settings WHERE key='ev_trash_teamid_backfill_v1'").fetchone():
+            conn.execute("""
+                UPDATE events
+                   SET team_id = (SELECT u.team_id FROM users u WHERE u.name = events.deleted_by)
+                 WHERE deleted_at IS NOT NULL
+                   AND team_id IS NULL
+                   AND deleted_by IS NOT NULL
+                   AND EXISTS (SELECT 1 FROM users u WHERE u.name = events.deleted_by AND u.team_id IS NOT NULL)
+            """)
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ev_trash_teamid_backfill_v1', '1')")
         # ── settings ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -762,8 +773,9 @@ def delete_event(event_id: int, delete_mode: str = 'this', deleted_by: str = Non
 
         if delete_mode == 'all':
             conn.execute(
-                "UPDATE events SET deleted_at = ?, deleted_by = ? WHERE id = ? OR recurrence_parent_id = ? OR parent_event_id = ?",
-                (now, deleted_by, parent_id, parent_id, parent_id)
+                "UPDATE events SET deleted_at = ?, deleted_by = ?, team_id = COALESCE(team_id, ?) "
+                "WHERE id = ? OR recurrence_parent_id = ? OR parent_event_id = ?",
+                (now, deleted_by, team_id, parent_id, parent_id, parent_id)
             )
         elif delete_mode == 'from_here':
             # 반복 series 조각 정리는 hard-delete 유지
@@ -783,14 +795,15 @@ def delete_event(event_id: int, delete_mode: str = 'this', deleted_by: str = Non
         else:  # 'this'
             if row.get("recurrence_parent_id"):
                 conn.execute(
-                    "UPDATE events SET deleted_at = ?, deleted_by = ? WHERE id = ?",
-                    (now, deleted_by, event_id)
+                    "UPDATE events SET deleted_at = ?, deleted_by = ?, team_id = COALESCE(team_id, ?) WHERE id = ?",
+                    (now, deleted_by, team_id, event_id)
                 )
             else:
                 # 부모 삭제 → 자식(반복 인스턴스 + 하위 업무)도 soft-delete
                 conn.execute(
-                    "UPDATE events SET deleted_at = ?, deleted_by = ? WHERE id = ? OR recurrence_parent_id = ? OR parent_event_id = ?",
-                    (now, deleted_by, event_id, event_id, event_id)
+                    "UPDATE events SET deleted_at = ?, deleted_by = ?, team_id = COALESCE(team_id, ?) "
+                    "WHERE id = ? OR recurrence_parent_id = ? OR parent_event_id = ?",
+                    (now, deleted_by, team_id, event_id, event_id, event_id)
                 )
 
 
