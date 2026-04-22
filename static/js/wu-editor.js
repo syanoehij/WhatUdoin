@@ -13,6 +13,33 @@
     return typeof s === 'string' ? document.querySelector(s) : s;
   }
 
+  /* ── 공용 HTML 렌더러 (링크 새창 + 코드블록 hljs 클래스) ── */
+  const WU_HTML_RENDERER = {
+    link(node, { entering }) {
+      if (entering) {
+        const attrs = { href: node.destination || '' };
+        if (node.title) attrs.title = node.title;
+        attrs.target = '_blank';
+        attrs.rel = 'noopener noreferrer';
+        return { type: 'openTag', tagName: 'a', attributes: attrs };
+      }
+      return { type: 'closeTag', tagName: 'a' };
+    },
+    codeBlock(node) {
+      const lang = ((node.info || '').split(/\s/)[0] || '').toLowerCase();
+      const cls  = lang ? `hljs language-${lang}` : 'hljs';
+      const src  = (node.literal || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return [
+        { type: 'openTag', tagName: 'pre', selfClose: false },
+        { type: 'openTag', tagName: 'code', attributes: { class: cls }, selfClose: false },
+        { type: 'html', content: src },
+        { type: 'closeTag', tagName: 'code' },
+        { type: 'closeTag', tagName: 'pre' },
+      ];
+    },
+  };
+
   /* ── 팩토리 ────────────────────────────────────── */
   function create(opts) {
     opts = opts || {};
@@ -486,6 +513,14 @@
       if (localStorage.getItem(key) === '1') setTimeout(_toggleToc, 400);
     }
 
+    /* ── syntax highlight 적용 ──────────────────────── */
+    function _applyHighlight() {
+      if (typeof window.hljs === 'undefined' || !containerEl) return;
+      containerEl.querySelectorAll('pre code').forEach(el => {
+        if (!el.dataset.highlighted) window.hljs.highlightElement(el);
+      });
+    }
+
     /* ── Toast UI Editor 초기화 ─────────────────────── */
     function _initEditor() {
       if (!containerEl) return;
@@ -497,9 +532,11 @@
             viewer: true,
             initialValue: opts.initialMarkdown || '',
             customHTMLSanitizer: feat.sanitizerOff ? html => html : undefined,
+            customHTMLRenderer: WU_HTML_RENDERER,
           });
         }
         if (hooks.onReady) hooks.onReady(_editor);
+        setTimeout(_applyHighlight, 150);
         return;
       }
 
@@ -514,8 +551,8 @@
           ['heading', 'bold', 'italic', 'strike'],
           ['hr', 'quote'],
           ['ul', 'ol', 'task'],
-          ['table'],
-          ['image'],
+          ['table', 'link', 'image'],
+          ['code', 'codeblock'],
         ],
         usageStatistics: false,
         events: {
@@ -530,6 +567,7 @@
       if (feat.sanitizerOff) {
         editorOpts.customHTMLSanitizer = html => html;
       }
+      editorOpts.customHTMLRenderer = WU_HTML_RENDERER;
 
       if (feat.imageUpload && feat.imageUpload.endpoint) {
         editorOpts.hooks = {
@@ -552,6 +590,7 @@
 
       if (feat.imageResize !== false) setTimeout(() => _initImgResize(), 300);
       if (hooks.onReady) hooks.onReady(_editor);
+      setTimeout(_applyHighlight, 150);
     }
 
     /* ── 글로벌 이벤트 등록 ─────────────────────────── */
@@ -589,8 +628,10 @@
           _editor.setMarkdown(md || '');
           _imgWidthMap = {};
           _parseInitialWidths(md || '');
+          setTimeout(_applyHighlight, 150);
         }
       },
+      applyHighlight: _applyHighlight,
       toggleToc:    _toggleToc,
       rebuildToc:   _buildToc,
       releaseLock:  _releaseLock,
@@ -622,5 +663,5 @@
     };
   }
 
-  global.WUEditor = { create };
+  global.WUEditor = { create, renderer: WU_HTML_RENDERER };
 })(window);

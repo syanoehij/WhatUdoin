@@ -120,8 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
         ['heading', 'bold', 'italic', 'strike'],
         ['hr', 'quote'],
         ['ul', 'ol', 'task'],
-        ['table', 'image'],
+        ['table', 'link', 'image'],
+        ['code', 'codeblock'],
       ],
+      customHTMLRenderer: window.WUEditor?.renderer,
       usageStatistics: false,
       events: {
         change: () => {
@@ -154,7 +156,11 @@ document.addEventListener('DOMContentLoaded', () => {
         el: viewEl,
         viewer: true,
         initialValue: INITIAL_MD || '(등록된 공지가 없습니다.)',
+        customHTMLRenderer: window.WUEditor?.renderer,
       });
+      setTimeout(() => {
+        if (typeof hljs !== 'undefined') viewEl.querySelectorAll('pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); });
+      }, 150);
     }
   }
 });

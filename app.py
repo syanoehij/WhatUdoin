@@ -21,6 +21,7 @@ import database as db
 import llm_parser
 import auth
 import crypto
+import backup
 
 scheduler = AsyncIOScheduler()
 
@@ -43,6 +44,11 @@ async def lifespan(app: FastAPI):
     if saved_url:
         llm_parser.set_ollama_base_url(saved_url)
     db.finalize_expired_done()  # 서버 시작 시 만료된 done 일정 즉시 처리
+    try:
+        await run_in_threadpool(backup.run_backup, db.DB_PATH, _RUN_DIR)
+    except Exception as _e:
+        import logging
+        logging.getLogger("whatudoin").warning("서버 시작 백업 실패: %s", _e)
     if not scheduler.running:
         # APScheduler: 1분마다 15분 후 일정 알람 체크
         scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)
@@ -50,6 +56,12 @@ async def lifespan(app: FastAPI):
         scheduler.add_job(db.cleanup_old_trash, "cron", hour=3, minute=0)
         # APScheduler: 매일 새벽 3시 5분 done 7일 경과 일정 자동 완료 처리
         scheduler.add_job(db.finalize_expired_done, "cron", hour=3, minute=5)
+        # APScheduler: 매일 새벽 2시 DB 백업 (90일 보관)
+        scheduler.add_job(
+            lambda: backup.run_backup(db.DB_PATH, _RUN_DIR),
+            "cron", hour=2, minute=0,
+            id="daily-db-backup", replace_existing=True,
+        )
         scheduler.start()
     yield
     if scheduler.running:
@@ -777,7 +789,7 @@ def team_members(request: Request, team_id: int = None):
     if not user:
         raise HTTPException(status_code=401)
     all_users = db.get_all_users()
-    members = [u for u in all_users if u.get("is_active", 1)]
+    members = [u for u in all_users if u.get("is_active", 1) and u.get("role") != "admin"]
     if team_id is not None:
         members = [u for u in members if u.get("team_id") == team_id]
     return [{"name": u["name"], "team_id": u.get("team_id"), "team_name": u.get("team_name")} for u in members]

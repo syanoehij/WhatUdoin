@@ -2,6 +2,33 @@
   "groups": [
     {
       "date": "2026-04-22",
+      "phase": "26차 2단계",
+      "phase_class": "phase-2",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>에디터(문서·체크·공지) — 하이퍼링크 새창 열기 + 코드블록 문법 강조",
+          "detail_html": "<ul>\n              <li>Toast UI Editor 툴바에 <b>링크(🔗)·인라인 코드·코드블록</b> 버튼 추가 — <code>wu-editor.js</code> 기본 toolbar 및 <code>doc_editor.html</code>·<code>notice.html</code> 개별 오버라이드 모두 갱신</li>\n              <li>뷰어 <code>customHTMLRenderer</code>에 <b>link 렌더러</b> 추가 → 본문 링크 클릭 시 항상 새 탭(<code>target=_blank rel=noopener noreferrer</code>)으로 열림</li>\n              <li><b>highlight.js 11.x</b>(common 빌드) 도입 — 코드블록 언어 지정 시 문법 색상 강조. 뷰어 렌더 후 자동 적용(<code>applyHighlight()</code>). 문서·체크·공지·히스토리·홈 위젯 전 경로 적용</li>\n              <li><code>wu-editor.css</code>에 <code>pre code.hljs</code> 블록 스타일(라이트/다크 대응) 추가</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>칸반·캘린더 — 담당자 필터 칩 개선 (admin 제외·본인 포함·모드별 표시)",
+          "detail_html": "<ul>\n              <li><b>admin 제외</b> — <code>/api/teams/members</code>에서 <code>role=admin</code> 계정을 필터. 담당자 칩 목록에 admin 미노출</li>\n              <li><b>본인 포함</b> — 팀원 칩 목록에서 로그인 유저를 제외하던 로직 제거. 본인이 맨 앞에 표시됨</li>\n              <li><b>모드별 표시 제어</b> — '내 일정만' 모드에서 담당자 칩 영역 전체 숨김, '팀 일정 보기' 전환 시 다시 노출. 캘린더·칸반 모두 동일하게 적용</li>\n              <li>칩 버튼 사이 간격(<code>gap</code>) 및 패딩 조정으로 가독성 개선</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>간트 — '내 일정만' 모드에서 빈 프로젝트·팀 헤더 숨김",
+          "detail_html": "<ul>\n              <li>기존: 내 이벤트가 0개인 프로젝트도 <code>(0)</code> 헤더 행만 남아 어수선한 UI</li>\n              <li>수정: <code>_teamHasVisibleProj()</code> 헬퍼 추가 → 내 일정이 없는 프로젝트·팀 divider 모두 렌더 스킵</li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>DB 자동 백업 — 서버 시작 시 + 새벽 2시 일 1회, 90일 보관",
+          "detail_html": "<ul>\n              <li>신규 <code>backup.py</code> 모듈 — SQLite <code>Connection.backup()</code> API로 WAL 안전 복사, <code>backupDB/</code> 폴더 자동 생성</li>\n              <li>서버 시작 lifespan에서 즉시 백업 1회 실행(실패 시 로그만 기록, 기동 차단 없음)</li>\n              <li>APScheduler cron 잡(<code>hour=2, minute=0</code>)으로 매일 새벽 2시 자동 백업</li>\n              <li>90일 초과 백업 파일 자동 삭제. <code>requirements.txt</code>에 <code>apscheduler</code> 명시 추가</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-22",
       "phase": "26차 1단계",
       "phase_class": "phase-1",
       "entries": [

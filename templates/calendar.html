@@ -115,7 +115,7 @@
   .cal-toolbar .toolbar-btn:hover { background: var(--surface-2); }
   .cal-toolbar .toolbar-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   .member-chip {
-    padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border);
+    padding: 3px 14px; border-radius: 14px; border: 1px solid var(--border);
     background: var(--surface); color: var(--text-muted); cursor: pointer;
     font-size: 0.78rem; font-family: inherit; white-space: nowrap;
     transition: background 0.12s, color 0.12s, border-color 0.12s;
@@ -150,7 +150,7 @@
       </span>
     </label>
     {% if user %}
-    <div id="team-members-strip" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;"></div>
+    <div id="team-members-strip" style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-left:6px;padding-left:14px;border-left:1px solid var(--border);"></div>
     {% endif %}
   </div>
   {% if user and user.role in ('editor', 'admin') %}
@@ -197,6 +197,8 @@ function _syncMyOnlyBtn() {
   if (!btn) return;
   btn.textContent = _myOnly ? '👥 팀 일정 보기' : '👤 내 일정만';
   btn.title = _myOnly ? '전체 팀 일정 보기' : '내 담당 일정만 보기';
+  const strip = document.getElementById('team-members-strip');
+  if (strip) strip.style.display = _myOnly ? 'none' : 'flex';
 }
 
 function toggleMyOnly() {
@@ -441,10 +443,14 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(members => {
         const strip = document.getElementById('team-members-strip');
         if (!strip) return;
-        const filtered = members.filter(m => m.name !== CURRENT_USER.name);
+        members.sort((a, b) => {
+          if (a.name === CURRENT_USER.name) return -1;
+          if (b.name === CURRENT_USER.name) return 1;
+          return a.name.localeCompare(b.name);
+        });
         strip.innerHTML =
           `<button class="member-chip active" data-name="__all__" onclick="toggleMemberFilter(null)">전체</button>` +
-          filtered.map(m => `<button class="member-chip" data-name="${m.name}" onclick="toggleMemberFilter('${m.name.replace(/'/g, "\\'")}')">${m.name}</button>`).join('');
+          members.map(m => `<button class="member-chip" data-name="${m.name}" onclick="toggleMemberFilter('${m.name.replace(/'/g, "\\'")}')">${m.name}</button>`).join('');
       })
       .catch(() => {});
   }

@@ -422,7 +422,9 @@ function renderNotice(notice) {
   }
   wrap.innerHTML = '';
   if (window.toastui?.Editor) {
-    new toastui.Editor.factory({ el: wrap, viewer: true, initialValue: notice.content });
+    const _nv = new toastui.Editor.factory({ el: wrap, viewer: true, initialValue: notice.content, customHTMLRenderer: window.WUEditor?.renderer });
+    void _nv;
+    setTimeout(() => { if (typeof hljs !== 'undefined') wrap.querySelectorAll('pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); }); }, 150);
   } else {
     wrap.textContent = notice.content;
   }

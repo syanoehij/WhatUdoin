@@ -783,16 +783,29 @@ function render() {
   const ganttRowsEl = document.getElementById('gantt-rows');
   teamRowsEl.innerHTML = nameRowsEl.innerHTML = ganttRowsEl.innerHTML = '';
 
-  const hasProjects = allTeams.some(t => t.projects.length > 0);
+  // 내 일정 필터 기준으로 표시할 프로젝트가 있는 팀인지 미리 판정
+  function _teamHasVisibleProj(team) {
+    return team.projects.some(p => {
+      if (!_ganttMyOnly || !CURRENT_USER) return true;
+      const me = CURRENT_USER.name.toLowerCase();
+      return p.events.some(e => (e.assignee || '').toLowerCase()
+        .split(',').map(s => s.trim()).some(a => a && (a.includes(me) || me.includes(a))));
+    });
+  }
+
+  const hasProjects = allTeams.some(t => _teamHasVisibleProj(t));
   if (!hasProjects) {
     ganttRowsEl.innerHTML = `<div class="gantt-empty">등록된 일정이 없습니다.</div>`;
     return;
   }
 
   let totalH = 0;
+  let _renderedTeamCount = 0;
 
   allTeams.forEach((team, tidx) => {
-    const isDivider = tidx > 0;
+    if (!_teamHasVisibleProj(team)) return;
+    const isDivider = _renderedTeamCount > 0;
+    _renderedTeamCount++;
     let teamTotalH = 0;
 
     team.projects.forEach((proj, pidx) => {
@@ -809,6 +822,7 @@ function render() {
           const assignee = (e.assignee || '').toLowerCase();
           return assignee.split(',').map(s => s.trim()).some(a => a && (a.includes(myName) || myName.includes(a)));
         });
+        if (projEvs.length === 0) return; // 내 이벤트 없는 프로젝트는 헤더도 숨김
       }
       // 이벤트 정렬
       const sortedEvs = [...projEvs].sort((a, b) =>

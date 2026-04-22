@@ -76,7 +76,7 @@
   .kanban-toolbar .toolbar-btn:hover { background: var(--surface-2); }
   .kanban-toolbar .toolbar-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   .member-chip {
-    padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border);
+    padding: 3px 14px; border-radius: 14px; border: 1px solid var(--border);
     background: var(--surface); color: var(--text-muted); cursor: pointer;
     font-size: 0.78rem; font-family: inherit; white-space: nowrap;
     transition: background 0.12s, color 0.12s, border-color 0.12s;
@@ -256,7 +256,7 @@
     {% endif %}
     <span id="kanban-total" class="kanban-total-label"></span>
     {% if user %}
-    <div id="kanban-team-members" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;"></div>
+    <div id="kanban-team-members" style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-left:6px;padding-left:14px;border-left:1px solid var(--border);"></div>
     {% endif %}
   </div>
   {% if user and user.role in ('editor', 'admin') %}
@@ -353,6 +353,8 @@ function _syncKanbanMyOnlyBtn() {
   if (!btn) return;
   btn.textContent = _kanbanMyOnly ? '👥 팀 일정 보기' : '👤 내 일정만';
   btn.title = _kanbanMyOnly ? '전체 팀 일정 보기' : '내 담당 일정만 보기';
+  const membersEl = document.getElementById('kanban-team-members');
+  if (membersEl) membersEl.style.display = _kanbanMyOnly ? 'none' : 'flex';
 }
 
 function toggleKanbanMyOnly() {
@@ -571,10 +573,14 @@ if (CURRENT_USER && CURRENT_USER.team_id) {
     .then(members => {
       const strip = document.getElementById('kanban-team-members');
       if (!strip) return;
-      const filtered = members.filter(m => m.name !== CURRENT_USER.name);
+      members.sort((a, b) => {
+        if (a.name === CURRENT_USER.name) return -1;
+        if (b.name === CURRENT_USER.name) return 1;
+        return a.name.localeCompare(b.name);
+      });
       strip.innerHTML =
         `<button class="member-chip active" data-name="__all__" onclick="toggleKanbanMemberFilter(null)">전체</button>` +
-        filtered.map(m => `<button class="member-chip" data-name="${m.name}" onclick="toggleKanbanMemberFilter('${m.name.replace(/'/g, "\\'")}')">${m.name}</button>`).join('');
+        members.map(m => `<button class="member-chip" data-name="${m.name}" onclick="toggleKanbanMemberFilter('${m.name.replace(/'/g, "\\'")}')">${m.name}</button>`).join('');
     })
     .catch(() => {});
 }

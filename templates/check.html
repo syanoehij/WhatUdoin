@@ -1552,6 +1552,7 @@ function renderViewer(content) {
     usageStatistics: false,
     customHTMLSanitizer: html => html,
     customHTMLRenderer: {
+      ...(window.WUEditor?.renderer || {}),
       item(node, { entering }) {
         if (entering) {
           const attrs = {};
@@ -1568,6 +1569,7 @@ function renderViewer(content) {
 
   // 잠금/비로그인 시 체크박스 클릭 차단 (시각적 반응 포함)
   container.classList.toggle('no-check-interaction', !CURRENT_USER || _contentLocked);
+  setTimeout(() => { if (typeof hljs !== 'undefined') container.querySelectorAll('pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); }); }, 150);
 
   // 뷰어 TOC 자동 동기화 — 본문 DOM 변경(체크박스 토글 등) 시 목차 갱신
   if (_viewerTocObserver) { _viewerTocObserver.disconnect(); _viewerTocObserver = null; }
