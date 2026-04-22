@@ -122,6 +122,39 @@
   }
   .member-chip:hover { background: var(--surface-3); color: var(--text); }
   .member-chip.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+
+  /* ── 컨텍스트 메뉴 ── */
+  #cal-ctx-menu {
+    position: fixed;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    padding: 4px;
+    min-width: 130px;
+    z-index: 9999;
+  }
+  .cal-ctx-item {
+    display: block;
+    width: 100%;
+    padding: 7px 14px;
+    border: none;
+    background: none;
+    text-align: left;
+    font-size: 0.85rem;
+    font-family: inherit;
+    color: var(--text);
+    cursor: pointer;
+    border-radius: 5px;
+    white-space: nowrap;
+  }
+  .cal-ctx-item:hover { background: var(--surface-2); }
+  .cal-ctx-item.cal-ctx-disabled { color: var(--text-muted); cursor: default; }
+  .cal-ctx-item.cal-ctx-disabled:hover { background: none; }
+  .cal-ctx-item.cal-ctx-danger { color: #cf222e; }
+  [data-theme="dark"] .cal-ctx-item.cal-ctx-danger { color: #f85149; }
+  .cal-ctx-item.cal-ctx-danger:hover { background: rgba(207,34,46,0.08); }
+  .fc-event.ctx-copied { outline: 2px solid var(--accent); outline-offset: 1px; }
 </style>
 {% endblock %}
 
@@ -185,6 +218,7 @@
 <script>
 let calendar;
 let currentDetailEventId = null;
+let _copiedEvent = null;
 let currentDetailEventTeamId = null;
 let _myOnly = !!CURRENT_USER;
 let _wheelNav = localStorage.getItem('cal_wheel') === '1';  // 기본 OFF
@@ -266,7 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
       right: 'dayGridMonth,timeGridTwoWeek,timeGridWeek,timeGridDay',
     },
     buttonText: { today: '오늘', month: '월', week: '주', day: '일' },
-    slotMinTime: '07:00:00',
+    slotMinTime: '00:00:00',
     slotMaxTime: '24:00:00',
     scrollTime: '07:00:00',
     views: {
@@ -410,6 +444,26 @@ document.addEventListener('DOMContentLoaded', () => {
           titleEl.appendChild(badge);
         }
       }
+      // 우클릭 컨텍스트 메뉴 (editor/admin 전용, doc·회의·일지 제외)
+      if (CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor')) {
+        const srcId  = info.event.source?.id;
+        const evType = p.event_type;
+        if (srcId !== 'doc-events') {
+          info.el.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            const dateStr = (info.event.startStr || '').slice(0, 10);
+            const isRecurring = !!(p.recurrence_rule || p.recurrence_parent_id);
+            const items = [{ label: '복사', fn: () => _ctxCopyEvent(info.event.id) }];
+            if (_copiedEvent) items.push({ label: '붙여넣기', fn: () => _ctxPasteEvent(dateStr) });
+            if (!evType || evType === 'schedule') {
+              items.push({ label: '하위 업무 생성', fn: () => _ctxAddSubtask(info.event.id) });
+            }
+            items.push({ label: '삭제', danger: true, fn: () => _ctxDeleteEvent(info.event.id, isRecurring) });
+            _showCtxMenu(e.clientX, e.clientY, items);
+          });
+        }
+      }
     },
     eventClick(info) {
       if (!CURRENT_USER) return;
@@ -486,6 +540,27 @@ document.addEventListener('DOMContentLoaded', () => {
     wheelTimer = setTimeout(() => { wheelTimer = null; }, 300);
     e.deltaY > 0 ? calendar.next() : calendar.prev();
   }, { passive: false });
+
+  // ── 날짜 셀 우클릭 → 붙여넣기 ────────────────────────────
+  document.getElementById('calendar').addEventListener('contextmenu', e => {
+    if (!CURRENT_USER || (CURRENT_USER.role !== 'admin' && CURRENT_USER.role !== 'editor')) return;
+    // 이벤트 위 우클릭은 eventDidMount 리스너가 처리
+    if (e.target.closest('.fc-event')) return;
+    // 타임 그리드에서는 슬롯 행이 날짜 컬럼 위를 덮으므로 elementsFromPoint로 전체 레이어 탐색
+    const dayCell = e.target.closest('[data-date]') ||
+      document.elementsFromPoint(e.clientX, e.clientY).find(el => el.dataset?.date);
+    if (!dayCell) return;
+    const dateStr = dayCell.dataset.date;
+    if (!dateStr) return;
+    // 타임 그리드에서 클릭한 시간 슬롯 추출
+    const slotEl  = document.elementsFromPoint(e.clientX, e.clientY)
+      .find(el => el.classList?.contains('fc-timegrid-slot') && el.dataset?.time);
+    const timeStr = slotEl ? slotEl.dataset.time.slice(0, 5) : null;
+    e.preventDefault();
+    _showCtxMenu(e.clientX, e.clientY, [
+      { label: '붙여넣기', disabled: !_copiedEvent, fn: () => _ctxPasteEvent(dateStr, timeStr) },
+    ]);
+  });
 });
 
 // ── 드래그로 일정 날짜 변경 ──────────────────────────────
@@ -648,6 +723,152 @@ function updateWeekLabel(info) {
   badge.className = 'fc-toolbar-week-num';
   badge.textContent = ' ' + label;
   titleEl.appendChild(badge);
+}
+
+// ── 컨텍스트 메뉴 헬퍼 ────────────────────────────────────
+function _showCtxMenu(x, y, items) {
+  _hideCtxMenu();
+  const menu = document.createElement('div');
+  menu.id = 'cal-ctx-menu';
+  items.forEach(item => {
+    const btn = document.createElement('button');
+    btn.className = 'cal-ctx-item' + (item.disabled ? ' cal-ctx-disabled' : '') + (item.danger ? ' cal-ctx-danger' : '');
+    btn.textContent = item.label;
+    if (!item.disabled) btn.onclick = () => { _hideCtxMenu(); item.fn(); };
+    menu.appendChild(btn);
+  });
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  if (rect.right  > window.innerWidth)  menu.style.left = Math.max(0, x - rect.width)  + 'px';
+  if (rect.bottom > window.innerHeight) menu.style.top  = Math.max(0, y - rect.height) + 'px';
+  requestAnimationFrame(() => document.addEventListener('click', _hideCtxMenu, { once: true }));
+}
+
+function _hideCtxMenu() {
+  document.getElementById('cal-ctx-menu')?.remove();
+}
+
+async function _ctxCopyEvent(eventId) {
+  try {
+    const res = await fetch(`/api/events/${eventId}`);
+    if (!res.ok) return;
+    _copiedEvent = await res.json();
+    // 하위 업무인 경우 상위 업무 제목 미리 로드
+    if (_copiedEvent.event_type === 'subtask' && _copiedEvent.parent_event_id) {
+      try {
+        const pRes = await fetch(`/api/events/${_copiedEvent.parent_event_id}`);
+        if (pRes.ok) { const p = await pRes.json(); _copiedEvent._parentTitle = p.title || ''; }
+      } catch {}
+    }
+    document.querySelectorAll('.fc-event[data-event-id]').forEach(el => {
+      el.classList.toggle('ctx-copied', String(el.dataset.eventId) === String(eventId));
+    });
+  } catch {}
+}
+
+function _ctxPasteEvent(dateStr, timeStr = null) {
+  if (!_copiedEvent) return;
+  const ev = _copiedEvent;
+
+  if (ev.event_type === 'subtask') {
+    // 하위 업무 복사: subtask 전용 openModal 경로 활용
+    openModal(dateStr, null, null, {
+      eventType:        'subtask',
+      parentEventId:    ev.parent_event_id,
+      parentEventTitle: ev._parentTitle || '',
+      project:          ev.project  || '',
+      assignee:         ev.assignee || '',
+      priority:         ev.priority || 'normal',
+    });
+    document.getElementById('f-title').value       = ev.title       || '';
+    document.getElementById('f-location').value    = ev.location    || '';
+    document.getElementById('f-description').value = ev.description || '';
+  } else {
+    openModal(dateStr, null);
+    document.getElementById('f-title').value       = ev.title       || '';
+    document.getElementById('f-project').value     = ev.project     || '';
+    document.getElementById('f-location').value    = ev.location    || '';
+    document.getElementById('f-description').value = ev.description || '';
+    setAssigneeTags(ev.assignee || '');
+    document.getElementById('f-priority').value    = ev.priority    || 'normal';
+    setEventType(ev.event_type || 'schedule');
+    if (ev.kanban_status) {
+      document.getElementById('f-kanban').checked = true;
+      setKanbanStatus(ev.kanban_status);
+    }
+  }
+  // 날짜: 타겟 날짜로 시작, 원본 기간(일수) 유지
+  const origStart  = (ev.start_datetime || '').slice(0, 10);
+  const origEnd    = (ev.end_datetime   || ev.start_datetime || '').slice(0, 10);
+  const daysDiff   = (origStart && origEnd) ? Math.round((new Date(origEnd) - new Date(origStart)) / 86400000) : 0;
+  const endDate    = new Date(dateStr);
+  endDate.setDate(endDate.getDate() + daysDiff);
+  const endDateStr = endDate.toISOString().slice(0, 10);
+  _fpInstance.setDate([dateStr, endDateStr], true);
+  document.getElementById('f-start-date').value = dateStr;
+  document.getElementById('f-end-date').value   = endDateStr;
+  if (ev.all_day) {
+    document.getElementById('f-allday').checked = true;
+    toggleAllDay();
+  } else {
+    document.getElementById('f-allday').checked = false;
+    let startTime = (ev.start_datetime || '').slice(11, 16) || '';
+    let endTime   = (ev.end_datetime   || '').slice(11, 16) || '';
+    // 타임 그리드에서 우클릭한 시간이 있으면 그 시간 기준으로, 원본 길이 유지
+    if (timeStr) {
+      startTime = timeStr;
+      const origST = (ev.start_datetime || '').slice(11, 16);
+      const origET = (ev.end_datetime   || '').slice(11, 16);
+      const [ch, cm] = timeStr.split(':').map(Number);
+      let durationMins = 60; // 기본 1시간
+      if (origST && origET) {
+        const [sh, sm] = origST.split(':').map(Number);
+        const [eh, em] = origET.split(':').map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        if (diff > 0) durationMins = diff;
+      }
+      const endMins = ch * 60 + cm + durationMins;
+      endTime = `${String(Math.floor(endMins / 60) % 24).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
+    }
+    document.getElementById('f-start-time').value = startTime;
+    document.getElementById('f-end-time').value   = endTime;
+    toggleAllDay();
+  }
+}
+
+async function _ctxAddSubtask(eventId) {
+  try {
+    const res = await fetch(`/api/events/${eventId}`);
+    if (!res.ok) return;
+    const ev = await res.json();
+    openModal('', null, null, {
+      eventType:        'subtask',
+      parentEventId:    ev.id,
+      parentEventTitle: ev.title,
+      project:          ev.project  || '',
+      assignee:         ev.assignee || '',
+      priority:         ev.priority || 'normal',
+    });
+  } catch {}
+}
+
+async function _ctxDeleteEvent(eventId, isRecurring) {
+  if (isRecurring) {
+    showRecurrenceDialog('delete', async (mode) => {
+      const res = await fetch(`/api/events/${eventId}?delete_mode=${mode}`, { method: 'DELETE' });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.detail || '삭제 실패'); return; }
+      if (window.onEventSaved) window.onEventSaved();
+    });
+    return;
+  }
+  if (!confirm('이 일정을 삭제할까요?')) return;
+  try {
+    const res = await fetch(`/api/events/${eventId}`, { method: 'DELETE' });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.detail || '삭제 실패'); return; }
+    if (window.onEventSaved) window.onEventSaved();
+  } catch { alert('서버 연결 오류'); }
 }
 
 // 캘린더 전역 검색 — 제목·프로젝트·내용으로 이벤트 강조
