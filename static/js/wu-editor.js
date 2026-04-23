@@ -598,12 +598,13 @@
       on(window, 'beforeunload', _onBeforeUnload);
 
       if (feat.shortcutSave) {
-        on(document, 'keydown', e => {
-          if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        document.addEventListener('keydown', e => {
+          if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
             e.preventDefault();
+            e.stopPropagation();
             if (opts.canEdit) _triggerSave(false);
           }
-        });
+        }, true);
       }
     }
 

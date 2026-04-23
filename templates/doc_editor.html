@@ -149,6 +149,7 @@
 <script>
 const DOC_ID         = {{ doc.id if doc else 'null' }};
 const IS_EDITOR      = {{ 'true' if can_edit else 'false' }};
+const IS_TEAM_DOC    = {{ 'true' if (doc and doc.is_team_doc) else 'false' }};
 const LOCKED_BY      = {{ (locked_by | tojson) if locked_by else 'null' }};
 const INITIAL_MD     = {{ (('# ' + doc.title + '\n\n' + (doc.content or '')) if doc else '') | tojson | safe }};
 const DOC_EVENTS      = {{ (doc_events if doc_events else []) | tojson | safe }};
@@ -377,6 +378,22 @@ function initDocEditor() {
     const sel = document.getElementById('ai-model-select');
     if (sel) sel.innerHTML = '<option value="gemma4:e2b">gemma4:e2b (빠름)</option>';
   });
+
+  // 팀 수정 가능 기존 문서: 편집자지만 뷰어로 진입, 편집 버튼 클릭 대기
+  if (DOC_ID && IS_TEAM_DOC) {
+    wuInst = WUEditor.create({
+      el: '#doc-content-view',
+      bodyEl: '#editor-body',
+      canEdit: false,
+      initialMarkdown: INITIAL_MD || '',
+      features: {
+        sanitizerOff: true,
+        toc: DOC_ID ? { storageKey: 'doc_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
+      },
+      hooks: {},
+    });
+    return;
+  }
 
   startDocEdit();
 }

@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-04-23",
+      "phase": "27차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>에디터 — Ctrl+S 저장 시 본문에 밑줄(_) 문자가 함께 삽입되던 버그 수정",
+          "detail_html": "<ul>\n              <li><b>원인</b> — Toast UI Editor(WYSIWYG = ProseMirror 기반) 내부 키맵이 <code>Ctrl+S</code>를 먼저 받아 본문에 <code>_</code> 문자를 삽입한 뒤, 버블 단계의 <code>document</code> 레벨 저장 리스너가 뒤이어 실행되는 순서 문제</li>\n              <li><b>수정</b> — <code>wu-editor.js</code>의 <code>shortcutSave</code> 리스너를 <b>캡처 단계</b>(<code>addEventListener(..., true)</code>)로 승격하고 <code>stopPropagation()</code>을 추가해 에디터 내부 핸들러로 키 이벤트가 전파되지 않도록 차단</li>\n              <li>대문자 <code>S</code>(Caps Lock 상태) 및 Mac의 <code>Cmd+S</code>도 동일 분기에서 처리. 문서·체크리스트 에디터 양쪽 모두 영향</li>\n            </ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag ux\">ux</span>문서 — 팀 수정 가능 문서는 뷰어 모드로 진입, 편집 버튼 클릭으로 전환",
+          "detail_html": "<ul>\n              <li><b>의도</b> — 팀 수정 가능 문서는 여러 팀원이 함께 보다가 필요한 사람이 편집하도록 설계되었으나, 기존에는 편집자가 접속하는 즉시 편집 모드 진입 + 락 획득이 되어 <b>첫 접속자가 편집권을 독점</b>하는 UX 문제 존재</li>\n              <li><b>수정</b> — 편집자가 <code>is_team_doc=1</code> 기존 문서에 진입하면 뷰어 모드로 시작하고 상단 <b>편집</b> 버튼을 노출. 버튼 클릭 시 기존 <code>startDocEdit()</code> 로직을 통해 편집 모드 전환 + 락 획득</li>\n              <li><b>분기 규칙</b> — 비로그인·잠금 중은 기존대로 뷰어 유지. <b>개인 문서</b>(<code>is_team_doc=0</code>)와 <b>새 문서 작성</b>(<code>/doc/new</code>)은 종전처럼 바로 편집 모드 진입</li>\n              <li><b>동시 접속 경쟁</b> — A·B 둘 다 뷰어 진입 후 A가 먼저 편집 버튼 클릭 → 락 획득. B의 편집 버튼 클릭은 423 → <code>onLockFailed</code>로 자동 리로드 → 잠금 배너 노출 (기존 <code>editLock</code> 인프라 재활용)</li>\n              <li>리사이저·AI 모델 로드 핸들러 등록을 뷰어 분기 앞으로 이동해 팀 문서 편집 전환 후에도 정상 동작하도록 조정</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-23",
       "phase": "26차 4단계",
       "phase_class": "phase-4",
       "entries": [
