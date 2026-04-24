@@ -332,7 +332,7 @@ function initDocEditor() {
         sanitizerOff: true,
         toc: DOC_ID ? { storageKey: 'doc_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
         shortcutSave: true,
-        autosave: DOC_ID ? { intervalMs: 120000, respectCooldown: true } : false,
+        autosave: DOC_ID ? { intervalMs: 60000, respectCooldown: true } : false,
         saveCooldown: { seconds: 10, saveBtnSelector: 'button[onclick="saveDoc()"]' },
         editLock: DOC_ID ? {
           endpoint: `/api/doc/${DOC_ID}/lock`,

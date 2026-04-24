@@ -1894,7 +1894,7 @@ function setDirty(val) {
   }
   if (val) {
     clearTimeout(_autoSaveTimer);
-    _autoSaveTimer = setTimeout(() => saveContent(true), 120000); // 2분 자동저장
+    _autoSaveTimer = setTimeout(() => saveContent(true), 60000); // 1분 자동저장
   }
 }
 

@@ -404,7 +404,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       sanitizerOff: true,
       toc: CKE_ID ? { storageKey: 'check_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
       shortcutSave: true,
-      autosave: CKE_ID ? { intervalMs: 120000, respectCooldown: false } : false,
+      autosave: CKE_ID ? { intervalMs: 60000, respectCooldown: false } : false,
       saveCooldown: { seconds: 10, saveBtnSelector: '#cke-save-btn' },
       editLock: CKE_ID ? {
         endpoint: `/api/checklists/${CKE_ID}/lock`,
