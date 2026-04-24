@@ -665,7 +665,7 @@ function showDetail(fcEvent) {
   document.getElementById('detail-body').innerHTML = rows.map(([label, val]) => `
     <div class="detail-row">
       <span class="detail-label">${label}</span>
-      <span class="detail-val">${label === '문서' ? val : esc(val)}</span>
+      <span class="detail-val">${label === '문서' ? val : (label === '내용' ? escWithBr(val) : esc(val))}</span>
     </div>
   `).join('');
 

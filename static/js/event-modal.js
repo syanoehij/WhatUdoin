@@ -885,6 +885,11 @@ function esc(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// HTML 이스케이프 + 줄바꿈(\n, \r\n)을 <br>로 변환. description 등 멀티라인 텍스트 표시용.
+function escWithBr(str) {
+  return esc(str).replace(/\r\n|\r|\n/g, '<br>');
+}
+
 // ── 칸반 상세 모달 (공유) ─────────────────────────────────
 let currentKDetailId = null;
 let _kdetailData     = null;
@@ -939,7 +944,7 @@ async function openKDetail(id) {
   document.getElementById('kdetail-body').innerHTML = rows.map(([label, val]) => `
     <div class="detail-row">
       <span class="detail-label">${label}</span>
-      <span class="detail-val">${esc(val)}</span>
+      <span class="detail-val">${label === '내용' ? escWithBr(val) : esc(val)}</span>
     </div>`).join('');
 
   _renderKDetailButtons();
