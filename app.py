@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
+import asyncio
+import json
 import os
 import re
 import uuid
@@ -13,7 +15,7 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, Request, HTTPException, Response, UploadFile, File
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -22,6 +24,7 @@ import llm_parser
 import auth
 import crypto
 import backup
+from broker import wu_broker
 
 scheduler = AsyncIOScheduler()
 
@@ -40,6 +43,8 @@ MEETINGS_DIR.mkdir(exist_ok=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    # SSE broker에 현재 이벤트 루프 등록 (sync 핸들러에서 publish 시 필수)
+    wu_broker.start_on_loop(asyncio.get_running_loop())
     saved_url = db.get_setting("ollama_url")
     if saved_url:
         llm_parser.set_ollama_base_url(saved_url)
@@ -454,6 +459,7 @@ async def bulk_event_visibility(request: Request):
     raw = data.get("is_public", 1)
     is_public = None if raw is None else (1 if raw else 0)
     count = db.bulk_update_event_visibility(project, is_public)
+    wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": None})
     return {"ok": True, "updated": count}
 
 
@@ -1059,6 +1065,7 @@ async def create_event(request: Request):
         for name in assignees:
             if name != user["name"]:
                 db.create_notification(name, "assigned", f"📌 담당자로 지정됨: {data.get('title','')}", event_id)
+    wu_broker.publish("events.changed", {"id": event_id, "action": "create", "team_id": user.get("team_id")})
     return {"id": event_id}
 
 
@@ -1120,6 +1127,8 @@ async def update_event(event_id: int, request: Request):
             if name != user["name"]:
                 db.create_notification(name, "assigned", f"📌 담당자로 지정됨: {data.get('title', event.get('title',''))}", event_id)
 
+    # 반복 3분기(this/from_here/all)·단일 모두 공통 return이므로 여기서 1회 publish
+    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -1133,6 +1142,8 @@ def unlink_event(event_id: int, request: Request):
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
     with db.get_conn() as conn:
         conn.execute("UPDATE events SET meeting_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (event_id,))
+    # sync 핸들러 → broker 내부의 call_soon_threadsafe가 루프 스레드로 안전 전달
+    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -1145,7 +1156,46 @@ def delete_event(event_id: int, request: Request, delete_mode: str = "this"):
     if not auth.can_edit_event(user, event):
         raise HTTPException(status_code=403, detail="다른 팀의 일정은 삭제할 수 없습니다.")
     db.delete_event(event_id, delete_mode, deleted_by=user["name"], team_id=user.get("team_id"))
+    # sync 핸들러 → broker 내부의 call_soon_threadsafe가 루프 스레드로 안전 전달
+    wu_broker.publish("events.changed", {"id": event_id, "action": "delete", "team_id": user.get("team_id")})
     return {"ok": True}
+
+
+# ── SSE 실시간 스트림 ────────────────────────────────────────
+@app.get("/api/stream")
+async def sse_stream(request: Request):
+    """캘린더·칸반·간트 실시간 동기화용 SSE 엔드포인트.
+
+    - 25초마다 ping 주석으로 프록시·브라우저 타임아웃 방지
+    - 클라이언트 연결 종료 시 subscribe한 큐를 자동 해제
+    """
+    _require_editor(request)
+
+    async def gen():
+        queue = await wu_broker.subscribe()
+        try:
+            yield ": connected\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    ev, data = await asyncio.wait_for(queue.get(), timeout=25.0)
+                    yield f"event: {ev}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+                except asyncio.TimeoutError:
+                    # 하트비트 — 연결 유지
+                    yield ": ping\n\n"
+        finally:
+            wu_broker.unsubscribe(queue)
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/kanban")
@@ -1178,6 +1228,7 @@ async def update_event_datetime(event_id: int, request: Request):
         end_datetime=data.get("end_datetime"),
         all_day=data.get("all_day", event.get("all_day", 0)),
     )
+    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -1191,6 +1242,7 @@ async def update_event_project(event_id: int, request: Request):
         raise HTTPException(status_code=403, detail="다른 팀의 일정은 수정할 수 없습니다.")
     data = await request.json()
     db.update_event_project(event_id, data.get("project"))
+    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -1344,7 +1396,7 @@ async def ai_conflict_review(request: Request):
 
 @app.patch("/api/events/{event_id}/kanban")
 async def update_event_kanban(event_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     event = db.get_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -1355,6 +1407,7 @@ async def update_event_kanban(event_id: int, request: Request):
     if "priority" in data:
         kwargs["priority"] = data["priority"]
     db.update_kanban_status(event_id, **kwargs)
+    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -1409,6 +1462,7 @@ async def manage_create_project(request: Request):
         proj_id = db.create_project(name, color, memo)
     except Exception:
         raise HTTPException(status_code=409, detail="같은 이름의 프로젝트가 이미 있습니다.")
+    wu_broker.publish("projects.changed", {"name": name, "action": "create"})
     return {"id": proj_id, "name": name}
 
 
@@ -1423,6 +1477,7 @@ async def manage_rename_project(name: str, request: Request):
     if new_name != name and not force and db.project_name_exists(new_name):
         raise HTTPException(status_code=409, detail=f'"{new_name}" 프로젝트가 이미 존재합니다. 병합하시겠습니까?')
     db.rename_project(name, new_name)
+    wu_broker.publish("projects.changed", {"name": new_name, "action": "update"})
     return {"ok": True}
 
 
@@ -1432,6 +1487,7 @@ async def manage_project_status(name: str, request: Request):
     data = await request.json()
     is_active = 1 if data.get("is_active", True) else 0
     db.update_project_status(name, is_active)
+    wu_broker.publish("projects.changed", {"name": name, "action": "update"})
     return {"ok": True}
 
 
@@ -1441,6 +1497,7 @@ async def manage_project_privacy(name: str, request: Request):
     data = await request.json()
     is_private = 1 if data.get("is_private") else 0
     db.update_project_privacy(name, is_private)
+    wu_broker.publish("projects.changed", {"name": name, "action": "update"})
     return {"ok": True}
 
 
@@ -1449,6 +1506,7 @@ async def manage_project_memo(name: str, request: Request):
     _require_editor(request)
     data = await request.json()
     db.update_project_memo(name, data.get("memo"))
+    wu_broker.publish("projects.changed", {"name": name, "action": "update"})
     return {"ok": True}
 
 
@@ -1464,6 +1522,7 @@ async def manage_project_color(name: str, request: Request):
     data = await request.json()
     color = data.get("color", "").strip() or None
     db.update_project_color(name, color)
+    wu_broker.publish("projects.changed", {"name": name, "action": "update"})
     return {"ok": True}
 
 
@@ -1472,6 +1531,7 @@ async def manage_project_dates(name: str, request: Request):
     _require_editor(request)
     data = await request.json()
     db.update_project_dates(name, data.get("start_date"), data.get("end_date"))
+    wu_broker.publish("projects.changed", {"name": name, "action": "update"})
     return {"ok": True}
 
 
@@ -1485,6 +1545,9 @@ async def manage_delete_project(name: str, request: Request):
         pass
     delete_events = data.get("delete_events", False)
     db.delete_project(name, delete_events, deleted_by=user["name"], team_id=user.get("team_id"))
+    # 프로젝트 삭제는 이벤트에도 영향 → 두 채널 모두 publish
+    wu_broker.publish("projects.changed", {"name": name, "action": "delete"})
+    wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -1859,6 +1922,7 @@ async def manage_add_event(name: str, request: Request):
         "team_id":        user.get("team_id"),
     }
     event_id = db.create_event(payload)
+    wu_broker.publish("events.changed", {"id": event_id, "action": "create", "team_id": user.get("team_id")})
     return {"id": event_id}
 
 
@@ -1883,22 +1947,24 @@ async def manage_update_event(event_id: int, request: Request):
         proj = db.get_project(old_proj)
         updated["is_public"] = 0 if (proj and proj.get("is_private")) else 1
     db.update_event(event_id, updated)
+    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
 @app.patch("/api/manage/events/{event_id}/status")
 async def manage_event_status(event_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     data = await request.json()
     is_active = 1 if data.get("is_active", True) else 0
     db.update_event_active_status(event_id, is_active)
+    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
 
 @app.patch("/api/events/{event_id}/visibility")
 async def update_event_visibility_api(event_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     body = await request.body()
     data = await request.json() if body else {}
     # is_public: null=프로젝트 연동, 0=비공개, 1=공개
@@ -1911,6 +1977,7 @@ async def update_event_visibility_api(event_id: int, request: Request):
         cur = ev.get("is_public") if ev else None
         is_public = 1 if cur is None else (0 if cur == 1 else None)
     db.update_event_visibility(event_id, is_public)
+    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True, "is_public": is_public}
 
 
@@ -1921,6 +1988,8 @@ def manage_delete_event(event_id: int, request: Request):
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     db.delete_event(event_id, deleted_by=user["name"], team_id=user.get("team_id"))
+    # sync 핸들러 → broker 내부의 call_soon_threadsafe가 루프 스레드로 안전 전달
+    wu_broker.publish("events.changed", {"id": event_id, "action": "delete", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -2250,6 +2319,9 @@ async def ai_confirm(request: Request):
             saved += 1
         else:
             skipped.append({"index": i, "title": e.get("title", ""), "reason": "날짜를 입력해주세요."})
+    # N건 일괄 저장 → publish 1회만 (루프 끝 단일 이벤트)
+    if saved > 0:
+        wu_broker.publish("events.changed", {"id": None, "action": "bulk_create", "team_id": team_id})
     return {"saved": saved, "blocked": [], "skipped": skipped, "requires_force": False}
 
 
@@ -2431,6 +2503,13 @@ def api_restore_trash(item_type: str, item_id: int, request: Request):
     ok = db.restore_trash_item(item_type, item_id)
     if not ok:
         raise HTTPException(status_code=404, detail="항목을 찾을 수 없습니다.")
+    # sync 핸들러 → broker 내부의 call_soon_threadsafe가 루프 스레드로 안전 전달
+    # event/project 복원 시에만 관련 채널로 publish
+    if item_type == "event":
+        wu_broker.publish("events.changed", {"id": item_id, "action": "update", "team_id": user.get("team_id")})
+    elif item_type == "project":
+        wu_broker.publish("projects.changed", {"name": None, "action": "update"})
+        wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 

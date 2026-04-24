@@ -1104,6 +1104,16 @@ async function openBarDetail(eventId) {
 }
 window.onEventSaved = loadData;
 
+// 실시간 동기화 — realtime.js는 scripts 블록에서 로드되므로 DOMContentLoaded 이후 등록
+document.addEventListener('DOMContentLoaded', function(){
+  var _doRefetch = typeof wuDebounce === 'function' ? wuDebounce(function(){
+    if(typeof wuShouldSuppressRefetch === 'function' && wuShouldSuppressRefetch()) return;
+    if(_barDragState !== null) return;
+    loadData();
+  }, 300) : null;
+  if(_doRefetch) window.addEventListener('wu:events:changed', _doRefetch);
+});
+
 // ── 간트 바 드래그 — 수평(날짜 이동) / 수직(프로젝트 이동) ──────
 let _barDragState = null;
 let _dateDragLabel = null;

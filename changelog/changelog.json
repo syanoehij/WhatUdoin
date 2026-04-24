@@ -1,6 +1,18 @@
 {
   "groups": [
     {
+      "date": "2026-04-25",
+      "phase": "28차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>공통 — SSE 기반 실시간 동기화 (캘린더·칸반·간트)",
+          "detail_html": "<ul>\n              <li><b>배경</b> — 기존에는 5분마다 전체 페이지 <code>location.reload()</code>로만 갱신되어 스크롤·필터·드래그 상태가 날아가고 체감 지연이 컸음. 캘린더·칸반·간트 세 뷰에 팀원의 일정 변경이 즉시 반영되지 않던 문제 해소</li>\n              <li><b>서버</b> — <code>broker.py</code> 신규: 스레드 안전한 in-memory SSE 브로커(<code>call_soon_threadsafe</code>). <code>GET /api/stream</code> 엔드포인트 추가(25초 ping 하트비트, 지수 백오프 재연결). 이벤트/프로젝트 변경 라우트 26곳에 <code>publish</code> 훅 삽입</li>\n              <li><b>클라이언트</b> — <code>realtime.js</code> 신규: <code>EventSource</code> 부트스트랩 + <code>wuDebounce(300ms)</code> + <code>wuShouldSuppressRefetch()</code>(모달 열림·포커스 입력 중 억제). 캘린더는 <code>refetch()</code>, 칸반은 <code>loadKanban()</code>, 간트는 <code>loadData()</code> 재사용</li>\n              <li><b>5분 자동 새로고침 제거</b> — <code>base.html</code>에서 <code>_autoRefreshTimer</code>·<code>startAutoRefresh</code> 및 사용자 설정 모달의 '자동 새로고침 간격' UI 제거. SSE 재연결 시 <code>open</code> 이벤트로 누락 데이터 일괄 복구</li>\n              <li><b>드래그 중 억제</b> — 칸반 드래그(<code>dragSrcId</code>), 간트 바 드래그(<code>_barDragState</code>) 진행 중에는 refetch 생략 → 드롭 완료 후 다음 이벤트에서 갱신</li>\n            </ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-04-24",
       "phase": "27차 2단계",
       "phase_class": "phase-2",

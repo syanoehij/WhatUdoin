@@ -265,7 +265,7 @@
   }
   </style>
   <script>
-    const CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id, 'name': user.name} | tojson if user else 'null' }};
+    var CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id, 'name': user.name} | tojson if user else 'null' }};
     // 다크 테마 깜빡임 방지: 렌더링 전에 적용
     (function() {
       if (localStorage.getItem('theme') === 'dark')
@@ -714,17 +714,7 @@
         <h2>⚙️ 사용자 설정</h2>
         <button class="icon-btn" onclick="closeUserSettings()">✕</button>
       </div>
-      <div class="form-row">
-        <label>자동 새로고침</label>
-        <select id="auto-refresh-select" onchange="saveAutoRefresh(this.value)">
-          <option value="0">끄기</option>
-          <option value="180000">3분</option>
-          <option value="240000">4분</option>
-          <option value="300000" selected>5분</option>
-          <option value="600000">10분</option>
-        </select>
-      </div>
-      <p class="text-muted" style="font-size:0.82rem;margin-top:6px;">설정은 브라우저에 저장됩니다.</p>
+      <p class="text-muted" style="font-size:0.82rem;margin-top:6px;">설정 항목은 추후 추가될 예정입니다.</p>
       <div class="modal-actions">
         <div></div>
         <button class="btn" onclick="closeUserSettings()">닫기</button>
@@ -733,6 +723,7 @@
   </div>
 
   <script src="/static/js/event-modal.js?v={{ range(1000,9999) | random }}"></script>
+  <script src="/static/js/realtime.js?v={{ range(1000,9999) | random }}"></script>
   {% block scripts %}{% endblock %}
 
   <script>
@@ -899,54 +890,12 @@
     }
     /* ── 사용자 설정 모달 ── */
     function openUserSettings() {
-      const sel = document.getElementById('auto-refresh-select');
-      if (sel) sel.value = localStorage.getItem('auto_refresh_interval') || '300000';
       document.getElementById('user-settings-overlay').classList.remove('hidden');
     }
     function closeUserSettings(e) {
       if (e && e.target !== document.getElementById('user-settings-overlay')) return;
       document.getElementById('user-settings-overlay').classList.add('hidden');
     }
-    function saveAutoRefresh(val) {
-      localStorage.setItem('auto_refresh_interval', val);
-      startAutoRefresh();
-    }
-
-    /* ── 자동 새로고침 ── */
-    let _autoRefreshTimer = null;
-
-    function _tryAutoRefresh() {
-      // 1. 모달 열려있으면 스킵 (일정 추가/수정, 칸반 상세, 설정, 비번변경 등 모든 modal-overlay)
-      if (document.querySelector('.modal-overlay:not(.hidden)')) return;
-
-      // 2. input / textarea / contenteditable 포커스 중이면 스킵
-      const ae = document.activeElement;
-      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.contentEditable === 'true')) return;
-
-      // 3. 페이지가 편집 차단을 요청한 경우 스킵
-      if (typeof window._blockAutoRefresh === 'function' && window._blockAutoRefresh()) return;
-      if (window._blockAutoRefresh === true) return;
-
-      // 4. 페이지가 자동 저장 후 새로고침을 원하는 경우
-      if (typeof window._autoSaveAndRefresh === 'function') {
-        window._autoSaveAndRefresh();
-        return;
-      }
-
-      // 5. 기본: 그냥 새로고침
-      location.reload();
-    }
-
-    function startAutoRefresh() {
-      if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
-      const raw = localStorage.getItem('auto_refresh_interval');
-      const ms  = parseInt(raw || '300000', 10);
-      if (ms >= 60000) {
-        _autoRefreshTimer = setInterval(_tryAutoRefresh, ms);
-      }
-    }
-    // 페이지 로드 시 자동 새로고침 시작 (기본값 5분)
-    startAutoRefresh();
 
     async function doChangePw() {
       const current = document.getElementById('change-pw-current').value.trim();

@@ -513,6 +513,21 @@ document.addEventListener('DOMContentLoaded', () => {
   window.onEventSaved = () => calendar.refetchEvents();
   window.onModalDateChanged = updateDateEvents;
 
+  // 실시간 동기화
+  (function(){
+    var _doRefetch = typeof wuDebounce === 'function' ? wuDebounce(function(){
+      if(typeof wuShouldSuppressRefetch === 'function' && wuShouldSuppressRefetch()) return;
+      var main = calendar.getEventSourceById('main-events');
+      if(main) main.refetch();
+      var doc = calendar.getEventSourceById('doc-events');
+      if(doc) doc.refetch();
+    }, 300) : null;
+    if(_doRefetch){
+      window.addEventListener('wu:events:changed', _doRefetch);
+      window.addEventListener('wu:projects:changed', _doRefetch);
+    }
+  })();
+
   // 칸반에서 수정 링크로 접근한 경우 자동으로 모달 열기
   const editId = new URLSearchParams(location.search).get('edit');
   if (editId && CURRENT_USER) {

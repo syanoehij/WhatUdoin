@@ -559,6 +559,16 @@ async function onDrop(e, newStatus) {
 window.onEventSaved   = loadKanban;
 window.onKDetailSaved = loadKanban;
 
+// 실시간 동기화
+(function(){
+  var _doRefetch = typeof wuDebounce === 'function' ? wuDebounce(function(){
+    if(typeof wuShouldSuppressRefetch === 'function' && wuShouldSuppressRefetch()) return;
+    if(typeof dragSrcId !== 'undefined' && dragSrcId !== null) return;
+    loadKanban();
+  }, 300) : null;
+  if(_doRefetch) window.addEventListener('wu:events:changed', _doRefetch);
+})();
+
 // 초기 로드
 _applyInitialTeamFilter();
 _syncKanbanMyOnlyBtn();
