@@ -306,6 +306,15 @@ def init_db():
                 locked_at    TEXT NOT NULL
             );
         """)
+        # tab_token 컬럼 마이그레이션 (기존 DB 대응)
+        for _tbl, _col, _def in [
+            ("meeting_locks",   "tab_token", "TEXT NOT NULL DEFAULT ''"),
+            ("checklist_locks", "tab_token", "TEXT NOT NULL DEFAULT ''"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_def}")
+            except Exception:
+                pass
 
         # ── links ──
         conn.execute("""
@@ -1978,35 +1987,35 @@ def list_users_with_avr():
 LOCK_TIMEOUT_MINUTES = 5
 
 
-def acquire_meeting_lock(meeting_id: int, user_name: str) -> bool:
-    """잠금 획득. 이미 다른 사람이 유효한 잠금을 가지면 False 반환."""
+def acquire_meeting_lock(meeting_id: int, user_name: str, tab_token: str) -> bool:
+    """잠금 획득. 이미 다른 탭이 유효한 잠금을 가지면 False 반환."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     threshold = (datetime.now(timezone.utc) - timedelta(minutes=LOCK_TIMEOUT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
     with get_conn() as conn:
         existing = conn.execute(
-            "SELECT user_name FROM meeting_locks WHERE meeting_id = ? AND locked_at > ?",
+            "SELECT tab_token FROM meeting_locks WHERE meeting_id = ? AND locked_at > ?",
             (meeting_id, threshold)
         ).fetchone()
-        if existing and existing["user_name"] != user_name:
+        if existing and existing["tab_token"] != tab_token:
             return False
         conn.execute(
-            "INSERT INTO meeting_locks (meeting_id, user_name, locked_at) VALUES (?, ?, ?) "
-            "ON CONFLICT(meeting_id) DO UPDATE SET user_name = excluded.user_name, locked_at = excluded.locked_at",
-            (meeting_id, user_name, now)
+            "INSERT INTO meeting_locks (meeting_id, user_name, locked_at, tab_token) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(meeting_id) DO UPDATE SET user_name = excluded.user_name, locked_at = excluded.locked_at, tab_token = excluded.tab_token",
+            (meeting_id, user_name, now, tab_token)
         )
     return True
 
 
-def heartbeat_meeting_lock(meeting_id: int, user_name: str) -> bool:
-    """잠금 보유자가 heartbeat로 locked_at 갱신. 잠금 보유자가 아니면 False."""
+def heartbeat_meeting_lock(meeting_id: int, tab_token: str) -> bool:
+    """잠금 보유자가 heartbeat로 locked_at 갱신. 잠금 보유자 탭이 아니면 False."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     threshold = (datetime.now(timezone.utc) - timedelta(minutes=LOCK_TIMEOUT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
     with get_conn() as conn:
         existing = conn.execute(
-            "SELECT user_name FROM meeting_locks WHERE meeting_id = ? AND locked_at > ?",
+            "SELECT tab_token FROM meeting_locks WHERE meeting_id = ? AND locked_at > ?",
             (meeting_id, threshold)
         ).fetchone()
-        if not existing or existing["user_name"] != user_name:
+        if not existing or existing["tab_token"] != tab_token:
             return False
         conn.execute(
             "UPDATE meeting_locks SET locked_at = ? WHERE meeting_id = ?",
@@ -2015,13 +2024,16 @@ def heartbeat_meeting_lock(meeting_id: int, user_name: str) -> bool:
     return True
 
 
-def release_meeting_lock(meeting_id: int, user_name: str):
-    """잠금 해제 (본인 것만)."""
+def release_meeting_lock(meeting_id: int, tab_token: str | None = None):
+    """잠금 해제. tab_token 지정 시 해당 탭 것만, None이면 강제 해제."""
     with get_conn() as conn:
-        conn.execute(
-            "DELETE FROM meeting_locks WHERE meeting_id = ? AND user_name = ?",
-            (meeting_id, user_name)
-        )
+        if tab_token:
+            conn.execute(
+                "DELETE FROM meeting_locks WHERE meeting_id = ? AND tab_token = ?",
+                (meeting_id, tab_token)
+            )
+        else:
+            conn.execute("DELETE FROM meeting_locks WHERE meeting_id = ?", (meeting_id,))
 
 
 def get_meeting_lock(meeting_id: int) -> dict | None:
@@ -2029,7 +2041,7 @@ def get_meeting_lock(meeting_id: int) -> dict | None:
     threshold = (datetime.now(timezone.utc) - timedelta(minutes=LOCK_TIMEOUT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT user_name, locked_at FROM meeting_locks WHERE meeting_id = ? AND locked_at > ?",
+            "SELECT user_name, locked_at, tab_token FROM meeting_locks WHERE meeting_id = ? AND locked_at > ?",
             (meeting_id, threshold)
         ).fetchone()
     return dict(row) if row else None
@@ -2244,35 +2256,35 @@ def get_checklist_projects() -> list:
 
 # ── Checklist Locks ───────────────────────────────────────
 
-def acquire_checklist_lock(checklist_id: int, user_name: str) -> bool:
-    """잠금 획득. 이미 다른 사람이 유효한 잠금을 가지면 False 반환."""
+def acquire_checklist_lock(checklist_id: int, user_name: str, tab_token: str) -> bool:
+    """잠금 획득. 이미 다른 탭이 유효한 잠금을 가지면 False 반환."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     threshold = (datetime.now(timezone.utc) - timedelta(minutes=LOCK_TIMEOUT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
     with get_conn() as conn:
         existing = conn.execute(
-            "SELECT user_name FROM checklist_locks WHERE checklist_id = ? AND locked_at > ?",
+            "SELECT tab_token FROM checklist_locks WHERE checklist_id = ? AND locked_at > ?",
             (checklist_id, threshold)
         ).fetchone()
-        if existing and existing["user_name"] != user_name:
+        if existing and existing["tab_token"] != tab_token:
             return False
         conn.execute(
-            "INSERT INTO checklist_locks (checklist_id, user_name, locked_at) VALUES (?, ?, ?) "
-            "ON CONFLICT(checklist_id) DO UPDATE SET user_name = excluded.user_name, locked_at = excluded.locked_at",
-            (checklist_id, user_name, now)
+            "INSERT INTO checklist_locks (checklist_id, user_name, locked_at, tab_token) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(checklist_id) DO UPDATE SET user_name = excluded.user_name, locked_at = excluded.locked_at, tab_token = excluded.tab_token",
+            (checklist_id, user_name, now, tab_token)
         )
     return True
 
 
-def heartbeat_checklist_lock(checklist_id: int, user_name: str) -> bool:
-    """잠금 보유자가 heartbeat로 locked_at 갱신. 잠금 보유자가 아니면 False."""
+def heartbeat_checklist_lock(checklist_id: int, tab_token: str) -> bool:
+    """잠금 보유자가 heartbeat로 locked_at 갱신. 잠금 보유자 탭이 아니면 False."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     threshold = (datetime.now(timezone.utc) - timedelta(minutes=LOCK_TIMEOUT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
     with get_conn() as conn:
         existing = conn.execute(
-            "SELECT user_name FROM checklist_locks WHERE checklist_id = ? AND locked_at > ?",
+            "SELECT tab_token FROM checklist_locks WHERE checklist_id = ? AND locked_at > ?",
             (checklist_id, threshold)
         ).fetchone()
-        if not existing or existing["user_name"] != user_name:
+        if not existing or existing["tab_token"] != tab_token:
             return False
         conn.execute(
             "UPDATE checklist_locks SET locked_at = ? WHERE checklist_id = ?",
@@ -2281,13 +2293,16 @@ def heartbeat_checklist_lock(checklist_id: int, user_name: str) -> bool:
     return True
 
 
-def release_checklist_lock(checklist_id: int, user_name: str):
-    """잠금 해제 (본인 것만)."""
+def release_checklist_lock(checklist_id: int, tab_token: str | None = None):
+    """잠금 해제. tab_token 지정 시 해당 탭 것만, None이면 강제 해제."""
     with get_conn() as conn:
-        conn.execute(
-            "DELETE FROM checklist_locks WHERE checklist_id = ? AND user_name = ?",
-            (checklist_id, user_name)
-        )
+        if tab_token:
+            conn.execute(
+                "DELETE FROM checklist_locks WHERE checklist_id = ? AND tab_token = ?",
+                (checklist_id, tab_token)
+            )
+        else:
+            conn.execute("DELETE FROM checklist_locks WHERE checklist_id = ?", (checklist_id,))
 
 
 def get_checklist_lock(checklist_id: int) -> dict | None:
@@ -2295,7 +2310,7 @@ def get_checklist_lock(checklist_id: int) -> dict | None:
     threshold = (datetime.now(timezone.utc) - timedelta(minutes=LOCK_TIMEOUT_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT user_name, locked_at FROM checklist_locks WHERE checklist_id = ? AND locked_at > ?",
+            "SELECT user_name, locked_at, tab_token FROM checklist_locks WHERE checklist_id = ? AND locked_at > ?",
             (checklist_id, threshold)
         ).fetchone()
     return dict(row) if row else None

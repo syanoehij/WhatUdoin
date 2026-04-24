@@ -101,7 +101,11 @@
   {% if locked_by %}
   <div class="lock-banner" id="lock-banner">
     <span class="lock-banner-icon">🔒</span>
+    {% if lock_type == 'self_tab' %}
+    <span>동일한 문서를 다른 탭에서 편집 중입니다. 이 탭에서는 저장된 내용만 볼 수 있습니다.</span>
+    {% else %}
     <span><strong>{{ locked_by }}</strong>님이 이미 편집 중입니다.</span>
+    {% endif %}
     <button class="lock-banner-refresh" onclick="location.reload()">새로고침</button>
   </div>
   {% endif %}
@@ -246,7 +250,9 @@ function ckExportLink() {
 
 const CKE_ID       = {{ checklist.id if checklist.id else 'null' }};
 const CKE_LOCKED   = {{ 'true' if locked_by else 'false' }};
+const LOCK_TYPE    = {{ lock_type | tojson if lock_type else 'null' }};
 const CKE_IS_NEW   = (CKE_ID === null);
+const TAB_TOKEN    = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getItem(k); if (!t) { t = (crypto?.randomUUID?.() ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); })); sessionStorage.setItem(k, t); } return t; })();
 
 // 첫 줄 = 제목 패턴: content에 # 제목이 없으면 title을 H1으로 앞에 붙임
 (function () {
@@ -365,6 +371,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     sessionStorage.removeItem('check_ai_draft');
   }
 
+  // self_tab: 이 탭이 실제로 잠금을 소유하는지 확인 → 소유자이면 편집 모드로 리디렉트
+  if (CKE_LOCKED && LOCK_TYPE === 'self_tab' && CKE_ID) {
+    fetch(`/api/checklists/${CKE_ID}/lock?tab_token=${TAB_TOKEN}`, { method: 'POST' })
+      .then(r => {
+        if (r.ok) {
+          const url = new URL(location.href);
+          url.searchParams.set('_t', TAB_TOKEN);
+          location.replace(url.toString());
+        }
+      }).catch(() => {});
+  }
+
   if (CKE_LOCKED) {
     wuInst = WUEditor.create({
       el: '#cke-viewer-wrap',
@@ -390,6 +408,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       saveCooldown: { seconds: 10, saveBtnSelector: '#cke-save-btn' },
       editLock: CKE_ID ? {
         endpoint: `/api/checklists/${CKE_ID}/lock`,
+        tabToken: TAB_TOKEN,
         heartbeatMs: 120000,
         onLockFailed: () => { alert('편집 잠금을 획득하지 못했습니다. 다른 사람이 편집 중입니다.'); location.href = '/check'; },
         onLockLost:   () => _handleLockLost(),

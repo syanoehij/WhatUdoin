@@ -30,7 +30,11 @@
   <!-- ── 잠금 배너 ── -->
   <div class="lock-banner" id="lock-banner">
     <span class="lock-banner-icon">🔒</span>
+    {% if lock_type == 'self_tab' %}
+    <span>동일한 문서를 다른 탭에서 편집 중입니다. 이 탭에서는 저장된 내용만 볼 수 있습니다.</span>
+    {% else %}
     <span><strong>{{ locked_by }}</strong>님이 편집 중입니다. 저장된 내용만 볼 수 있습니다.</span>
+    {% endif %}
     <button class="lock-banner-refresh" onclick="location.reload()">새로고침</button>
   </div>
   {% endif %}
@@ -151,6 +155,8 @@ const DOC_ID         = {{ doc.id if doc else 'null' }};
 const IS_EDITOR      = {{ 'true' if can_edit else 'false' }};
 const IS_TEAM_DOC    = {{ 'true' if (doc and doc.is_team_doc) else 'false' }};
 const LOCKED_BY      = {{ (locked_by | tojson) if locked_by else 'null' }};
+const LOCK_TYPE      = {{ lock_type | tojson if lock_type else 'null' }};
+const TAB_TOKEN      = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getItem(k); if (!t) { t = (crypto?.randomUUID?.() ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); })); sessionStorage.setItem(k, t); } return t; })();
 const INITIAL_MD     = {{ (('# ' + doc.title + '\n\n' + (doc.content or '')) if doc else '') | tojson | safe }};
 const DOC_EVENTS      = {{ (doc_events if doc_events else []) | tojson | safe }};
 const DONE_PROJECTS   = new Set({{ (done_projects if done_projects else []) | tojson | safe }});
@@ -209,6 +215,18 @@ function initDocEditor() {
   if (from === 'calendar') {
     btnBack.href = '/calendar';
     btnBack.textContent = '← 캘린더';
+  }
+
+  // self_tab: 이 탭이 실제로 잠금을 소유하는지 서버에 확인 → 소유자이면 편집 모드로 리디렉트
+  if (IS_EDITOR && DOC_ID && LOCK_TYPE === 'self_tab') {
+    fetch(`/api/doc/${DOC_ID}/lock?tab_token=${TAB_TOKEN}`, { method: 'POST' })
+      .then(r => {
+        if (r.ok) {
+          const url = new URL(location.href);
+          url.searchParams.set('_t', TAB_TOKEN);
+          location.replace(url.toString());
+        }
+      }).catch(() => {});
   }
 
   // 편집자이고 잠금 없으면 뷰어 건너뛰고 바로 편집 모드로 진입
@@ -318,6 +336,7 @@ function initDocEditor() {
         saveCooldown: { seconds: 10, saveBtnSelector: 'button[onclick="saveDoc()"]' },
         editLock: DOC_ID ? {
           endpoint: `/api/doc/${DOC_ID}/lock`,
+          tabToken: TAB_TOKEN,
           heartbeatMs: 30000,
           onLockFailed: () => location.reload(),
         } : false,
@@ -476,7 +495,7 @@ async function saveDoc(leaveTarget) {
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, content, is_team_doc: isTeamDoc, is_public: isPublic, team_share: teamShare }),
+    body: JSON.stringify({ title, content, is_team_doc: isTeamDoc, is_public: isPublic, team_share: teamShare, tab_token: TAB_TOKEN }),
   });
 
   try {

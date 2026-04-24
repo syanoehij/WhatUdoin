@@ -1,6 +1,33 @@
 {
   "groups": [
     {
+      "date": "2026-04-24",
+      "phase": "27차 2단계",
+      "phase_class": "phase-2",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — JS 파서 오류로 페이지 전체가 '불러오는 중'에서 멈추던 버그 수정",
+          "detail_html": "<ul>\n              <li><b>원인</b> — viewer_toggle 경로 코드 수정 중 <code>if (res.ok)</code> 블록을 제거하면서 닫는 <code>}</code>가 잉여 상태로 남아 스크립트 전체 파싱 실패 → 체크 항목·프로젝트 목록이 전혀 로드되지 않고 '불러오는 중' 텍스트만 표시</li>\n              <li><b>수정</b> — <code>check.html</code> 해당 위치 잉여 <code>}</code> 제거 및 들여쓰기 정리</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>공통 — HTTP(비보안) 환경에서 탭 토큰 생성 실패로 문서·체크 내용이 표시되지 않던 문제 수정",
+          "detail_html": "<ul>\n              <li><b>원인</b> — 다른 PC에서 <code>http://</code>로 접속 시 브라우저 보안 정책에 의해 <code>crypto.randomUUID()</code>가 <code>TypeError</code>를 던지고, 이 오류가 전파되어 탭 토큰 의존 전체 초기화 블록이 실패 → 문서 내용·체크 항목이 모두 표시되지 않음</li>\n              <li><b>수정</b> — <code>crypto?.randomUUID?.()</code> 옵셔널 체이닝으로 보호 + 실패 시 <code>Math.random()</code> 기반 RFC 4122 v4 UUID 생성 폴백 추가 (<code>doc_editor.html</code>·<code>check_editor.html</code>·<code>check.html</code> 공통 적용). <code>https://</code>나 <code>localhost</code> 환경은 기존 방식 유지</li>\n            </ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>편집 락 — 탭 토큰 미검증으로 인한 락 강제 해제 및 자기 잠금 버그 2건 수정",
+          "detail_html": "<ul>\n              <li><b>[P1] 타 편집자 락 강제 해제</b> — <code>DELETE /api/.../lock</code> 호출 시 <code>tab_token</code>이 없으면 현재 락 소유자와 무관하게 락을 삭제하던 버그. 체크리스트 저장 후 자동 <code>DELETE</code>가 다른 편집자의 활성 락을 지워버릴 수 있었음 → <code>tab_token</code> 없는 DELETE는 no-op으로 처리</li>\n              <li><b>[P2] 동일 유저 재로드 후 자기 잠금</b> — 탭 토큰 없이 동일 유저 락을 <code>self_tab</code>으로 분류하면, 새로고침·크래시 복구 시 실제 편집 탭이 없어도 5분 타임아웃까지 본인이 잠금 화면을 보는 문제 → <code>?_t=TOKEN</code> URL 파라미터로 서버가 탭 소유권을 검증; 자기 탭이면 편집 모드 유지, 다른 탭이면 viewer에서 자동 재획득 시도</li>\n            </ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span>체크 뷰어 — 편집 잠금 배너 서브 메시지 추가 및 폴링 간격 단축·편집 시작·종료 실시간 감지",
+          "detail_html": "<ul>\n              <li><b>서브 메시지</b> — 잠금 배너에 '편집이 완료될 때까지 체크박스를 변경할 수 없습니다.' 부제목 추가 → 체크박스를 눌러도 저장되지 않음을 명시</li>\n              <li><b>폴링 간격 단축</b> — <code>POLL_INTERVAL</code> 10초 → 5초. 카운트다운 뱃지도 5초 기준으로 변경</li>\n              <li><b>편집 시작·종료 실시간 감지</b> — <code>_doPoll</code>이 매 폴링 사이클마다 락 상태 API를 무조건 먼저 조회. 편집 잠금 중에는 콘텐츠 fetch 생략 → 불필요한 요청 제거. 잠금이 막 해제된 경우(<code>wasLocked → false</code>)에는 콘텐츠를 즉시 갱신해 편집 완료 내용 반영</li>\n            </ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-04-23",
       "phase": "27차 1단계",
       "phase_class": "phase-1",

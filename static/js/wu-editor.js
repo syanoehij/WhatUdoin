@@ -227,17 +227,23 @@
     }
 
     /* ── 편집 잠금 ──────────────────────────────────── */
+    function _lockUrl() {
+      const lk = feat.editLock;
+      return lk.tabToken ? `${lk.endpoint}?tab_token=${lk.tabToken}` : lk.endpoint;
+    }
+
     function _acquireLock() {
       const lk = feat.editLock;
       if (!lk || !lk.endpoint) return;
-      fetch(lk.endpoint, { method: 'POST' })
+      const url = _lockUrl();
+      fetch(url, { method: 'POST' })
         .then(res => {
           if (res.status === 423) {
             if (lk.onLockFailed) lk.onLockFailed();
             return;
           }
           _lockHeartbeat = setInterval(() => {
-            fetch(lk.endpoint, { method: 'PUT' })
+            fetch(url, { method: 'PUT' })
               .then(r => { if (r.status === 423 && lk.onLockLost) lk.onLockLost(); })
               .catch(() => {});
           }, lk.heartbeatMs || 30000);
@@ -249,7 +255,7 @@
       const lk = feat.editLock;
       if (!lk || !lk.endpoint) return;
       clearInterval(_lockHeartbeat);
-      fetch(lk.endpoint, { method: 'DELETE', keepalive: true }).catch(() => {});
+      fetch(_lockUrl(), { method: 'DELETE', keepalive: true }).catch(() => {});
     }
 
     /* ── beforeunload ───────────────────────────────── */

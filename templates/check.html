@@ -417,8 +417,8 @@
   }
   .ck-lock-overlay-icon { font-size: 1rem; }
   .ck-lock-overlay-title { font-weight: 600; }
-  .ck-lock-overlay-sub { display: none; }
-  .ck-lock-overlay .btn { margin-left: auto; }
+  .ck-lock-overlay-sub { font-size: 0.82rem; opacity: 0.75; }
+  .ck-lock-overlay .btn { margin-left: auto; flex-shrink: 0; }
 
   /* ── 저장 토스트 ── */
   #ck-save-toast {
@@ -821,8 +821,10 @@
     <!-- 잠금 배너 (다른 사람이 편집 중일 때 상단에 표시, 본문은 정상 노출) -->
     <div class="ck-lock-overlay" id="ck-lock-overlay" style="display:none;">
       <div class="ck-lock-overlay-icon">🔒</div>
-      <div class="ck-lock-overlay-title" id="ck-lock-msg">편집 중입니다.</div>
-      <div class="ck-lock-overlay-sub">편집이 완료되면 내용을 확인할 수 있습니다.</div>
+      <div>
+        <div class="ck-lock-overlay-title" id="ck-lock-msg">편집 중입니다.</div>
+        <div class="ck-lock-overlay-sub" id="ck-lock-sub"></div>
+      </div>
       <button class="btn btn-sm" onclick="refreshLockStatus()">새로고침</button>
     </div>
 
@@ -969,6 +971,7 @@
 <script>
 const IS_EDITOR = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
 const ALL_PROJECTS = {{ projects | tojson | safe }};
+const TAB_TOKEN = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getItem(k); if (!t) { t = (crypto?.randomUUID?.() ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); })); sessionStorage.setItem(k, t); } return t; })();
 
 let _allChecklists      = [];
 let _curProj            = null;
@@ -1001,7 +1004,7 @@ let _wizardBusy = false;
 window.addEventListener('beforeunload', (e) => {
   if ((IS_EDITOR && _dirty) || _wizardBusy) { e.preventDefault(); e.returnValue = ''; }
   if (IS_EDITOR && _curId && _editMode) {
-    fetch(`/api/checklists/${_curId}/lock`, { method: 'DELETE', keepalive: true });
+    fetch(`/api/checklists/${_curId}/lock?tab_token=${TAB_TOKEN}`, { method: 'DELETE', keepalive: true });
   }
 });
 
@@ -1168,7 +1171,7 @@ async function openChecklist(id, forceEdit = false) {
   }
   // 이전 항목 잠금 해제
   if (IS_EDITOR && _curId && _editMode && _curId !== id) {
-    await fetch(`/api/checklists/${_curId}/lock`, { method: 'DELETE' });
+    await fetch(`/api/checklists/${_curId}/lock?tab_token=${TAB_TOKEN}`, { method: 'DELETE' });
     _stopHeartbeat();
   }
 
@@ -1188,8 +1191,13 @@ async function openChecklist(id, forceEdit = false) {
   _curItem = await itemRes.json();
 
   // 잠금 상태 반영
-  const lockData = lockRes.ok ? await lockRes.json() : { locked_by: null };
-  _setLockState(lockData.locked_by);
+  let lockData = lockRes.ok ? await lockRes.json() : { locked_by: null, lock_type: null };
+  // self_tab: 이 탭이 실제로 잠금 소유자인지 확인 (같은 탭 새로고침 복원)
+  if (lockData.lock_type === 'self_tab' && IS_EDITOR) {
+    const claimRes = await fetch(`/api/checklists/${_curId}/lock?tab_token=${TAB_TOKEN}`, { method: 'POST' });
+    if (claimRes.ok) lockData = { locked_by: null, lock_type: null };
+  }
+  _setLockState(lockData.locked_by, lockData.lock_type);
   _applyContentLockUi(_curItem.is_locked);
 
   document.getElementById('ck-placeholder').style.display = 'none';
@@ -1208,32 +1216,34 @@ async function openChecklist(id, forceEdit = false) {
 }
 
 // ── 잠금 상태 설정 ─────────────────────────────────────────
-function _setLockState(lockedBy) {
-  const myName = CURRENT_USER?.name || '';
-  _lockedByOther = !!(lockedBy && lockedBy !== myName);
+function _setLockState(lockedBy, lockType) {
+  _lockedByOther = !!(lockType);
 
-  const overlay  = document.getElementById('ck-lock-overlay');
-  const viewer   = document.getElementById('ck-viewer-wrap');
+  const overlay = document.getElementById('ck-lock-overlay');
 
-  if (_lockedByOther) {
+  const subEl = document.getElementById('ck-lock-sub');
+  if (lockType === 'self_tab') {
+    document.getElementById('ck-lock-msg').textContent = '동일 문서를 다른 탭에서 편집 중입니다.';
+    if (subEl) subEl.textContent = '편집이 완료될 때까지 체크박스를 변경할 수 없습니다.';
+    if (overlay) overlay.style.display = '';
+  } else if (lockType === 'other_user') {
     document.getElementById('ck-lock-msg').textContent = `${lockedBy}님이 편집 중입니다.`;
+    if (subEl) subEl.textContent = '편집이 완료될 때까지 체크박스를 변경할 수 없습니다.';
     if (overlay) overlay.style.display = '';
   } else {
     if (overlay) overlay.style.display = 'none';
+    if (subEl) subEl.textContent = '';
   }
 
   // 편집/삭제 버튼: 잠금 시 disabled + tooltip
   if (IS_EDITOR) {
+    const tip = lockType === 'self_tab' ? '동일 문서를 다른 탭에서 편집 중입니다'
+              : lockType === 'other_user' ? `${lockedBy}님이 편집 중입니다`
+              : '';
     const editBtn = document.getElementById('ck-edit-btn');
-    if (editBtn) {
-      editBtn.disabled = _lockedByOther;
-      editBtn.title    = _lockedByOther ? `${lockedBy}님이 편집 중입니다` : '';
-    }
+    if (editBtn) { editBtn.disabled = _lockedByOther; editBtn.title = tip; }
     const deleteBtn = document.getElementById('ck-delete-btn');
-    if (deleteBtn) {
-      deleteBtn.disabled = _lockedByOther;
-      deleteBtn.title    = _lockedByOther ? `${lockedBy}님이 편집 중입니다` : '';
-    }
+    if (deleteBtn) { deleteBtn.disabled = _lockedByOther; deleteBtn.title = tip; }
   }
 }
 
@@ -1252,8 +1262,12 @@ async function refreshLockStatus() {
   if (!_curId) return;
   const res = await fetch(`/api/checklists/${_curId}/lock`);
   if (res.ok) {
-    const data = await res.json();
-    _setLockState(data.locked_by);
+    let data = await res.json();
+    if (data.lock_type === 'self_tab' && IS_EDITOR) {
+      const claimRes = await fetch(`/api/checklists/${_curId}/lock?tab_token=${TAB_TOKEN}`, { method: 'POST' });
+      if (claimRes.ok) data = { locked_by: null, lock_type: null };
+    }
+    _setLockState(data.locked_by, data.lock_type ?? null);
     document.getElementById('ck-viewer-wrap').style.display = '';
     if (_curItem) renderViewer(_curItem.content);
   }
@@ -1263,7 +1277,7 @@ async function refreshLockStatus() {
 function _showViewerMode() {
   // 편집 모드에서 전환 시 잠금 해제
   if (_editMode && IS_EDITOR && _curId) {
-    fetch(`/api/checklists/${_curId}/lock`, { method: 'DELETE' });
+    fetch(`/api/checklists/${_curId}/lock?tab_token=${TAB_TOKEN}`, { method: 'DELETE' });
     _stopHeartbeat();
   }
 
@@ -1312,13 +1326,13 @@ function _showViewerMode() {
 async function _showEditorMode() {
   _stopPoll(); // 편집 중에는 폴링 중단
   // 잠금 획득
-  const lockRes = await fetch(`/api/checklists/${_curId}/lock`, { method: 'POST' });
+  const lockRes = await fetch(`/api/checklists/${_curId}/lock?tab_token=${TAB_TOKEN}`, { method: 'POST' });
   if (!lockRes.ok) {
     const err = await lockRes.json().catch(() => ({}));
     alert(err.detail || '편집 잠금을 획득하지 못했습니다. 다른 사람이 편집 중입니다.');
     // 잠금 상태 갱신 후 뷰어 유지
     const lockInfo = await fetch(`/api/checklists/${_curId}/lock`);
-    if (lockInfo.ok) { const d = await lockInfo.json(); _setLockState(d.locked_by); }
+    if (lockInfo.ok) { const d = await lockInfo.json(); _setLockState(d.locked_by, d.lock_type ?? null); }
     return;
   }
 
@@ -1341,7 +1355,7 @@ async function _showEditorMode() {
   // Heartbeat (2분마다 — LOCK_TIMEOUT_MINUTES=5 이내)
   _stopHeartbeat();
   _heartbeatInterval = setInterval(() => {
-    if (_curId && _editMode) fetch(`/api/checklists/${_curId}/lock`, { method: 'PUT' });
+    if (_curId && _editMode) fetch(`/api/checklists/${_curId}/lock?tab_token=${TAB_TOKEN}`, { method: 'PUT' });
   }, 120000);
 
   const _initContent = (_curItem.content || '');
@@ -1358,30 +1372,36 @@ function _stopHeartbeat() {
 }
 
 // ── 뷰어 실시간 동기화 폴링 ───────────────────────────────
-const POLL_INTERVAL = 10000; // 10초
+const POLL_INTERVAL = 5000; // 5초
 
 async function _doPoll(id) {
   if (_editMode || !_curId || _curId !== id) { _stopPoll(); return; }
   if (document.visibilityState === 'hidden') return; // 탭 백그라운드면 스킵
   try {
+    // 편집 잠금 상태 항상 확인 (편집 시작·종료 실시간 감지)
+    const lockRes = await fetch(`/api/checklists/${_curId}/lock`);
+    let lockData = lockRes.ok ? await lockRes.json() : { locked_by: null, lock_type: null };
+    if (lockData.lock_type === 'self_tab' && IS_EDITOR) {
+      const claimRes = await fetch(`/api/checklists/${_curId}/lock?tab_token=${TAB_TOKEN}`, { method: 'POST' });
+      if (claimRes.ok) lockData = { locked_by: null, lock_type: null };
+    }
+    const wasLocked = _lockedByOther;
+    _setLockState(lockData.locked_by, lockData.lock_type ?? null);
+
+    // 편집 잠금 중이면 콘텐츠 확인 생략 (편집 중 부분 내용은 저장 전까지 반영 안 함)
+    if (_lockedByOther) return;
+
+    // 콘텐츠 변경 확인 (잠금이 막 풀렸으면 무조건, 그 외엔 updated_at 변경 시에만)
     const res = await fetch(`/api/checklists/${_curId}`);
     if (!res.ok) return;
     const data = await res.json();
-    if (data.updated_at === _pollUpdatedAt) return; // 변경 없음
+    if (data.updated_at === _pollUpdatedAt && !wasLocked) return; // 변경 없음
     _pollUpdatedAt = data.updated_at;
     _curItem = data;
 
-    // 체크 잠금 변경 반영 (다른 사용자가 잠금 걸면 폴링 중단)
-    if (data.is_locked) {
-      _applyContentLockUi(true);
-      return;
-    }
+    // 체크 잠금 변경 반영
+    if (data.is_locked) { _applyContentLockUi(true); return; }
     _applyContentLockUi(false);
-
-    // 편집 잠금 상태도 재확인
-    const lockRes = await fetch(`/api/checklists/${_curId}/lock`);
-    const lockData = lockRes.ok ? await lockRes.json() : { locked_by: null };
-    _setLockState(lockData.locked_by);
 
     // 목록 updated_at 갱신
     const idx = _allChecklists.findIndex(c => c.id === _curId);
@@ -1389,11 +1409,8 @@ async function _doPoll(id) {
     renderList();
     _updateMeta();
 
-    // 잠금 없으면 뷰어 갱신
-    if (!_lockedByOther) {
-      document.getElementById('ck-viewer-wrap').style.display = '';
-      renderViewer(data.content);
-    }
+    document.getElementById('ck-viewer-wrap').style.display = '';
+    renderViewer(data.content);
   } catch {}
 }
 
@@ -1568,7 +1585,7 @@ function renderViewer(content) {
   });
 
   // 잠금/비로그인 시 체크박스 클릭 차단 (시각적 반응 포함)
-  container.classList.toggle('no-check-interaction', !CURRENT_USER || _contentLocked);
+  container.classList.toggle('no-check-interaction', !CURRENT_USER || _contentLocked || _lockedByOther);
   setTimeout(() => { if (typeof hljs !== 'undefined') container.querySelectorAll('pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); }); }, 150);
 
   // 뷰어 TOC 자동 동기화 — 본문 DOM 변경(체크박스 토글 등) 시 목차 갱신
@@ -1760,23 +1777,30 @@ async function toggleCheckboxByLine(mdLine, checked, mdContent) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content: newMd, save_history: false, source: 'viewer_toggle' }),
   });
-  if (res.ok) {
-    // 내용 갱신
-    _curItem.content = newMd;
-    renderViewer(newMd);
-    // TOC가 열려있으면 재빌드하여 언매핑 방지
-    const _tocPanel = document.getElementById('ck-viewer-toc');
-    if (_tocPanel && !_tocPanel.classList.contains('hidden')) buildViewerToc();
-    // 목록 갱신 (updated_at 반영)
-    const updated = await fetch(`/api/checklists/${_curId}`);
-    if (updated.ok) {
-      _curItem = await updated.json();
-      const idx = _allChecklists.findIndex(c => c.id === _curId);
-      if (idx >= 0) _allChecklists[idx] = {..._allChecklists[idx], updated_at: _curItem.updated_at};
-      renderList();
+  if (!res.ok) {
+    if (res.status === 423) {
+      showSaveToast('잠금 상태입니다. 체크박스를 변경할 수 없습니다.');
+      renderViewer(_curItem.content);
+      const lockInfo = await fetch(`/api/checklists/${_curId}/lock`);
+      if (lockInfo.ok) { const d = await lockInfo.json(); _setLockState(d.locked_by, d.lock_type ?? null); }
     }
-    showSaveToast('체크 상태가 저장되었습니다.');
+    return;
   }
+  // 내용 갱신
+  _curItem.content = newMd;
+  renderViewer(newMd);
+  // TOC가 열려있으면 재빌드하여 언매핑 방지
+  const _tocPanel = document.getElementById('ck-viewer-toc');
+  if (_tocPanel && !_tocPanel.classList.contains('hidden')) buildViewerToc();
+  // 목록 갱신 (updated_at 반영)
+  const updated = await fetch(`/api/checklists/${_curId}`);
+  if (updated.ok) {
+    _curItem = await updated.json();
+    const idx = _allChecklists.findIndex(c => c.id === _curId);
+    if (idx >= 0) _allChecklists[idx] = {..._allChecklists[idx], updated_at: _curItem.updated_at};
+    renderList();
+  }
+  showSaveToast('체크 상태가 저장되었습니다.');
 }
 
 async function toggleTableCheckboxByIndex(idx, checked, mdContent) {
@@ -1801,20 +1825,27 @@ async function toggleTableCheckboxByIndex(idx, checked, mdContent) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content: newMd, save_history: false, source: 'viewer_toggle' }),
   });
-  if (res.ok) {
-    _curItem.content = newMd;
-    renderViewer(newMd);
-    const _tocPanel = document.getElementById('ck-viewer-toc');
-    if (_tocPanel && !_tocPanel.classList.contains('hidden')) buildViewerToc();
-    const updated = await fetch(`/api/checklists/${_curId}`);
-    if (updated.ok) {
-      _curItem = await updated.json();
-      const i = _allChecklists.findIndex(c => c.id === _curId);
-      if (i >= 0) _allChecklists[i] = { ..._allChecklists[i], updated_at: _curItem.updated_at };
-      renderList();
+  if (!res.ok) {
+    if (res.status === 423) {
+      showSaveToast('잠금 상태입니다. 체크박스를 변경할 수 없습니다.');
+      renderViewer(_curItem.content);
+      const lockInfo = await fetch(`/api/checklists/${_curId}/lock`);
+      if (lockInfo.ok) { const d = await lockInfo.json(); _setLockState(d.locked_by, d.lock_type ?? null); }
     }
-    showSaveToast('체크 상태가 저장되었습니다.');
+    return;
   }
+  _curItem.content = newMd;
+  renderViewer(newMd);
+  const _tocPanel = document.getElementById('ck-viewer-toc');
+  if (_tocPanel && !_tocPanel.classList.contains('hidden')) buildViewerToc();
+  const updated = await fetch(`/api/checklists/${_curId}`);
+  if (updated.ok) {
+    _curItem = await updated.json();
+    const i = _allChecklists.findIndex(c => c.id === _curId);
+    if (i >= 0) _allChecklists[i] = { ..._allChecklists[i], updated_at: _curItem.updated_at };
+    renderList();
+  }
+  showSaveToast('체크 상태가 저장되었습니다.');
 }
 
 // ── Dirty / 자동저장 ──────────────────────────────────────

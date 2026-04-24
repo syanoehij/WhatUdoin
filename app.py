@@ -242,12 +242,22 @@ def doc_detail_page(request: Request, meeting_id: int):
     can_edit = _can_write_doc(current_user, doc)
     lock = db.get_meeting_lock(meeting_id)
     locked_by = None
-    if lock and current_user and lock["user_name"] != current_user["name"]:
-        locked_by = lock["user_name"]
+    lock_type = None
+    if lock:
+        if current_user and lock["user_name"] == current_user["name"]:
+            _t = request.query_params.get("_t", "")
+            if _t and _t == lock.get("tab_token", ""):
+                pass  # 이 탭이 잠금 소유자임을 증명 → 편집 모드 허용
+            else:
+                lock_type = "self_tab"
+                locked_by = lock["user_name"]
+        else:
+            lock_type = "other_user"
+            locked_by = lock["user_name"]
     done_projects = db.get_done_project_names()
     return templates.TemplateResponse(request, "doc_editor.html", _ctx(
         request, doc=doc, doc_events=events,
-        locked_by=locked_by, can_edit=can_edit, done_projects=done_projects,
+        locked_by=locked_by, lock_type=lock_type, can_edit=can_edit, done_projects=done_projects,
     ))
 
 
@@ -355,13 +365,25 @@ def check_editor_page(request: Request, checklist_id: int):
     all_projs = db.get_all_projects_with_events()
     projects = [p for p in all_projs if p.get("is_active", 1)]
     lock = db.get_checklist_lock(checklist_id)
-    locked_by = lock["user_name"] if lock else None
+    locked_by = None
+    lock_type = None
+    if lock:
+        if user and lock["user_name"] == user["name"]:
+            _t = request.query_params.get("_t", "")
+            if _t and _t == lock.get("tab_token", ""):
+                pass  # 이 탭이 잠금 소유자임을 증명 → 편집 모드 허용
+            else:
+                lock_type = "self_tab"
+                locked_by = lock["user_name"]
+        else:
+            lock_type = "other_user"
+            locked_by = lock["user_name"]
     proj_name = item.get("project")
     proj_info = next((p for p in all_projs if p.get("name") == proj_name), None) if proj_name else None
     proj_is_private = bool(proj_info.get("is_private", 0)) if proj_info else False
     return templates.TemplateResponse(
         request, "check_editor.html",
-        _ctx(request, checklist=item, locked_by=locked_by, projects=projects, proj_is_private=proj_is_private)
+        _ctx(request, checklist=item, locked_by=locked_by, lock_type=lock_type, projects=projects, proj_is_private=proj_is_private)
     )
 
 
@@ -482,8 +504,12 @@ async def update_checklist_content(checklist_id: int, request: Request):
         raise HTTPException(status_code=404)
     data = await request.json()
     source = data.get("source", "editor")  # "editor" | "viewer_toggle"
-    if source == "viewer_toggle" and item.get("is_locked"):
-        raise HTTPException(status_code=423, detail="체크 잠금 상태입니다.")
+    if source == "viewer_toggle":
+        if item.get("is_locked"):
+            raise HTTPException(status_code=423, detail="체크 잠금 상태입니다.")
+        edit_lock = db.get_checklist_lock(checklist_id)
+        if edit_lock:
+            raise HTTPException(status_code=423, detail="편집 잠금 상태입니다.")
     content = data.get("content", "")
     save_history = data.get("save_history", True)
     db.update_checklist_content(checklist_id, content, user["name"], save_history=save_history)
@@ -510,7 +536,7 @@ def delete_checklist(checklist_id: int, request: Request):
     item = db.get_checklist(checklist_id)
     if not item:
         raise HTTPException(status_code=404)
-    db.release_checklist_lock(checklist_id, user["name"])
+    db.release_checklist_lock(checklist_id)  # 삭제 시 강제 해제
     db.delete_checklist(checklist_id, deleted_by=user["name"], team_id=user.get("team_id"))
     return {"ok": True}
 
@@ -520,7 +546,8 @@ def delete_checklist(checklist_id: int, request: Request):
 @app.post("/api/checklists/{checklist_id}/lock")
 def lock_checklist(checklist_id: int, request: Request):
     user = _require_editor(request)
-    ok = db.acquire_checklist_lock(checklist_id, user["name"])
+    tab_token = request.query_params.get("tab_token", "")
+    ok = db.acquire_checklist_lock(checklist_id, user["name"], tab_token)
     if not ok:
         lock = db.get_checklist_lock(checklist_id)
         locked_by = lock["user_name"] if lock else "알 수 없음"
@@ -530,8 +557,9 @@ def lock_checklist(checklist_id: int, request: Request):
 
 @app.put("/api/checklists/{checklist_id}/lock")
 def heartbeat_checklist_lock(checklist_id: int, request: Request):
-    user = _require_editor(request)
-    ok = db.heartbeat_checklist_lock(checklist_id, user["name"])
+    _require_editor(request)
+    tab_token = request.query_params.get("tab_token", "")
+    ok = db.heartbeat_checklist_lock(checklist_id, tab_token)
     if not ok:
         lock = db.get_checklist_lock(checklist_id)
         locked_by = lock["user_name"] if lock else "알 수 없음"
@@ -543,14 +571,20 @@ def heartbeat_checklist_lock(checklist_id: int, request: Request):
 def unlock_checklist(checklist_id: int, request: Request):
     user = auth.get_current_user(request)
     if user:
-        db.release_checklist_lock(checklist_id, user["name"])
+        tab_token = request.query_params.get("tab_token") or None
+        if tab_token:  # tab_token 없으면 no-op — 다른 편집자 잠금 보호
+            db.release_checklist_lock(checklist_id, tab_token)
     return {"ok": True}
 
 
 @app.get("/api/checklists/{checklist_id}/lock")
-def get_checklist_lock_status(checklist_id: int):
+def get_checklist_lock_status(checklist_id: int, request: Request):
     lock = db.get_checklist_lock(checklist_id)
-    return {"locked_by": lock["user_name"] if lock else None}
+    if not lock:
+        return {"locked_by": None, "lock_type": None}
+    user = auth.get_current_user(request)
+    lock_type = "self_tab" if (user and lock["user_name"] == user["name"]) else "other_user"
+    return {"locked_by": lock["user_name"], "lock_type": lock_type}
 
 
 @app.patch("/api/checklists/{checklist_id}/is-locked")
@@ -1992,8 +2026,9 @@ async def update_doc(meeting_id: int, request: Request):
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
     db.update_meeting(meeting_id, title, content, user["id"], meeting_date, is_team_doc, is_public, team_share)
-    # 저장 완료 시 잠금 해제
-    db.release_meeting_lock(meeting_id, user["name"])
+    # 저장 완료 시 잠금 해제 (tab_token 없으면 강제 해제)
+    tab_token = data.get("tab_token") or None
+    db.release_meeting_lock(meeting_id, tab_token)
     return {"ok": True}
 
 
@@ -2022,7 +2057,8 @@ async def rotate_doc_visibility(meeting_id: int, request: Request):
 @app.post("/api/doc/{meeting_id}/lock")
 def lock_doc(meeting_id: int, request: Request):
     user = _require_editor(request)
-    ok = db.acquire_meeting_lock(meeting_id, user["name"])
+    tab_token = request.query_params.get("tab_token", "")
+    ok = db.acquire_meeting_lock(meeting_id, user["name"], tab_token)
     if not ok:
         lock = db.get_meeting_lock(meeting_id)
         locked_by = lock["user_name"] if lock else "알 수 없음"
@@ -2032,8 +2068,13 @@ def lock_doc(meeting_id: int, request: Request):
 
 @app.put("/api/doc/{meeting_id}/lock")
 def heartbeat_doc_lock(meeting_id: int, request: Request):
-    user = _require_editor(request)
-    db.heartbeat_meeting_lock(meeting_id, user["name"])
+    _require_editor(request)
+    tab_token = request.query_params.get("tab_token", "")
+    ok = db.heartbeat_meeting_lock(meeting_id, tab_token)
+    if not ok:
+        lock = db.get_meeting_lock(meeting_id)
+        locked_by = lock["user_name"] if lock else "알 수 없음"
+        raise HTTPException(status_code=423, detail=f"{locked_by}님이 편집 중입니다.")
     return {"ok": True}
 
 
@@ -2041,14 +2082,20 @@ def heartbeat_doc_lock(meeting_id: int, request: Request):
 def unlock_doc(meeting_id: int, request: Request):
     user = auth.get_current_user(request)
     if user:
-        db.release_meeting_lock(meeting_id, user["name"])
+        tab_token = request.query_params.get("tab_token") or None
+        if tab_token:  # tab_token 없으면 no-op — 다른 편집자 잠금 보호
+            db.release_meeting_lock(meeting_id, tab_token)
     return {"ok": True}
 
 
 @app.get("/api/doc/{meeting_id}/lock")
-def get_doc_lock(meeting_id: int):
+def get_doc_lock(meeting_id: int, request: Request):
     lock = db.get_meeting_lock(meeting_id)
-    return {"locked_by": lock["user_name"] if lock else None}
+    if not lock:
+        return {"locked_by": None, "lock_type": None}
+    user = auth.get_current_user(request)
+    lock_type = "self_tab" if (user and lock["user_name"] == user["name"]) else "other_user"
+    return {"locked_by": lock["user_name"], "lock_type": lock_type}
 
 
 @app.get("/api/doc/calendar")
