@@ -969,7 +969,8 @@
 {% block scripts %}
 <script src="/static/js/wu-editor.js"></script>
 <script>
-const IS_EDITOR = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
+const IS_EDITOR    = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
+const IS_LOGGED_IN = {{ 'true' if user else 'false' }};
 const ALL_PROJECTS = {{ projects | tojson | safe }};
 const TAB_TOKEN = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getItem(k); if (!t) { t = (crypto?.randomUUID?.() ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); })); sessionStorage.setItem(k, t); } return t; })();
 
@@ -1222,7 +1223,11 @@ function _setLockState(lockedBy, lockType) {
   const overlay = document.getElementById('ck-lock-overlay');
 
   const subEl = document.getElementById('ck-lock-sub');
-  if (lockType === 'self_tab') {
+  if (!IS_LOGGED_IN) {
+    // 비로그인 사용자에게는 편집 잠금 배너를 표시하지 않음
+    if (overlay) overlay.style.display = 'none';
+    if (subEl) subEl.textContent = '';
+  } else if (lockType === 'self_tab') {
     document.getElementById('ck-lock-msg').textContent = '동일 문서를 다른 탭에서 편집 중입니다.';
     if (subEl) subEl.textContent = '편집이 완료될 때까지 체크박스를 변경할 수 없습니다.';
     if (overlay) overlay.style.display = '';

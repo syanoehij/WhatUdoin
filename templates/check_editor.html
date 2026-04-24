@@ -98,7 +98,7 @@
 {% block content %}
 <div class="editor-page">
 
-  {% if locked_by %}
+  {% if locked_by and user %}
   <div class="lock-banner" id="lock-banner">
     <span class="lock-banner-icon">🔒</span>
     {% if lock_type == 'self_tab' %}
