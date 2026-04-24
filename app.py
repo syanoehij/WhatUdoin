@@ -426,6 +426,7 @@ async def create_checklist(request: Request):
     content = data.get("content", "").strip()
     is_public = 1 if data.get("is_public") else 0
     cid = db.create_checklist(project, title, content, user["name"], is_public=is_public)
+    wu_broker.publish("checks.changed", {"id": cid, "action": "create"})
     return {"id": cid}
 
 
@@ -499,6 +500,7 @@ async def update_checklist(checklist_id: int, request: Request):
     # 프로젝트에서 미지정으로 이동 → 항상 외부 비공개
     if old_proj and not project:
         db.update_checklist_visibility(checklist_id, 0)
+    wu_broker.publish("checks.changed", {"id": checklist_id, "action": "update"})
     return {"ok": True}
 
 
@@ -519,6 +521,7 @@ async def update_checklist_content(checklist_id: int, request: Request):
     content = data.get("content", "")
     save_history = data.get("save_history", True)
     db.update_checklist_content(checklist_id, content, user["name"], save_history=save_history)
+    wu_broker.publish("checks.changed", {"id": checklist_id, "action": "content"})
     return {"ok": True}
 
 
@@ -533,6 +536,7 @@ async def restore_checklist_history(checklist_id: int, history_id: int, request:
     ok = db.restore_checklist_from_history(checklist_id, history_id, user["name"])
     if not ok:
         raise HTTPException(status_code=404, detail="이력을 찾을 수 없습니다.")
+    wu_broker.publish("checks.changed", {"id": checklist_id, "action": "content"})
     return db.get_checklist(checklist_id)
 
 
@@ -544,6 +548,7 @@ def delete_checklist(checklist_id: int, request: Request):
         raise HTTPException(status_code=404)
     db.release_checklist_lock(checklist_id)  # 삭제 시 강제 해제
     db.delete_checklist(checklist_id, deleted_by=user["name"], team_id=user.get("team_id"))
+    wu_broker.publish("checks.changed", {"id": checklist_id, "action": "delete"})
     return {"ok": True}
 
 
@@ -558,6 +563,7 @@ def lock_checklist(checklist_id: int, request: Request):
         lock = db.get_checklist_lock(checklist_id)
         locked_by = lock["user_name"] if lock else "알 수 없음"
         raise HTTPException(status_code=423, detail=f"{locked_by}님이 편집 중입니다.")
+    wu_broker.publish("checks.changed", {"id": checklist_id, "action": "lock"})
     return {"ok": True}
 
 
@@ -580,6 +586,7 @@ def unlock_checklist(checklist_id: int, request: Request):
         tab_token = request.query_params.get("tab_token") or None
         if tab_token:  # tab_token 없으면 no-op — 다른 편집자 잠금 보호
             db.release_checklist_lock(checklist_id, tab_token)
+            wu_broker.publish("checks.changed", {"id": checklist_id, "action": "unlock"})
     return {"ok": True}
 
 

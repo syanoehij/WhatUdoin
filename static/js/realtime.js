@@ -78,6 +78,13 @@
       } catch (ex) {}
     });
 
+    _es.addEventListener('checks.changed', function (e) {
+      try {
+        var d = JSON.parse(e.data);
+        _dispatch('wu:checks:changed', d);
+      } catch (ex) {}
+    });
+
     _es.onerror = function () {
       try { _es.close(); } catch (e) {}
       _es = null;

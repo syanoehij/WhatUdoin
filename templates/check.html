@@ -1377,7 +1377,7 @@ function _stopHeartbeat() {
 }
 
 // ── 뷰어 실시간 동기화 폴링 ───────────────────────────────
-const POLL_INTERVAL = 5000; // 5초
+const POLL_INTERVAL = 30000; // SSE가 주 경로, 폴링은 30초 백업
 
 async function _doPoll(id) {
   if (_editMode || !_curId || _curId !== id) { _stopPoll(); return; }
@@ -1481,6 +1481,37 @@ function _stopCountdown() {
   const badge = document.getElementById('ck-poll-badge');
   if (badge) { badge.classList.remove('active', 'flash'); badge.textContent = ''; }
 }
+
+// ── SSE 실시간 동기화 ─────────────────────────────────────
+(function () {
+  if (typeof wuDebounce !== 'function') return;
+  window.addEventListener('wu:checks:changed', wuDebounce(function (e) {
+    var d = e.detail || {};
+    var evId = Number(d.id);
+    var action = d.action;
+    // 목록 변경 (신규·삭제·제목/프로젝트 변경)
+    if (action === 'create' || action === 'delete' || action === 'update') {
+      loadAll();
+    }
+    // 현재 열린 체크리스트의 내용·락 변경 → 폴링 즉시 실행
+    if (_curId && evId === _curId && (action === 'content' || action === 'lock' || action === 'unlock')) {
+      _doPoll(_curId);
+      _resetCountdown();
+    }
+  }, 300));
+
+  // 일정 상태 변경 시 연동 체크박스 재동기화 (_doPoll의 updated_at 가드를 우회)
+  window.addEventListener('wu:events:changed', wuDebounce(function () {
+    if (!_curId || !_curItem) return;
+    if (document.visibilityState === 'hidden') return;
+    var viewerEl = document.getElementById('ck-viewer');
+    if (!viewerEl) return;
+    // renderViewer와 동일하게 첫 줄 H1을 제거한 content 사용 (data-mdline 기준 일치)
+    var raw = _curItem.content || '';
+    var displayContent = /^\s*#\s/.test(raw) ? raw.replace(/^\s*#[^\n]*\n*/, '') : raw;
+    _syncLinkedCheckboxes(displayContent, viewerEl);
+  }, 300));
+})();
 
 function exportChecklist() {
   if (!_curId) return;

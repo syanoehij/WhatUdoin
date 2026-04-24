@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-04-25",
+      "phase": "28차 2단계",
+      "phase_class": "phase-2",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>체크 — SSE 기반 실시간 동기화",
+          "detail_html": "<ul>\n              <li><b>체크리스트 목록·내용·잠금 변경</b> 시 서버가 <code>checks.changed</code> SSE 이벤트를 발행(<code>app.py</code> 7곳: 생성·수정·내용·기록 복원·삭제·잠금·잠금 해제). 뷰어 페이지가 이벤트를 수신해 목록 또는 현재 체크리스트를 즉시 갱신</li>\n              <li>기존 5초 폴링을 <b>30초 백업 폴링</b>으로 완화 — SSE가 주 경로, 폴링은 네트워크 단절 복구 보조</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 일정 연동 체크박스 실시간 미갱신 수정",
+          "detail_html": "<ul>\n              <li><b>원인</b> — 일정 연동 체크박스의 상태는 체크리스트 내용이 아닌 연동된 일정의 <code>kanban_status</code>에서 결정됨. 칸반에서 일정 상태가 바뀌어도 <code>checks.changed</code> 이벤트가 발생하지 않고, <code>_doPoll</code>의 <code>updated_at</code> 조기 반환 로직이 <code>_syncLinkedCheckboxes</code> 호출을 건너뜀</li>\n              <li><b>수정</b> — <code>wu:events:changed</code> 리스너 추가: 일정 변경 SSE 수신 시 뷰어가 열려 있으면 <code>_syncLinkedCheckboxes</code>를 직접 호출해 연동 체크박스 상태를 즉시 재동기화. <code>renderViewer</code>와 동일하게 첫 줄 H1 제거 후 <code>displayContent</code> 기준으로 <code>data-mdline</code> 줄 번호 맞춤</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-25",
       "phase": "28차 1단계",
       "phase_class": "phase-1",
       "entries": [
