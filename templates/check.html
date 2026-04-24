@@ -1294,7 +1294,7 @@ function _showViewerMode() {
   if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
 
   // 잠금 배너 + 뷰어 항상 노출 (배너만 표시 여부 다름)
-  document.getElementById('ck-lock-overlay').style.display = _lockedByOther ? '' : 'none';
+  document.getElementById('ck-lock-overlay').style.display = (_lockedByOther && IS_LOGGED_IN) ? '' : 'none';
   document.getElementById('ck-viewer-wrap').style.display  = '';
   renderViewer(_curItem.content);
 
