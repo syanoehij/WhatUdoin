@@ -697,5 +697,15 @@ async function rotateVis(docId, ev) {
   if (selectedYM === '__all__') renderAllList(filtered);
   else renderDocList(selectedYM, byMonth);
 }
+
+// 실시간 동기화 — 문서 생성·삭제·공개범위 변경 시 페이지 새로고침
+(function () {
+  if (typeof wuDebounce !== 'function') return;
+  var _reload = wuDebounce(function () {
+    if (typeof wuShouldSuppressRefetch === 'function' && wuShouldSuppressRefetch()) return;
+    location.reload();
+  }, 800);
+  window.addEventListener('wu:docs:changed', _reload);
+})();
 </script>
 {% endblock %}

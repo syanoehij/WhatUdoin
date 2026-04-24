@@ -2074,6 +2074,7 @@ async def create_doc(request: Request):
         title, content, user.get("team_id"), user["id"],
         meeting_date, is_team_doc, is_public, team_share
     )
+    wu_broker.publish("docs.changed", {"action": "create", "id": meeting_id})
     return {"id": meeting_id}
 
 
@@ -2119,6 +2120,7 @@ async def rotate_doc_visibility(meeting_id: int, request: Request):
         elif (is_pub, t_share) == (0, 1): new_pub, new_share = 1, 0
         else:                              new_pub, new_share = 0, 0
     db.update_meeting_visibility(meeting_id, is_team, new_pub, new_share)
+    wu_broker.publish("docs.changed", {"action": "update", "id": meeting_id})
     return {"ok": True, "is_team_doc": is_team, "is_public": new_pub, "team_share": new_share}
 
 
@@ -2223,6 +2225,7 @@ def delete_doc(meeting_id: int, request: Request):
     if not _can_write_doc(user, doc):
         raise HTTPException(status_code=403, detail="삭제 권한이 없습니다.")
     db.delete_meeting(meeting_id, deleted_by=user["name"])
+    wu_broker.publish("docs.changed", {"action": "delete", "id": meeting_id})
     return {"ok": True}
 
 
