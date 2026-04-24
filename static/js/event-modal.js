@@ -938,7 +938,6 @@ async function openKDetail(id) {
     ['프로젝트', e.project     || '-'],
     ['기간',     fmtD(e.start_datetime) + (e.end_datetime ? ' ~ ' + fmtD(e.end_datetime) : '')],
     ['담당자',   e.assignee    || '-'],
-    ['장소',     e.location    || '-'],
     ['내용',     e.description || '-'],
   ];
   document.getElementById('kdetail-body').innerHTML = rows.map(([label, val]) => `
