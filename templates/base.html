@@ -714,8 +714,18 @@
         <h2>⚙️ 사용자 설정</h2>
         <button class="icon-btn" onclick="closeUserSettings()">✕</button>
       </div>
-      <p class="text-muted" style="font-size:0.82rem;margin-top:6px;">설정 항목은 추후 추가될 예정입니다.</p>
-      <div class="modal-actions">
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:16px;">
+        <!-- 로컬 저장 데이터 초기화 -->
+        <div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;">
+          <div style="font-size:0.88rem;font-weight:600;margin-bottom:4px;">로컬 저장 데이터 초기화</div>
+          <p class="text-muted" style="font-size:0.8rem;margin:0 0 10px;">
+            캘린더 뷰·날짜, 칸반 필터, 문서 정렬 등 브라우저에 저장된 화면 상태와 HTTPS 연결 캐시를 모두 지웁니다.
+            페이지가 느리거나 화면이 이상하게 동작할 때 시도해 보세요. 초기화 후 페이지가 새로고침됩니다.
+          </p>
+          <button class="btn btn-secondary" id="clear-storage-btn" onclick="clearLocalStorage()" style="color:#d63031;border-color:#d63031;">초기화</button>
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:16px;">
         <div></div>
         <button class="btn" onclick="closeUserSettings()">닫기</button>
       </div>
@@ -895,6 +905,12 @@
     function closeUserSettings(e) {
       if (e && e.target !== document.getElementById('user-settings-overlay')) return;
       document.getElementById('user-settings-overlay').classList.add('hidden');
+    }
+    function clearLocalStorage() {
+      var btn = document.getElementById('clear-storage-btn');
+      if (btn) { btn.disabled = true; btn.textContent = '초기화 중...'; }
+      localStorage.clear();
+      location.reload();
     }
 
     async function doChangePw() {

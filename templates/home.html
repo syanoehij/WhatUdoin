@@ -458,6 +458,17 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+// 실시간 동기화
+(function () {
+  if (typeof wuDebounce !== 'function') return;
+  var _reload = wuDebounce(function () {
+    if (typeof wuShouldSuppressRefetch === 'function' && wuShouldSuppressRefetch()) return;
+    if (homeDragSrcId !== null) return;
+    if (CURRENT_USER) loadUser(); else loadGuest();
+  }, 300);
+  window.addEventListener('wu:events:changed', _reload);
+})();
+
 window.__pageSearch = {
   enabled: true,
   placeholder: '일정 제목·프로젝트 검색…',

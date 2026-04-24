@@ -1172,18 +1172,23 @@ async def sse_stream(request: Request):
     _require_editor(request)
 
     async def gen():
+        import time
         queue = await wu_broker.subscribe()
+        _last_ping = time.monotonic()
         try:
             yield ": connected\n\n"
             while True:
-                if await request.is_disconnected():
-                    break
                 try:
-                    ev, data = await asyncio.wait_for(queue.get(), timeout=25.0)
+                    ev, data = await asyncio.wait_for(queue.get(), timeout=3.0)
                     yield f"event: {ev}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
                 except asyncio.TimeoutError:
-                    # 하트비트 — 연결 유지
-                    yield ": ping\n\n"
+                    # 3초마다 disconnect 감지 — 좀비 연결 빠른 정리
+                    if await request.is_disconnected():
+                        break
+                    # 25초마다 ping (프록시·브라우저 타임아웃 방지)
+                    if time.monotonic() - _last_ping >= 25.0:
+                        yield ": ping\n\n"
+                        _last_ping = time.monotonic()
         finally:
             wu_broker.unsubscribe(queue)
 
@@ -2095,7 +2100,10 @@ async def update_doc(meeting_id: int, request: Request):
     team_share   = 1 if data.get("team_share", False) else 0
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
+    old_title = (doc.get("title") or "").strip()
     db.update_meeting(meeting_id, title, content, user["id"], meeting_date, is_team_doc, is_public, team_share)
+    if title != old_title:
+        wu_broker.publish("docs.changed", {"action": "update", "id": meeting_id})
     # 저장 완료 시 잠금 해제 (tab_token 없으면 강제 해제)
     tab_token = data.get("tab_token") or None
     db.release_meeting_lock(meeting_id, tab_token)

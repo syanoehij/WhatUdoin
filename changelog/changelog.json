@@ -13,7 +13,22 @@
         {
           "icon": "🔄",
           "title_html": "<span class=\"cl-tag feat\">feat</span>문서 목록 — SSE 기반 자동 갱신",
-          "detail_html": "<ul>\n              <li>문서 목록(<code>/doc</code>)은 서버 렌더 데이터(<code>ALL_DOCS</code>)를 사용하므로 캘린더·칸반·간트와 달리 <code>location.reload()</code> 방식으로 적용</li>\n              <li>팀원이 문서를 <b>생성·삭제·공개범위 변경</b>하면 서버가 <code>docs.changed</code> SSE 이벤트를 발행 → 800ms 디바운스 후 목록 자동 새로고침. 문서 본문 저장(자동 저장 포함)은 목록에 영향 없으므로 제외</li>\n              <li>모달 열림·입력 포커스 중에는 새로고침 억제(<code>wuShouldSuppressRefetch</code>)</li>\n            </ul>"
+          "detail_html": "<ul>\n              <li>문서 목록(<code>/doc</code>)은 서버 렌더 데이터(<code>ALL_DOCS</code>)를 사용하므로 캘린더·칸반·간트와 달리 <code>location.reload()</code> 방식으로 적용</li>\n              <li>팀원이 문서를 <b>생성·삭제·공개범위 변경·제목 변경</b>하면 서버가 <code>docs.changed</code> SSE 이벤트를 발행 → 800ms 디바운스 후 목록 자동 새로고침. 본문 자동 저장은 제목 비교 후 변경 없으면 이벤트 생략</li>\n              <li>모달 열림·입력 포커스 중에는 새로고침 억제(<code>wuShouldSuppressRefetch</code>)</li>\n            </ul>"
+        },
+        {
+          "icon": "🔄",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>내 스케줄 — 칸반 실시간 동기화",
+          "detail_html": "<ul>\n              <li>홈(<code>/</code>) 내 스케줄 칸반에 <code>wu:events:changed</code> 리스너 추가 → 팀원의 일정 변경이 300ms 내 반영</li>\n              <li>카드 드래그 중(<code>homeDragSrcId</code>)에는 갱신 억제</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>공통 — SSE 좀비 연결로 인한 페이지 전환 시 로딩 지연 수정",
+          "detail_html": "<ul>\n              <li><b>원인</b> — 기존 SSE 루프가 <code>queue.get(timeout=25초)</code>로 대기하다 타임아웃 후에야 disconnect를 감지해, 페이지 이탈 후 최대 25초간 서버에 좀비 연결이 잔존. 간트↔칸반 반복 이동 시 좀비가 누적되어 uvicorn HTTP 연결 슬롯을 점유 → API 요청 지연</li>\n              <li><b>수정</b> — <code>queue.get</code> timeout 25초 → 3초로 단축, 3초마다 disconnect 체크. ping은 기존과 동일하게 25초 간격 유지</li>\n              <li><code>realtime.js</code>에 <code>beforeunload</code> 핸들러 추가 — 페이지 이탈 시 EventSource를 명시적으로 닫아 서버가 TCP FIN을 즉시 수신하도록 개선</li>\n              <li>SSE <code>open</code> 이벤트의 최초 연결 시 불필요한 refetch 제거 — 페이지 로드 시 이미 정상 fetch 중인데 300ms 후 재fetch가 중복 발생하던 문제 해소</li>\n            </ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span>사용자 설정 — 로컬 저장 데이터 초기화 버튼 추가",
+          "detail_html": "<ul>\n              <li>프로필 → 설정 모달에 '로컬 저장 데이터 초기화' 항목 추가</li>\n              <li>캘린더 뷰·날짜, 칸반 필터, 문서 정렬, HTTPS 연결 캐시 등 브라우저 localStorage 전체를 한 번에 지우고 페이지를 새로고침. 화면이 이상하게 동작하거나 느릴 때 사용</li>\n            </ul>"
         }
       ]
     },
