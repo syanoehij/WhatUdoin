@@ -1129,9 +1129,11 @@ async function openBindCheckPicker() {
   // 프로젝트 필터 옵션 populate
   const projSel = document.getElementById('bind-check-project-filter');
   const projs = [...new Set(_boundChecklistAll.map(c => c.project).filter(Boolean))].sort();
+  const hasUnassigned = _boundChecklistAll.some(c => !c.project);
   if (projSel) {
     projSel.innerHTML = '<option value="">전체 프로젝트</option>' +
-      projs.map(p => `<option value="${esc(p).replace(/"/g, '&quot;')}">${esc(p)}</option>`).join('');
+      projs.map(p => `<option value="${esc(p).replace(/"/g, '&quot;')}">${esc(p)}</option>`).join('') +
+      (hasUnassigned ? '<option value="__unassigned__">미지정</option>' : '');
     // 현재 일정 모달의 프로젝트가 있으면 자동 선택
     const fProj = document.getElementById('f-project');
     const curProj = fProj ? fProj.value : '';
@@ -1159,10 +1161,11 @@ function renderBindCheckList() {
   if (!list) return;
   const proj = projSel ? projSel.value : '';
   const q    = searchEl ? searchEl.value.toLowerCase() : '';
-  const items = _boundChecklistAll.filter(c =>
-    (!proj || c.project === proj) &&
-    (!q || (c.title || '').toLowerCase().includes(q) || (c.project || '').toLowerCase().includes(q))
-  );
+  const items = _boundChecklistAll.filter(c => {
+    if (proj === '__unassigned__') { if (c.project) return false; }
+    else if (proj && c.project !== proj) return false;
+    return !q || (c.title || '').toLowerCase().includes(q) || (c.project || '').toLowerCase().includes(q);
+  });
   if (!items.length) {
     list.innerHTML = '<div style="color:#aaa; padding:24px; text-align:center;">검색 결과 없음</div>';
     return;

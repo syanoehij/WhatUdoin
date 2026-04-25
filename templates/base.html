@@ -679,7 +679,7 @@
               <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
                 <button type="button" class="btn btn-sm" id="btn-bind-check" onclick="openBindCheckPicker()">🔗 체크 바인딩</button>
                 <button type="button" class="btn btn-sm hidden" id="btn-unbind-check" onclick="unbindCheck()">바인딩 해제</button>
-                <a id="bound-check-link" href="#" target="_blank" class="btn btn-sm hidden" style="text-decoration:none;">📋 바인된 체크 보기</a>
+                <a id="bound-check-link" href="#" target="_blank" class="btn btn-sm hidden" style="text-decoration:none;">📋 바인딩 된 체크로 이동</a>
               </div>
             </div>
             <div class="form-row">
@@ -726,7 +726,7 @@
 
   <!-- ── 체크 바인딩: 체크리스트 선택 sub-modal ── -->
   <div id="bind-check-modal-overlay" class="modal-overlay hidden" onclick="closeBindCheckPicker(event)" style="z-index:2100;">
-    <div class="modal bind-check-modal" style="max-width:480px; max-height:80vh; display:flex; flex-direction:column;">
+    <div class="modal bind-check-modal" style="max-width:620px; max-height:80vh; display:flex; flex-direction:column;">
       <div class="modal-header" style="padding:16px 20px 12px; border-bottom:1px solid var(--border);">
         <h2 style="margin:0; font-size:16px;">체크 선택</h2>
         <button type="button" onclick="closeBindCheckPicker()" style="background:none;border:none;cursor:pointer;font-size:18px; line-height:1;">✕</button>
@@ -737,7 +737,9 @@
         </select>
         <input type="text" id="bind-check-search" placeholder="제목 검색..."
                style="flex:2; padding:6px 10px; border:1px solid var(--border); border-radius:6px;"
-               oninput="renderBindCheckList()" />
+               oninput="renderBindCheckList()"
+               onkeydown="if(event.key==='Enter') renderBindCheckList()" />
+        <button type="button" class="btn btn-sm btn-primary" onclick="renderBindCheckList()" style="flex-shrink:0;">조회</button>
       </div>
       <div id="bind-check-list" style="overflow-y:auto; flex:1; padding:0 20px 16px;"></div>
     </div>
