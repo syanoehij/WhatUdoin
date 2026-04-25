@@ -213,6 +213,7 @@ def init_db():
             ("team_id",    "INTEGER DEFAULT NULL"),
             ("is_public",  "INTEGER DEFAULT 0"),
             ("is_locked",  "INTEGER NOT NULL DEFAULT 0"),
+            ("is_active",  "INTEGER DEFAULT 1"),
         ])
         # 미지정 체크리스트(project 없음)는 외부 비공개 고정 — 1회 초기화
         if _table_exists(conn, "checklists") and not conn.execute("SELECT 1 FROM settings WHERE key='ck_unset_priv_reset_v1'").fetchone():
@@ -2059,7 +2060,7 @@ def create_checklist(project: str, title: str, content: str, created_by: str, is
     return cur.lastrowid
 
 
-def get_checklists(project: str = None, viewer=None) -> list:
+def get_checklists(project: str = None, viewer=None, active_only: bool | None = None) -> list:
     inactive_filter = """
         AND (project IS NULL OR project = ''
              OR project NOT IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))
@@ -2075,23 +2076,37 @@ def get_checklists(project: str = None, viewer=None) -> list:
           )
         )
     """ if viewer is None else ""
+    active_filter = ""
+    if active_only is True:
+        active_filter = " AND COALESCE(is_active, 1) = 1"
+    elif active_only is False:
+        active_filter = " AND COALESCE(is_active, 1) = 0"
     private_proj_filter = ""  # public_filter에 통합됨
     with get_conn() as conn:
         if project is None:
             rows = conn.execute(
-                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter} ORDER BY updated_at DESC"
+                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
             ).fetchall()
         elif project == "":
             # 미지정 (project가 NULL 또는 빈 문자열인 항목)
             rows = conn.execute(
-                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter} ORDER BY updated_at DESC"
+                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
             ).fetchall()
         else:
             rows = conn.execute(
-                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter} ORDER BY updated_at DESC",
+                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC",
                 (project,)
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+def set_checklist_active(checklist_id: int, is_active: int):
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE checklists SET is_active = ?, updated_at = ? WHERE id = ?",
+            (is_active, now, checklist_id)
+        )
 
 
 def set_checklist_is_locked(checklist_id: int, locked: int) -> None:

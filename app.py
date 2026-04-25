@@ -410,9 +410,10 @@ def check_history_page(request: Request, checklist_id: int):
 # ── 체크리스트 API ────────────────────────────────────────────
 
 @app.get("/api/checklists")
-def list_checklists(request: Request, project: str = None):
+def list_checklists(request: Request, project: str = None, active: int = None):
     viewer = auth.get_current_user(request)
-    return db.get_checklists(project=project, viewer=viewer)
+    active_only = None if active is None else bool(active)
+    return db.get_checklists(project=project, viewer=viewer, active_only=active_only)
 
 
 @app.post("/api/checklists")
@@ -439,6 +440,19 @@ def get_checklist(checklist_id: int, request: Request):
     if not _can_read_checklist(user, item):
         raise HTTPException(status_code=404)
     return item
+
+
+@app.patch("/api/checklists/{checklist_id}/status")
+async def toggle_checklist_status(checklist_id: int, request: Request):
+    _require_editor(request)
+    item = db.get_checklist(checklist_id)
+    if not item:
+        raise HTTPException(status_code=404)
+    data = await request.json()
+    is_active = 1 if data.get("is_active", True) else 0
+    db.set_checklist_active(checklist_id, is_active)
+    wu_broker.publish("checks.changed", {"id": checklist_id, "action": "update"})
+    return {"ok": True, "is_active": is_active}
 
 
 @app.patch("/api/checklists/bulk-visibility")

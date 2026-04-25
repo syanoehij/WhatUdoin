@@ -190,11 +190,16 @@
   .pm-ev-row:last-child { border-bottom: none; }
   .pm-ev-row:hover { background: var(--surface-2); }
   .pm-ev-row.pm-ev-child {
-    margin-left: 20px;
-    border-left: 2px solid #a29bfe;
-    padding-left: 10px;
-    background: var(--surface-1, #f8f9fa);
+    margin-left: 16px;
+    padding-left: 8px;
     font-size: 0.9em;
+  }
+  .pm-ev-title[data-edit-id] {
+    cursor: pointer;
+  }
+  .pm-ev-title[data-edit-id]:hover {
+    text-decoration: underline;
+    color: var(--accent);
   }
   .kbn-badge {
     font-size: 0.68rem; font-weight: 700; padding: 1px 6px;
@@ -385,7 +390,42 @@
     z-index: 9999;
   }
   .pm-toast.show { opacity: 1; }
+
+  /* ── 사이드 드로어 (일정·체크리스트 공용) ── */
+  .pm-side-drawer {
+    position: fixed; right: 0; top: 0; bottom: 0; width: 720px; max-width: 90vw;
+    background: var(--surface); border-left: 1px solid var(--border);
+    z-index: 2000; display: flex; flex-direction: column;
+    transform: translateX(100%); transition: transform 0.22s ease;
+    box-shadow: -4px 0 28px rgba(0,0,0,0.13);
+  }
+  .pm-side-drawer.open { transform: translateX(0); }
+  .pm-side-drawer-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 16px; border-bottom: 1px solid var(--border);
+    flex-shrink: 0; gap: 10px;
+  }
+  .pm-side-drawer-title {
+    font-size: 1rem; font-weight: 700; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+  }
+  .pm-side-drawer-body {
+    flex: 1; overflow-y: auto; padding: 16px 20px;
+  }
+  /* 일정 뷰어 메타 그리드 */
+  .pm-ev-meta { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .pm-ev-meta-row { display: flex; gap: 8px; align-items: baseline; font-size: 0.87rem; }
+  .pm-ev-meta-label { color: var(--text-muted); white-space: nowrap; min-width: 64px; flex-shrink: 0; }
+  .pm-ev-meta-val { color: var(--text); }
+  .pm-ev-desc-box {
+    background: var(--surface-2); border-radius: 8px; padding: 12px 14px;
+    font-size: 0.87rem; color: var(--text); white-space: pre-wrap; line-height: 1.6;
+  }
+  .pm-ev-title[data-ck-id] { cursor: pointer; }
+  .pm-ev-title[data-ck-id]:hover { text-decoration: underline; color: var(--accent); }
 </style>
+<link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
+<script src="/static/lib/toastui-editor-all.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -527,6 +567,8 @@
       <div class="pm-events-wrap">
         <div class="pm-events-title">연결된 일정</div>
         <div id="det-events"></div>
+        <div class="pm-events-title" style="margin-top:18px;" id="det-journals-title">연결된 일지</div>
+        <div id="det-journals"></div>
         <div class="pm-events-title" style="margin-top:18px;" id="det-meetings-title">연결된 회의</div>
         <div id="det-meetings"></div>
         <div class="pm-events-title" style="margin-top:18px;" id="det-checklists-title">연결된 체크리스트</div>
@@ -537,6 +579,16 @@
 </div>
 
 <div class="pm-toast" id="pm-toast"></div>
+
+<!-- 사이드 드로어 (일정·체크리스트 공용) -->
+<div id="pm-sd-bg" onclick="closeSideDrawer()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.18);z-index:1999;"></div>
+<div id="pm-side-drawer" class="pm-side-drawer">
+  <div class="pm-side-drawer-header">
+    <span id="pm-sd-title" class="pm-side-drawer-title"></span>
+    <div id="pm-sd-actions" style="display:flex;gap:7px;align-items:center;flex-shrink:0;"></div>
+  </div>
+  <div id="pm-sd-body" class="pm-side-drawer-body"></div>
+</div>
 
 <!-- 비공개 전환 확인 모달 -->
 <div id="pm-confirm-overlay" style="
@@ -572,6 +624,115 @@ window._blockAutoRefresh = () => {
   return (create && create.classList.contains('visible')) ||
          (edit   && edit.classList.contains('visible'));
 };
+
+/* ── 일정 클릭 → 수정 모달 ── */
+async function openPmEventEdit(id) {
+  try {
+    const res = await fetch(`/api/events/${id}`);
+    if (!res.ok) return;
+    const ev = await res.json();
+    window.onEventSaved = loadProjectList;
+    openModal('', ev);
+  } catch {}
+}
+
+/* ── 사이드 드로어 공용 ── */
+let _pmCkViewer = null;
+
+function _openDrawer(title, actionsHtml) {
+  document.getElementById('pm-sd-title').textContent = title;
+  document.getElementById('pm-sd-actions').innerHTML = actionsHtml +
+    `<button class="pm-btn" onclick="closeSideDrawer()" style="font-size:1rem;padding:2px 9px;">✕</button>`;
+  document.getElementById('pm-sd-bg').style.display = '';
+  document.getElementById('pm-side-drawer').classList.add('open');
+}
+
+function closeSideDrawer() {
+  document.getElementById('pm-side-drawer').classList.remove('open');
+  document.getElementById('pm-sd-bg').style.display = 'none';
+}
+
+/* ── 일정 뷰어 드로어 ── */
+let _sdCurEventId = null;
+
+async function openEvDrawer(id) {
+  try {
+    const res = await fetch(`/api/events/${id}`);
+    if (!res.ok) return;
+    const ev = await res.json();
+    _sdCurEventId = id;
+
+    const TYPE_LABELS = { schedule: '일정', meeting: '회의', journal: '일지', subtask: '하위 업무' };
+    const KBN_LABELS  = { backlog: 'Backlog', todo: 'Todo', in_progress: 'In Progress',
+                          peer_review: 'Peer Review', done: 'Done', blocked: 'Blocked' };
+    const PRI_LABELS  = { low: '낮음', normal: '보통', high: '높음', critical: '긴급' };
+
+    const s  = (ev.start_datetime || '').slice(0, 10);
+    const en = (ev.end_datetime   || '').slice(0, 10);
+    const dateStr = en && en !== s ? `${s} ~ ${en}` : s || '미정';
+
+    const kbnBadge = ev.kanban_status
+      ? `<span class="kbn-badge kbn-${ev.kanban_status}" style="font-size:0.8rem;">${KBN_LABELS[ev.kanban_status] || ev.kanban_status}</span>` : '—';
+
+    function meta(label, val) {
+      if (!val) return '';
+      return `<div class="pm-ev-meta-row"><span class="pm-ev-meta-label">${label}</span><span class="pm-ev-meta-val">${val}</span></div>`;
+    }
+
+    const actionsHtml =
+      `<button class="pm-btn pm-btn-accent" style="font-size:0.78rem;padding:3px 10px;" onclick="openPmEventEdit(${id})">✏️ 일정 수정</button>`;
+
+    _openDrawer(ev.title, actionsHtml);
+
+    const body = document.getElementById('pm-sd-body');
+    body.innerHTML = `
+      <div class="pm-ev-meta">
+        ${meta('날짜', dateStr)}
+        ${meta('담당자', escHtml(ev.assignee || ''))}
+        ${meta('유형', TYPE_LABELS[ev.event_type] || ev.event_type || '일정')}
+        <div class="pm-ev-meta-row"><span class="pm-ev-meta-label">칸반 상태</span><span class="pm-ev-meta-val">${kbnBadge}</span></div>
+        ${meta('우선순위', PRI_LABELS[ev.priority] || ev.priority || '')}
+        ${meta('프로젝트', escHtml(ev.project || ''))}
+        ${meta('장소', escHtml(ev.location || ''))}
+      </div>
+      ${ev.description
+        ? `<div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;">설명</div>
+           <div class="pm-ev-desc-box">${escHtml(ev.description)}</div>`
+        : ''}`;
+  } catch {}
+}
+
+/* ── 체크리스트 뷰어 드로어 ── */
+async function openCkDrawer(id, title) {
+  _openDrawer(title,
+    `<a href="/check?id=${id}" target="_blank" rel="noopener"
+       class="pm-btn pm-btn-accent" style="font-size:0.78rem;padding:3px 10px;text-decoration:none;">↗ 체크 페이지</a>`);
+
+  const body = document.getElementById('pm-sd-body');
+  body.innerHTML = '<div style="color:var(--text-muted);padding:12px 0;">불러오는 중…</div>';
+
+  try {
+    const res = await fetch(`/api/checklists/${id}`);
+    if (!res.ok) throw new Error();
+    const item = await res.json();
+
+    if (_pmCkViewer) { try { _pmCkViewer.destroy(); } catch {} _pmCkViewer = null; }
+    body.innerHTML = '';
+
+    let content = item.content || '';
+    if (/^\s*#\s/.test(content)) content = content.replace(/^\s*#[^\n]*\n*/, '');
+    if (!content.trim()) { body.innerHTML = '<div style="color:var(--text-muted);padding:12px 0;font-style:italic;">내용 없음</div>'; return; }
+
+    _pmCkViewer = toastui.Editor.factory({
+      el: body, viewer: true, initialValue: content, usageStatistics: false,
+    });
+    if (typeof hljs !== 'undefined') {
+      setTimeout(() => body.querySelectorAll('pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); }), 100);
+    }
+  } catch {
+    body.innerHTML = '<div style="color:var(--text-muted);padding:12px 0;">불러오기 실패</div>';
+  }
+}
 
 /* ── 데이터 로드 ── */
 async function loadProjectList() {
@@ -718,73 +879,91 @@ function renderDetail(idx) {
     `;
   }
 
-  // 일정 목록 (회의·하위업무 제외, 하위업무는 부모 아래에 들여쓰기)
+  // 일정 목록 (회의·일지·하위업무 제외, 하위업무는 부모 아래에 들여쓰기)
   const evEl = document.getElementById('det-events');
-  const allEventsRaw = isUnset ? unsetVisibleEvents(p) : p.events.filter(e => e.event_type !== 'meeting');
+  const allEventsRaw = isUnset
+    ? unsetVisibleEvents(p).filter(e => e.event_type !== 'journal')
+    : p.events.filter(e => e.event_type !== 'meeting' && e.event_type !== 'journal');
   const subtasksByParent = {};
   allEventsRaw.filter(e => e.parent_event_id).forEach(s => {
     (subtasksByParent[s.parent_event_id] ||= []).push(s);
   });
+  const KANBAN_LABELS = {
+    backlog: 'Backlog', todo: 'Todo', in_progress: 'In Progress',
+    peer_review: 'Peer Review', done: 'Done', blocked: 'Blocked'
+  };
+  function renderPmEvent(e, isChild) {
+    const s  = (e.start_datetime || '').slice(0, 10);
+    const en = (e.end_datetime   || '').slice(0, 10);
+    const date     = en && en !== s ? `${s} ~ ${en}` : s;
+    const assignee = e.assignee
+      ? `<span class="pm-ev-assignee" title="${escHtml(e.assignee)}">${escHtml(e.assignee)}</span>` : '';
+    const kbnBadge = e.kanban_status
+      ? `<span class="kbn-badge kbn-${e.kanban_status}">${KANBAN_LABELS[e.kanban_status] || e.kanban_status}</span>`
+      : '';
+    let actionBtn;
+    const isDone = e.is_active === 0;
+    const evPub = e.is_public;
+    const visLocked = isDone || isClosed;
+    const exportEvBtn = `<a class="pm-btn pm-btn-accent" href="/api/events/${e.id}/export" rel="noopener" style="padding:2px 8px;font-size:0.74rem;text-decoration:none;display:inline-block;" title="마크다운으로 내보내기">📄 MD</a>`;
+    const evVisBtn = visLocked
+      ? `<button class="pm-btn pm-btn-danger" style="padding:2px 8px;font-size:0.74rem;opacity:0.5;cursor:not-allowed;" disabled title="완료/종료된 항목은 외부 비공개 고정">🔒 외부 비공개</button>`
+      : evPub === 1
+      ? `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="cycleEventVisibility(${e.id}, 1)" title="클릭: 외부 비공개로 변경">🔓 외부 공개</button>`
+      : evPub === 0
+      ? `<button class="pm-btn pm-btn-danger" style="padding:2px 8px;font-size:0.74rem;" onclick="cycleEventVisibility(${e.id}, 0)" title="클릭: 프로젝트 연동으로 변경">🔒 외부 비공개</button>`
+      : `<button class="pm-btn" style="padding:2px 8px;font-size:0.74rem;color:var(--text-muted);" onclick="cycleEventVisibility(${e.id}, null)" title="클릭: 외부 공개로 변경">🔄 프로젝트 연동</button>`;
+    if (isUnset) {
+      actionBtn = (!isDone
+        ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, false)">완료 처리</button>`
+        : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`)
+        + exportEvBtn + evVisBtn;
+    } else {
+      const doneBtn = !isDone
+        ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, false)">완료 처리</button>`
+        : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`;
+      actionBtn = `${doneBtn}${exportEvBtn}` +
+        (e.event_type !== 'subtask' ? `<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeEvent(${e.id})">프로젝트에서 제외</button>` : '') +
+        evVisBtn;
+    }
+    const rowStyle = isDone ? 'opacity:0.45;' : '';
+    const titleStyle = isDone ? 'text-decoration:line-through;' : '';
+    const childPrefix = isChild ? '<span style="color:var(--text-faint);margin-right:3px;">└</span>' : '';
+    const childClass = isChild ? ' pm-ev-child' : '';
+    return `
+      <div class="pm-ev-row${childClass}" style="${rowStyle}">
+        <span class="pm-ev-title" style="${titleStyle};cursor:pointer;" title="클릭하여 상세 보기" data-edit-id="${e.id}" onclick="openEvDrawer(${e.id})">${childPrefix}${escHtml(e.title)}</span>
+        ${kbnBadge}
+        <span class="pm-ev-date">${date}</span>
+        ${assignee}
+        ${actionBtn}
+      </div>`;
+  }
+
   const eventsToShow = allEventsRaw.filter(e => !e.parent_event_id);
   if (!eventsToShow.length) {
     evEl.innerHTML = '<div class="pm-empty">연결된 일정 없음</div>';
   } else {
-    const KANBAN_LABELS = {
-      backlog: 'Backlog', todo: 'Todo', in_progress: 'In Progress',
-      peer_review: 'Peer Review', done: 'Done', blocked: 'Blocked'
-    };
-    function renderPmEvent(e, isChild) {
-      const s  = (e.start_datetime || '').slice(0, 10);
-      const en = (e.end_datetime   || '').slice(0, 10);
-      const date     = en && en !== s ? `${s} ~ ${en}` : s;
-      const assignee = e.assignee
-        ? `<span class="pm-ev-assignee" title="${escHtml(e.assignee)}">${escHtml(e.assignee)}</span>` : '';
-      const kbnBadge = e.kanban_status
-        ? `<span class="kbn-badge kbn-${e.kanban_status}">${KANBAN_LABELS[e.kanban_status] || e.kanban_status}</span>`
-        : '';
-      let actionBtn;
-      const isDone = e.is_active === 0;
-      const evPub = e.is_public;
-      const visLocked = isDone || isClosed;
-      const exportEvBtn = `<a class="pm-btn pm-btn-accent" href="/api/events/${e.id}/export" rel="noopener" style="padding:2px 8px;font-size:0.74rem;text-decoration:none;display:inline-block;" title="마크다운으로 내보내기">📄 MD</a>`;
-      const evVisBtn = visLocked
-        ? `<button class="pm-btn pm-btn-danger" style="padding:2px 8px;font-size:0.74rem;opacity:0.5;cursor:not-allowed;" disabled title="완료/종료된 항목은 외부 비공개 고정">🔒 외부 비공개</button>`
-        : evPub === 1
-        ? `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="cycleEventVisibility(${e.id}, 1)" title="클릭: 외부 비공개로 변경">🔓 외부 공개</button>`
-        : evPub === 0
-        ? `<button class="pm-btn pm-btn-danger" style="padding:2px 8px;font-size:0.74rem;" onclick="cycleEventVisibility(${e.id}, 0)" title="클릭: 프로젝트 연동으로 변경">🔒 외부 비공개</button>`
-        : `<button class="pm-btn" style="padding:2px 8px;font-size:0.74rem;color:var(--text-muted);" onclick="cycleEventVisibility(${e.id}, null)" title="클릭: 외부 공개로 변경">🔄 프로젝트 연동</button>`;
-      if (isUnset) {
-        actionBtn = (!isDone
-          ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, false)">완료 처리</button>`
-          : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`)
-          + exportEvBtn + evVisBtn;
-      } else {
-        const doneBtn = !isDone
-          ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, false)">완료 처리</button>`
-          : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleEventStatus(${e.id}, true)">재개</button>`;
-        actionBtn = `${doneBtn}${exportEvBtn}` +
-          (e.event_type !== 'subtask' ? `<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeEvent(${e.id})">프로젝트에서 제외</button>` : '') +
-          evVisBtn;
-      }
-      const rowStyle = isDone ? 'opacity:0.45;' : '';
-      const titleStyle = isDone ? 'text-decoration:line-through;' : '';
-      const icon = e.event_type === 'journal' ? '📓 ' : e.event_type === 'subtask' ? '🧩 ' : '';
-      const childClass = isChild ? ' pm-ev-child' : '';
-      return `
-        <div class="pm-ev-row${childClass}" style="${rowStyle}">
-          <span class="pm-ev-title" style="${titleStyle}" title="${escHtml(e.title)}">${icon}${escHtml(e.title)}</span>
-          ${kbnBadge}
-          <span class="pm-ev-date">${date}</span>
-          ${assignee}
-          ${actionBtn}
-        </div>`;
-    }
     evEl.innerHTML = eventsToShow.map(e => {
       const parentHtml = renderPmEvent(e, false);
       const children   = (subtasksByParent[e.id] || []).map(sub => renderPmEvent(sub, true)).join('');
       return parentHtml + children;
     }).join('');
+  }
+
+  // 일지 목록
+  const jnTitleEl = document.getElementById('det-journals-title');
+  const jnEl      = document.getElementById('det-journals');
+  const journalsToShow = isUnset
+    ? unsetVisibleEvents(p).filter(e => e.event_type === 'journal')
+    : p.events.filter(e => e.event_type === 'journal');
+  if (!journalsToShow.length) {
+    jnTitleEl.style.display = 'none';
+    jnEl.style.display = 'none';
+  } else {
+    jnTitleEl.style.display = '';
+    jnEl.style.display = '';
+    jnEl.innerHTML = journalsToShow.map(e => renderPmEvent(e, false)).join('');
   }
 
   // 회의 목록
@@ -807,7 +986,7 @@ function renderDetail(idx) {
       const visLabel = `<button class="pm-btn" style="padding:2px 8px;font-size:0.74rem;color:var(--text-muted);cursor:default;" disabled title="회의 일정은 프로젝트 연동 고정">🔄 프로젝트 연동</button>`;
       return `
         <div class="pm-ev-row">
-          <span class="pm-ev-title" title="${escHtml(e.title)}">${escHtml(e.title)}</span>
+          <span class="pm-ev-title" style="cursor:pointer;" title="클릭하여 상세 보기" data-edit-id="${e.id}" onclick="openEvDrawer(${e.id})">${escHtml(e.title)}</span>
           <span class="pm-ev-date">${date}</span>
           ${assignee}
           ${exportEvBtn}${visLabel}
@@ -821,14 +1000,19 @@ function renderDetail(idx) {
   clTitleEl.style.display = '';
   clEl.style.display = '';
   clEl.innerHTML = '<div class="pm-empty">로딩 중...</div>';
-  loadChecklistsForProject(isUnset ? null : p.name, clEl);
+  loadChecklistsForProject(isUnset ? null : p.name, clEl, isClosed);
 }
 
-async function loadChecklistsForProject(projectName, clEl) {
+async function loadChecklistsForProject(projectName, clEl, isClosed) {
   try {
-    const url = projectName == null
-      ? `/api/checklists?project=`
-      : `/api/checklists?project=${encodeURIComponent(projectName)}`;
+    let url;
+    if (projectName == null) {
+      // 미지정: filter 상태에 맞게 active/inactive 분리
+      url = `/api/checklists?project=&active=${filter === 'closed' ? 0 : 1}`;
+    } else {
+      // 특정 프로젝트: is_active 무관하게 전부 표시 (프로젝트 자체 상태로 이미 구분됨)
+      url = `/api/checklists?project=${encodeURIComponent(projectName)}`;
+    }
     const res = await fetch(url);
     const items = await res.json();
     if (!items.length) {
@@ -836,19 +1020,32 @@ async function loadChecklistsForProject(projectName, clEl) {
       return;
     }
     clEl.innerHTML = items.map(c => {
+      const isDone   = c.is_active === 0;
+      const visLocked = isDone || isClosed;
+      const rowStyle   = isDone ? 'opacity:0.45;' : '';
+      const titleStyle = isDone ? 'text-decoration:line-through;' : '';
+
       const ckPub = c.is_public;
-      const ckVisBtn = ckPub === 1
+      const ckVisBtn = visLocked
+        ? `<button class="pm-btn pm-btn-danger" style="padding:2px 8px;font-size:0.74rem;opacity:0.5;cursor:not-allowed;" disabled title="완료/종료된 항목은 외부 비공개 고정">🔒 외부 비공개</button>`
+        : ckPub === 1
         ? `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="cycleChecklistVisibility(${c.id}, 1)" title="클릭: 외부 비공개로 변경">🔓 외부 공개</button>`
         : ckPub === 0
         ? `<button class="pm-btn pm-btn-danger" style="padding:2px 8px;font-size:0.74rem;" onclick="cycleChecklistVisibility(${c.id}, 0)" title="클릭: 프로젝트 연동으로 변경">🔒 외부 비공개</button>`
         : `<button class="pm-btn" style="padding:2px 8px;font-size:0.74rem;color:var(--text-muted);" onclick="cycleChecklistVisibility(${c.id}, null)" title="클릭: 외부 공개로 변경">🔄 프로젝트 연동</button>`;
-      const excludeBtn = projectName != null
+
+      const statusBtn = isClosed ? '' : (!isDone
+        ? `<button class="pm-btn pm-btn-close" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleChecklistStatus(${c.id}, false)">완료 처리</button>`
+        : `<button class="pm-btn pm-btn-resume" style="padding:2px 8px;font-size:0.74rem;" onclick="toggleChecklistStatus(${c.id}, true)">재개</button>`);
+
+      const excludeBtn = (!isClosed && projectName != null)
         ? `<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeChecklist(${c.id})">프로젝트에서 제외</button>`
         : '';
       return `
-        <div class="pm-ev-row">
-          <span class="pm-ev-title" title="${escHtml(c.title)}">${escHtml(c.title)}</span>
+        <div class="pm-ev-row" style="${rowStyle}">
+          <span class="pm-ev-title" data-ck-id="${c.id}" data-ck-title="${escHtml(c.title)}" style="${titleStyle}" title="클릭하여 내용 보기" onclick="openCkDrawer(${c.id}, this.dataset.ckTitle)">${escHtml(c.title)}</span>
           <span class="pm-ev-date">${(c.updated_at || '').slice(0, 10)}</span>
+          ${statusBtn}
           <a class="pm-btn pm-btn-accent" href="/api/checklists/${c.id}/export" rel="noopener" style="padding:2px 8px;font-size:0.74rem;text-decoration:none;display:inline-block;" title="마크다운/ZIP으로 내보내기">📄 MD</a>
           ${excludeBtn}
           ${ckVisBtn}
@@ -857,6 +1054,15 @@ async function loadChecklistsForProject(projectName, clEl) {
   } catch(e) {
     clEl.innerHTML = '<div class="pm-empty">로드 실패</div>';
   }
+}
+
+async function toggleChecklistStatus(id, active) {
+  const res = await fetch(`/api/checklists/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_active: active }),
+  });
+  if (res.ok && selIdx !== null) renderDetail(selIdx);
 }
 
 function hideDetail() {
@@ -1020,7 +1226,7 @@ async function cycleChecklistVisibility(id, cur) {
     const p = projects[selIdx];
     const isUnsetNow = p.name === '미지정';
     const clEl = document.getElementById('det-checklists');
-    if (clEl && clEl.style.display !== 'none') loadChecklistsForProject(isUnsetNow ? null : p.name, clEl);
+    if (clEl && clEl.style.display !== 'none') loadChecklistsForProject(isUnsetNow ? null : p.name, clEl, projects[selIdx].is_active === 0);
   }
 }
 
