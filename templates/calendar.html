@@ -155,6 +155,7 @@
   [data-theme="dark"] .cal-ctx-item.cal-ctx-danger { color: #f85149; }
   .cal-ctx-item.cal-ctx-danger:hover { background: rgba(207,34,46,0.08); }
   .fc-event.ctx-copied { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #calendar.hide-allday .wu-allday-event { display: none !important; }
 </style>
 {% endblock %}
 
@@ -165,13 +166,17 @@
     <select id="cal-proj-filter" onchange="applyProjFilter()">
       <option value="">전체</option>
     </select>
-    {% if user %}
-    <button class="toolbar-btn" id="my-only-btn" onclick="toggleMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
-    {% endif %}
     <label class="wheel-toggle-wrap" title="휠 스크롤로 날짜 이동">
       <span class="cal-toolbar-label">🖱 휠 이동</span>
       <span class="toggle-switch">
         <input type="checkbox" id="wheel-toggle-chk" onchange="toggleWheelNav(this.checked)" />
+        <span class="toggle-track"></span>
+      </span>
+    </label>
+    <label class="wheel-toggle-wrap" title="종일(all-day) 일정 표시/숨김">
+      <span class="cal-toolbar-label">📅 종일 표시</span>
+      <span class="toggle-switch">
+        <input type="checkbox" id="allday-toggle-chk" onchange="toggleShowAllDay(this.checked)" />
         <span class="toggle-track"></span>
       </span>
     </label>
@@ -182,6 +187,9 @@
         <span class="toggle-track"></span>
       </span>
     </label>
+    {% if user %}
+    <button class="toolbar-btn" id="my-only-btn" onclick="toggleMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
+    {% endif %}
     {% if user %}
     <div id="team-members-strip" style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-left:6px;padding-left:14px;border-left:1px solid var(--border);"></div>
     {% endif %}
@@ -222,7 +230,8 @@ let _copiedEvent = null;
 let currentDetailEventTeamId = null;
 let _myOnly = !!CURRENT_USER;
 let _wheelNav = localStorage.getItem('cal_wheel') === '1';  // 기본 OFF
-let _showDocs = localStorage.getItem('cal_show_docs') !== '0';  // 기본 ON
+let _showDocs    = localStorage.getItem('cal_show_docs')    !== '0';  // 기본 ON
+let _showAllDay  = localStorage.getItem('cal_show_allday') !== '0';  // 기본 ON
 let _projFilter = '';  // '' = 전체, '__unassigned__' = 미지정, 그 외 = 프로젝트명
 let _filterMember = null;
 
@@ -262,6 +271,13 @@ function toggleShowDocs(val) {
   calendar.getEventSourceById('doc-events').refetch();
 }
 
+function toggleShowAllDay(val) {
+  _showAllDay = val;
+  localStorage.setItem('cal_show_allday', _showAllDay ? '1' : '0');
+  calendar.setOption('allDaySlot', _showAllDay);
+  document.getElementById('calendar').classList.toggle('hide-allday', !_showAllDay);
+}
+
 function applyProjFilter() {
   _projFilter = document.getElementById('cal-proj-filter').value;
   calendar.getEventSourceById('main-events').refetch();
@@ -294,6 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
     height: '100%',
     stickyHeaderDates: true,
     nowIndicator: true,
+    allDaySlot: _showAllDay,
     headerToolbar: {
       left: 'prev,next today',
       center: 'title',
@@ -404,6 +421,7 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     eventDidMount(info) {
       info.el.dataset.eventId = String(info.event.id);
+      if (info.event.allDay) info.el.classList.add('wu-allday-event');
       const p = info.event.extendedProps;
       const titleEl = info.el.querySelector('.fc-event-title');
       if (titleEl) {
@@ -486,6 +504,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (wChk) wChk.checked = _wheelNav;
   const dChk = document.getElementById('doc-toggle-chk');
   if (dChk) dChk.checked = _showDocs;
+  const aChk = document.getElementById('allday-toggle-chk');
+  if (aChk) aChk.checked = _showAllDay;
+  if (!_showAllDay) document.getElementById('calendar').classList.add('hide-allday');
 
   // 내 일정만 버튼 초기 상태 동기화
   _syncMyOnlyBtn();
