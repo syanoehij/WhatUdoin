@@ -57,7 +57,7 @@
     overflow-y: auto !important;
   }
 
-  /* eid: 연동 마커 링크 — 프리뷰에서 작게 표시, 클릭 무효화 */
+  /* eid: 연결 마커 링크 — 프리뷰에서 작게 표시, 클릭 무효화 */
   a[href^="eid:"] {
     pointer-events: none;
     font-size: 0.72rem;
@@ -78,7 +78,7 @@
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
   }
 
-  /* ── 일정 연동 사이드 패널 ── */
+  /* ── 일정 연결 사이드 패널 ── */
   .ck-ev-panel {
     width: 300px;
     flex-shrink: 0;
@@ -197,7 +197,8 @@
         <button type="button" class="vis-btn" data-val="1" onclick="toggleNewVisibility(this)">외부 공개</button>
       </div>
       {% endif %}
-      <button class="btn btn-sm" id="btn-ev-panel-toggle" onclick="toggleEvPanel()" title="연결된 일정 패널 열기/닫기">🔗 일정 연동</button>
+      <button class="btn btn-sm" id="btn-ck-ai-toggle" onclick="toggleCkAiPanel()" title="본문 내용으로 일정 추출">🪄 일정 생성(AI)</button>
+      <button class="btn btn-sm" id="btn-ev-panel-toggle" onclick="toggleEvPanel()" title="연결된 일정 패널 열기/닫기">🔗 일정 연결</button>
       <button class="btn btn-sm btn-primary" id="cke-save-btn" onclick="saveContent()">저장</button>
       {% endif %}
     </div>
@@ -214,6 +215,38 @@
       {% endif %}
     </div>
 
+    <!-- 드래그 리사이저 (AI 패널 폭 조절용) -->
+    {% if not locked_by %}
+    <div class="editor-resizer" id="cke-editor-resizer" style="display:none;"></div>
+    {% endif %}
+
+    <!-- AI 일정 생성 패널 (기본 숨김) -->
+    {% if not locked_by %}
+    <div class="ai-panel hidden" id="cke-ai-panel">
+      <div class="ai-panel-top">
+        <div class="ai-panel-controls">
+          <select id="cke-ai-model-select" class="form-input" style="flex:1;min-width:0;"></select>
+          <button class="btn btn-primary" onclick="runCkAiParse()" id="btn-cke-run-ai">일정 생성</button>
+        </div>
+        <p class="ai-panel-desc">체크리스트 내용을 분석해서 일정을 자동으로 추출합니다.</p>
+        <div id="cke-ai-loading" class="loading hidden"><span id="cke-ai-loading-msg">⏳ AI가 분석 중입니다...</span></div>
+        <div id="cke-ai-error" class="form-error hidden"></div>
+      </div>
+      <div class="ai-panel-body" id="cke-ai-panel-body">
+        <div id="cke-ai-result-section" class="hidden">
+          <div class="result-header-row">
+            <h4>파싱 결과 <span id="cke-ai-result-count" class="count-badge"></span></h4>
+            <div class="btn-group">
+              <button class="btn btn-sm" onclick="resetCkAiResult()">초기화</button>
+              <button id="btn-cke-confirm-all" class="btn btn-sm btn-primary" onclick="confirmCkAiEvents()">모두 등록</button>
+            </div>
+          </div>
+          <div id="cke-ai-result-list"></div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- 목차 패널 (기본 숨김) -->
     {% if checklist.id and not locked_by %}
     <aside class="toc-panel hidden" id="toc-panel">
@@ -226,7 +259,7 @@
     </aside>
     {% endif %}
 
-    <!-- 일정 연동 패널 (기본 숨김) -->
+    <!-- 일정 연결 패널 (기본 숨김) -->
     {% if not locked_by %}
     <aside class="ck-ev-panel hidden" id="ck-ev-panel">
       <div class="ck-ev-panel-header">
@@ -247,7 +280,7 @@
 
 <div id="cke-save-toast">저장되었습니다.</div>
 
-<!-- ── 일정 연동 모달 ── -->
+<!-- ── 일정 연결 모달 ── -->
 <div id="cke-event-link-modal" style="
   display:none; position:fixed; inset:0;
   background:rgba(0,0,0,0.45);
@@ -260,7 +293,7 @@
     box-shadow:0 16px 40px rgba(0,0,0,0.28); overflow:hidden;
   ">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);">
-      <span style="font-weight:700;font-size:0.97rem;">🔗 일정 연동</span>
+      <span style="font-weight:700;font-size:0.97rem;">🔗 일정 연결</span>
       <button onclick="closeEventLinkModal()" style="background:none;border:none;cursor:pointer;font-size:1.1rem;color:var(--text-faint);">✕</button>
     </div>
     <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
@@ -317,6 +350,19 @@ const CKE_ID       = {{ checklist.id if checklist.id else 'null' }};
 const CKE_LOCKED   = {{ 'true' if locked_by else 'false' }};
 const LOCK_TYPE    = {{ lock_type | tojson if lock_type else 'null' }};
 const CKE_IS_NEW   = (CKE_ID === null);
+const DONE_PROJECTS = new Set({{ (done_projects if done_projects else []) | tojson | safe }});
+const KANBAN_STATUSES = [
+  ['backlog','Backlog'],['todo','Todo'],['in_progress','In Progress'],
+  ['peer_review','Peer Review'],['done','Done'],['blocked','Blocked'],
+];
+const PRIORITIES = [
+  ['urgent','🔴 긴급'],['high','🟠 높음'],['normal','🔵 보통'],['low','⚪ 낮음'],
+];
+
+let ckParsedEvents = [];
+let ckAiPanelOpen  = false;
+let _ckAiSaving    = false;
+window._blockAutoRefresh = () => ckAiPanelOpen || ckParsedEvents.some(Boolean);
 const TAB_TOKEN    = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getItem(k); if (!t) { t = (crypto?.randomUUID?.() ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); })); sessionStorage.setItem(k, t); } return t; })();
 
 // 첫 줄 = 제목 패턴: content에 # 제목이 없으면 title을 H1으로 앞에 붙임
@@ -496,6 +542,49 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (CKE_IS_NEW) {
     wuInst.setLeaveMsg('항목이 저장되지 않았습니다', '저장하지 않으면 작성 내용이 사라집니다.');
   }
+
+  // 리사이저 드래그 (AI 패널 폭 조절)
+  const ckResizer  = document.getElementById('cke-editor-resizer');
+  const ckAiPanel  = document.getElementById('cke-ai-panel');
+  const ckEdBody   = document.getElementById('cke-editor-body');
+  if (ckResizer && ckAiPanel && ckEdBody) {
+    ckResizer.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      ckResizer.classList.add('dragging');
+      const startX     = e.clientX;
+      const startWidth = ckAiPanel.getBoundingClientRect().width;
+      const totalWidth = ckEdBody.getBoundingClientRect().width;
+      function onMouseMove(e) {
+        const delta    = startX - e.clientX;
+        const newWidth = Math.min(Math.max(startWidth + delta, 280), totalWidth * 0.7);
+        ckAiPanel.style.width = newWidth + 'px';
+        if (wuInst) wuInst.resize?.();
+      }
+      function onMouseUp() {
+        ckResizer.classList.remove('dragging');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      }
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+  }
+
+  // AI 모델 목록 로드
+  fetch('/api/ai/models').then(r => r.json()).then(data => {
+    const sel = document.getElementById('cke-ai-model-select');
+    if (!sel) return;
+    sel.innerHTML = '';
+    data.models.forEach((m, i) => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m + (i === 0 ? ' (빠름)' : '');
+      sel.appendChild(opt);
+    });
+  }).catch(() => {
+    const sel = document.getElementById('cke-ai-model-select');
+    if (sel) sel.innerHTML = '<option value="gemma4:e2b">gemma4:e2b (빠름)</option>';
+  });
 });
 
 async function toggleContentLock() {
@@ -516,6 +605,7 @@ async function toggleContentLock() {
 
 async function saveContent(auto = false, leaveTarget = null) {
   if (_lockLost) return;
+  if (auto && _ckAiSaving) return;
   const project = document.getElementById('ck-edit-project')?.value || '';
   const md      = wuInst ? wuInst.getMarkdown() : '';
   const lines   = md.split('\n');
@@ -568,7 +658,7 @@ async function saveContent(auto = false, leaveTarget = null) {
   }
 }
 
-// ── 일정 연동 사이드 패널 ──────────────────────────────
+// ── 일정 연결 사이드 패널 ──────────────────────────────
 let _evPanelOpen = false;
 let _evRenderSeq = 0;
 
@@ -640,7 +730,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('wu:events:changed', _onEvChanged);
 });
 
-// ── 일정 연동 모달 ──────────────────────────────────────
+// ── 일정 연결 모달 ──────────────────────────────────────
 function openEventLinkModal() {
   const modal = document.getElementById('cke-event-link-modal');
   modal.style.display = 'flex';
@@ -737,6 +827,401 @@ async function deleteChecklist() {
   } else {
     alert('삭제 실패');
   }
+}
+
+/* ── AI 일정 생성 패널 ─────────────────────────────────── */
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+function toggleCkAiPanel() {
+  if (CKE_IS_NEW) { alert('체크리스트를 먼저 저장하세요.'); return; }
+  ckAiPanelOpen = !ckAiPanelOpen;
+  const panel  = document.getElementById('cke-ai-panel');
+  const body   = document.getElementById('cke-editor-body');
+  const btn    = document.getElementById('btn-ck-ai-toggle');
+  if (!panel) return;
+  panel.classList.toggle('hidden', !ckAiPanelOpen);
+  body.classList.toggle('split', ckAiPanelOpen);
+  if (btn) btn.classList.toggle('active', ckAiPanelOpen);
+  if (wuInst) wuInst.resize?.();
+}
+
+function _ckAiHasRequired(e) {
+  return !!(e && e.date && e.title && e.assignee);
+}
+
+function _ckBuildConflictBadge(e) {
+  if (!e._conflict) return '';
+  const typeLabel = e._conflict.type === 'exact' ? '중복' : '유사';
+  const simBadge  = e._conflict.similarity != null ? ` (${e._conflict.similarity}%)` : '';
+  const fieldsBadge = (e._conflict.fields_matched && e._conflict.fields_matched.length)
+    ? ` [${e._conflict.fields_matched.join('·')}]` : '';
+  const aiNote  = e._conflict.ai_confirmed ? ` ✓AI` : '';
+  const tooltip = (e._conflict.ai_confirmed ? 'AI가 중복으로 확인했습니다' : '유사한 일정이 감지되었습니다')
+    + (e._conflict.ai_reason ? ': ' + e._conflict.ai_reason : '') + fieldsBadge;
+  return `<span class="conflict-warn${e._conflict.ai_confirmed ? ' ai-confirmed' : ''}" title="${esc(tooltip)}">⚠ ${typeLabel}: &quot;${esc(e._conflict.existing_title)}&quot;${simBadge}${fieldsBadge}${aiNote}</span>`;
+}
+
+function updateCkAiConfirmCount() {
+  const total    = ckParsedEvents.filter(Boolean).length;
+  const selected = ckParsedEvents.filter((e, i) => {
+    if (!e) return false;
+    const chk = document.getElementById(`cke-ai-include-${i}`);
+    const isOn = chk ? chk.checked : e._include !== false;
+    return isOn && _ckAiHasRequired(e);
+  }).length;
+  document.getElementById('cke-ai-result-count').textContent =
+    selected === total ? `${total}건` : `${selected}/${total}건 선택`;
+  const btn = document.getElementById('btn-cke-confirm-all');
+  if (btn) btn.disabled = selected === 0;
+}
+
+function toggleCkAiInclude(i, checked) {
+  const e = ckParsedEvents[i];
+  if (!e) return;
+  if (checked && !_ckAiHasRequired(e)) {
+    const chk = document.getElementById(`cke-ai-include-${i}`);
+    if (chk) chk.checked = false;
+    return;
+  }
+  e._include = checked;
+  const label = document.querySelector(`#cke-ai-item-${i} .ai-include-label`);
+  if (label) {
+    label.classList.toggle('is-included', checked);
+    label.classList.toggle('is-excluded', !checked);
+    label.title = checked ? '클릭하면 등록에서 제외됩니다' : '클릭하면 등록 대상에 포함됩니다';
+    label.querySelector('.include-icon').textContent = checked ? '✓' : '✗';
+    label.querySelector('.include-text').textContent = checked ? '등록' : '건너뜀';
+  }
+  updateCkAiConfirmCount();
+}
+
+function renderCkAiResults() {
+  const cnt  = ckParsedEvents.filter(Boolean).length;
+  document.getElementById('cke-ai-result-count').textContent = `${cnt}건`;
+  const list = document.getElementById('cke-ai-result-list');
+
+  function _buildCard(e, i) {
+    const included = e._include !== false;
+    const hasRequired = _ckAiHasRequired(e);
+    const missingDate     = !e.date;
+    const missingTitle    = !e.title;
+    const missingAssignee = !e.assignee;
+    const typeIcon = e.event_type === 'meeting' ? '💬' : e.event_type === 'journal' ? '📓' : '📅';
+    const datePart = e.date
+      ? (e.end_date && e.end_date !== e.date ? `${e.date} ~ ${e.end_date}` : e.date) : '';
+    const timePart = !e.all_day && e.start_time ? ` ${e.start_time}${e.end_time ? '~' + e.end_time : ''}` : '';
+    const summary = [
+      e.title ? esc(e.title) : '<em style="color:#aaa">제목 없음</em>',
+      datePart ? `<span style="color:#666;font-size:12px">${esc(datePart)}${esc(timePart)}</span>` : '',
+      e.assignee ? `<span style="color:#666;font-size:12px">담당: ${esc(e.assignee)}</span>` : '',
+      e.project  ? `<span style="color:#666;font-size:12px">[${esc(e.project)}]</span>` : '',
+    ].filter(Boolean).join(' · ');
+    const conflictBadge = _ckBuildConflictBadge(e);
+    const batchBadge = e._conflict_batch
+      ? `<span class="batch-conflict-warn" title="같은 문서에서 추출된 #${e._conflict_batch.batch_index + 1}번 일정과 유사 (${e._conflict_batch.similarity}%)">⚠ 같은 내용 내 중복</span>` : '';
+    const warnBadges = (conflictBadge || batchBadge) ? '' : [
+      missingTitle    ? `<span class="date-missing-warn">⚠ 제목 미입력</span>` : '',
+      missingDate     ? `<span class="date-missing-warn">⚠ 날짜 미입력</span>` : '',
+      missingAssignee ? `<span class="date-missing-warn">⚠ 담당자 미지정</span>` : '',
+    ].join('');
+    const doneProject = e.project && DONE_PROJECTS.has(e.project);
+    const doneProjectBadge = doneProject ? `<span class="done-project-warn">⚠ 완료된 프로젝트 선택</span>` : '';
+    const badgeRow = (conflictBadge || batchBadge || warnBadges || doneProjectBadge)
+      ? `<div class="item-badges">${warnBadges}${doneProjectBadge}${conflictBadge}${batchBadge}</div>` : '';
+    return `
+    <div class="result-item" id="cke-ai-item-${i}" onclick="openEditForCkAi(${i})" title="클릭하면 상세 내용 확인 및 편집">
+      <div class="item-header">
+        <span class="item-type-icon">${typeIcon}</span>
+        <span class="item-summary">${summary}</span>
+        <div class="btn-group" onclick="event.stopPropagation()">
+          <label class="ai-include-label ${included && hasRequired ? 'is-included' : 'is-excluded'}${hasRequired ? '' : ' is-locked'}" title="${hasRequired ? (included ? '클릭하면 등록에서 제외됩니다' : '클릭하면 등록 대상에 포함됩니다') : '필수 정보를 채우면 등록 가능'}">
+            <input type="checkbox" id="cke-ai-include-${i}" ${included && hasRequired ? 'checked' : ''} ${hasRequired ? '' : 'disabled'} onchange="toggleCkAiInclude(${i},this.checked)" />
+            <span class="include-icon">${included && hasRequired ? '✓' : '✗'}</span>
+            <span class="include-text">${included && hasRequired ? '등록' : '건너뜀'}</span>
+          </label>
+          <button class="btn btn-sm btn-danger" onclick="removeCkAiItem(${i})">제거</button>
+        </div>
+      </div>
+      ${badgeRow}
+    </div>`;
+  }
+
+  const meetings  = ckParsedEvents.map((e, i) => ({ e, i })).filter(({ e }) => e && e.event_type === 'meeting');
+  const schedules = ckParsedEvents.map((e, i) => ({ e, i })).filter(({ e }) => e && e.event_type !== 'meeting');
+
+  let html = '';
+  if (meetings.length) {
+    html += `<div class="ai-result-section-header">💬 회의 (${meetings.length}개)</div>`;
+    html += meetings.map(({ e, i }) => _buildCard(e, i)).join('');
+  }
+  if (schedules.length) {
+    html += `<div class="ai-result-section-header">📅 업무 일정 (${schedules.length}개)</div>`;
+    html += schedules.map(({ e, i }) => _buildCard(e, i)).join('');
+  }
+  list.innerHTML = html;
+  document.getElementById('cke-ai-result-section').classList.remove('hidden');
+  updateCkAiConfirmCount();
+}
+
+function removeCkAiItem(i) {
+  ckParsedEvents[i] = null;
+  document.getElementById(`cke-ai-item-${i}`).remove();
+  const remaining = ckParsedEvents.filter(Boolean);
+  document.getElementById('cke-ai-result-count').textContent = `${remaining.length}건`;
+  if (!remaining.length) resetCkAiResult();
+}
+
+function resetCkAiResult() {
+  ckParsedEvents = [];
+  document.getElementById('cke-ai-result-section').classList.add('hidden');
+}
+
+function setCkLoadingMsg(msg) {
+  const el = document.getElementById('cke-ai-loading-msg');
+  if (el) el.textContent = msg;
+}
+
+function showCkAiError(msg) {
+  const el = document.getElementById('cke-ai-error');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+/* AI 카드 편집 — event-modal.js 재사용 */
+function _ckAiToModalEventData(e) {
+  const dateStr    = e.date || '';
+  const endDateStr = e.end_date || dateStr;
+  const startTime  = e.start_time || '00:00';
+  const endTime    = e.end_time   || '00:00';
+  return {
+    id: null, title: e.title || '', project: e.project || '',
+    location: e.location || '', description: e.description || '',
+    assignee: e.assignee || '', all_day: e.all_day ? 1 : 0,
+    start_datetime: dateStr ? `${dateStr}T${e.all_day ? '00:00' : startTime}` : '',
+    end_datetime:   endDateStr ? `${endDateStr}T${e.all_day ? '00:00' : endTime}` : '',
+    priority: e.priority || 'normal', kanban_status: e.kanban_status || 'backlog',
+    event_type: e.event_type || 'schedule',
+    recurrence_rule: e.recurrence_rule || '', recurrence_end: e.recurrence_end || '',
+  };
+}
+
+function _ckModalPayloadToAi(payload) {
+  const startDt = payload.start_datetime || '';
+  const endDt   = payload.end_datetime   || '';
+  const date     = startDt ? startDt.slice(0, 10) : null;
+  const endDate  = endDt   ? endDt.slice(0, 10)   : null;
+  const allDay   = !!payload.all_day;
+  const startTime = (!allDay && startDt.length > 10) ? startDt.slice(11, 16) : null;
+  const endTime   = (!allDay && endDt.length > 10)   ? endDt.slice(11, 16)   : null;
+  return {
+    title: payload.title || null, project: payload.project || null,
+    location: payload.location || null, description: payload.description || null,
+    assignee: payload.assignee || null, date, end_date: (endDate && endDate !== date) ? endDate : null,
+    all_day: allDay, start_time: startTime, end_time: endTime,
+    priority: payload.priority || 'normal', kanban_status: payload.kanban_status || null,
+    event_type: payload.event_type || 'schedule',
+    recurrence_rule: payload.recurrence_rule || null, recurrence_end: payload.recurrence_end || null,
+  };
+}
+
+function openEditForCkAi(i) {
+  const e = ckParsedEvents[i];
+  if (!e) return;
+  openModal('', _ckAiToModalEventData(e), null, {
+    title: 'AI 추출 일정 편집',
+    onSave: (payload) => {
+      const updated = _ckModalPayloadToAi(payload);
+      const hasRequired = !!(updated.date && updated.title && updated.assignee);
+      ckParsedEvents[i] = { ...ckParsedEvents[i], ...updated, _include: hasRequired, _conflict: null, _conflict_batch: null };
+      _rerunCkConflictChecks();
+    },
+  });
+}
+
+async function _rerunCkConflictChecks() {
+  renderCkAiResults();
+  await _checkConflictsForCkParsed();
+  await _aiReviewConflictsForCk(document.getElementById('cke-ai-model-select')?.value || '');
+  renderCkAiResults();
+}
+
+async function _checkConflictsForCkParsed() {
+  try {
+    const res = await fetch('/api/events/check-conflicts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        events: ckParsedEvents.map(e => ({
+          title: e.title, date: e.date, assignee: e.assignee,
+          project: e.project || null, location: e.location || null,
+          start_time: e.start_time || null, end_time: e.end_time || null,
+          all_day: !!e.all_day,
+        })),
+      }),
+    });
+    const data = await res.json();
+    window._ckLastCheckResults = data.results;
+    data.results.forEach((r, i) => {
+      if (r.conflict) {
+        ckParsedEvents[i]._conflict = r.conflict;
+        if (r.conflict.type === 'exact') ckParsedEvents[i]._include = false;
+      }
+      if (r.conflict_batch) ckParsedEvents[i]._conflict_batch = r.conflict_batch;
+    });
+  } catch (_) {}
+}
+
+async function _aiReviewConflictsForCk(model) {
+  const events = ckParsedEvents.filter(Boolean).map(e => ({
+    title: e.title, date: e.date, assignee: e.assignee,
+    project: e.project || null, start_time: e.start_time || null,
+    end_time: e.end_time || null, all_day: !!e.all_day,
+  }));
+  if (!events.length) return;
+  const checkResults = window._ckLastCheckResults || events.map(() => ({}));
+  try {
+    const res = await fetch('/api/events/ai-conflict-review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events, check_results: checkResults, model: model || document.getElementById('cke-ai-model-select').value }),
+    });
+    const data = await res.json();
+    data.results.forEach((r, i) => {
+      if (!ckParsedEvents[i] || !r) return;
+      const wasExact = ckParsedEvents[i]._conflict && ckParsedEvents[i]._conflict.type === 'exact';
+      if (r.is_duplicate) {
+        if (wasExact) {
+          ckParsedEvents[i]._conflict.ai_confirmed = true;
+          ckParsedEvents[i]._conflict.ai_reason    = r.reason;
+        } else {
+          const prev = ckParsedEvents[i]._conflict || {};
+          ckParsedEvents[i]._conflict = {
+            type: 'ai', existing_title: r.existing_title || prev.existing_title || '기존 일정',
+            similarity: prev.similarity, fields_matched: prev.fields_matched,
+            ai_confirmed: true, ai_reason: r.reason,
+          };
+          ckParsedEvents[i]._include = false;
+        }
+      } else {
+        if (!wasExact) {
+          ckParsedEvents[i]._conflict = null;
+          ckParsedEvents[i]._include = _ckAiHasRequired(ckParsedEvents[i]);
+        }
+      }
+    });
+  } catch (_) {}
+}
+
+async function runCkAiParse() {
+  if (CKE_IS_NEW) { alert('체크리스트를 먼저 저장하세요.'); return; }
+  const content = wuInst ? wuInst.getMarkdown().trim() : '';
+  if (!content) { alert('체크리스트 내용을 먼저 입력하세요.'); return; }
+
+  const model = document.getElementById('cke-ai-model-select').value;
+  document.getElementById('cke-ai-loading').classList.remove('hidden');
+  document.getElementById('cke-ai-error').classList.add('hidden');
+  document.getElementById('cke-ai-result-section').classList.add('hidden');
+  document.getElementById('btn-cke-run-ai').disabled = true;
+
+  try {
+    setCkLoadingMsg('📄 1단계: AI가 일정을 추출하는 중...');
+    const res1  = await fetch('/api/ai/parse', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: content, model }),
+    });
+    const data1 = await res1.json();
+    if (!res1.ok) throw new Error(data1.detail || '파싱 실패');
+    if (!data1.events.length) {
+      showCkAiError('일정 정보를 찾지 못했습니다. 더 구체적인 내용을 작성해보세요.');
+      return;
+    }
+
+    setCkLoadingMsg('🔍 2단계: AI 검토자가 내용을 점검하는 중...');
+    let finalEvents = data1.events;
+    try {
+      const res2  = await fetch('/api/ai/refine', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: content, events: data1.events, model }),
+      });
+      if (res2.ok) {
+        const data2 = await res2.json();
+        if (data2.events && data2.events.length) finalEvents = data2.events;
+      }
+    } catch (_) {}
+
+    ckParsedEvents = finalEvents.map(e => {
+      const eventType = e.event_type || 'schedule';
+      const kanbanStatus = e.kanban_status || (eventType === 'schedule' ? 'backlog' : null);
+      const hasRequired = _ckAiHasRequired(e);
+      return { ...e, _include: hasRequired, _conflict: null, priority: e.priority || 'normal', event_type: eventType, kanban_status: kanbanStatus };
+    });
+
+    setCkLoadingMsg('🔎 3단계: 기존 일정과 중복 검사 중...');
+    await _checkConflictsForCkParsed();
+
+    setCkLoadingMsg('🤖 4단계: AI가 중복 여부를 최종 검토 중...');
+    await _aiReviewConflictsForCk(model);
+    renderCkAiResults();
+  } catch (e) {
+    showCkAiError(e.message);
+  } finally {
+    window._blockAutoRefresh = () => ckAiPanelOpen || ckParsedEvents.some(Boolean);
+    document.getElementById('cke-ai-loading').classList.add('hidden');
+    document.getElementById('btn-cke-run-ai').disabled = false;
+  }
+}
+
+async function confirmCkAiEvents(force = false) {
+  if (CKE_IS_NEW) { alert('체크리스트를 먼저 저장하세요.'); return; }
+  const toSave = ckParsedEvents.filter((e, i) => {
+    if (!e) return false;
+    const chk = document.getElementById(`cke-ai-include-${i}`);
+    const isOn = chk ? chk.checked : e._include !== false;
+    return isOn && _ckAiHasRequired(e);
+  });
+  if (!toSave.length) { alert('등록할 일정이 없습니다. 체크박스를 확인하세요.'); return; }
+
+  _ckAiSaving = true;
+  try {
+    const res = await fetch('/api/ai/confirm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events: toSave, checklist_id: CKE_ID, force }),
+    });
+    const data = await res.json();
+
+    if (data.requires_force && data.blocked && data.blocked.length) {
+      const names = data.blocked.map(b => `"${b.title}" (${b.similarity}% 유사: "${b.existing_title}")`).join('\n');
+      const ok = confirm(`아래 일정이 기존 일정과 중복될 수 있습니다:\n\n${names}\n\n그래도 강제 등록하시겠습니까?`);
+      _ckAiSaving = false;
+      if (ok) return confirmCkAiEvents(true);
+      return;
+    }
+
+    const created = Array.isArray(data.created) ? data.created : [];
+    if (created.length) {
+      const md = wuInst ? wuInst.getMarkdown() : '';
+      const tail = created.map(({ index, id, title: srvTitle }) => {
+        const t = (srvTitle || toSave[index]?.title || '').trim() || '제목없음';
+        return `- [ ] ${t} [🔗](eid:${id})`;
+      }).join('\n');
+      const newMd = (md.endsWith('\n') ? md : md + '\n') + '\n' + tail + '\n';
+      wuInst.setContent(newMd);
+      await saveContent(false);
+    } else {
+      let msg = `${data.saved}개 일정이 등록되었습니다.`;
+      if (data.skipped && data.skipped.length) {
+        msg += `\n\n건너뜀 ${data.skipped.length}건:\n` + data.skipped.map(s => `"${s.title || '제목없음'}" (${s.reason})`).join('\n');
+      }
+      alert(msg);
+    }
+  } finally {
+    _ckAiSaving = false;
+  }
+  location.reload();
 }
 </script>
 {% endblock %}

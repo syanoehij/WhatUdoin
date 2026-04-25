@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-04-25",
+      "phase": "29차",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>체크 편집기 — 본문 내용으로 일정 생성(AI)",
+          "detail_html": "<ul>\n              <li>체크리스트 풀페이지 편집기 헤더에 <b>'🪄 일정 생성(AI)'</b> 버튼 추가. 문서 편집기와 동일한 LLM 4단계 파이프라인(parse → refine → check-conflicts → ai-conflict-review)으로 체크 본문에서 일정을 자동 추출</li>\n              <li>등록된 일정은 DB 컬럼 추가 없이 <b>본문 마크다운에 마커 삽입</b> 방식으로 연결 — <code>* [ ] 제목 [🔗](eid:N)</code> 형태로 본문 끝에 자동 추가. 기존 <code>_parseLinkedIdxMap</code>·<code>#ck-ev-panel</code> 렌더링 로직과 자연스럽게 연동되어 '🔗 일정 연결' 패널에 즉시 반영</li>\n              <li>신규 체크(미저장) 상태에서 버튼 클릭 시 <b>'체크리스트를 먼저 저장하세요.'</b> 안내 후 중단. 1분 자동저장과의 race 방지를 위해 <code>_ckAiSaving</code> 플래그로 confirm 진행 중 자동저장 일시 차단</li>\n              <li><code>/api/ai/confirm</code> 응답에 <code>created: [{index, id, title}]</code> 배열 추가 — skipped/blocked 항목이 있어도 요청 배열 기준 index로 정확히 마커를 매핑. doc_editor는 새 키를 무시하므로 회귀 없음</li>\n              <li>AI 패널이 열린 상태에서 외부 SSE <code>events.changed</code> 수신 시 페이지 자동 새로고침 차단(<code>window._blockAutoRefresh</code> 훅 연동)</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-25",
       "phase": "28차 4단계",
       "phase_class": "phase-4",
       "entries": [

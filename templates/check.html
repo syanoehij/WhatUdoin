@@ -684,7 +684,7 @@
     color: var(--text-faint);
   }
 
-  /* eid: 연동 마커 링크 — 뷰어에서 숨김 (.ck-linked-badge 로 대체 표시) */
+  /* eid: 연결 마커 링크 — 뷰어에서 숨김 (.ck-linked-badge 로 대체 표시) */
   #ck-viewer a[href^="eid:"] { display: none !important; }
 
   /* ── 내보내기 드롭다운 ── */
@@ -705,7 +705,7 @@
   }
   .export-menu button:hover, .export-menu a:hover { background: var(--surface-2); }
 
-  /* ── 연동 체크박스 뱃지 ── */
+  /* ── 연결 체크박스 뱃지 ── */
   .ck-linked-badge {
     display: inline-block;
     font-size: 0.68rem;
@@ -1368,7 +1368,7 @@ async function _showEditorMode() {
   let _editorMd = /^\s*#\s/.test(_initContent)
     ? _initContent
     : ((_curItem.title ? '# ' + _curItem.title + '\n\n' : '') + _initContent);
-  // 연동 체크박스 상태를 칸반 API 기준으로 맞춰 편집화면에도 올바르게 반영
+  // 연결 체크박스 상태를 칸반 API 기준으로 맞춰 편집화면에도 올바르게 반영
   _editorMd = await _syncLinkedMd(_editorMd);
   initEditor(_editorMd);
 }
@@ -1501,7 +1501,7 @@ function _stopCountdown() {
     }
   }, 300));
 
-  // 일정 상태 변경 시 연동 체크박스 재동기화 (_doPoll의 updated_at 가드를 우회)
+  // 일정 상태 변경 시 연결 체크박스 재동기화 (_doPoll의 updated_at 가드를 우회)
   window.addEventListener('wu:events:changed', wuDebounce(function () {
     if (!_curId || !_curItem) return;
     if (document.visibilityState === 'hidden') return;
@@ -1638,14 +1638,14 @@ function renderViewer(content) {
       }, 150);
     });
     _viewerTocObserver.observe(tocTarget, { childList: true, subtree: true, characterData: true });
-    // 연동 체크박스 상태 동기화
+    // 연결 체크박스 상태 동기화
     attachCheckboxHandlers(displayContent);
     // renderViewer가 어느 경로로 호출되든 TOC 패널이 열려 있으면 즉시 갱신
     _scheduleViewerTocRebuild();
   }, 100);
 }
 
-// ── 연동 체크박스 파싱: mdContent에서 마크다운 라인번호(1-base) → event_id 맵 반환
+// ── 연결 체크박스 파싱: mdContent에서 마크다운 라인번호(1-base) → event_id 맵 반환
 function _parseLinkedCheckboxes(mdContent) {
   const linked = {}; // {mdLine(1-base): eventId}
   const lines = (mdContent || '').split('\n');
@@ -1658,7 +1658,7 @@ function _parseLinkedCheckboxes(mdContent) {
   return linked;
 }
 
-// ── 연동 체크박스의 칸반 상태를 마크다운 텍스트에 반영 (편집화면 진입 시 사용)
+// ── 연결 체크박스의 칸반 상태를 마크다운 텍스트에 반영 (편집화면 진입 시 사용)
 async function _syncLinkedMd(md) {
   const linked = _parseLinkedCheckboxes(md);
   if (!Object.keys(linked).length) return md;
@@ -1684,7 +1684,7 @@ async function _syncLinkedMd(md) {
   return lines.join('\n');
 }
 
-// ── 연동 체크박스의 칸반 상태를 뷰어에 동기화
+// ── 연결 체크박스의 칸반 상태를 뷰어에 동기화
 async function _syncLinkedCheckboxes(mdContent, viewerEl) {
   const linked = _parseLinkedCheckboxes(mdContent);
   if (!Object.keys(linked).length) return;
@@ -1699,7 +1699,7 @@ async function _syncLinkedCheckboxes(mdContent, viewerEl) {
     } catch {}
   }));
 
-  // 각 연동 체크박스에 상태 적용 + 뱃지 추가 (data-mdline 기반)
+  // 각 연결 체크박스에 상태 적용 + 뱃지 추가 (data-mdline 기반)
   Object.entries(linked).forEach(([lineStr, eventId]) => {
     const li = viewerEl.querySelector(`li.task-list-item[data-mdline="${lineStr}"]`);
     if (!li) return;
@@ -1709,12 +1709,12 @@ async function _syncLinkedCheckboxes(mdContent, viewerEl) {
     // ToastUI Viewer는 input 없이 .checked 클래스로 체크 표시
     li.classList.toggle('checked', isChecked);
 
-    // 연동 뱃지 — <p> 안에 인라인으로 추가해 1줄 유지
+    // 연결 뱃지 — <p> 안에 인라인으로 추가해 1줄 유지
     const para = li.querySelector('p') || li;
     if (!para.querySelector('.ck-linked-badge')) {
       const badge = document.createElement('span');
       badge.className = 'ck-linked-badge';
-      badge.title = `연동 일정: ${ev?.title || '#' + eventId}`;
+      badge.title = `연결 일정: ${ev?.title || '#' + eventId}`;
       badge.textContent = '🔗';
       // 뱃지 클릭 시 일정 수정 모달 열기 (체크박스 토글 차단)
       badge.addEventListener('click', async (evt) => {
@@ -1785,7 +1785,7 @@ function attachCheckboxHandlers(mdContent) {
     });
   });
 
-  // 연동 체크박스 칸반 상태 동기화 — 로그인 여부 무관하게 항상 실행
+  // 연결 체크박스 칸반 상태 동기화 — 로그인 여부 무관하게 항상 실행
   _syncLinkedCheckboxes(mdContent, viewerEl);
 }
 

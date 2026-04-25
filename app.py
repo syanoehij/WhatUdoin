@@ -386,9 +386,10 @@ def check_editor_page(request: Request, checklist_id: int):
     proj_name = item.get("project")
     proj_info = next((p for p in all_projs if p.get("name") == proj_name), None) if proj_name else None
     proj_is_private = bool(proj_info.get("is_private", 0)) if proj_info else False
+    done_projects = db.get_done_project_names()
     return templates.TemplateResponse(
         request, "check_editor.html",
-        _ctx(request, checklist=item, locked_by=locked_by, lock_type=lock_type, projects=projects, proj_is_private=proj_is_private)
+        _ctx(request, checklist=item, locked_by=locked_by, lock_type=lock_type, projects=projects, proj_is_private=proj_is_private, done_projects=done_projects)
     )
 
 
@@ -2337,6 +2338,7 @@ async def ai_confirm(request: Request):
 
     saved = 0
     skipped = []
+    created = []
     for i, e in enumerate(events):
         payload = llm_parser.to_event_payload(e)
         val_errors = _validate_event_payload(payload)
@@ -2346,15 +2348,17 @@ async def ai_confirm(request: Request):
         if payload["start_datetime"]:
             payload["team_id"]    = team_id
             payload["created_by"] = str(user["id"])
-            payload["meeting_id"] = meeting_id
-            db.create_event(payload)
+            if meeting_id:
+                payload["meeting_id"] = meeting_id
+            event_id = db.create_event(payload)
             saved += 1
+            created.append({"index": i, "id": event_id, "title": payload.get("title", "")})
         else:
             skipped.append({"index": i, "title": e.get("title", ""), "reason": "날짜를 입력해주세요."})
     # N건 일괄 저장 → publish 1회만 (루프 끝 단일 이벤트)
     if saved > 0:
         wu_broker.publish("events.changed", {"id": None, "action": "bulk_create", "team_id": team_id})
-    return {"saved": saved, "blocked": [], "skipped": skipped, "requires_force": False}
+    return {"saved": saved, "created": created, "blocked": [], "skipped": skipped, "requires_force": False}
 
 
 @app.post("/api/ai/refine")
