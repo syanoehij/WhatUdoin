@@ -1094,6 +1094,7 @@ function applyBoundState(title, content, id) {
 }
 
 function unbindCheck() {
+  if (!confirm('체크 바인딩을 해제하시겠습니까?')) return;
   _currentBoundChecklistId = null;
   if (_boundViewerInstance) { _boundViewerInstance.destroy(); _boundViewerInstance = null; }
   const viewerEl  = document.getElementById('bound-content-viewer');
