@@ -2,7 +2,19 @@
   "groups": [
     {
       "date": "2026-04-25",
-      "phase": "29차",
+      "phase": "29차 2단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>일정 ↔ 체크 바인딩 — 일정 내용을 체크리스트와 연동",
+          "detail_html": "<ul>\n              <li>캘린더 일정 수정 모달에 <b>\"🔗 체크 바인딩\"</b> 버튼 추가. 프로젝트 필터 + 제목 검색으로 원하는 체크리스트를 선택해 일정 내용란과 바인딩 가능</li>\n              <li>바인딩 시 내용(description)란이 체크리스트 본문 뷰어(TUI Editor viewer 모드)로 대체되어 읽기 전용으로 표시. 체크리스트가 소스 오브 트루스이므로 본문 편집은 체크 페이지에서 진행</li>\n              <li><b>\"📋 바인된 체크 보기\"</b> 버튼으로 연결된 체크리스트 페이지를 새 탭에서 열 수 있음. <b>\"바인딩 해제\"</b> 클릭 시 기존 description이 자동 복원</li>\n              <li>같은 체크 한 개를 여러 일정에 동시 바인딩 가능 — 체크 본문 1회 수정으로 연결된 모든 일정에 동일하게 반영. 어제 일지·오늘 일지를 동일한 체크로 공유하는 케이스에 유용</li>\n              <li>DB: <code>events.bound_checklist_id</code> 컬럼 추가(<code>_migrate</code> 패턴으로 기존 DB 자동 마이그레이션). 바인딩된 체크가 휴지통으로 이동돼도 dangling 허용(기존 회의 연결 정책과 동일), UI에서 \"(삭제된 체크)\" 표시</li>\n              <li>TUI Editor를 <code>base.html</code> 공통 로드로 이동해 캘린더·일정 모달 어디서나 체크 본문 뷰어 사용 가능</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-25",
+      "phase": "29차 1단계",
       "phase_class": "phase-1",
       "entries": [
         {

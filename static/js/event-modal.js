@@ -31,6 +31,11 @@ let _currentEventData = null;     // 현재 편집 중인 이벤트 원본 데�
 let _hasSubtasks = false;         // 현재 편집 이벤트가 하위 업무를 보유하는지
 let _isRecurringParent = false;   // 반복 일정 부모인지 (하위 생성 불가 표시용)
 
+// ── 체크 바인딩 상태 ─────────────────────────────────────
+let _currentBoundChecklistId = null;   // 현재 모달에 바인된 체크리스트 id
+let _boundChecklistAll       = [];     // sub-modal 캐시: 활성 체크리스트 전체
+let _boundViewerInstance     = null;   // 본문 viewer toastui 인스턴스
+
 // ── 프로젝트 자동완성 ─────────────────────────────────────
 async function loadProjects() {
   const res = await fetch('/api/projects');
@@ -359,6 +364,21 @@ function openModal(dateStr = '', eventData = null, dragOpts = null, options = nu
   if (CURRENT_USER) setAssigneeTags(CURRENT_USER.name);
   document.getElementById('btn-delete').classList.add('hidden');
   document.getElementById('doc-link-row').style.display = 'none';
+  // 체크 바인딩 UI 리셋 (신규 모달 또는 수정 모달 진입 공통)
+  _currentBoundChecklistId = null;
+  if (_boundViewerInstance) { _boundViewerInstance.destroy(); _boundViewerInstance = null; }
+  {
+    const _descEl    = document.getElementById('f-description');
+    const _viewerEl  = document.getElementById('bound-content-viewer');
+    const _btnBind   = document.getElementById('btn-bind-check');
+    const _btnUnbind = document.getElementById('btn-unbind-check');
+    const _linkEl    = document.getElementById('bound-check-link');
+    if (_descEl)    _descEl.classList.remove('hidden');
+    if (_viewerEl) { _viewerEl.classList.add('hidden'); _viewerEl.innerHTML = ''; }
+    if (_btnBind)   _btnBind.classList.remove('hidden');
+    if (_btnUnbind) _btnUnbind.classList.add('hidden');
+    if (_linkEl)    _linkEl.classList.add('hidden');
+  }
   document.getElementById('modal-title').textContent = (options && options.title) || '일정 추가';
   toggleAllDay();
 
@@ -479,6 +499,16 @@ function openModal(dateStr = '', eventData = null, dragOpts = null, options = nu
       docLinkRow.style.display = '';
     } else {
       docLinkRow.style.display = 'none';
+    }
+
+    // ── 체크 바인딩 상태 복원 ──
+    if (eventData.bound_checklist_id) {
+      _currentBoundChecklistId = eventData.bound_checklist_id;
+      applyBoundState(
+        eventData.bound_checklist_title,
+        eventData.bound_checklist_content,
+        eventData.bound_checklist_id
+      );
     }
   }
 
@@ -631,6 +661,7 @@ async function saveEvent(e) {
     recurrence_rule:  recurrenceRule,
     recurrence_end:   recurrenceEnd,
     parent_event_id:  parentEventIdEl && parentEventIdEl.value ? parseInt(parentEventIdEl.value) : null,
+    bound_checklist_id: _currentBoundChecklistId || null,
   };
 
   // AI 경로: DB 저장 대신 payload를 콜백으로 전달
@@ -1012,6 +1043,148 @@ async function completeKanbanEvent() {
     body: JSON.stringify({ is_active: false }),
   });
   if (window.onKDetailSaved) window.onKDetailSaved();
+}
+
+// ── 체크 바인딩 (Check Binding) ─────────────────────────
+//
+// 동작:
+//  - "🔗 체크 바인딩" 클릭 → openBindCheckPicker(): sub-modal 열고 체크리스트 목록 fetch (캐시)
+//  - 체크 선택 → selectBoundCheck() → applyBoundState(): textarea 숨기고 viewer 노출
+//  - "바인딩 해제" 클릭 → unbindCheck(): 원래 textarea 복원, _currentBoundChecklistId = null
+//  - 저장 시 saveEvent() payload에 bound_checklist_id 동봉 (백엔드에서 null은 해제로 처리)
+
+function applyBoundState(title, content, id) {
+  _currentBoundChecklistId = id;
+  const descEl    = document.getElementById('f-description');
+  const viewerEl  = document.getElementById('bound-content-viewer');
+  const btnBind   = document.getElementById('btn-bind-check');
+  const btnUnbind = document.getElementById('btn-unbind-check');
+  const linkEl    = document.getElementById('bound-check-link');
+  if (!descEl || !viewerEl || !btnBind || !btnUnbind || !linkEl) return;
+
+  descEl.classList.add('hidden');
+  viewerEl.classList.remove('hidden');
+  btnBind.classList.add('hidden');
+  btnUnbind.classList.remove('hidden');
+  if (id) {
+    linkEl.href = `/check?id=${id}`;
+    linkEl.classList.remove('hidden');
+  } else {
+    linkEl.classList.add('hidden');
+  }
+
+  // 기존 viewer 인스턴스가 있으면 정리
+  if (_boundViewerInstance) { _boundViewerInstance.destroy(); _boundViewerInstance = null; }
+  viewerEl.innerHTML = '';
+
+  // toastui 미로드 시 폴백 (이론상 base.html에서 로드되므로 발생 안 함)
+  if (typeof toastui === 'undefined' || !toastui.Editor) {
+    viewerEl.textContent = content || '(삭제된 체크입니다 — 바인딩 해제 후 다시 선택하세요)';
+    return;
+  }
+
+  _boundViewerInstance = toastui.Editor.factory({
+    el: viewerEl,
+    viewer: true,
+    initialValue: content || '*(삭제된 체크입니다 — 바인딩 해제 후 다시 선택하세요)*',
+    usageStatistics: false,
+    customHTMLSanitizer: html => html,
+    customHTMLRenderer: (window.WUEditor && window.WUEditor.renderer) || {},
+  });
+}
+
+function unbindCheck() {
+  _currentBoundChecklistId = null;
+  if (_boundViewerInstance) { _boundViewerInstance.destroy(); _boundViewerInstance = null; }
+  const viewerEl  = document.getElementById('bound-content-viewer');
+  const descEl    = document.getElementById('f-description');
+  const btnBind   = document.getElementById('btn-bind-check');
+  const btnUnbind = document.getElementById('btn-unbind-check');
+  const linkEl    = document.getElementById('bound-check-link');
+  if (viewerEl) { viewerEl.classList.add('hidden'); viewerEl.innerHTML = ''; }
+  if (descEl)    descEl.classList.remove('hidden');
+  if (btnBind)   btnBind.classList.remove('hidden');
+  if (btnUnbind) btnUnbind.classList.add('hidden');
+  if (linkEl)    linkEl.classList.add('hidden');
+}
+
+async function openBindCheckPicker() {
+  const overlay = document.getElementById('bind-check-modal-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('hidden');
+
+  // 캐시 없으면 fetch (이후 동일 모달 라이프사이클 동안 재사용)
+  if (!_boundChecklistAll.length) {
+    try {
+      const r = await fetch('/api/checklists?active=1');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      _boundChecklistAll = await r.json();
+    } catch (e) {
+      const list = document.getElementById('bind-check-list');
+      if (list) list.innerHTML = '<div style="color:#e17055; padding:24px; text-align:center;">체크리스트를 불러오지 못했습니다.</div>';
+      return;
+    }
+  }
+
+  // 프로젝트 필터 옵션 populate
+  const projSel = document.getElementById('bind-check-project-filter');
+  const projs = [...new Set(_boundChecklistAll.map(c => c.project).filter(Boolean))].sort();
+  if (projSel) {
+    projSel.innerHTML = '<option value="">전체 프로젝트</option>' +
+      projs.map(p => `<option value="${esc(p).replace(/"/g, '&quot;')}">${esc(p)}</option>`).join('');
+    // 현재 일정 모달의 프로젝트가 있으면 자동 선택
+    const fProj = document.getElementById('f-project');
+    const curProj = fProj ? fProj.value : '';
+    if (curProj && projs.includes(curProj)) projSel.value = curProj;
+    else projSel.value = '';
+  }
+  const searchEl = document.getElementById('bind-check-search');
+  if (searchEl) searchEl.value = '';
+  renderBindCheckList();
+  // 검색 박스 포커스
+  setTimeout(() => { if (searchEl) searchEl.focus(); }, 50);
+}
+
+function closeBindCheckPicker(e) {
+  // overlay 영역 클릭만 허용 (modal 내부 클릭 시 닫기 방지)
+  if (e && e.target !== document.getElementById('bind-check-modal-overlay')) return;
+  const overlay = document.getElementById('bind-check-modal-overlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
+function renderBindCheckList() {
+  const projSel = document.getElementById('bind-check-project-filter');
+  const searchEl = document.getElementById('bind-check-search');
+  const list = document.getElementById('bind-check-list');
+  if (!list) return;
+  const proj = projSel ? projSel.value : '';
+  const q    = searchEl ? searchEl.value.toLowerCase() : '';
+  const items = _boundChecklistAll.filter(c =>
+    (!proj || c.project === proj) &&
+    (!q || (c.title || '').toLowerCase().includes(q) || (c.project || '').toLowerCase().includes(q))
+  );
+  if (!items.length) {
+    list.innerHTML = '<div style="color:#aaa; padding:24px; text-align:center;">검색 결과 없음</div>';
+    return;
+  }
+  list.innerHTML = items.map(c => {
+    // title/content는 onclick에 인라인 전달되므로 JSON.stringify로 이스케이프 (XSS 방지)
+    // attribute가 single-quote(')로 감싸져 있으므로 ' 이스케이프 + < 이스케이프
+    const tArg = JSON.stringify(c.title || '').replace(/</g, '\\u003c').replace(/'/g, '&#39;');
+    const cArg = JSON.stringify(c.content || '').replace(/</g, '\\u003c').replace(/'/g, '&#39;');
+    return `
+      <div class="bind-check-item" onclick='selectBoundCheck(${c.id}, ${tArg}, ${cArg})'>
+        <div class="bind-check-item-title">${esc(c.title || '')}</div>
+        ${c.project ? `<div class="bind-check-item-proj">${esc(c.project)}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function selectBoundCheck(id, title, content) {
+  const overlay = document.getElementById('bind-check-modal-overlay');
+  if (overlay) overlay.classList.add('hidden');
+  applyBoundState(title, content, id);
 }
 
 // ── 초기화 ───────────────────────────────────────────────

@@ -927,6 +927,17 @@ def _project_color(name: str) -> str:
 def list_events():
     events = db.get_all_events()
     proj_colors = db.get_project_colors()
+    # 바인딩된 체크리스트의 title 일괄 조회 (삭제된 체크는 None으로 폴백)
+    bound_ids = {e.get("bound_checklist_id") for e in events if e.get("bound_checklist_id")}
+    bound_titles = {}
+    if bound_ids:
+        with db.get_conn() as _conn:
+            placeholders = ",".join("?" for _ in bound_ids)
+            rows = _conn.execute(
+                f"SELECT id, title FROM checklists WHERE id IN ({placeholders}) AND deleted_at IS NULL",
+                tuple(bound_ids)
+            ).fetchall()
+            bound_titles = {r["id"]: r["title"] for r in rows}
     result = []
     for e in events:
         proj_name = e.get("project")
@@ -978,6 +989,8 @@ def list_events():
                 "recurrence_rule":       e.get("recurrence_rule"),
                 "recurrence_parent_id":  e.get("recurrence_parent_id"),
                 "parent_event_id":       e.get("parent_event_id"),
+                "bound_checklist_id":    e.get("bound_checklist_id"),
+                "bound_checklist_title": bound_titles.get(e.get("bound_checklist_id")) if e.get("bound_checklist_id") else None,
             },
         }
         color = proj_color or (proj_name and _project_color(proj_name))
@@ -1060,6 +1073,7 @@ async def create_event(request: Request):
     data.setdefault("recurrence_rule", None)
     data.setdefault("recurrence_end", None)
     data.setdefault("parent_event_id", None)
+    data.setdefault("bound_checklist_id", None)
     errors = _validate_event_payload(data)
     if errors:
         raise HTTPException(status_code=422, detail=errors[0])
@@ -1104,6 +1118,7 @@ async def update_event(event_id: int, request: Request):
     data.setdefault("kanban_status", event.get("kanban_status"))
     data.setdefault("priority", event.get("priority", "normal"))
     data.setdefault("parent_event_id", event.get("parent_event_id"))
+    data.setdefault("bound_checklist_id", event.get("bound_checklist_id"))
     # 하위 업무를 가진 업무의 유형 변경 차단
     existing_type = event.get("event_type", "schedule")
     new_type = data.get("event_type")

@@ -29,7 +29,8 @@ def init_db():
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 source TEXT DEFAULT 'manual',
-                meeting_id INTEGER
+                meeting_id INTEGER,
+                bound_checklist_id INTEGER
             )
         """)
         # ── teams ──
@@ -170,6 +171,7 @@ def init_db():
             ("recurrence_end",       "TEXT DEFAULT NULL"),
             ("recurrence_parent_id", "INTEGER DEFAULT NULL"),
             ("parent_event_id",      "INTEGER DEFAULT NULL"),
+            ("bound_checklist_id",   "INTEGER DEFAULT NULL"),
         ])
         # 기존 done 상태 일정에 done_at 백필
         if _table_exists(conn, "events"):
@@ -435,18 +437,21 @@ def _generate_recurrence_children(conn, parent_id: int, parent_data: dict):
             "recurrence_rule":     None,
             "recurrence_end":      None,
             "recurrence_parent_id": parent_id,
+            "bound_checklist_id":  parent_data.get("bound_checklist_id"),
         }
         conn.execute(
             """INSERT INTO events
                (title, team_id, project, description, location, assignee, all_day,
                 start_datetime, end_datetime, created_by, source, meeting_id,
                 kanban_status, priority, event_type, is_active, is_public,
-                recurrence_rule, recurrence_end, recurrence_parent_id)
+                recurrence_rule, recurrence_end, recurrence_parent_id,
+                bound_checklist_id)
                VALUES
                (:title, :team_id, :project, :description, :location, :assignee, :all_day,
                 :start_datetime, :end_datetime, :created_by, :source, :meeting_id,
                 :kanban_status, :priority, :event_type, :is_active, :is_public,
-                :recurrence_rule, :recurrence_end, :recurrence_parent_id)""",
+                :recurrence_rule, :recurrence_end, :recurrence_parent_id,
+                :bound_checklist_id)""",
             child,
         )
 
@@ -527,6 +532,17 @@ def get_event(event_id: int):
             if parent:
                 d["recurrence_rule"] = parent["recurrence_rule"]
                 d["recurrence_end"]  = parent["recurrence_end"]
+        # 바인딩된 체크리스트 정보 (삭제된 체크는 None으로 폴백)
+        if d.get("bound_checklist_id"):
+            chk = conn.execute(
+                "SELECT title, content FROM checklists WHERE id = ? AND deleted_at IS NULL",
+                (d["bound_checklist_id"],)
+            ).fetchone()
+            d["bound_checklist_title"]   = chk["title"]   if chk else None
+            d["bound_checklist_content"] = chk["content"] if chk else None
+        else:
+            d["bound_checklist_title"]   = None
+            d["bound_checklist_content"] = None
         return d
 
 
@@ -560,6 +576,7 @@ def create_event(data: dict) -> int:
     data.setdefault("recurrence_end", None)
     data.setdefault("recurrence_parent_id", None)
     data.setdefault("parent_event_id", None)
+    data.setdefault("bound_checklist_id", None)
     data.setdefault("is_public", None)  # 기본: 프로젝트 공개 연동
     # 회의·일지·하위 업무 타입은 칸반 등록 안 함
     if data.get("event_type") in ("meeting", "journal", "subtask"):
@@ -570,12 +587,14 @@ def create_event(data: dict) -> int:
                (title, team_id, project, description, location, assignee, all_day,
                 start_datetime, end_datetime, created_by, source, meeting_id,
                 kanban_status, priority, event_type, is_public,
-                recurrence_rule, recurrence_end, recurrence_parent_id, parent_event_id)
+                recurrence_rule, recurrence_end, recurrence_parent_id, parent_event_id,
+                bound_checklist_id)
                VALUES
                (:title, :team_id, :project, :description, :location, :assignee, :all_day,
                 :start_datetime, :end_datetime, :created_by, :source, :meeting_id,
                 :kanban_status, :priority, :event_type, :is_public,
-                :recurrence_rule, :recurrence_end, :recurrence_parent_id, :parent_event_id)""",
+                :recurrence_rule, :recurrence_end, :recurrence_parent_id, :parent_event_id,
+                :bound_checklist_id)""",
             data,
         )
         parent_id = cur.lastrowid
@@ -602,24 +621,26 @@ def _apply_event_update(conn, event_id: int, data: dict):
     data.setdefault("recurrence_rule", None)
     data.setdefault("recurrence_end", None)
     data.setdefault("parent_event_id", None)
+    data.setdefault("bound_checklist_id", None)
     conn.execute(
         """UPDATE events SET
-            title           = :title,
-            project         = :project,
-            description     = :description,
-            location        = :location,
-            assignee        = :assignee,
-            all_day         = :all_day,
-            start_datetime  = :start_datetime,
-            end_datetime    = :end_datetime,
-            kanban_status   = :kanban_status,
-            priority        = :priority,
-            done_at         = :done_at,
-            event_type      = :event_type,
-            recurrence_rule = :recurrence_rule,
-            recurrence_end  = :recurrence_end,
-            parent_event_id = :parent_event_id,
-            updated_at      = CURRENT_TIMESTAMP
+            title              = :title,
+            project            = :project,
+            description        = :description,
+            location           = :location,
+            assignee           = :assignee,
+            all_day            = :all_day,
+            start_datetime     = :start_datetime,
+            end_datetime       = :end_datetime,
+            kanban_status      = :kanban_status,
+            priority           = :priority,
+            done_at            = :done_at,
+            event_type         = :event_type,
+            recurrence_rule    = :recurrence_rule,
+            recurrence_end     = :recurrence_end,
+            parent_event_id    = :parent_event_id,
+            bound_checklist_id = :bound_checklist_id,
+            updated_at         = CURRENT_TIMESTAMP
            WHERE id = :id""",
         data,
     )
@@ -722,6 +743,7 @@ def update_event_recurring_from_here(event_id: int, data: dict):
         new_parent.setdefault("kanban_status", existing.get("kanban_status"))
         new_parent.setdefault("priority", existing.get("priority", "normal"))
         new_parent.setdefault("is_active", 1)
+        new_parent.setdefault("bound_checklist_id", existing.get("bound_checklist_id"))
         if new_parent.get("event_type") in ("meeting", "journal"):
             new_parent["kanban_status"] = None
 
@@ -730,12 +752,14 @@ def update_event_recurring_from_here(event_id: int, data: dict):
                (title, team_id, project, description, location, assignee, all_day,
                 start_datetime, end_datetime, created_by, source, meeting_id,
                 kanban_status, priority, event_type, is_active,
-                recurrence_rule, recurrence_end, recurrence_parent_id)
+                recurrence_rule, recurrence_end, recurrence_parent_id,
+                bound_checklist_id)
                VALUES
                (:title, :team_id, :project, :description, :location, :assignee, :all_day,
                 :start_datetime, :end_datetime, :created_by, :source, :meeting_id,
                 :kanban_status, :priority, :event_type, :is_active,
-                :recurrence_rule, :recurrence_end, :recurrence_parent_id)""",
+                :recurrence_rule, :recurrence_end, :recurrence_parent_id,
+                :bound_checklist_id)""",
             new_parent,
         )
         new_parent_id = cur.lastrowid
