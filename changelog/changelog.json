@@ -19,6 +19,16 @@
           "icon": "🔧",
           "title_html": "<span class=\"cl-tag fix\">fix</span>체크 편집기 — 일정 연동 목록에서 일지·회의·하위 업무 제외",
           "detail_html": "<ul>\n              <li>기존에는 <code>by-project-range</code> API가 <code>journal</code>(일지) 타입까지 포함하여 칸반에 노출되지 않는 일정이 목록에 섞이던 문제 수정</li>\n              <li>기본 조회 시 <code>schedule</code>(업무) 타입만 반환하도록 변경. <code>include_subtasks=1</code> 옵션 사용 시에만 <code>subtask</code> 추가 포함. <code>meeting</code>·<code>journal</code>은 두 경우 모두 제외</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 편집 모드 — 목차(TOC) 실시간 갱신 안 되는 버그 수정",
+          "detail_html": "<ul>\n              <li><code>wu-editor.js</code>의 <code>MutationObserver</code>가 <code>childList/subtree/characterData</code>만 감시하여 TUI Editor 체크박스 토글 시 발생하는 attribute 변경 및 텍스트 편집 직후 지연 리렌더링을 잡지 못하던 문제 수정</li>\n              <li><code>_scheduleTocRebuild()</code> 함수 신설(200ms 디바운스) — TUI Editor <code>change</code> 이벤트에 연결하여 체크박스 추가·삭제·토글, 헤딩 수정 등 모든 변경 시 TOC 자동 갱신. TOC 패널이 닫혀 있으면 재빌드 생략</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 뷰어 모드 — 목차(TOC) 실시간 갱신 안 되는 버그 수정",
+          "detail_html": "<ul>\n              <li>체크박스 토글·SSE 폴링·항목 전환 등 <code>renderViewer()</code> 호출 경로가 여럿인데, 각 호출부에 TOC 재빌드 트리거가 누락되어 있거나 비동기 타이밍 오류로 구 DOM을 스캔하던 문제 수정</li>\n              <li><code>renderViewer()</code> 내부 <code>setTimeout(100ms)</code> 콜백 마지막에 <code>_scheduleViewerTocRebuild()</code> 호출 추가 — 어떤 경로(체크박스 토글, SSE 갱신, 항목 전환, 뷰어 모드 전환)로 호출되든 TOC 패널이 열려 있으면 자동 갱신</li>\n            </ul>"
         }
       ]
     },

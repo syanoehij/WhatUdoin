@@ -981,6 +981,7 @@ let _curItem            = null;
 let wuInst              = null;   // WUEditor 인스턴스
 let _ckViewer           = null;
 let _viewerTocObserver  = null;
+let _viewerTocRebuildTimer = null;
 let _dirty              = false;
 let _autoSaveTimer      = null;
 let _editMode           = false;
@@ -1639,6 +1640,8 @@ function renderViewer(content) {
     _viewerTocObserver.observe(tocTarget, { childList: true, subtree: true, characterData: true });
     // 연동 체크박스 상태 동기화
     attachCheckboxHandlers(displayContent);
+    // renderViewer가 어느 경로로 호출되든 TOC 패널이 열려 있으면 즉시 갱신
+    _scheduleViewerTocRebuild();
   }, 100);
 }
 
@@ -1796,6 +1799,7 @@ async function toggleLinkedCheckbox(li, eventId, toChecked) {
   if (res.ok) {
     showSaveToast(toChecked ? '피어 리뷰로 변경되었습니다.' : 'Todo로 변경되었습니다.');
     // 동일 이벤트 중복 체크박스 동기화를 위해 뷰어 즉시 새로고침
+    // renderViewer 내부에서 _scheduleViewerTocRebuild가 호출되므로 여기선 별도 호출 불필요
     if (_curId) openChecklist(_curId);
   }
 }
@@ -1825,9 +1829,8 @@ async function toggleCheckboxByLine(mdLine, checked, mdContent) {
   // 내용 갱신
   _curItem.content = newMd;
   renderViewer(newMd);
-  // TOC가 열려있으면 재빌드하여 언매핑 방지
-  const _tocPanel = document.getElementById('ck-viewer-toc');
-  if (_tocPanel && !_tocPanel.classList.contains('hidden')) buildViewerToc();
+  // TOC가 열려있으면 재빌드하여 언매핑 방지 (renderViewer DOM 안정 대기)
+  _scheduleViewerTocRebuild();
   // 목록 갱신 (updated_at 반영)
   const updated = await fetch(`/api/checklists/${_curId}`);
   if (updated.ok) {
@@ -1872,8 +1875,8 @@ async function toggleTableCheckboxByIndex(idx, checked, mdContent) {
   }
   _curItem.content = newMd;
   renderViewer(newMd);
-  const _tocPanel = document.getElementById('ck-viewer-toc');
-  if (_tocPanel && !_tocPanel.classList.contains('hidden')) buildViewerToc();
+  // TOC가 열려있으면 재빌드 (renderViewer DOM 안정 대기)
+  _scheduleViewerTocRebuild();
   const updated = await fetch(`/api/checklists/${_curId}`);
   if (updated.ok) {
     _curItem = await updated.json();
@@ -2436,6 +2439,16 @@ function toggleViewerToc() {
   const panel = document.getElementById('ck-viewer-toc');
   if (panel.classList.contains('hidden')) buildViewerToc();
   else panel.classList.add('hidden');
+}
+
+// 뷰어 모드 TOC 디바운스 재빌드 — 체크박스 토글 후 renderViewer 직후
+// viewer DOM 채움이 비동기로 끝나는 케이스를 흡수하기 위해 200ms 지연 호출.
+// 패널이 닫혀 있으면 즉시 반환(다음 toggleViewerToc 시 buildViewerToc 호출됨).
+function _scheduleViewerTocRebuild() {
+  const panel = document.getElementById('ck-viewer-toc');
+  if (!panel || panel.classList.contains('hidden')) return;
+  clearTimeout(_viewerTocRebuildTimer);
+  _viewerTocRebuildTimer = setTimeout(buildViewerToc, 200);
 }
 
 // ── 뷰어 공개 범위 토글 ─────────────────────────────────

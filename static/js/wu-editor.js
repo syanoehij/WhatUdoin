@@ -519,6 +519,19 @@
       if (localStorage.getItem(key) === '1') setTimeout(_toggleToc, 400);
     }
 
+    // TUI Editor의 change 이벤트(체크박스 토글 등 포함)에서 호출되는
+    // 디바운스된 TOC 재빌드 트리거. MutationObserver로 잡히지 않는
+    // 변경(텍스트 편집 직후, 체크박스 토글 attribute 변경 등)을 보완한다.
+    let _tocRebuildTimer = null;
+    function _scheduleTocRebuild() {
+      if (!feat.toc) return;
+      const panelEl = document.getElementById('toc-panel');
+      // 패널이 닫혀 있으면 재빌드 불필요(다음 toggle 시 _buildToc 호출됨)
+      if (!panelEl || panelEl.classList.contains('hidden')) return;
+      clearTimeout(_tocRebuildTimer);
+      _tocRebuildTimer = setTimeout(_buildToc, 200);
+    }
+
     /* ── syntax highlight 적용 ──────────────────────── */
     function _applyHighlight() {
       if (typeof window.hljs === 'undefined' || !containerEl) return;
@@ -566,6 +579,7 @@
             _setDirty(true);
             if (hooks.onChange) hooks.onChange();
             _scheduleAutosave();
+            _scheduleTocRebuild();
           },
         },
       };
@@ -658,6 +672,7 @@
         _listeners.length = 0;
         clearInterval(_lockHeartbeat);
         clearTimeout(_autoSaveTimer);
+        clearTimeout(_tocRebuildTimer);
         if (_tocObserver)    { _tocObserver.disconnect();    _tocObserver    = null; }
         if (_tocActiveObs)   { _tocActiveObs.disconnect();   _tocActiveObs   = null; }
         if (_imgResizeObs)   { _imgResizeObs.disconnect();   _imgResizeObs   = null; }
