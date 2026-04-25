@@ -2,6 +2,28 @@
   "groups": [
     {
       "date": "2026-04-25",
+      "phase": "28차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>체크 편집기 — 일정 연동 사이드 패널",
+          "detail_html": "<ul>\n              <li>'🔗 일정 연동' 버튼 클릭 시 기존처럼 삽입 모달이 바로 열리던 방식 대신, <b>우측 슬라이드 패널(300px)</b>이 열리며 현재 마크다운에 <code>eid:</code> 링크로 연결된 일정 목록을 표시. 각 항목에 날짜·제목·칸반 상태(☐/☑) 노출</li>\n              <li>패널 상단 <b>'+ 추가'</b> 버튼을 눌러야 기존 일정 연동 삽입 모달이 열림. 일정 삽입 완료 시 패널이 즉시 갱신되고, <code>wu:events:changed</code> SSE 수신 시에도 300ms 디바운스로 자동 갱신</li>\n              <li>삽입 모달 크기 확대: 너비 <code>520px → 640px</code>, 높이 <code>80vh → 88vh</code></li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>체크 편집기 — 일정 연동 모달에 프로젝트 선택 추가",
+          "detail_html": "<ul>\n              <li>일정 연동 삽입 모달에 <b>프로젝트 선택 드롭다운</b> 추가. 편집기에서 현재 선택된 프로젝트가 기본값으로 자동 설정되어 별도 조작 없이 바로 조회 가능</li>\n              <li>다른 프로젝트의 일정도 조회·연결 가능하도록 드롭다운으로 변경 지원. 기간·프로젝트 선택 후 '조회' 버튼으로 일정 목록 갱신</li>\n            </ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 편집기 — 일정 연동 목록에서 일지·회의·하위 업무 제외",
+          "detail_html": "<ul>\n              <li>기존에는 <code>by-project-range</code> API가 <code>journal</code>(일지) 타입까지 포함하여 칸반에 노출되지 않는 일정이 목록에 섞이던 문제 수정</li>\n              <li>기본 조회 시 <code>schedule</code>(업무) 타입만 반환하도록 변경. <code>include_subtasks=1</code> 옵션 사용 시에만 <code>subtask</code> 추가 포함. <code>meeting</code>·<code>journal</code>은 두 경우 모두 제외</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-25",
       "phase": "28차 3단계",
       "phase_class": "phase-3",
       "entries": [

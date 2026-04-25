@@ -494,7 +494,7 @@ def get_all_events():
 
 def get_events_by_project_range(project: str, start_date: str, end_date: str, include_subtasks: bool = False) -> list[dict]:
     """특정 프로젝트의 날짜 범위 일정 조회 (반복 원본만, 완료 프로젝트 제외)"""
-    type_filter = "('schedule', 'journal', 'subtask')" if include_subtasks else "('schedule', 'journal')"
+    type_filter = "('schedule', 'subtask')" if include_subtasks else "('schedule')"
     with get_conn() as conn:
         rows = conn.execute(
             f"""SELECT e.* FROM events e
