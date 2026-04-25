@@ -1167,7 +1167,7 @@ function escHtml(s) {
 // ── 체크리스트 열기 (항상 뷰어 모드로) ───────────────────
 async function openChecklist(id, forceEdit = false) {
   if (_dirty && _editMode) {
-    if (!confirm('저장되지 않은 변경사항이 있습니다. 이동하시겠습니까?')) return;
+    if (!await wuDialog.confirm({ title: '페이지 이동', message: '저장되지 않은 변경사항이 있습니다. 이동하시겠습니까?' })) return;
   }
   // 이전 항목 잠금 해제
   if (IS_EDITOR && _curId && _editMode && _curId !== id) {
@@ -1333,7 +1333,7 @@ async function _showEditorMode() {
   const lockRes = await fetch(`/api/checklists/${_curId}/lock?tab_token=${TAB_TOKEN}`, { method: 'POST' });
   if (!lockRes.ok) {
     const err = await lockRes.json().catch(() => ({}));
-    alert(err.detail || '편집 잠금을 획득하지 못했습니다. 다른 사람이 편집 중입니다.');
+    wuToast.error(err.detail || '편집 잠금을 획득하지 못했습니다. 다른 사람이 편집 중입니다.');
     // 잠금 상태 갱신 후 뷰어 유지
     const lockInfo = await fetch(`/api/checklists/${_curId}/lock`);
     if (lockInfo.ok) { const d = await lockInfo.json(); _setLockState(d.locked_by, d.lock_type ?? null); }
@@ -1533,9 +1533,9 @@ function closeCkViewExportMenu() {
   document.getElementById('ck-view-export-menu')?.classList.add('hidden');
 }
 function ckViewExportLink() {
-  if (!_curId) { alert('체크리스트를 먼저 선택하세요.'); return; }
+  if (!_curId) { wuToast.warning('체크리스트를 먼저 선택하세요.'); return; }
   const url = `http://${location.hostname}:8000/check?id=${_curId}`;
-  navigator.clipboard.writeText(url).then(() => alert(`링크가 복사되었습니다:\n${url}`)).catch(() => prompt('링크를 복사하세요:', url));
+  navigator.clipboard.writeText(url).then(() => wuToast.success(`링크가 복사되었습니다:\n${url}`)).catch(async () => { await wuDialog.prompt({ title: '링크 복사', message: '링크를 복사하세요:', value: url, readonly: true, copyButton: true }); });
 }
 
 function switchToEdit() {
@@ -1543,9 +1543,9 @@ function switchToEdit() {
   window.location.href = `/check/${_curItem.id}/edit`;
 }
 
-function switchToViewer() {
+async function switchToViewer() {
   if (_dirty) {
-    if (!confirm('저장되지 않은 변경사항이 있습니다. 뷰어로 전환하시겠습니까?')) return;
+    if (!await wuDialog.confirm({ title: '페이지 이동', message: '저장되지 않은 변경사항이 있습니다. 뷰어로 전환하시겠습니까?' })) return;
     setDirty(false);
   }
   _showViewerMode();
@@ -1908,7 +1908,7 @@ async function saveContent(auto = false) {
   const content = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd();
 
   if (!title) {
-    alert('첫 번째 줄이 제목이 됩니다. 내용을 입력하세요.');
+    wuToast.warning('첫 번째 줄이 제목이 됩니다. 내용을 입력하세요.');
     return;
   }
 
@@ -1986,7 +1986,7 @@ function closeRenameForm() {
 
 async function saveRename() {
   const title = document.getElementById('ck-rename-title').value.trim();
-  if (!title) { alert('제목을 입력하세요.'); return; }
+  if (!title) { wuToast.warning('제목을 입력하세요.'); return; }
   const project = document.getElementById('ck-rename-project')?.value || '';
 
   const res = await fetch(`/api/checklists/${_curId}`, {
@@ -1994,7 +1994,7 @@ async function saveRename() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, project }),
   });
-  if (!res.ok) { alert('저장 실패'); return; }
+  if (!res.ok) { wuToast.error('저장 실패'); return; }
 
   const wasEdit = _editMode;
   closeRenameForm();
@@ -2006,10 +2006,10 @@ async function saveRename() {
 // ── 삭제 ──────────────────────────────────────────────────
 async function deleteChecklist() {
   if (!_curId) return;
-  if (!confirm(`"${_curItem?.title}" 체크리스트를 삭제하시겠습니까?`)) return;
+  if (!await wuDialog.confirm({ title: '체크리스트 삭제', message: `"${_curItem?.title}" 체크리스트를 삭제하시겠습니까?`, danger: true })) return;
 
   const res = await fetch(`/api/checklists/${_curId}`, { method: 'DELETE' });
-  if (!res.ok) { alert('삭제 실패'); return; }
+  if (!res.ok) { wuToast.error('삭제 실패'); return; }
 
   _stopHeartbeat();
   _lockedByOther = false;
@@ -2068,9 +2068,9 @@ function closeHistoryModal() {
 }
 
 async function restoreFromHistory(histId) {
-  if (!confirm('이 버전으로 내용을 복원하시겠습니까?\n현재 내용은 새 이력으로 저장됩니다.')) return;
+  if (!await wuDialog.confirm({ title: '복원', message: '이 버전으로 내용을 복원하시겠습니까?\n현재 내용은 새 이력으로 저장됩니다.' })) return;
   const res = await fetch(`/api/checklists/${_curId}/histories/${histId}/restore`, { method: 'POST' });
-  if (!res.ok) { alert('복원 실패'); return; }
+  if (!res.ok) { wuToast.error('복원 실패'); return; }
   const updated = await res.json();
   _curItem = updated;
   // 목록 갱신
@@ -2205,7 +2205,7 @@ async function _loadSchedModels() {
 async function queryScheduleEvents() {
   const start = document.getElementById('sched-start').value;
   const end   = document.getElementById('sched-end').value;
-  if (!start || !end) { alert('날짜를 선택하세요.'); return; }
+  if (!start || !end) { wuToast.warning('날짜를 선택하세요.'); return; }
   if (!_curProj || _curProj === '미지정') return;
 
   const listEl   = document.getElementById('sched-event-list');

@@ -448,9 +448,9 @@ function exportLink() {
   const loc = window.location;
   const httpUrl = `http://${loc.hostname}:8000${loc.pathname}${loc.search}${loc.hash}`;
   navigator.clipboard.writeText(httpUrl).then(() => {
-    alert(`링크가 복사되었습니다:\n${httpUrl}`);
-  }).catch(() => {
-    prompt('링크를 복사하세요:', httpUrl);
+    wuToast.success(`링크가 복사되었습니다:\n${httpUrl}`);
+  }).catch(async () => {
+    await wuDialog.prompt({ title: '링크 복사', message: '링크를 복사하세요:', value: httpUrl, readonly: true, copyButton: true });
   });
 }
 
@@ -483,7 +483,7 @@ async function saveDoc(leaveTarget) {
   const lines = raw.split('\n');
   const title = lines[0].replace(/^#+\s*/, '').trim();
   const content = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd();
-  if (!title) { alert('첫 줄에 제목(H1)을 입력하세요.'); return; }
+  if (!title) { wuToast.warning('첫 줄에 제목(H1)을 입력하세요.'); return; }
 
   const method = DOC_ID ? 'PUT' : 'POST';
   const url    = DOC_ID ? `/api/doc/${DOC_ID}` : '/api/doc';
@@ -511,7 +511,7 @@ async function saveDoc(leaveTarget) {
       }
     } else {
       const err = await res.json();
-      alert(err.detail || '저장 실패');
+      wuToast.error(err.detail || '저장 실패');
     }
   } finally {
     _docSaving = false;
@@ -520,7 +520,7 @@ async function saveDoc(leaveTarget) {
 }
 
 async function deleteDoc() {
-  if (!confirm('이 문서를 삭제하시겠습니까?')) return;
+  if (!await wuDialog.confirm({ title: '문서 삭제', message: '이 문서를 삭제하시겠습니까?', danger: true })) return;
   const res = await fetch(`/api/doc/${DOC_ID}`, { method: 'DELETE' });
   if (res.ok) location.href = '/doc';
 }
@@ -528,7 +528,7 @@ async function deleteDoc() {
 /* ── AI 파싱 ─────────────────────────────────────────── */
 async function runAiParse() {
   const content = getDocContent();
-  if (!content) { alert('문서 내용을 먼저 입력하세요.'); return; }
+  if (!content) { wuToast.warning('문서 내용을 먼저 입력하세요.'); return; }
 
   const model = document.getElementById('ai-model-select').value;
   document.getElementById('ai-loading').classList.remove('hidden');
@@ -829,14 +829,14 @@ function removeAiItem(i) {
 }
 
 async function confirmAiEvents(force = false) {
-  if (!DOC_ID) { alert('문서를 먼저 저장하세요.'); return; }
+  if (!DOC_ID) { wuToast.warning('문서를 먼저 저장하세요.'); return; }
   const toSave = parsedEvents.filter((e, i) => {
     if (!e) return false;
     const chk = document.getElementById(`ai-include-${i}`);
     const isOn = chk ? chk.checked : e._include !== false;
     return isOn && _aiHasRequired(e);
   });
-  if (!toSave.length) { alert('등록할 일정이 없습니다. 체크박스를 확인하세요.'); return; }
+  if (!toSave.length) { wuToast.warning('등록할 일정이 없습니다. 체크박스를 확인하세요.'); return; }
 
   const res = await fetch('/api/ai/confirm', {
     method: 'POST',
@@ -847,9 +847,10 @@ async function confirmAiEvents(force = false) {
 
   if (data.requires_force && data.blocked && data.blocked.length) {
     const names = data.blocked.map(b => `"${b.title}" (${b.similarity}% 유사: "${b.existing_title}")`).join('\n');
-    const ok = confirm(
-      `아래 일정이 기존 일정과 중복될 수 있습니다:\n\n${names}\n\n그래도 강제 등록하시겠습니까?`
-    );
+    const ok = await wuDialog.confirm({
+      title: '강제 등록',
+      message: `아래 일정이 기존 일정과 중복될 수 있습니다:\n\n${names}\n\n그래도 강제 등록하시겠습니까?`,
+    });
     if (ok) await confirmAiEvents(true);
     return;
   }
@@ -858,8 +859,10 @@ async function confirmAiEvents(force = false) {
   if (data.skipped && data.skipped.length) {
     const skipNames = data.skipped.map(s => `"${s.title || '제목없음'}" (${s.reason})`).join('\n');
     msg += `\n\n건너뜀 ${data.skipped.length}건:\n${skipNames}`;
+    await wuDialog.alert({ title: 'AI 등록 결과', message: msg });
+  } else {
+    wuToast.success(msg);
   }
-  alert(msg);
   // reload 전 미저장 문서 내용 저장 시도, 저장 실패해도 팝업 방지를 위해 dirty 해제
   if (IS_EDITOR && !LOCKED_BY && wuInst?.dirty) {
     await saveDoc();
@@ -1026,7 +1029,7 @@ function openEditForLinked(i) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.detail || '저장 실패');
+        wuToast.error(err.detail || '저장 실패');
         return;
       }
       linkedEvents[i] = { ...e, ...payload };
@@ -1038,14 +1041,14 @@ function openEditForLinked(i) {
 
 async function unlinkLinkedEvent(i) {
   const e = linkedEvents[i];
-  if (!confirm(`"${e.title}" 일정을 이 문서에서 연결 해제하시겠습니까?\n(일정은 삭제되지 않고 캘린더에 그대로 남습니다.)`)) return;
+  if (!await wuDialog.confirm({ title: '연결 해제', message: `"${e.title}" 일정을 이 문서에서 연결 해제하시겠습니까?\n(일정은 삭제되지 않고 캘린더에 그대로 남습니다.)` })) return;
   const res = await fetch(`/api/events/${e.id}/unlink`, { method: 'PATCH' });
   if (res.ok) {
     linkedEvents.splice(i, 1);
     renderLinkedEvents();
     updateAiBtnLabel();
   } else {
-    alert('연결 해제 실패');
+    wuToast.error('연결 해제 실패');
   }
 }
 

@@ -152,7 +152,7 @@ async function openAddSubtaskModal() {
   const titleEl = document.getElementById('f-title');
   const isDirty = titleEl && titleEl.value !== (ev.title || '');
   if (isDirty) {
-    if (!confirm('저장하지 않은 변경사항이 있습니다. 저장 후 하위 일정을 생성하시겠습니까?')) return;
+    if (!await wuDialog.confirm({ title: '하위 일정 생성', message: '저장하지 않은 변경사항이 있습니다. 저장 후 하위 일정을 생성하시겠습니까?' })) return;
     // 저장 후 진행
     await new Promise((resolve) => {
       const origSaved = window.onEventSaved;
@@ -613,7 +613,7 @@ async function saveEvent(e) {
   const startTime = document.getElementById('f-start-time').value || '00:00';
   const endTime   = document.getElementById('f-end-time').value   || '00:00';
 
-  if (!document.getElementById('f-title').value.trim()) { alert('제목을 입력해주세요.'); return; }
+  if (!document.getElementById('f-title').value.trim()) { wuToast.warning('제목을 입력해주세요.'); return; }
   if (!getAssigneeValue()) {
     const errEl = document.getElementById('assignee-error');
     if (errEl) {
@@ -623,12 +623,12 @@ async function saveEvent(e) {
     }
     return;
   }
-  if (!startDate) { alert('시작 날짜를 선택해주세요.'); return; }
+  if (!startDate) { wuToast.warning('시작 날짜를 선택해주세요.'); return; }
   if (endDate && endDate < startDate) {
-    alert('종료 날짜는 시작 날짜보다 이전일 수 없습니다.'); return;
+    wuToast.warning('종료 날짜는 시작 날짜보다 이전일 수 없습니다.'); return;
   }
   if (!allDay && endDate === startDate && endTime < startTime) {
-    alert('종료 시간은 시작 시간보다 이전일 수 없습니다.'); return;
+    wuToast.warning('종료 시간은 시작 시간보다 이전일 수 없습니다.'); return;
   }
 
   const kanban_status = _currentEventType === 'schedule'
@@ -639,7 +639,7 @@ async function saveEvent(e) {
   const recurrenceEnd  = document.getElementById('f-recurrence-end').value || null;
 
   if (recurrenceRule && !recurrenceEnd) {
-    alert('반복 요일이 선택된 경우 반복 종료일을 설정해주세요.');
+    wuToast.warning('반복 요일이 선택된 경우 반복 종료일을 설정해주세요.');
     document.getElementById('f-recurrence-end').focus();
     return;
   }
@@ -688,7 +688,7 @@ async function saveEvent(e) {
       });
       if (!res2.ok) {
         const err = await res2.json();
-        alert(err.detail || '저장 실패');
+        wuToast.error(err.detail || '저장 실패');
         return;
       }
       if (window.onEventSaved) window.onEventSaved();
@@ -704,7 +704,7 @@ async function saveEvent(e) {
 
   if (!res.ok) {
     const err = await res.json();
-    alert(err.detail || '저장 실패');
+    wuToast.error(err.detail || '저장 실패');
     return;
   }
 
@@ -722,7 +722,7 @@ async function deleteEvent() {
       const res2 = await fetch(`/api/events/${id}?delete_mode=${deleteMode}`, { method: 'DELETE' });
       if (!res2.ok) {
         const err = await res2.json();
-        alert(err.detail || '삭제 실패');
+        wuToast.error(err.detail || '삭제 실패');
         return;
       }
       if (window.onEventSaved) window.onEventSaved();
@@ -730,11 +730,11 @@ async function deleteEvent() {
     return;
   }
 
-  if (!confirm('이 일정을 삭제할까요?')) return;
+  if (!await wuDialog.confirm({ title: '일정 삭제', message: '이 일정을 삭제할까요?', danger: true })) return;
   const res = await fetch(`/api/events/${id}`, { method: 'DELETE' });
   if (!res.ok) {
     const err = await res.json();
-    alert(err.detail || '삭제 실패');
+    wuToast.error(err.detail || '삭제 실패');
     return;
   }
   document.getElementById('modal-overlay').classList.add('hidden');
@@ -1032,7 +1032,7 @@ async function editKanbanEvent() {
 
 async function completeKanbanEvent() {
   if (!currentKDetailId) return;
-  if (!confirm('이 일정을 완료 처리하시겠습니까?\n칸반과 간트에서 숨겨집니다.')) return;
+  if (!await wuDialog.confirm({ title: '완료 처리', message: '이 일정을 완료 처리하시겠습니까?\n칸반과 간트에서 숨겨집니다.' })) return;
   const id = currentKDetailId;
   document.getElementById('kdetail-overlay').classList.add('hidden');
   currentKDetailId = null;
@@ -1093,8 +1093,8 @@ function applyBoundState(title, content, id) {
   });
 }
 
-function unbindCheck() {
-  if (!confirm('체크 바인딩을 해제하시겠습니까?')) return;
+async function unbindCheck() {
+  if (!await wuDialog.confirm({ title: '연결 해제', message: '체크 바인딩을 해제하시겠습니까?' })) return;
   _currentBoundChecklistId = null;
   if (_boundViewerInstance) { _boundViewerInstance.destroy(); _boundViewerInstance = null; }
   const viewerEl  = document.getElementById('bound-content-viewer');

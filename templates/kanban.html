@@ -531,7 +531,7 @@ async function onDrop(e, newStatus) {
   e.currentTarget.classList.remove('drag-over');
   e.stopPropagation();
   if (!dragSrcId) return;
-  if (!CURRENT_USER) { alert('로그인이 필요합니다.'); return; }
+  if (!CURRENT_USER) { wuToast.info('로그인이 필요합니다.'); return; }
 
   const id = parseInt(dragSrcId);
   dragSrcId = null;
@@ -550,7 +550,7 @@ async function onDrop(e, newStatus) {
     body: JSON.stringify({ kanban_status: newStatus }),
   });
   if (!res.ok) {
-    alert('상태 변경 실패');
+    wuToast.error('상태 변경 실패');
     loadKanban();
   }
 }

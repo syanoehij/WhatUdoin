@@ -1142,7 +1142,7 @@ async function saveEdit() {
     });
     if (r.status === 409) {
       const msg = (await r.json()).detail;
-      if (!confirm(`${msg}\n\n확인: 기존 "${newName}" 프로젝트에 병합합니다.`)) return;
+      if (!await wuDialog.confirm({ title: '프로젝트 병합', message: `${msg}\n\n확인: 기존 "${newName}" 프로젝트에 병합합니다.` })) return;
       const r2 = await fetch(`/api/manage/projects/${encodeURIComponent(p.name)}`, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
@@ -1178,7 +1178,7 @@ async function saveEdit() {
 /* ── 미지정 일정 완료/재개 ── */
 async function toggleEventStatus(id, activate) {
   if (activate) {
-    if (!confirm('이 일정을 다시 진행중으로 재개합니다.')) return;
+    if (!await wuDialog.confirm({ title: '재개', message: '이 일정을 다시 진행중으로 재개합니다.' })) return;
   }
   const res = await fetch(`/api/manage/events/${id}/status`, {
     method: 'PATCH',
@@ -1232,7 +1232,7 @@ async function cycleChecklistVisibility(id, cur) {
 
 /* ── 일정 프로젝트 제외 (미지정으로 이동) ── */
 async function excludeEvent(id) {
-  if (!confirm('이 일정을 프로젝트에서 제외합니다.\n일정 자체는 삭제되지 않고 미지정으로 이동됩니다.')) return;
+  if (!await wuDialog.confirm({ title: '제외', message: '이 일정을 프로젝트에서 제외합니다.\n일정 자체는 삭제되지 않고 미지정으로 이동됩니다.' })) return;
   const res = await fetch(`/api/manage/events/${id}`, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
@@ -1245,7 +1245,7 @@ async function excludeEvent(id) {
 
 /* ── 체크리스트 프로젝트 제외 ── */
 async function excludeChecklist(id) {
-  if (!confirm('이 체크리스트를 프로젝트에서 제외합니다.\n체크리스트 자체는 삭제되지 않고 미지정으로 이동됩니다.')) return;
+  if (!await wuDialog.confirm({ title: '제외', message: '이 체크리스트를 프로젝트에서 제외합니다.\n체크리스트 자체는 삭제되지 않고 미지정으로 이동됩니다.' })) return;
   const item = await (await fetch(`/api/checklists/${id}`)).json();
   const res = await fetch(`/api/checklists/${id}`, {
     method: 'PATCH',
@@ -1263,7 +1263,7 @@ async function toggleStatus(idx, activate) {
   const msg = activate
     ? `"${p.name}" 프로젝트를 재개합니다.\n간트와 칸반에 다시 노출됩니다.`
     : `"${p.name}" 프로젝트를 종료합니다.\n간트와 칸반에서 숨겨집니다.`;
-  if (!confirm(msg)) return;
+  if (!await wuDialog.confirm({ title: activate ? '재개' : '종료', message: msg })) return;
   const res = await fetch(`/api/manage/projects/${encodeURIComponent(p.name)}/status`, {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json'},
@@ -1367,8 +1367,8 @@ async function deleteProject(idx, withEvents) {
   const msg = withEvents
     ? `"${p.name}" 프로젝트와 하위 일정 및 체크 항목을 모두 삭제합니다.\n정말 삭제하시겠습니까?`
     : `"${p.name}" 프로젝트를 삭제합니다.\n하위 일정과 체크 항목은 '미지정'으로 이동됩니다.\n계속하시겠습니까?`;
-  if (!confirm(msg)) return;
-  if (withEvents && confirm('삭제 전에 옵시디언 ZIP으로 먼저 저장할까요?\n(취소 시 바로 삭제)')) {
+  if (!await wuDialog.confirm({ title: '프로젝트 삭제', message: msg, danger: true })) return;
+  if (withEvents && await wuDialog.confirm({ title: 'ZIP 백업', message: '삭제 전에 옵시디언 ZIP으로 먼저 저장할까요?\n(취소 시 바로 삭제)' })) {
     exportProjectMd(idx);
     await new Promise(r => setTimeout(r, 600));
   }

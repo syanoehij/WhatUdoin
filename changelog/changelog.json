@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-04-25",
+      "phase": "29차 3단계",
+      "phase_class": "phase-3",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>UI — 브라우저 시스템 팝업 → 커스텀 모달/토스트로 전면 교체",
+          "detail_html": "<ul>\n              <li><b>공통 인프라 신설</b> — <code>static/js/wu-dialog.js</code> 추가. <code>wuDialog.confirm/alert/prompt</code>(Promise 기반 커스텀 모달)와 <code>wuToast.success/error/warning/info</code>(자동 소멸 토스트) API 제공. dialog는 큐잉(동시 호출 시 순차 표시), toast는 스택(여러 개 세로 배치). ESC·백드롭 클릭 = 취소(MutationObserver 연동). z-index 2200+으로 기존 모달 위에 표시</li>\n              <li><b>confirm/prompt 교체</b> — 전체 18개 파일, 약 31건의 <code>confirm()</code>·<code>prompt()</code> 호출을 <code>await wuDialog.confirm()</code>·<code>await wuDialog.prompt()</code>로 교체. 삭제 동작은 <code>danger: true</code>(빨간 OK 버튼) 적용. 기존 클립보드 복사용 <code>prompt</code> 3건은 <code>readonly + copyButton</code> 모달로 전환</li>\n              <li><b>alert → 토스트 교체</b> — 전체 파일에서 약 76건의 <code>alert()</code>를 용도에 따라 분류 후 교체. 성공 → <code>wuToast.success</code>(2초), 실패/오류 → <code>wuToast.error</code>(4초), 입력검증 → <code>wuToast.warning</code>(2.5초), 중립 안내 → <code>wuToast.info</code>(2초). AI import 결과 등 긴 통계 메시지 3건은 <code>wuDialog.alert</code>(모달) 예외 처리</li>\n              <li>대상 파일: base.html, calendar.html, trash.html, check_editor.html, check.html, check_history.html, doc_history.html, doc_editor.html, doc_list.html, project_manage.html, admin.html, ai_import.html, kanban.html, notice.html, static/js/event-modal.js, static/js/wu-editor.js</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-25",
       "phase": "29차 2단계",
       "phase_class": "phase-1",
       "entries": [

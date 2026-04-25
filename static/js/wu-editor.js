@@ -600,7 +600,7 @@
               const { url } = await res.json();
               callback(url, '');
             } catch {
-              alert('이미지 업로드에 실패했습니다.');
+              wuToast.error('이미지 업로드에 실패했습니다.');
             }
           },
         };

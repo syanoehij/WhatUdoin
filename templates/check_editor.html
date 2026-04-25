@@ -340,9 +340,9 @@ function ckExportLink() {
   const loc = window.location;
   const httpUrl = `http://${loc.hostname}:8000${loc.pathname}${loc.search}${loc.hash}`;
   navigator.clipboard.writeText(httpUrl).then(() => {
-    alert(`링크가 복사되었습니다:\n${httpUrl}`);
-  }).catch(() => {
-    prompt('링크를 복사하세요:', httpUrl);
+    wuToast.success(`링크가 복사되었습니다:\n${httpUrl}`);
+  }).catch(async () => {
+    await wuDialog.prompt({ title: '링크 복사', message: '링크를 복사하세요:', value: httpUrl, readonly: true, copyButton: true });
   });
 }
 
@@ -457,7 +457,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ is_public: val }),
       });
-      if (!res.ok) { alert('변경 실패'); return; }
+      if (!res.ok) { wuToast.error('변경 실패'); return; }
       document.querySelectorAll('#ck-vis-seg .vis-btn').forEach(b => b.classList.toggle('active', b === btn));
     });
   });
@@ -476,7 +476,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const sel = document.getElementById('ck-edit-project');
         if (sel && draft.project) sel.value = draft.project;
       } else {
-        alert('AI 초안을 찾을 수 없습니다. 빈 편집기로 시작합니다.');
+        wuToast.warning('AI 초안을 찾을 수 없습니다. 빈 편집기로 시작합니다.');
       }
     } catch (_) {}
     sessionStorage.removeItem('check_ai_draft');
@@ -521,7 +521,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         endpoint: `/api/checklists/${CKE_ID}/lock`,
         tabToken: TAB_TOKEN,
         heartbeatMs: 120000,
-        onLockFailed: () => { alert('편집 잠금을 획득하지 못했습니다. 다른 사람이 편집 중입니다.'); location.href = '/check'; },
+        onLockFailed: () => { wuToast.error('편집 잠금을 획득하지 못했습니다. 다른 사람이 편집 중입니다.'); location.href = '/check'; },
         onLockLost:   () => _handleLockLost(),
       } : false,
       leaveConfirm: { backBtnSelector: '#btn-back' },
@@ -612,7 +612,7 @@ async function saveContent(auto = false, leaveTarget = null) {
   const title   = lines[0].replace(/^#+\s*/, '').trim();
   const content = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd();
 
-  if (!title) { alert('첫 줄에 제목(H1)을 입력하세요.'); return; }
+  if (!title) { wuToast.warning('첫 줄에 제목(H1)을 입력하세요.'); return; }
 
   if (CKE_IS_NEW) {
     const res = await fetch('/api/checklists', {
@@ -626,7 +626,7 @@ async function saveContent(auto = false, leaveTarget = null) {
       window.location.href = `/check/${data.id}/edit`;
     } else {
       const err = await res.json().catch(() => ({}));
-      alert(err.detail || '저장 실패');
+      wuToast.error(err.detail || '저장 실패');
     }
     return;
   }
@@ -817,7 +817,7 @@ document.addEventListener('keydown', e => {
 });
 
 async function deleteChecklist() {
-  if (!confirm('이 체크리스트를 삭제하시겠습니까?')) return;
+  if (!await wuDialog.confirm({ title: '체크리스트 삭제', message: '이 체크리스트를 삭제하시겠습니까?', danger: true })) return;
   wuInst?.releaseLock();
   const res = await fetch(`/api/checklists/${CKE_ID}`, { method: 'DELETE' });
   if (res.ok) {
@@ -825,7 +825,7 @@ async function deleteChecklist() {
     const lastProj = localStorage.getItem('ck_last_proj');
     window.location.href = lastProj ? `/check?proj=${encodeURIComponent(lastProj)}` : '/check';
   } else {
-    alert('삭제 실패');
+    wuToast.error('삭제 실패');
   }
 }
 
@@ -836,7 +836,7 @@ function esc(s) {
 }
 
 function toggleCkAiPanel() {
-  if (CKE_IS_NEW) { alert('체크리스트를 먼저 저장하세요.'); return; }
+  if (CKE_IS_NEW) { wuToast.warning('체크리스트를 먼저 저장하세요.'); return; }
   ckAiPanelOpen = !ckAiPanelOpen;
   const panel  = document.getElementById('cke-ai-panel');
   const body   = document.getElementById('cke-editor-body');
@@ -1117,9 +1117,9 @@ async function _aiReviewConflictsForCk(model) {
 }
 
 async function runCkAiParse() {
-  if (CKE_IS_NEW) { alert('체크리스트를 먼저 저장하세요.'); return; }
+  if (CKE_IS_NEW) { wuToast.warning('체크리스트를 먼저 저장하세요.'); return; }
   const content = wuInst ? wuInst.getMarkdown().trim() : '';
-  if (!content) { alert('체크리스트 내용을 먼저 입력하세요.'); return; }
+  if (!content) { wuToast.warning('체크리스트 내용을 먼저 입력하세요.'); return; }
 
   const model = document.getElementById('cke-ai-model-select').value;
   document.getElementById('cke-ai-loading').classList.remove('hidden');
@@ -1176,14 +1176,14 @@ async function runCkAiParse() {
 }
 
 async function confirmCkAiEvents(force = false) {
-  if (CKE_IS_NEW) { alert('체크리스트를 먼저 저장하세요.'); return; }
+  if (CKE_IS_NEW) { wuToast.warning('체크리스트를 먼저 저장하세요.'); return; }
   const toSave = ckParsedEvents.filter((e, i) => {
     if (!e) return false;
     const chk = document.getElementById(`cke-ai-include-${i}`);
     const isOn = chk ? chk.checked : e._include !== false;
     return isOn && _ckAiHasRequired(e);
   });
-  if (!toSave.length) { alert('등록할 일정이 없습니다. 체크박스를 확인하세요.'); return; }
+  if (!toSave.length) { wuToast.warning('등록할 일정이 없습니다. 체크박스를 확인하세요.'); return; }
 
   _ckAiSaving = true;
   try {
@@ -1195,7 +1195,7 @@ async function confirmCkAiEvents(force = false) {
 
     if (data.requires_force && data.blocked && data.blocked.length) {
       const names = data.blocked.map(b => `"${b.title}" (${b.similarity}% 유사: "${b.existing_title}")`).join('\n');
-      const ok = confirm(`아래 일정이 기존 일정과 중복될 수 있습니다:\n\n${names}\n\n그래도 강제 등록하시겠습니까?`);
+      const ok = await wuDialog.confirm({ title: '강제 등록', message: `아래 일정이 기존 일정과 중복될 수 있습니다:\n\n${names}\n\n그래도 강제 등록하시겠습니까?` });
       _ckAiSaving = false;
       if (ok) return confirmCkAiEvents(true);
       return;
@@ -1215,8 +1215,10 @@ async function confirmCkAiEvents(force = false) {
       let msg = `${data.saved}개 일정이 등록되었습니다.`;
       if (data.skipped && data.skipped.length) {
         msg += `\n\n건너뜀 ${data.skipped.length}건:\n` + data.skipped.map(s => `"${s.title || '제목없음'}" (${s.reason})`).join('\n');
+        await wuDialog.alert({ title: 'AI 등록 결과', message: msg });
+      } else {
+        wuToast.success(msg);
       }
-      alert(msg);
     }
   } finally {
     _ckAiSaving = false;

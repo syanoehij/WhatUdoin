@@ -719,34 +719,34 @@ async function doRestoreProject() {
   const projId   = btn.dataset.projId;
   const projName = btn.dataset.projName;
   if (!projId) return;
-  if (!confirm(`"${projName}" 프로젝트와 연결된 모든 항목을 복원하시겠습니까?`)) return;
+  if (!await wuDialog.confirm({ title: '복원', message: `"${projName}" 프로젝트와 연결된 모든 항목을 복원하시겠습니까?` })) return;
   try {
     const res = await fetch(`/api/trash/project/${projId}/restore`, { method: 'POST' });
-    if (!res.ok) { alert('복원 실패'); return; }
+    if (!res.ok) { wuToast.error('복원 실패'); return; }
     const prevCat = _selectedCat;
     _selectedItem = null;
     await loadTrash();
     // 복원 후 해당 카테고리가 사라졌으면 초기화
     renderDetail(null);
   } catch(e) {
-    alert('오류 발생: ' + e.message);
+    wuToast.error('오류 발생: ' + e.message);
   }
 }
 
 // ── 개별 항목 복원 ──
 async function doRestore() {
   if (!_selectedItem) return;
-  if (!confirm(`"${_selectedItem.title}" 을(를) 복원하시겠습니까?`)) return;
+  if (!await wuDialog.confirm({ title: '복원', message: `"${_selectedItem.title}" 을(를) 복원하시겠습니까?` })) return;
   try {
     const res = await fetch(`/api/trash/${_selectedItem._type}/${_selectedItem.id}/restore`, { method: 'POST' });
-    if (!res.ok) { alert('복원 실패'); return; }
+    if (!res.ok) { wuToast.error('복원 실패'); return; }
     const prevCat = _selectedCat;
     _selectedItem = null;
     await loadTrash();
     if (prevCat) selectCat(prevCat);
     renderDetail(null);
   } catch(e) {
-    alert('오류 발생: ' + e.message);
+    wuToast.error('오류 발생: ' + e.message);
   }
 }
 

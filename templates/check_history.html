@@ -33,14 +33,14 @@
 {% block scripts %}
 <script>
 async function restoreHistory(historyId) {
-  if (!confirm('이 버전으로 복원하시겠습니까?\n현재 내용은 이력으로 저장됩니다.')) return;
+  if (!await wuDialog.confirm({ title: '버전 복원', message: '이 버전으로 복원하시겠습니까?\n현재 내용은 이력으로 저장됩니다.' })) return;
   const res = await fetch(`/api/checklists/{{ checklist.id }}/histories/${historyId}/restore`, { method: 'POST' });
   if (res.ok) {
-    alert('복원됐습니다.');
+    wuToast.success('복원됐습니다.');
     location.href = '/check/{{ checklist.id }}/edit';
   } else {
     const err = await res.json().catch(() => ({}));
-    alert(err.detail || '복원 실패');
+    wuToast.error(err.detail || '복원 실패');
   }
 }
 </script>

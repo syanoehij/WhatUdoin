@@ -625,7 +625,7 @@ async function generateWeeklyReport() {
   const baseDate = document.getElementById('weekly-date').value;
   const teamId   = document.getElementById('weekly-team').value;
   const model    = document.getElementById('weekly-model').value;
-  if (!baseDate) { alert('기준 날짜를 선택하세요.'); return; }
+  if (!baseDate) { wuToast.warning('기준 날짜를 선택하세요.'); return; }
   document.getElementById('weekly-form').style.display = 'none';
   document.getElementById('weekly-loading').classList.remove('hidden');
   document.getElementById('weekly-error').classList.add('hidden');

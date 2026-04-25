@@ -797,6 +797,7 @@
     </div>
   </div>
 
+  <script src="/static/js/wu-dialog.js?v={{ range(1000,9999) | random }}"></script>
   <script src="/static/js/event-modal.js?v={{ range(1000,9999) | random }}"></script>
   <script src="/static/js/realtime.js?v={{ range(1000,9999) | random }}"></script>
   {% block scripts %}{% endblock %}
@@ -1350,7 +1351,7 @@
         await _loadLinks();
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err.detail || '저장 실패');
+        wuToast.error(err.detail || '저장 실패');
       }
     };
 
@@ -1362,13 +1363,34 @@
 
     // ── 삭제 ──
     window._deleteLink = async function(id) {
-      if (!confirm('이 링크를 삭제하시겠습니까?')) return;
+      if (!await wuDialog.confirm({ title: '링크 삭제', message: '이 링크를 삭제하시겠습니까?', danger: true })) return;
       const res = await fetch(`/api/links/${id}`, { method: 'DELETE' });
       if (res.ok) await _loadLinks();
-      else alert('삭제 실패');
+      else wuToast.error('삭제 실패');
     };
   })();
   </script>
   {% endif %}
+
+  <!-- wu-dialog: 커스텀 confirm/alert/prompt 모달 -->
+  <div id="wu-dialog-overlay" class="modal-overlay hidden" onclick="wuDialog._onBackdropClick(event)">
+    <div class="modal modal-sm" id="wu-dialog-box">
+      <div class="modal-header">
+        <span id="wu-dialog-title" class="modal-title"></span>
+        <button onclick="wuDialog._onCancel()" class="modal-close-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="wu-dialog-message" style="margin:0 0 8px;white-space:pre-line;"></p>
+        <input type="text" id="wu-dialog-input" class="form-control" style="display:none;width:100%;">
+      </div>
+      <div class="modal-footer wu-dialog-actions">
+        <button id="wu-dialog-cancel" class="btn btn-secondary" onclick="wuDialog._onCancel()">취소</button>
+        <button id="wu-dialog-copy" class="btn btn-secondary" onclick="wuDialog._onCopy()" style="display:none;">복사</button>
+        <button id="wu-dialog-ok" class="btn btn-primary" onclick="wuDialog._onOk()">확인</button>
+      </div>
+    </div>
+  </div>
+  <!-- wu-toast-container -->
+  <div id="wu-toast-container"></div>
 </body>
 </html>
