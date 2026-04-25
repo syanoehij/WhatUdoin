@@ -155,7 +155,6 @@
   [data-theme="dark"] .cal-ctx-item.cal-ctx-danger { color: #f85149; }
   .cal-ctx-item.cal-ctx-danger:hover { background: rgba(207,34,46,0.08); }
   .fc-event.ctx-copied { outline: 2px solid var(--accent); outline-offset: 1px; }
-  #calendar.hide-allday .wu-allday-event { display: none !important; }
 </style>
 {% endblock %}
 
@@ -275,7 +274,8 @@ function toggleShowAllDay(val) {
   _showAllDay = val;
   localStorage.setItem('cal_show_allday', _showAllDay ? '1' : '0');
   calendar.setOption('allDaySlot', _showAllDay);
-  document.getElementById('calendar').classList.toggle('hide-allday', !_showAllDay);
+  calendar.getEventSourceById('main-events').refetch();
+  calendar.getEventSourceById('doc-events').refetch();
 }
 
 function applyProjFilter() {
@@ -338,6 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let evs = await res.json();
             // 프로젝트 필터 드롭다운 갱신 (전체 이벤트 기준)
             _populateProjFilter(evs);
+            if (!_showAllDay) evs = evs.filter(e => !e.allDay);
             if (_myOnly && CURRENT_USER) {
               const myName = CURRENT_USER.name.toLowerCase();
               evs = evs.filter(e => {
@@ -366,7 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
       {
         id: 'doc-events',
         events: async function(fetchInfo, successCb, failureCb) {
-          if (!_showDocs) { successCb([]); return; }
+          if (!_showDocs || !_showAllDay) { successCb([]); return; }
           try {
             const res = await fetch('/api/doc/calendar');
             successCb(await res.json());

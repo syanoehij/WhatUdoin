@@ -14,6 +14,11 @@
           "icon": "🎨",
           "title_html": "<span class=\"cl-tag ux\">ux</span>체크 바인딩 — 선택 모달 및 버튼 UI 개선",
           "detail_html": "<ul>\n              <li>\"📋 체크로 이동\" 버튼 문구 간소화 (구: \"바인된 체크 보기\")</li>\n              <li>체크 선택 모달에 <b>미지정</b> 프로젝트 필터 추가 — 프로젝트가 지정되지 않은 체크리스트도 구분하여 조회 가능</li>\n              <li>검색창 옆 <b>조회</b> 버튼 추가 (Enter 키도 동일하게 동작). 선택 모달 폭 480px → 620px으로 확대</li>\n              <li>\"바인딩 해제\" 클릭 시 확인 창 표시 — 실수로 해제되는 것을 방지</li>\n            </ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>캘린더 — 월 뷰 종일 표시 토글 후 이벤트 겹침 버그 수정",
+          "detail_html": "<ul>\n              <li>월(dayGridMonth) 뷰에서 '📅 종일 표시' 토글을 끈 뒤 다시 켜면 종일 이벤트와 시간 이벤트가 같은 row에 겹쳐 그려지던 문제 수정</li>\n              <li>근본 원인: 종일 이벤트를 CSS <code>display:none</code>으로만 숨겼기 때문에 FullCalendar 내부 layout 캐시가 stale 상태로 남아 재렌더 시 row 배정이 어긋남</li>\n              <li>해결: CSS 숨김 방식을 제거하고 event source 콜백에서 <code>_showAllDay=false</code>일 때 데이터 레벨로 종일 이벤트를 직접 필터링. 토글 시 <code>refetch()</code>를 호출해 FullCalendar가 layout을 새로 계산하도록 강제</li>\n              <li>OFF 상태에서 시간 일정이 위로 당겨져 빈 row 없이 표시되도록 개선. '📄 문서 표시'가 켜져 있어도 종일 OFF 시 문서 이벤트(모두 allDay)도 함께 숨겨져 기존 동작과 일관성 유지</li>\n            </ul>"
         }
       ]
     },
