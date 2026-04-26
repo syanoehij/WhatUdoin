@@ -1,6 +1,18 @@
 {
   "groups": [
     {
+      "date": "2026-04-26",
+      "phase": "29차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span>간트 — 하위 일정 행 다크 테마 색상 수정",
+          "detail_html": "<ul>\n              <li>간트 차트 이름 패널에서 하위 일정(subtask) 행의 배경이 밝은 크림색(<code>#f8f9fa</code>)으로 렌더링되어 다크 테마와 충돌하던 문제 수정</li>\n              <li>근본 원인: <code>.row-subtask-name</code>의 <code>background: var(--surface-1, #f8f9fa)</code>에서 다크 테마에 <code>--surface-1</code>이 미정의되어 fallback 밝은 색상이 적용됨</li>\n              <li>수정: <code>color-mix(in srgb, var(--surface-2) 60%, var(--surface) 40%)</code>로 교체하여 다크 테마 변수를 직접 참조. 좌측 테두리(<code>border-left</code>)도 하드코딩 색상에서 <code>var(--accent, #a29bfe)</code>로 토큰화</li>\n            </ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-04-25",
       "phase": "29차 3단계",
       "phase_class": "phase-3",
