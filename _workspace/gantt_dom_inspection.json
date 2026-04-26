@@ -1,0 +1,255 @@
+{
+  "rows": [
+    {
+      "i": 0,
+      "tag": "DIV",
+      "classes": "gantt-team-rows",
+      "dataset": {},
+      "text": "Inv"
+    },
+    {
+      "i": 1,
+      "tag": "DIV",
+      "classes": "gantt-name-rows",
+      "dataset": {},
+      "text": "▼\nFW개발\n(14)\n▾\n일정 123213\n4/10\n하위 업무 1\n4/22\n▾\n사용자 프로필 기능 구현2\n4/18\n하위 업무3\n4/24\n하위 업"
+    },
+    {
+      "i": 2,
+      "tag": "DIV",
+      "classes": "gantt-rows",
+      "dataset": {},
+      "text": "⚠ 하위 업무3\n하위 업무 2a\n⚠ 테스트 일정1\n⚠ 여행지 점검"
+    },
+    {
+      "i": 3,
+      "tag": "DIV",
+      "classes": "gantt-row row-proj-header",
+      "dataset": {
+        "projKey": "Inv::FW개발"
+      },
+      "text": ""
+    },
+    {
+      "i": 4,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": ""
+    },
+    {
+      "i": 5,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": ""
+    },
+    {
+      "i": 6,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": ""
+    },
+    {
+      "i": 7,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": "⚠ 하위 업무3"
+    },
+    {
+      "i": 8,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": "하위 업무 2a"
+    },
+    {
+      "i": 9,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": ""
+    },
+    {
+      "i": 10,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": ""
+    },
+    {
+      "i": 11,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": ""
+    },
+    {
+      "i": 12,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": ""
+    },
+    {
+      "i": 13,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": ""
+    },
+    {
+      "i": 14,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": ""
+    },
+    {
+      "i": 15,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": ""
+    },
+    {
+      "i": 16,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": ""
+    },
+    {
+      "i": 17,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": "⚠ 테스트 일정1"
+    },
+    {
+      "i": 18,
+      "tag": "DIV",
+      "classes": "gantt-row row-proj-header",
+      "dataset": {
+        "projKey": "Inv::미지정"
+      },
+      "text": ""
+    },
+    {
+      "i": 19,
+      "tag": "DIV",
+      "classes": "gantt-row row-event",
+      "dataset": {},
+      "text": "⚠ 여행지 점검"
+    }
+  ],
+  "bars": [
+    {
+      "i": 0,
+      "classes": "gantt-bar overdue",
+      "dataset": {},
+      "text": "⚠ 하위 업무3",
+      "bg": "rgb(92, 53, 160)",
+      "color": "rgb(255, 255, 255)",
+      "border": "",
+      "opacity": "1"
+    },
+    {
+      "i": 1,
+      "classes": "gantt-bar",
+      "dataset": {},
+      "text": "하위 업무 2a",
+      "bg": "rgb(92, 53, 160)",
+      "color": "rgb(255, 255, 255)",
+      "border": "",
+      "opacity": "1"
+    },
+    {
+      "i": 2,
+      "classes": "gantt-bar overdue",
+      "dataset": {},
+      "text": "⚠ 테스트 일정1",
+      "bg": "rgb(92, 53, 160)",
+      "color": "rgb(255, 255, 255)",
+      "border": "",
+      "opacity": "1"
+    },
+    {
+      "i": 3,
+      "classes": "gantt-bar overdue",
+      "dataset": {},
+      "text": "⚠ 여행지 점검",
+      "bg": "rgb(0, 135, 90)",
+      "color": "rgb(255, 255, 255)",
+      "border": "",
+      "opacity": "1"
+    }
+  ],
+  "classes": {},
+  "candidateChildSelectors": [
+    {
+      "tag": "SPAN",
+      "classes": "subtitle",
+      "text": "너 뭐하니?"
+    },
+    {
+      "tag": "DIV",
+      "classes": "event-name-row has-subtasks",
+      "text": "▾\n일정 123213\n4/10"
+    },
+    {
+      "tag": "DIV",
+      "classes": "event-name-row row-subtask-name",
+      "text": "하위 업무 1\n4/22"
+    },
+    {
+      "tag": "DIV",
+      "classes": "event-name-row has-subtasks",
+      "text": "▾\n사용자 프로필 기능 구현2\n4/18"
+    },
+    {
+      "tag": "DIV",
+      "classes": "event-name-row row-subtask-name",
+      "text": "하위 업무3\n4/24"
+    },
+    {
+      "tag": "DIV",
+      "classes": "event-name-row row-subtask-name",
+      "text": "하위 업무 2a\n4/28"
+    },
+    {
+      "tag": "DIV",
+      "classes": "event-name-row has-subtasks",
+      "text": "▾\n일정 123\n4/22"
+    },
+    {
+      "tag": "DIV",
+      "classes": "event-name-row row-subtask-name",
+      "text": "하위 테스트 B1\n4/21"
+    },
+    {
+      "tag": "DIV",
+      "classes": "event-name-row row-subtask-name",
+      "text": "하위 테스트 A\n4/21"
+    },
+    {
+      "tag": "UL",
+      "classes": "subtask-list",
+      "text": ""
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "btn btn-parent-goto",
+      "text": "↑ 상위 업무로 이동"
+    },
+    {
+      "tag": "BUTTON",
+      "classes": "btn btn-subtask hidden",
+      "text": "하위 일정 생성"
+    }
+  ],
+  "rowCount": 20,
+  "barCount": 4
+}

@@ -25,16 +25,4 @@ package-lock.json
 playwright.config.js
 tests/
 test-results/
-meetings/2026/04/57b6eb4358424211a588ef3739608d46.png
-meetings/2026/04/aa4dc6dcb704455982852b4a76f11eb4.png
-meetings/2026/04/5cdc03e1ce5344aeb1fc5b7ee69bbd08.png
-meetings/2026/04/7d593df94d9c4a2fa51fdd27a5837c9d.png
-meetings/2026/04/21ecc684563248b9b4099addeba9f358.png
-meetings/2026/04/53d9705c837542ddafe9d0838a0b5f97.png
-meetings/2026/04/804c0d28d34f4eaa89c94d8a74758a5c.png
-meetings/2026/04/8704e1abf5d84af584dbfeb8907d69e3.png
-meetings/2026/04/afdc7db76c02407286547c2106dd5378.png
-meetings/2026/04/d85c793d9580421e99a1b87679489d4a.png
-meetings/2026/04/de8593562847437198c895e815ad0055.png
-meetings/2026/04/e32ca0f19bf6430282bb11e18692e9a4.png
-meetings/2026/04/efb9248ff7e74cd3b6a4074a8c5b8393.png
+meetings/
