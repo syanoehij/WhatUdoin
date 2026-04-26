@@ -1012,6 +1012,7 @@
 
     // sessionStorage로 새로고침 후에도 이전 카운트 유지 (자동새로고침 중복 발화 방지)
     let _notifPrevCount = parseInt(sessionStorage.getItem('notif_prev_count') || '0', 10);
+    let _notifLastId    = parseInt(sessionStorage.getItem('notif_last_id')    || '0', 10);
 
     /* ── 시각 알림 3종 ── */
     const _origTitle   = document.title;
@@ -1090,9 +1091,32 @@
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
-    function _showBrowserNotif(msg) {
+    const _NOTIF_TITLES = { notice: '📢 팀 공지', assigned: '📌 새 담당자 지정', upcoming: '⏰ 일정 임박', extra: '📥 추가 알림' };
+    function _showBrowserNotif(item) {
       if (!('Notification' in window) || Notification.permission !== 'granted') return;
-      new Notification('WhatUDoin', { body: msg, icon: '/static/favicon.ico' });
+      const title = _NOTIF_TITLES[item.type] || 'WhatUDoin';
+      const body  = item.message.replace(/^(?:📢|📌|⏰)\s*[^:]+:\s*/, '') || item.message;
+      const tag   = item.id > 0 ? `wu-notif-${item.id}` : `wu-notif-extra-${Date.now()}`;
+      const n = new Notification(title, { body, tag, icon: '/static/favicon.ico', requireInteraction: false });
+      n.onclick = () => { window.focus(); n.close(); };
+    }
+    async function _fireNewNotifs() {
+      try {
+        const res = await fetch('/api/notifications/pending');
+        if (!res.ok) return;
+        const items = await res.json();
+        const newItems = items.filter(n => n.id > _notifLastId).sort((a, b) => a.id - b.id);
+        if (!newItems.length) return;
+        const MAX_INDIVIDUAL = 4;
+        const toShow = newItems.slice(0, MAX_INDIVIDUAL);
+        toShow.forEach(item => _showBrowserNotif(item));
+        const extra = newItems.length - MAX_INDIVIDUAL;
+        if (extra > 0) {
+          _showBrowserNotif({ type: 'extra', message: `외 ${extra}건 더`, id: -1, event_id: null });
+        }
+        _notifLastId = newItems[newItems.length - 1].id;
+        sessionStorage.setItem('notif_last_id', _notifLastId);
+      } catch {}
     }
 
     // 뱃지 업데이트 (읽음 처리 없음)
@@ -1113,7 +1137,7 @@
         // 이전보다 알림이 늘었으면 브라우저 알림 (HTTPS/localhost에서만 동작)
         const arrived = count > _notifPrevCount;
         if (arrived) {
-          _showBrowserNotif(`새 알림 ${count - _notifPrevCount}건이 있습니다.`);
+          _fireNewNotifs();
         }
         // 시각 알림 3종 (HTTP에서도 동작)
         _pulseBell(count > 0, arrived);
@@ -1190,6 +1214,20 @@
     // 전역: 전체 읽음
     window.markAllNotifsRead = async function() {
       try {
+        // 읽음 처리 전에 현재 pending 목록의 최대 id를 last_id로 동기화 (읽은 알림 재토스트 방지)
+        try {
+          const pRes = await fetch('/api/notifications/pending');
+          if (pRes.ok) {
+            const pItems = await pRes.json();
+            if (pItems.length) {
+              const maxId = Math.max(...pItems.map(n => n.id));
+              if (maxId > _notifLastId) {
+                _notifLastId = maxId;
+                sessionStorage.setItem('notif_last_id', maxId);
+              }
+            }
+          }
+        } catch {}
         await fetch('/api/notifications/read-all', { method: 'POST' });
         const badge = document.getElementById('notif-badge');
         if (badge) badge.classList.add('hidden');

@@ -9,6 +9,11 @@
           "icon": "🎨",
           "title_html": "<span class=\"cl-tag ux\">ux</span>간트 — 하위 일정 행 다크 테마 색상 수정",
           "detail_html": "<ul>\n              <li>간트 차트 이름 패널에서 하위 일정(subtask) 행의 배경이 밝은 크림색(<code>#f8f9fa</code>)으로 렌더링되어 다크 테마와 충돌하던 문제 수정</li>\n              <li>근본 원인: <code>.row-subtask-name</code>의 <code>background: var(--surface-1, #f8f9fa)</code>에서 다크 테마에 <code>--surface-1</code>이 미정의되어 fallback 밝은 색상이 적용됨</li>\n              <li>수정: <code>color-mix(in srgb, var(--surface-2) 60%, var(--surface) 40%)</code>로 교체하여 다크 테마 변수를 직접 참조. 좌측 테두리(<code>border-left</code>)도 하드코딩 색상에서 <code>var(--accent, #a29bfe)</code>로 토큰화</li>\n            </ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span>알림 — OS 토스트에 실제 메시지 표시 개선",
+          "detail_html": "<ul>\n              <li>기존 윈도우 알림 토스트가 항상 <b>\"새 알림 N건이 있습니다.\"</b>만 표시하던 문제 개선. 이제 알림 유형별 제목(<code>📢 팀 공지</code> / <code>📌 새 담당자 지정</code> / <code>⏰ 일정 임박</code>)과 실제 메시지 본문을 즉시 표시</li>\n              <li>새 알림 여러 건 발생 시 각각 개별 토스트로 표시. 5건 이상이면 앞 4건 개별 + <code>📥 추가 알림 / 외 N건 더</code> 요약 토스트로 알림 센터 도배 방지</li>\n              <li><code>sessionStorage</code>에 마지막 발화 알림 id(<code>notif_last_id</code>) 저장 — 페이지 새로고침 후 동일 알림 재발화 방지. 전체 읽음 처리 시에도 last_id 동기화</li>\n              <li>알림 토스트 클릭 시 편집 중 실수 이동 방지를 위해 페이지 이동 없이 브라우저 창 포커스만 수행</li>\n            </ul>"
         }
       ]
     },
