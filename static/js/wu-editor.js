@@ -52,6 +52,7 @@
     let _cooldown     = false;
     let _autoSaveTimer = null;
     let _lockHeartbeat = null;
+    let _idleTimer    = null;
     const _listeners  = [];   // { target, type, fn, capture } — destroy 시 일괄 해제
 
     /* ── listener 등록 헬퍼 ── */
@@ -278,6 +279,14 @@
           _triggerSave(true);
         }
       }, as.intervalMs || 120000);
+    }
+
+    /* ── 유휴 타이머 (사용자 키 입력 없을 때 자동 종료) ── */
+    function _scheduleIdleTimer() {
+      const it = feat.idleTimeout;
+      if (!it || !it.ms || !it.onIdle) return;
+      clearTimeout(_idleTimer);
+      _idleTimer = setTimeout(it.onIdle, it.ms);
     }
 
     /* ── 저장 쿨다운 ────────────────────────────────── */
@@ -579,6 +588,7 @@
             _setDirty(true);
             if (hooks.onChange) hooks.onChange();
             _scheduleAutosave();
+            _scheduleIdleTimer();
             _scheduleTocRebuild();
           },
         },
@@ -626,6 +636,8 @@
           }
         }, true);
       }
+
+      _scheduleIdleTimer();
     }
 
     /* ── 초기화 실행 ────────────────────────────────── */
@@ -671,6 +683,7 @@
           target.removeEventListener(type, fn, capture));
         _listeners.length = 0;
         clearInterval(_lockHeartbeat);
+        clearTimeout(_idleTimer);
         clearTimeout(_autoSaveTimer);
         clearTimeout(_tocRebuildTimer);
         if (_tocObserver)    { _tocObserver.disconnect();    _tocObserver    = null; }

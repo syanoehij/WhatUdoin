@@ -326,7 +326,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/wu-editor.js"></script>
+<script src="/static/js/wu-editor.js?v={{ range(1000,9999) | random }}"></script>
 <script>
 function toggleCkExportMenu(e) {
   e.stopPropagation();
@@ -525,6 +525,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         onLockLost:   () => _handleLockLost(),
       } : false,
       leaveConfirm: { backBtnSelector: '#btn-back' },
+      idleTimeout: CKE_ID ? {
+        ms: 600000,
+        onIdle: async () => {
+          if (wuInst?.dirty) await saveContent(true);
+          wuInst?.releaseLock?.();
+          wuToast.info('10분 동안 수정이 없어 편집 모드를 종료합니다.');
+          setTimeout(() => { location.href = `/check?id=${CKE_ID}`; }, 800);
+        },
+      } : false,
     },
     hooks: {
       onSave: (md, { leaveTarget } = {}) => saveContent(false, leaveTarget),

@@ -341,6 +341,15 @@ function initDocEditor() {
           onLockFailed: () => location.reload(),
         } : false,
         leaveConfirm: { backBtnSelector: '#btn-back' },
+        idleTimeout: (DOC_ID && IS_TEAM_DOC) ? {
+          ms: 600000,
+          onIdle: async () => {
+            if (wuInst?.dirty) await saveDoc();
+            wuInst?.releaseLock?.();
+            wuToast.info('10분 동안 수정이 없어 편집 모드를 종료합니다.');
+            setTimeout(() => location.reload(), 800);
+          },
+        } : false,
       },
       hooks: {
         onSave: (md, { leaveTarget } = {}) => saveDoc(leaveTarget),
