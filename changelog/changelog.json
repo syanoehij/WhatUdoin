@@ -1,6 +1,18 @@
 {
   "groups": [
     {
+      "date": "2026-04-28",
+      "phase": "30차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>캘린더·칸반 — '내 일정만' 전환 시 담당자 필터 미리셋 버그 수정",
+          "detail_html": "<ul>\n              <li>팀 일정 보기에서 담당자 칩을 선택한 상태로 <b>'👤 내 일정만'</b>을 누르면 <code>_filterMember</code> 상태가 그대로 남아, 클라이언트 필터에서 <code>(내 일정) ∩ (선택한 담당자 일정)</code>이 AND 결합되어 화면에 변화가 없거나 일정이 비어 보이던 문제 수정</li>\n              <li><code>toggleMyOnly()</code> / <code>toggleKanbanMyOnly()</code> 진입 시 <code>_filterMember</code> / <code>_kanbanFilterMember</code>를 <code>null</code>로 초기화하고, 멤버 칩 UI를 '전체' active 상태로 복구. 이제 토글 시 항상 전체 멤버 기준으로 필터링 재시작</li>\n              <li>수정 파일: <code>templates/calendar.html</code>, <code>templates/kanban.html</code></li>\n            </ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-04-26",
       "phase": "29차 4단계",
       "phase_class": "phase-4",

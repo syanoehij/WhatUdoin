@@ -246,6 +246,10 @@ function _syncMyOnlyBtn() {
 function toggleMyOnly() {
   if (!CURRENT_USER) return;
   _myOnly = !_myOnly;
+  _filterMember = null;
+  document.querySelectorAll('#team-members-strip .member-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.name === '__all__');
+  });
   _syncMyOnlyBtn();
   calendar.getEventSourceById('main-events').refetch();
 }

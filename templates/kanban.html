@@ -360,6 +360,10 @@ function _syncKanbanMyOnlyBtn() {
 function toggleKanbanMyOnly() {
   if (!CURRENT_USER) return;
   _kanbanMyOnly = !_kanbanMyOnly;
+  _kanbanFilterMember = null;
+  document.querySelectorAll('#kanban-team-members .member-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.name === '__all__');
+  });
   _syncKanbanMyOnlyBtn();
   renderBoard();
 }
