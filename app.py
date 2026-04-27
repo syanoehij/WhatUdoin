@@ -638,14 +638,20 @@ async def api_save_notice(request: Request):
     data = await request.json()
     content = data.get("content", "")
     notice_id = db.save_notice(content, user["name"])
-    # 팀 공지 저장 시 전체 유저 알림 (작성자 제외)
-    preview = content.replace("#", "").strip()[:40]
-    db.create_notification_for_all(
-        "notice",
-        f"📢 팀 공지 업데이트: {preview}…" if len(content) > 40 else f"📢 팀 공지 업데이트: {preview}",
-        exclude_user=user["name"]
-    )
     return {"id": notice_id}
+
+
+@app.post("/api/notice/notify")
+async def api_notify_notice(request: Request):
+    user = _require_editor(request)
+    notice = db.get_latest_notice()
+    if not notice:
+        return {"ok": False, "reason": "no_notice"}
+    content = notice["content"]
+    preview = content.replace("#", "").strip()[:40]
+    msg = f"📢 팀 공지 업데이트: {preview}…" if len(content.replace("#", "").strip()) > 40 else f"📢 팀 공지 업데이트: {preview}"
+    db.create_notification_for_all("notice", msg, exclude_user=user["name"])
+    return {"ok": True}
 
 
 # ── 알림 API ─────────────────────────────────────────────

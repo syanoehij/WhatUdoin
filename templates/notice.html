@@ -48,6 +48,67 @@
     z-index: 9999;
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
   }
+  #notify-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+  }
+  #notify-modal-overlay.open { display: flex; }
+  #notify-modal-box {
+    background: var(--bg-card, var(--bg, #fff));
+    border-radius: 12px;
+    padding: 24px 28px 20px;
+    min-width: 300px;
+    max-width: 420px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  }
+  #notify-modal-box h3 {
+    margin: 0 0 10px;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  #notify-modal-box p {
+    margin: 0 0 20px;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  #notify-modal-box .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  #notify-result-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 10001;
+    align-items: center;
+    justify-content: center;
+  }
+  #notify-result-overlay.open { display: flex; }
+  #notify-result-box {
+    background: var(--bg-card, var(--bg, #fff));
+    border-radius: 12px;
+    padding: 24px 28px 20px;
+    min-width: 260px;
+    max-width: 380px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  }
+  #notify-result-box p {
+    margin: 0 0 20px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+  #notify-result-box .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
 </style>
 {% endblock %}
 
@@ -64,6 +125,7 @@
       {% endif %}
       <a href="/notice/history" class="btn btn-sm">이력 보기</a>
       {% if user and user.role in ('editor', 'admin') %}
+      <button class="btn btn-sm btn-warning" onclick="notifyTeam()" title="가장 최근 저장본을 팀 전체에 알림">📢 알림 발송</button>
       <button class="btn btn-sm btn-primary" onclick="saveNotice()">저장</button>
       {% endif %}
     </div>
@@ -81,6 +143,26 @@
 </div>
 
 <div id="save-toast">저장되었습니다.</div>
+
+<div id="notify-modal-overlay">
+  <div id="notify-modal-box">
+    <h3>📢 알림 발송</h3>
+    <p>팀 전체에 공지 알림을 발송합니다.<br>계속하시겠습니까?</p>
+    <div class="modal-actions">
+      <button class="btn btn-sm" onclick="_notifyCancel()">취소</button>
+      <button class="btn btn-sm btn-primary" onclick="_notifyConfirm()">발송</button>
+    </div>
+  </div>
+</div>
+
+<div id="notify-result-overlay">
+  <div id="notify-result-box">
+    <p id="notify-result-msg"></p>
+    <div class="modal-actions">
+      <button class="btn btn-sm btn-primary" onclick="_resultClose()">확인</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -105,6 +187,10 @@ window.addEventListener('beforeunload', (e) => {
     e.preventDefault();
     e.returnValue = '';
   }
+});
+
+document.getElementById('notify-modal-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) _notifyCancel();
 });
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -190,6 +276,44 @@ async function saveNotice(isAuto = false) {
       metaEl.textContent = `마지막 저장: ${dateStr} · {{ user.name if user else '' }}`;
     }
   }
+}
+
+function notifyTeam() {
+  if (_noticeDirty) {
+    alert("저장되지 않은 변경사항이 있습니다.\n먼저 저장한 뒤 다시 시도해주세요.");
+    return;
+  }
+  document.getElementById('notify-modal-overlay').classList.add('open');
+}
+
+function _notifyCancel() {
+  document.getElementById('notify-modal-overlay').classList.remove('open');
+}
+
+async function _notifyConfirm() {
+  document.getElementById('notify-modal-overlay').classList.remove('open');
+  try {
+    const res = await fetch('/api/notice/notify', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      _showResultModal("알림이 발송되었습니다.");
+    } else if (data.reason === 'no_notice') {
+      _showResultModal("발송할 공지가 없습니다.\n먼저 공지를 저장해주세요.");
+    } else {
+      _showResultModal("알림 발송에 실패했습니다.");
+    }
+  } catch (e) {
+    _showResultModal("알림 발송에 실패했습니다.");
+  }
+}
+
+function _showResultModal(msg) {
+  document.getElementById('notify-result-msg').textContent = msg;
+  document.getElementById('notify-result-overlay').classList.add('open');
+}
+
+function _resultClose() {
+  document.getElementById('notify-result-overlay').classList.remove('open');
 }
 </script>
 {% endblock %}

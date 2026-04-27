@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-04-28",
+      "phase": "30차 2단계",
+      "phase_class": "phase-2",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>팀 공지 — 알림 발송 버튼 분리 및 모달 UI 개선",
+          "detail_html": "<ul>\n              <li>기존에는 공지를 저장할 때마다 전체 팀원에게 자동으로 알림이 발송되어, 짧은 시간 내 수정 시 OS 토스트가 3~4건씩 연속 발생하던 문제 개선</li>\n              <li><b>\"📢 알림 발송\"</b> 버튼 신설. 저장(수동·자동)은 알림 없이 저장만 처리하고, 버튼 클릭 시에만 가장 최근 저장본 기준으로 팀 전체에 알림 push</li>\n              <li>알림 발송 확인 및 결과(성공·실패·공지 없음) 팝업을 브라우저 기본 <code>alert/confirm</code>에서 커스텀 모달로 교체</li>\n              <li>헤더 버튼 순서를 <b>이력 보기 → 알림 발송 → 저장</b>으로 변경. 발송 확인 모달의 발송 버튼을 파란색으로 변경</li>\n              <li>백엔드: <code>POST /api/notice/notify</code> 신규 엔드포인트 추가. <code>POST /api/notice</code>(저장)에서 알림 생성 로직 분리</li>\n              <li>수정 파일: <code>app.py</code>, <code>templates/notice.html</code></li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-28",
       "phase": "30차 1단계",
       "phase_class": "phase-1",
       "entries": [
