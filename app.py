@@ -1209,10 +1209,10 @@ def delete_event(event_id: int, request: Request, delete_mode: str = "this"):
 async def sse_stream(request: Request):
     """캘린더·칸반·간트 실시간 동기화용 SSE 엔드포인트.
 
+    - 비로그인 게스트 포함 — 페이로드는 id/action 메타 한정
     - 25초마다 ping 주석으로 프록시·브라우저 타임아웃 방지
     - 클라이언트 연결 종료 시 subscribe한 큐를 자동 해제
     """
-    _require_editor(request)
 
     async def gen():
         import time

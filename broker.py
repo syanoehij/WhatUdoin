@@ -32,6 +32,7 @@ class SSEBroker:
         """이벤트 브로드캐스트.
 
         async 컨텍스트, sync(스레드풀) 컨텍스트 모두에서 호출 가능.
+        payload는 식별자/액션 메타만 — 본문·민감정보 추가 금지(게스트 SSE 개방됨).
         """
         if not self._loop or not self._subs:
             return

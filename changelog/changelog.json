@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-04-28",
+      "phase": "31차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>비로그인 — 공개 페이지 SSE 자동 갱신 개방",
+          "detail_html": "<ul>\n              <li>비로그인 게스트가 공개 문서·체크리스트·캘린더·칸반 등을 열어둔 상태에서 다른 사용자가 내용을 수정하면 <b>수동 새로고침 없이 자동으로 반영</b>되도록 개선</li>\n              <li>기존 SSE 엔드포인트(<code>/api/stream</code>)가 로그인 편집자만 접근 가능하도록 잠겨 있었으나, 브로드캐스트 페이로드가 <code>{id, action, team_id}</code> 식별자 메타만 포함하므로 정보 누출 위험 없이 게스트에게 개방</li>\n              <li><code>static/js/realtime.js</code>의 <code>CURRENT_USER</code> 게스트 가드를 제거하여 비로그인 상태에서도 <code>EventSource</code> 연결 생성</li>\n              <li>문서 편집 페이지(<code>/doc/{id}</code>)에 <code>wu:docs:changed</code> 자동 갱신 핸들러 추가 — ID 일치·입력 포커스·편집자 미저장(dirty) 보호 3중 가드 적용</li>\n              <li>수정 파일: <code>app.py</code>, <code>broker.py</code>, <code>static/js/realtime.js</code>, <code>templates/doc_editor.html</code></li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-28",
       "phase": "31차 3단계",
       "phase_class": "phase-3",
       "entries": [

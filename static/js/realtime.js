@@ -30,8 +30,6 @@
     return false;
   };
 
-  if (!window.CURRENT_USER) return;
-
   var _es = null;
   var _backoff = 1000;
   var _everConnected = false;  // 재연결 복구 여부 추적

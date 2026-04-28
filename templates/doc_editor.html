@@ -432,6 +432,14 @@ if (document.readyState === 'loading') {
   initDocEditor();
 }
 
+window.addEventListener('wu:docs:changed', wuDebounce(function(e){
+  var d = e.detail || {};
+  if (String(d.id) !== String(DOC_ID)) return;
+  if (window.wuShouldSuppressRefetch && window.wuShouldSuppressRefetch()) return;
+  if (wuInst && wuInst.dirty) return;
+  window._autoSaveAndRefresh();
+}, 500));
+
 /* ── TOC 글로벌 래퍼 (HTML onclick에서 호출) ─────────── */
 function toggleTocPanel() { wuInst?.toggleToc(); }
 
