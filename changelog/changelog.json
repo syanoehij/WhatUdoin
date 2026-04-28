@@ -9,6 +9,16 @@
           "icon": "🐛",
           "title_html": "<span class=\"cl-tag fix\">fix</span>편집기 — 코드블록 다크 테마 CSS 셀렉터 수정",
           "detail_html": "<ul>\n              <li>다크 테마에서 코드블록 배경이 흰색으로 표시되던 버그 수정. <code>wu-editor.css</code>가 <code>.dark</code> 클래스 셀렉터를 사용했으나 앱은 <code>&lt;html data-theme=\"dark\"&gt;</code> 속성 방식으로 테마를 적용하므로 CSS가 전혀 동작하지 않았음</li>\n              <li>코드블록(<code>pre</code>, <code>code.hljs</code>) 2개 규칙과 잠금 배너(<code>.lock-banner</code>) 1개 규칙의 <code>.dark</code> → <code>[data-theme=\"dark\"]</code> 셀렉터 교체(총 5개 셀렉터)</li>\n              <li>수정 파일: <code>static/css/wu-editor.css</code></li>\n            </ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>편집기 — 표 안 이미지 크기 변경 툴바 비활성화",
+          "detail_html": "<ul>\n              <li>표(table) 셀 안에 이미지를 넣은 후 크기를 변경하면 <code>&lt;img style=\"width:Npx\"&gt;</code> HTML 태그로 변환되어 Markdown→WYSIWYG 전환 시 이미지가 소실되던 버그 수정</li>\n              <li>표 셀(<code>td</code>, <code>th</code>) 내부 이미지는 클릭해도 리사이즈 툴바가 나타나지 않도록 <code>e.target.closest('td, th')</code> 가드 추가. 표 외부 이미지 리사이즈는 정상 동작 유지</li>\n              <li>수정 파일: <code>static/js/wu-editor.js</code></li>\n            </ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span>편집기 — 마크다운 모드 다크 테마 개선",
+          "detail_html": "<ul>\n              <li>마크다운 편집 모드로 전환 시 Write/Preview 탭 영역이 흰 배경으로 표시되던 문제 수정. TUI Editor의 <code>.toastui-editor-md-tab-container</code> 및 <code>.tab-item</code>에 다크 테마 오버라이드 추가</li>\n              <li>마크다운 문법 강조 색상 다크 테마 대응: 표 셀 텍스트(<code>#222</code> 하드코딩), 인용구 마크 텍스트(<code>#555</code>), 인라인 코드 배경(연분홍), 코드블록 줄 배경(연회색) 등 다크 배경에서 가독성이 낮은 색상 교체</li>\n              <li>수정 파일: <code>static/css/style.css</code></li>\n            </ul>"
         }
       ]
     },

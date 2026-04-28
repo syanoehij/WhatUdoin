@@ -162,7 +162,7 @@
 
       on(document, 'pointerdown', e => {
         const edEl = containerEl && containerEl.querySelector('.toastui-editor-ww-container');
-        if (e.target.tagName === 'IMG' && edEl && edEl.contains(e.target)) {
+        if (e.target.tagName === 'IMG' && edEl && edEl.contains(e.target) && !e.target.closest('td, th')) {
           _activeImg = e.target;
         } else if (!_tbEl.contains(e.target)) {
           _activeImg = null;
@@ -171,7 +171,7 @@
 
       on(document, 'click', e => {
         const edEl = containerEl && containerEl.querySelector('.toastui-editor-ww-container');
-        if (e.target.tagName === 'IMG' && edEl && edEl.contains(e.target)) {
+        if (e.target.tagName === 'IMG' && edEl && edEl.contains(e.target) && !e.target.closest('td, th')) {
           const r = e.target.getBoundingClientRect();
           _tbEl.style.top  = (r.bottom + window.scrollY + 6) + 'px';
           _tbEl.style.left = Math.max(4, r.left) + 'px';
