@@ -167,16 +167,17 @@
 
   /* 자동 완료 카운트다운 배지 */
   .kbn-auto-done {
-    display: inline-block;
-    font-size: 0.68rem;
-    padding: 1px 6px;
-    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    border-radius: 3px;
     background: var(--surface-3, #e0e0e0);
     color: var(--text-muted);
-    margin-top: 4px;
   }
   .kbn-auto-done.warn    { background: #fff3cd; color: #856404; }
   .kbn-auto-done.danger  { background: #f8d7da; color: #842029; }
+  .card-status-row { margin-top: 3px; }
 
   .card-project-badge {
     display: inline-block;
@@ -499,27 +500,32 @@ function cardHTML(e) {
     dateRangeStr = endStr ? `${startStr}~${endStr}` : `${startStr}~`;
   }
 
-  // 날짜 줄: 시작일이 있을 때만 렌더링
-  const dateRow = dateRangeStr
-    ? `<div class="card-meta">
-        <span class="priority-dot ${priority}"></span>
-        <span class="card-date">${dateRangeStr}</span>
-        ${overdueBadge}
-      </div>`
-    : '';
-
-  // 담당자 줄: 담당자가 있을 때만 렌더링
-  const assigneeRow = assigneeBadges
-    ? `<div class="card-meta card-assignee-row">${assigneeBadges}</div>`
-    : '';
-
-  let autoDoneBadge = '';
+  let autoDoneSpan = '';
   if (CURRENT_USER && e.kanban_status === 'done' && e.done_at) {
     const doneMs = new Date(e.done_at.replace(' ', 'T') + 'Z').getTime();
     const daysLeft = Math.max(0, 7 - Math.floor((Date.now() - doneMs) / 86400000));
     const cls = daysLeft <= 2 ? 'danger' : (daysLeft <= 4 ? 'warn' : '');
-    autoDoneBadge = `<div><span class="kbn-auto-done ${cls}" title="done 7일 경과 시 자동 완료 처리">⏳ ${daysLeft}일 후 자동완료</span></div>`;
+    autoDoneSpan = `<span class="kbn-auto-done ${cls}" title="done 7일 경과 시 자동 완료 처리">⏳ ${daysLeft}일 후 자동완료</span>`;
   }
+
+  // 날짜 줄
+  const dateRow = dateRangeStr
+    ? `<div class="card-meta">
+        <span class="priority-dot ${priority}"></span>
+        <span class="card-date">${dateRangeStr}</span>
+      </div>`
+    : '';
+
+  // 담당자 줄
+  const assigneeRow = assigneeBadges
+    ? `<div class="card-meta card-assignee-row">${assigneeBadges}</div>`
+    : '';
+
+  // 상태 줄: 기한초과 or 자동완료 (있을 때만)
+  const statusBadges = [overdueBadge, autoDoneSpan].filter(Boolean).join('');
+  const statusRow = statusBadges
+    ? `<div class="card-meta card-status-row">${statusBadges}</div>`
+    : '';
 
   return `
     <div class="kanban-card${overdue ? ' overdue' : ''}" data-id="${e.id}" data-priority="${priority}" data-description="${esc(e.description || '')}" draggable="true">
@@ -527,7 +533,7 @@ function cardHTML(e) {
       <div class="card-title">${e.event_type === 'meeting' ? '💬 ' : e.event_type === 'journal' ? '📓 ' : ''}${esc(e.title)}</div>
       ${dateRow}
       ${assigneeRow}
-      ${autoDoneBadge}
+      ${statusRow}
     </div>`;
 }
 
