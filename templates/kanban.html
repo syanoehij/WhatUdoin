@@ -213,6 +213,9 @@
     padding: 1px 5px;
     color: var(--text-muted);
   }
+  .card-assignee-row {
+    margin-top: 3px;
+  }
   .priority-dot {
     width: 7px; height: 7px;
     border-radius: 50%;
@@ -451,7 +454,7 @@ function renderBoard() {
     document.getElementById(`count-${status}`).textContent = cards.length;
     const body = document.getElementById(`col-${status}`);
     if (!cards.length) {
-      body.innerHTML = '<div class="kanban-empty">없음</div>';
+      body.innerHTML = `<div class="kanban-empty">${CURRENT_USER ? '없음' : '공개된 항목 없음'}</div>`;
       return;
     }
     body.innerHTML = cards.map(e => cardHTML(e)).join('');
@@ -484,10 +487,31 @@ function cardHTML(e) {
   const assignees = (e.assignee || '').split(',').map(s => s.trim()).filter(Boolean);
   const assigneeBadges = assignees.map(a => `<span class="card-assignee">${esc(a)}</span>`).join('');
   const priority = e.priority || 'normal';
-  const dateStr = fmtDate(e.start_datetime);
+  const startStr = fmtDate(e.start_datetime);
+  const endStr   = fmtDate(e.end_datetime);
   const overdue = isOverdue(e);
   const overdueBadge = overdue
     ? `<span class="card-overdue-badge">⚠ 기한초과</span>` : '';
+
+  // 날짜 범위 문자열: 시작만 있으면 "시작~", 둘 다 있으면 "시작~종료", 없으면 빈 문자열
+  let dateRangeStr = '';
+  if (startStr) {
+    dateRangeStr = endStr ? `${startStr}~${endStr}` : `${startStr}~`;
+  }
+
+  // 날짜 줄: 시작일이 있을 때만 렌더링
+  const dateRow = dateRangeStr
+    ? `<div class="card-meta">
+        <span class="priority-dot ${priority}"></span>
+        <span class="card-date">${dateRangeStr}</span>
+        ${overdueBadge}
+      </div>`
+    : '';
+
+  // 담당자 줄: 담당자가 있을 때만 렌더링
+  const assigneeRow = assigneeBadges
+    ? `<div class="card-meta card-assignee-row">${assigneeBadges}</div>`
+    : '';
 
   let autoDoneBadge = '';
   if (CURRENT_USER && e.kanban_status === 'done' && e.done_at) {
@@ -501,12 +525,8 @@ function cardHTML(e) {
     <div class="kanban-card${overdue ? ' overdue' : ''}" data-id="${e.id}" data-priority="${priority}" data-description="${esc(e.description || '')}" draggable="true">
       ${projectBadge}
       <div class="card-title">${e.event_type === 'meeting' ? '💬 ' : e.event_type === 'journal' ? '📓 ' : ''}${esc(e.title)}</div>
-      <div class="card-meta">
-        <span class="priority-dot ${priority}"></span>
-        <span class="card-date">${dateStr}</span>
-        ${assigneeBadges}
-        ${overdueBadge}
-      </div>
+      ${dateRow}
+      ${assigneeRow}
       ${autoDoneBadge}
     </div>`;
 }

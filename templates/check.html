@@ -1146,7 +1146,7 @@ function renderList() {
 
   const container = document.getElementById('ck-list');
   if (!sorted.length) {
-    container.innerHTML = '<div class="ck-empty">항목이 없습니다.</div>';
+    container.innerHTML = `<div class="ck-empty">${IS_LOGGED_IN ? '항목이 없습니다.' : '공개된 항목이 없습니다.'}</div>`;
     return;
   }
   container.innerHTML = sorted.map(c => `

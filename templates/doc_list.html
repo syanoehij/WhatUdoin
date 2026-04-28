@@ -116,7 +116,7 @@
     </table>
 
     <div class="empty-state hidden" id="docs-empty">
-      <p>{% if user %}등록된 문서가 없습니다.{% else %}공유된 문서가 없습니다.{% endif %}</p>
+      <p>{% if user %}등록된 문서가 없습니다.{% else %}공개된 문서가 없습니다.{% endif %}</p>
     </div>
   </div>
 </div>
@@ -153,8 +153,8 @@ const ALL_DOCS      = {{ docs | tojson | safe }};
 const CURRENT_UID   = {{ user.id if user else 'null' }};
 const CURRENT_UNAME = {{ (user.name or user.username) | tojson | safe if user else 'null' }};
 const IS_LOGGED_IN  = {{ 'true' if user else 'false' }};
-const EMPTY_MSG       = IS_LOGGED_IN ? '등록된 문서가 없습니다.' : '공유된 문서가 없습니다.';
-const EMPTY_MONTH_MSG = IS_LOGGED_IN ? '해당 월에 등록된 문서가 없습니다.' : '공유된 문서가 없습니다.';
+const EMPTY_MSG       = IS_LOGGED_IN ? '등록된 문서가 없습니다.' : '공개된 문서가 없습니다.';
+const EMPTY_MONTH_MSG = IS_LOGGED_IN ? '해당 월에 등록된 문서가 없습니다.' : '공개된 문서가 없습니다.';
 
 // ── 상태 ────────────────────────────────────────────────
 // selectedDocType:    null=전체, 'team'=팀 문서, 'personal'=개인 문서

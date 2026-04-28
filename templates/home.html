@@ -298,7 +298,7 @@ function buildBoard(containerId, events, draggable) {
 
     const bodyHtml = cards.length
       ? cards.map(e => cardHTML(e, draggable)).join('')
-      : '<div class="kanban-empty">없음</div>';
+      : `<div class="kanban-empty">${CURRENT_USER ? '없음' : '공개된 항목 없음'}</div>`;
 
     col.innerHTML = `
       <div class="kanban-col-header">

@@ -795,7 +795,7 @@ function render() {
 
   const hasProjects = allTeams.some(t => _teamHasVisibleProj(t));
   if (!hasProjects) {
-    ganttRowsEl.innerHTML = `<div class="gantt-empty">등록된 일정이 없습니다.</div>`;
+    ganttRowsEl.innerHTML = `<div class="gantt-empty">${CURRENT_USER ? '등록된 일정이 없습니다.' : '공개된 일정이 없습니다.'}</div>`;
     return;
   }
 

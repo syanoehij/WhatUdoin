@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-04-28",
+      "phase": "31차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span>비로그인 — 빈 상태 메시지에 공개 여부 명시",
+          "detail_html": "<ul>\n              <li>비로그인(게스트) 유저가 빈 화면을 볼 때 <b>\"항목이 없습니다.\"</b> 대신 <b>\"공개된 항목이 없습니다.\"</b> 형태로 표시하여, 내용이 존재하지만 공개되지 않아 보이지 않는다는 맥락을 전달</li>\n              <li>로그인 유저에게는 기존 메시지 유지. <code>IS_LOGGED_IN</code> / <code>CURRENT_USER</code> 분기로 처리</li>\n              <li>수정 파일 및 변경 내용: <code>templates/check.html</code>(체크리스트 목록 — \"공개된 항목이 없습니다.\"), <code>templates/project.html</code>(간트 — \"공개된 일정이 없습니다.\"), <code>templates/kanban.html</code>(칸반 컬럼 — \"공개된 항목 없음\"), <code>templates/home.html</code>(홈 게스트 보드 컬럼 — \"공개된 항목 없음\"), <code>templates/doc_list.html</code>(문서 목록 — \"공개된 문서가 없습니다.\")</li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-28",
       "phase": "30차 2단계",
       "phase_class": "phase-2",
       "entries": [
