@@ -1057,7 +1057,10 @@ function renderProjList() {
   const container = document.getElementById('ck-proj-list');
   // 프로젝트별 카운트
   const counts = {};
-  _allChecklists.forEach(c => { counts[c.project || ''] = (counts[c.project || ''] || 0) + 1; });
+  _allChecklists.forEach(c => {
+    const key = (c.project && c.project.trim()) ? c.project : '미지정';
+    counts[key] = (counts[key] || 0) + 1;
+  });
 
   // 전체 카운트 업데이트
   document.getElementById('ck-cnt-all').textContent = _allChecklists.length;
@@ -1073,7 +1076,8 @@ function renderProjList() {
   const fromCklists = _allChecklists.map(c => c.project).filter(Boolean);
   const allProjSet = [...new Set([...fromServer, ...fromCklists])];
   // '미지정'은 맨 앞으로 고정, 나머지는 알파벳순
-  const hasUnassigned = allProjSet.includes('미지정');
+  const hasUnassigned = allProjSet.includes('미지정')
+    || _allChecklists.some(c => !c.project || !c.project.trim());
   const projs = [
     ...(hasUnassigned ? ['미지정'] : []),
     ...allProjSet.filter(p => p !== '미지정').sort(),
@@ -1106,7 +1110,7 @@ function selectProject(proj) {
 
   // 현재 선택된 항목이 새 필터에 없으면 우측 패널 초기화
   const filtered = _curProj
-    ? _allChecklists.filter(c => c.project === _curProj)
+    ? _allChecklists.filter(c => _curProj === '미지정' ? (!c.project || !c.project.trim()) : c.project === _curProj)
     : _allChecklists;
   if (_curId && !filtered.find(c => c.id === _curId)) {
     _curId = null;
@@ -1138,7 +1142,7 @@ function _pubBadge(isPub, project) {
 
 function renderList() {
   const filtered = _curProj
-    ? _allChecklists.filter(c => c.project === _curProj)
+    ? _allChecklists.filter(c => _curProj === '미지정' ? (!c.project || !c.project.trim()) : c.project === _curProj)
     : _allChecklists;
 
   // 수정일 최신순 정렬

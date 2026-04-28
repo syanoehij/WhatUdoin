@@ -6,6 +6,11 @@
       "phase_class": "phase-3",
       "entries": [
         {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 미지정 프로젝트 필터 클릭 시 항목 미표시 버그 수정",
+          "detail_html": "<ul>\n              <li>체크리스트 사이드바에서 <b>미지정</b>을 클릭해도 항목이 표시되지 않던 버그 수정. 필터 로직이 <code>c.project === '미지정'</code>으로 비교했으나 실제 미지정 항목은 <code>c.project</code>가 <code>null</code> 또는 빈 문자열이어서 항상 0건 반환</li>\n              <li>미지정 선택 시 <code>!c.project || !c.project.trim()</code>으로 비교하도록 수정. 카운트 집계도 동일하게 null/''을 <code>'미지정'</code> 키로 묶어 배지 숫자 정확도 확보</li>\n              <li><code>hasUnassigned</code> 조건을 보완 — <code>ALL_PROJECTS</code>에 미지정 합성 항목이 없어도 체크리스트 데이터에 미지정 항목이 있으면 사이드바 버튼이 표시되도록 수정</li>\n              <li>수정 파일: <code>templates/check.html</code></li>\n            </ul>"
+        },
+        {
           "icon": "🎨",
           "title_html": "<span class=\"cl-tag ux\">ux</span>칸반 — 카드 정보 표시 4줄 구조로 개선 및 상태 배지 통합",
           "detail_html": "<ul>\n              <li>칸반 카드 표시 구조를 <b>3줄(프로젝트명 / 업무이름 / 시작일+담당자)</b>에서 <b>4~5줄(프로젝트명 / 업무이름 / 시작일~종료일 / 담당자 / 상태배지)</b>로 개선. 시작·종료 일자를 <code>시작~종료</code> 형태로 같은 줄에 표시하고, 담당자를 별도 줄로 분리</li>\n              <li>종료일 없는 카드는 <code>시작~</code>으로 표시(미정 의미). 시작일 자체가 없으면 날짜 행 생략. 담당자 없으면 담당자 행 생략</li>\n              <li><b>기한초과</b>(<code>card-overdue-badge</code>)와 <b>N일 후 자동완료</b>(<code>kbn-auto-done</code>) 배지를 동일 <code>card-status-row</code> 줄로 통합. 두 배지의 <code>display / font-size / padding / border-radius</code>를 맞춰 높이·여백 일치</li>\n              <li><code>kbn-auto-done</code>의 독립 <code>margin-top</code> 제거, 행 단위 여백(<code>card-status-row { margin-top: 3px }</code>)으로 통일</li>\n              <li>수정 파일: <code>templates/kanban.html</code></li>\n            </ul>"
