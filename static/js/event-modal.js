@@ -32,9 +32,10 @@ let _hasSubtasks = false;         // 현재 편집 이벤트가 하위 업무를
 let _isRecurringParent = false;   // 반복 일정 부모인지 (하위 생성 불가 표시용)
 
 // ── 체크 바인딩 상태 ─────────────────────────────────────
-let _currentBoundChecklistId = null;   // 현재 모달에 바인된 체크리스트 id
-let _boundChecklistAll       = [];     // sub-modal 캐시: 활성 체크리스트 전체
-let _boundViewerInstance     = null;   // 본문 viewer toastui 인스턴스
+let _currentBoundChecklistId  = null;   // 현재 모달에 바인된 체크리스트 id
+let _boundChecklistAll        = [];     // sub-modal 캐시: 활성 체크리스트 전체
+let _boundViewerInstance      = null;   // 본문 viewer toastui 인스턴스
+let _kdetailBoundViewerInst   = null;   // 칸반 상세 모달 바인딩 viewer 인스턴스
 
 // ── 프로젝트 자동완성 ─────────────────────────────────────
 async function loadProjects() {
@@ -983,6 +984,31 @@ async function openKDetail(id) {
   const editBtn = document.getElementById('kbtn-edit');
   if (editBtn) editBtn.style.display = canEdit ? '' : 'none';
 
+  // 체크 바인딩 뷰어
+  const boundWrap   = document.getElementById('kdetail-bound-wrap');
+  const boundViewer = document.getElementById('kdetail-bound-viewer');
+  if (boundWrap && boundViewer) {
+    if (_kdetailBoundViewerInst) { _kdetailBoundViewerInst.destroy(); _kdetailBoundViewerInst = null; }
+    boundViewer.innerHTML = '';
+    if (e.bound_checklist_id && e.bound_checklist_content != null) {
+      boundWrap.classList.remove('hidden');
+      if (typeof toastui !== 'undefined' && toastui.Editor) {
+        _kdetailBoundViewerInst = toastui.Editor.factory({
+          el: boundViewer,
+          viewer: true,
+          initialValue: e.bound_checklist_content || '',
+          usageStatistics: false,
+          customHTMLSanitizer: html => html,
+          customHTMLRenderer: (window.WUEditor && window.WUEditor.renderer) || {},
+        });
+      } else {
+        boundViewer.textContent = e.bound_checklist_content || '';
+      }
+    } else {
+      boundWrap.classList.add('hidden');
+    }
+  }
+
   document.getElementById('kdetail-overlay').classList.remove('hidden');
 }
 
@@ -991,6 +1017,9 @@ function closeKDetail(ev) {
   document.getElementById('kdetail-overlay').classList.add('hidden');
   currentKDetailId = null;
   _kdetailData     = null;
+  if (_kdetailBoundViewerInst) { _kdetailBoundViewerInst.destroy(); _kdetailBoundViewerInst = null; }
+  const bw = document.getElementById('kdetail-bound-wrap');
+  if (bw) bw.classList.add('hidden');
 }
 
 async function changeStatus(newStatus) {
