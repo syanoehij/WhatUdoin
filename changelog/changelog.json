@@ -1,6 +1,18 @@
 {
   "groups": [
     {
+      "date": "2026-04-29",
+      "phase": "31차 5단계",
+      "phase_class": "phase-5",
+      "entries": [
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>편집기 — 코드블록 다크 테마 CSS 셀렉터 수정",
+          "detail_html": "<ul>\n              <li>다크 테마에서 코드블록 배경이 흰색으로 표시되던 버그 수정. <code>wu-editor.css</code>가 <code>.dark</code> 클래스 셀렉터를 사용했으나 앱은 <code>&lt;html data-theme=\"dark\"&gt;</code> 속성 방식으로 테마를 적용하므로 CSS가 전혀 동작하지 않았음</li>\n              <li>코드블록(<code>pre</code>, <code>code.hljs</code>) 2개 규칙과 잠금 배너(<code>.lock-banner</code>) 1개 규칙의 <code>.dark</code> → <code>[data-theme=\"dark\"]</code> 셀렉터 교체(총 5개 셀렉터)</li>\n              <li>수정 파일: <code>static/css/wu-editor.css</code></li>\n            </ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-04-28",
       "phase": "31차 4단계",
       "phase_class": "phase-4",
