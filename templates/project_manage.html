@@ -725,6 +725,8 @@ async function openCkDrawer(id, title) {
 
     _pmCkViewer = toastui.Editor.factory({
       el: body, viewer: true, initialValue: content, usageStatistics: false,
+      customHTMLSanitizer: html => html,
+      customHTMLRenderer: window.WUEditor?.renderer,
     });
     if (typeof hljs !== 'undefined') {
       setTimeout(() => body.querySelectorAll('pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); }), 100);

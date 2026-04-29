@@ -422,7 +422,7 @@ function renderNotice(notice) {
   }
   wrap.innerHTML = '';
   if (window.toastui?.Editor) {
-    const _nv = new toastui.Editor.factory({ el: wrap, viewer: true, initialValue: notice.content, customHTMLRenderer: window.WUEditor?.renderer });
+    const _nv = new toastui.Editor.factory({ el: wrap, viewer: true, initialValue: notice.content, customHTMLSanitizer: html => html, customHTMLRenderer: window.WUEditor?.renderer });
     void _nv;
     setTimeout(() => { if (typeof hljs !== 'undefined') wrap.querySelectorAll('pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); }); }, 150);
   } else {

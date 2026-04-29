@@ -13,7 +13,7 @@
     return typeof s === 'string' ? document.querySelector(s) : s;
   }
 
-  /* ── 공용 HTML 렌더러 (링크 새창 + 코드블록 hljs 클래스) ── */
+  /* ── 공용 HTML 렌더러 (링크 새창 + 코드블록 hljs 클래스 + 줄내림 보존) ── */
   const WU_HTML_RENDERER = {
     link(node, { entering }) {
       if (entering) {
@@ -37,6 +37,14 @@
         { type: 'closeTag', tagName: 'code' },
         { type: 'closeTag', tagName: 'pre' },
       ];
+    },
+    /* softbreak: 마크다운 단일 개행 → <br> (기본값은 공백/줄바꿈 문자) */
+    softbreak() {
+      return { type: 'html', content: '<br>' };
+    },
+    /* linebreak: trailing 두 칸 공백 또는 Shift+Enter → <br> */
+    linebreak() {
+      return { type: 'html', content: '<br>' };
     },
   };
 

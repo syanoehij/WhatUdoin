@@ -79,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
       el: document.getElementById('viewer-container'),
       viewer: true,
       initialValue: HISTORIES[0].content || '',
+      customHTMLSanitizer: html => html,
       customHTMLRenderer: window.WUEditor?.renderer,
     });
     setTimeout(() => { if (typeof hljs !== 'undefined') document.querySelectorAll('#viewer-container pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); }); }, 150);

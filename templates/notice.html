@@ -209,6 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ['table', 'link', 'image'],
         ['code', 'codeblock'],
       ],
+      customHTMLSanitizer: html => html,
       customHTMLRenderer: window.WUEditor?.renderer,
       usageStatistics: false,
       events: {
@@ -242,6 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
         el: viewEl,
         viewer: true,
         initialValue: INITIAL_MD || '(등록된 공지가 없습니다.)',
+        customHTMLSanitizer: html => html,
         customHTMLRenderer: window.WUEditor?.renderer,
       });
       setTimeout(() => {

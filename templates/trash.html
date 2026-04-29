@@ -702,6 +702,8 @@ function renderDetail(item) {
         el: contentViewer,
         viewer: true,
         initialValue: item.content || '',
+        customHTMLSanitizer: html => html,
+        customHTMLRenderer: window.WUEditor?.renderer,
       });
     } else {
       contentViewer.textContent = item.content;

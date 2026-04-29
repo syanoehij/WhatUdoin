@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-04-29",
+      "phase": "32차 3단계",
+      "phase_class": "phase-3",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>편집기 — 줄내림(<code>&lt;br&gt;</code>) 유지 기능 추가",
+          "detail_html": "<ul>\n              <li>마크다운 단일 개행(Soft Break) 및 Shift+Enter가 <code>&lt;br&gt;</code>로 렌더링되도록 <code>softbreak</code>/<code>linebreak</code> 핸들러 추가</li>\n              <li>저장 시 연속 빈줄을 <code>&lt;br&gt;</code> 블록으로 변환하여 재저장 시에도 개수가 보존되는 라운드트립 안정성 확보</li>\n              <li>공지·문서·휴지통·프로젝트 관리 등 6개 뷰어 템플릿에 <code>customHTMLSanitizer</code> 추가 — 뷰어에서 <code>&lt;br&gt;</code> 태그가 제거되지 않고 그대로 렌더링</li>\n              <li>CSS 빈 단락(<code>p</code> 태그)에 <code>min-height: 1.8em</code> 추가하여 빈 줄이 시각적 여백으로 표시</li>\n              <li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/style.css</code>, <code>templates/doc_editor.html</code>, <code>templates/home.html</code>, <code>templates/notice.html</code>, <code>templates/notice_history.html</code>, <code>templates/project_manage.html</code>, <code>templates/trash.html</code></li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-29",
       "phase": "32차 2단계",
       "phase_class": "phase-2",
       "entries": [
