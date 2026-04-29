@@ -1,6 +1,18 @@
 {
   "groups": [
     {
+      "date": "2026-04-30",
+      "phase": "32차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>편집기 — 다크 테마 Markdown 모드 텍스트 가시성 수정",
+          "detail_html": "<ul>\n              <li>다크 테마에서 Markdown 소스 에디터의 헤딩·본문 텍스트가 거의 보이지 않던 문제 수정</li>\n              <li>원인: vendor CSS(<code>toastui-editor.min.css</code>)가 <code>.ProseMirror { color: #222 }</code>를 직접 지정해 부모 요소의 <code>color: var(--text)</code> 상속을 막고 있었음</li>\n              <li><code>[data-theme=\"dark\"] .toastui-editor-md-container .ProseMirror</code>에 <code>color: var(--text)</code> 직접 오버라이드 추가</li>\n              <li><code>[data-theme=\"dark\"] .toastui-editor-md-marked-text</code> 일반 규칙 추가 — 헤딩·본문 토큰 색상 보장 (코드·링크 등 특수 토큰은 더 높은 specificity로 유지)</li>\n              <li>수정 파일: <code>static/css/style.css</code></li>\n            </ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-04-29",
       "phase": "32차 3단계",
       "phase_class": "phase-3",
