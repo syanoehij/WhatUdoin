@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-04-29",
+      "phase": "32차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>체크 — 목록 패널 숨기기/보이기 토글 기능 추가",
+          "detail_html": "<ul>\n              <li>체크 화면 오른쪽 뷰어 헤더에 <b>« 목록 숨기기 / » 목록 보이기</b> 버튼 추가. 클릭 시 왼쪽 프로젝트 필터·체크리스트 목록 패널이 접히고 에디터가 전체 너비를 차지</li>\n              <li>CSS <code>width:0; opacity:0; overflow:hidden</code> + <code>transition 0.25s ease</code>로 부드러운 슬라이드 애니메이션 적용</li>\n              <li>상태는 세션 내에서만 유지(localStorage 미저장) — 페이지 새로고침 시 항상 패널 보임 상태로 시작</li>\n              <li>모바일(767px 이하)에서는 토글 버튼 자동 숨김</li>\n              <li>수정 파일: <code>templates/check.html</code></li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-29",
       "phase": "31차 5단계",
       "phase_class": "phase-5",
       "entries": [
