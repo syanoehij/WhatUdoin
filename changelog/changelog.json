@@ -9,6 +9,16 @@
           "icon": "✨",
           "title_html": "<span class=\"cl-tag feat\">feat</span>체크 — 목록 패널 숨기기/보이기 토글 기능 추가",
           "detail_html": "<ul>\n              <li>체크 화면 오른쪽 뷰어 헤더에 <b>« 목록 숨기기 / » 목록 보이기</b> 버튼 추가. 클릭 시 왼쪽 프로젝트 필터·체크리스트 목록 패널이 접히고 에디터가 전체 너비를 차지</li>\n              <li>CSS <code>width:0; opacity:0; overflow:hidden</code> + <code>transition 0.25s ease</code>로 부드러운 슬라이드 애니메이션 적용</li>\n              <li>상태는 세션 내에서만 유지(localStorage 미저장) — 페이지 새로고침 시 항상 패널 보임 상태로 시작</li>\n              <li>모바일(767px 이하)에서는 토글 버튼 자동 숨김</li>\n              <li>수정 파일: <code>templates/check.html</code></li>\n            </ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span>체크 — 목차 패널 상태 localStorage 미저장·이중 토글 버그 수정",
+          "detail_html": "<ul>\n              <li>뷰어 목차(<code>ck-viewer-toc</code>): <code>toggleViewerToc()</code>가 localStorage에 상태를 저장하지 않아 페이지 이동 후 항상 닫힌 채 복원되던 버그 수정. 열기 시 <code>check_viewer_toc_open=1</code>, 닫기 시 <code>0</code> 저장</li>\n              <li>뷰어 모드 진입(<code>_showViewerMode</code>) 시 <code>check_viewer_toc_open</code>이 <code>1</code>이면 <code>renderViewer</code> DOM 완성 후 200ms 뒤 목차를 자동으로 복원</li>\n              <li>편집기 목차(<code>toc-panel</code>): 편집→뷰어→편집 모드 전환 시 <code>_initToc</code>가 이미 열린 패널을 다시 토글해 닫고 localStorage를 <code>0</code>으로 덮어쓰던 이중 토글 버그 수정. <code>initEditor()</code> 진입 시 <code>toc-panel</code>에 <code>hidden</code> 강제 추가해 항상 올바른 초기 상태 보장</li>\n              <li>수정 파일: <code>templates/check.html</code></li>\n            </ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span>체크 — 목차 버튼 열림 상태 시각 표시",
+          "detail_html": "<ul>\n              <li>목차 패널이 열려 있을 때 <b>📑 목차</b> 버튼에 accent 색상 하이라이트(<code>.active</code>)를 적용해 현재 열림 여부를 한눈에 파악 가능</li>\n              <li>뷰어 목차 버튼(<code>#btn-toc-viewer</code>), 편집기 목차 버튼(<code>#btn-toc-toggle-inline</code>) 모두 동일하게 적용. 문서 편집기(<code>#btn-toc-toggle</code>)와 동일한 UX</li>\n              <li>편집 모드로 전환 시 뷰어 목차 버튼의 <code>active</code> 상태도 함께 초기화</li>\n              <li>수정 파일: <code>static/css/style.css</code>, <code>templates/check.html</code></li>\n            </ul>"
         }
       ]
     },

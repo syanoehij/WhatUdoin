@@ -1332,7 +1332,9 @@ mark.search-hl {
 .toc-empty {
   padding: 20px 14px; font-size: 0.82rem; color: var(--text-muted); text-align: center;
 }
-#btn-toc-toggle.active { background: var(--accent); color: white; border-color: var(--accent); }
+#btn-toc-toggle.active,
+#btn-toc-viewer.active,
+#btn-toc-toggle-inline.active { background: var(--accent); color: white; border-color: var(--accent); }
 
 .doc-date-wrap { flex: 1; display: flex; justify-content: center; }
 .doc-date-wrap input[type="date"] {
@@ -1430,6 +1432,8 @@ mark.search-hl {
 }
 .toastui-editor-contents p,
 .toastui-editor-contents li { color: var(--text) !important; }
+/* 단락 여백: 빈 줄이 시각적으로 보이도록 */
+.toastui-editor-contents p { margin: 0.5em 0 !important; min-height: 1.8em; }
 .toastui-editor-contents h1 { font-size: 1.7rem !important; font-weight: 700 !important; border-bottom: 2px solid var(--border) !important; padding-bottom: 6px !important; margin: 0.8em 0 0.4em !important; }
 .toastui-editor-contents h2 { font-size: 1.3rem !important; font-weight: 700 !important; border-bottom: 1px solid var(--border-light) !important; padding-bottom: 4px !important; margin: 0.8em 0 0.4em !important; }
 .toastui-editor-contents h3 { font-size: 1.1rem !important; font-weight: 600 !important; margin: 0.8em 0 0.4em !important; }
@@ -1494,7 +1498,7 @@ mark.search-hl {
 .markdown-body h1 { font-size: 1.7rem; border-bottom: 2px solid var(--border); padding-bottom: 6px; }
 .markdown-body h2 { font-size: 1.3rem; border-bottom: 1px solid var(--border-light); padding-bottom: 4px; }
 .markdown-body h3 { font-size: 1.1rem; }
-.markdown-body p { margin: 0.5em 0; }
+.markdown-body p { margin: 0.5em 0; min-height: 1.8em; }
 .markdown-body ul, .markdown-body ol { padding-left: 1.5em; margin: 0.5em 0; }
 .markdown-body li { margin: 0.2em 0; }
 .markdown-body strong { font-weight: 700; }

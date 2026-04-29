@@ -1369,6 +1369,15 @@ function _showViewerMode() {
   document.getElementById('ck-viewer-wrap').style.display  = '';
   renderViewer(_curItem.content);
 
+  // 뷰어 TOC 상태 복원 — renderViewer가 DOM을 채운 직후 약간의 지연 필요
+  if (localStorage.getItem('check_viewer_toc_open') === '1') {
+    setTimeout(() => {
+      buildViewerToc();
+      const btn = document.getElementById('btn-toc-viewer');
+      if (btn) btn.classList.add('active');
+    }, 200);
+  }
+
   // 목차 버튼은 뷰어 모드에서 항상 표시
   const tocViewerBtn = document.getElementById('btn-toc-viewer');
   if (tocViewerBtn) tocViewerBtn.style.display = '';
@@ -1424,7 +1433,7 @@ async function _showEditorMode() {
   const tocToggleBtnShow = document.getElementById('btn-toc-toggle-inline');
   if (tocToggleBtnShow) tocToggleBtnShow.style.display = '';
   const tocViewerBtn = document.getElementById('btn-toc-viewer');
-  if (tocViewerBtn) tocViewerBtn.style.display = 'none';
+  if (tocViewerBtn) { tocViewerBtn.style.display = 'none'; tocViewerBtn.classList.remove('active'); }
   const visSeg = document.getElementById('ck-vis-seg-viewer');
   if (visSeg) visSeg.style.display = 'none';
 
@@ -1634,6 +1643,9 @@ function initEditor(content) {
   const container = document.getElementById('ck-editor-container');
   if (wuInst) { wuInst.destroy(); wuInst = null; }
   container.innerHTML = '';
+  // _initToc은 패널이 hidden 상태임을 가정하고 토글하므로, 이전 세션에서 열린 채 destroy된 경우 강제 리셋
+  const _prevTocPanel = document.getElementById('toc-panel');
+  if (_prevTocPanel) _prevTocPanel.classList.add('hidden');
 
   wuInst = WUEditor.create({
     el: '#ck-editor-container',
@@ -2507,8 +2519,16 @@ function buildViewerToc() {
 
 function toggleViewerToc() {
   const panel = document.getElementById('ck-viewer-toc');
-  if (panel.classList.contains('hidden')) buildViewerToc();
-  else panel.classList.add('hidden');
+  const btn   = document.getElementById('btn-toc-viewer');
+  if (panel.classList.contains('hidden')) {
+    buildViewerToc();
+    if (btn) btn.classList.add('active');
+    localStorage.setItem('check_viewer_toc_open', '1');
+  } else {
+    panel.classList.add('hidden');
+    if (btn) btn.classList.remove('active');
+    localStorage.setItem('check_viewer_toc_open', '0');
+  }
 }
 
 // 뷰어 모드 TOC 디바운스 재빌드 — 체크박스 토글 후 renderViewer 직후
