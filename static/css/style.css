@@ -1282,9 +1282,24 @@ mark.search-hl {
 /* AI 버튼 활성 상태 */
 #btn-ai-toggle.active { background: var(--accent); color: white; border-color: var(--accent); }
 
+/* ── ToC 리사이저 ────────────────────────── */
+.toc-resizer {
+  width: 5px;
+  min-width: 5px;
+  cursor: col-resize;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background 0.15s;
+  display: none;
+  user-select: none;
+}
+.toc-resizer:hover,
+.toc-resizer.dragging { background: var(--accent); }
+.editor-body.toc-open .toc-resizer { display: block; }
+
 /* ── ToC 패널 ────────────────────────────── */
 .toc-panel {
-  width: 240px;
+  width: 320px;
   flex-shrink: 0;
   border-left: 1px solid var(--border);
   background: var(--surface);
@@ -1326,9 +1341,9 @@ mark.search-hl {
   border-left-color: var(--accent);
   background: var(--surface-2);
 }
-.toc-lv1 { padding-left: 14px; font-weight: 600; }
-.toc-lv2 { padding-left: 28px; }
-.toc-lv3 { padding-left: 42px; font-size: 0.78rem; }
+.toc-lv1 { padding-left: 8px; font-weight: 600; }
+.toc-lv2 { padding-left: 18px; }
+.toc-lv3 { padding-left: 26px; font-size: 0.78rem; }
 .toc-empty {
   padding: 20px 14px; font-size: 0.82rem; color: var(--text-muted); text-align: center;
 }
@@ -1488,6 +1503,25 @@ mark.search-hl {
 [data-theme="dark"] .toastui-editor-md-code-block-line-background,
 [data-theme="dark"] .toastui-editor-md-custom-block-line-background { background-color: rgba(255,255,255,0.05) !important; }
 [data-theme="dark"] .toastui-editor-md-preview-highlight { color: var(--text) !important; background-color: rgba(255,245,0,0.15) !important; }
+/* ── MD 소스 토큰 — vendor #ccc/#999/#555 고정값 다크 테마 오버라이드 ── */
+[data-theme="dark"] .toastui-editor-md-delimiter,
+[data-theme="dark"] .toastui-editor-md-thematic-break { color: var(--text-muted) !important; }
+[data-theme="dark"] .toastui-editor-md-block-quote,
+[data-theme="dark"] .toastui-editor-md-link,
+[data-theme="dark"] .toastui-editor-md-table { color: var(--text-muted) !important; }
+[data-theme="dark"] .toastui-editor-md-code.toastui-editor-md-delimiter { color: var(--text-muted) !important; }
+[data-theme="dark"] .toastui-editor-md-html,
+[data-theme="dark"] .toastui-editor-md-meta { color: var(--text-muted) !important; }
+[data-theme="dark"] .toastui-editor-md-link.toastui-editor-md-link-url.toastui-editor-md-marked-text { color: var(--text-muted) !important; }
+[data-theme="dark"] .toastui-editor-md-custom-block { color: #b39ddb !important; }
+[data-theme="dark"] .toastui-editor-md-custom-block .toastui-editor-md-delimiter { color: var(--text-muted) !important; }
+[data-theme="dark"] .toastui-editor-md-custom-block .toastui-editor-md-meta { color: #ce93d8 !important; }
+/* ── WYSIWYG/프리뷰 코드블록 — vendor background:#f4f7f8 고정값 오버라이드 ── */
+[data-theme="dark"] .toastui-editor-contents pre { background: var(--code-bg) !important; color: var(--text) !important; }
+[data-theme="dark"] .toastui-editor-contents pre code { background: transparent !important; color: var(--text) !important; }
+/* ── .markdown-body 뷰어 코드블록 (pre) — vendor background:#f4f7f8 고정값 없음이나 명시 보장 ── */
+[data-theme="dark"] .markdown-body pre { background: var(--code-bg) !important; color: var(--text) !important; }
+[data-theme="dark"] .markdown-body pre code { background: transparent !important; color: var(--text) !important; }
 
 /* 마크다운 렌더링 스타일 */
 .markdown-body h1, .markdown-body h2, .markdown-body h3 {

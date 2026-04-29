@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-04-29",
+      "phase": "32차 2단계",
+      "phase_class": "phase-2",
+      "entries": [
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span>편집기 — 목차 패널 기본 폭 확대 및 들여쓰기 개선",
+          "detail_html": "<ul>\n              <li>목차 패널 기본 너비 240px → <b>320px</b>으로 확대해 긴 제목도 잘리지 않도록 개선</li>\n              <li>목차 항목 들여쓰기 축소: lv1 14px → 8px, lv2 28px → 18px, lv3 42px → 26px — 좁은 패널에서도 내용 가독성 향상</li>\n              <li>수정 파일: <code>static/css/style.css</code></li>\n            </ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span>편집기 — 목차 패널 드래그 리사이저 추가",
+          "detail_html": "<ul>\n              <li>목차 패널과 편집 영역 사이에 드래그로 폭을 조절할 수 있는 리사이저(칸막이) 추가</li>\n              <li>마우스 드래그로 180px ~ 600px 범위에서 자유롭게 폭 조절 가능, <code>col-resize</code> 커서로 사용 힌트 제공</li>\n              <li>문서 편집기(<code>doc_editor.html</code>)·체크 편집기(<code>check_editor.html</code>) 양쪽 모두 적용</li>\n              <li>수정 파일: <code>templates/doc_editor.html</code>, <code>templates/check_editor.html</code></li>\n            </ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-29",
       "phase": "32차 1단계",
       "phase_class": "phase-1",
       "entries": [

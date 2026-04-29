@@ -249,6 +249,7 @@
 
     <!-- 목차 패널 (기본 숨김) -->
     {% if checklist.id and not locked_by %}
+    <div class="toc-resizer" id="toc-resizer"></div>
     <aside class="toc-panel hidden" id="toc-panel">
       <div class="toc-panel-header">
         <span class="toc-panel-title">목차</span>
@@ -444,6 +445,30 @@ async function _syncLinkedMdForEditor(md) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // ToC 리사이저 드래그
+  const tocResizer = document.getElementById('toc-resizer');
+  const tocPanel   = document.getElementById('toc-panel');
+  if (tocResizer && tocPanel) {
+    tocResizer.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      tocResizer.classList.add('dragging');
+      const startX     = e.clientX;
+      const startWidth = tocPanel.getBoundingClientRect().width;
+      function onMouseMove(e) {
+        const delta    = startX - e.clientX;
+        const newWidth = Math.min(Math.max(startWidth + delta, 180), 600);
+        tocPanel.style.width = newWidth + 'px';
+      }
+      function onMouseUp() {
+        tocResizer.classList.remove('dragging');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      }
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+  }
+
   const backBtn = document.getElementById('btn-back');
   if (backBtn) backBtn.href = CKE_IS_NEW ? '/check' : `/check?id=${CKE_ID}`;
 

@@ -133,6 +133,7 @@
 
     <!-- 오른쪽: ToC 패널 (기본 숨김) -->
     {% if doc %}
+    <div class="toc-resizer" id="toc-resizer"></div>
     <aside class="toc-panel hidden" id="toc-panel">
       <div class="toc-panel-header">
         <span class="toc-panel-title">목차</span>
@@ -195,6 +196,31 @@ window._autoSaveAndRefresh = async () => {
 
 /* ── 초기화 ─────────────────────────────────────────── */
 function initDocEditor() {
+  // ToC 리사이저 드래그
+  const tocResizer = document.getElementById('toc-resizer');
+  const tocPanel   = document.getElementById('toc-panel');
+  if (tocResizer && tocPanel) {
+    tocResizer.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      tocResizer.classList.add('dragging');
+      const startX     = e.clientX;
+      const startWidth = tocPanel.getBoundingClientRect().width;
+      function onMouseMove(e) {
+        const delta    = startX - e.clientX;
+        const newWidth = Math.min(Math.max(startWidth + delta, 180), 600);
+        tocPanel.style.width = newWidth + 'px';
+        if (typeof editor !== 'undefined' && editor) editor.resize?.();
+      }
+      function onMouseUp() {
+        tocResizer.classList.remove('dragging');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      }
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+  }
+
   // AI 초안 주입 (주간 보고서 생성 후 저장 없이 편집기 진입 시)
   let initialMd = INITIAL_MD || '';
   let _aiDraftLoaded = false;
@@ -499,7 +525,18 @@ async function saveDoc(leaveTarget) {
   const raw   = getDocContent();
   const lines = raw.split('\n');
   const title = lines[0].replace(/^#+\s*/, '').trim();
-  const content = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd();
+  const rawContent = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd();
+  // 연속 빈줄 보존 처리:
+  // 1단계: 기존 <br> 단독 줄을 정규화(이전 저장 시 삽입된 것 제거) → 라운드트립 누적 방지
+  // 2단계: 3개 이상 연속 \n → 초과분만큼 <br> 블록 삽입
+  const normalized = rawContent.replace(/\n\n(?:<br>\n\n)+/g, (m) => {
+    const count = (m.match(/<br>/g) || []).length;
+    return '\n\n' + '<br>\n\n'.repeat(count);
+  });
+  const content = normalized.replace(/\n{3,}/g, (m) => {
+    const brCount = Math.max(1, m.length - 2);
+    return '\n\n' + '<br>\n\n'.repeat(brCount);
+  });
   if (!title) { wuToast.warning('첫 줄에 제목(H1)을 입력하세요.'); return; }
 
   const method = DOC_ID ? 'PUT' : 'POST';
