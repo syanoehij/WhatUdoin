@@ -1090,6 +1090,7 @@ const TAB_TOKEN = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getI
 let _allChecklists      = [];
 let _curProj            = null;
 let _sortMode           = localStorage.getItem('ck_sort_mode') || 'time'; // 'time' | 'name'
+let _sortDir            = localStorage.getItem('ck_sort_dir')  || 'desc'; // 'asc' | 'desc'
 let _projFilter         = localStorage.getItem('ck_proj_filter') || 'active';
 let _searchTerm         = '';
 let _curId              = null;
@@ -1167,7 +1168,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const params = new URLSearchParams(location.search);
 
-  document.querySelectorAll('.ck-sort-tab').forEach(b => b.classList.toggle('active', b.dataset.sort === _sortMode));
+  _updateSortTabs();
 
   const urlFilter = params.get('filter');
   if (urlFilter === 'done' || urlFilter === 'active') {
@@ -1365,11 +1366,12 @@ function renderList() {
     );
   }
 
-  const sorted = [...filtered].sort((a, b) =>
-    _sortMode === 'name'
+  const sorted = [...filtered].sort((a, b) => {
+    const cmp = _sortMode === 'name'
       ? (a.title || '').localeCompare(b.title || '', 'ko')
-      : (b.updated_at || '').localeCompare(a.updated_at || '')
-  );
+      : (a.updated_at || '').localeCompare(b.updated_at || '');
+    return _sortDir === 'desc' ? -cmp : cmp;
+  });
 
   const container = document.getElementById('ck-list');
   if (!sorted.length) {
@@ -1387,10 +1389,25 @@ function renderList() {
   `).join('');
 }
 
+function _updateSortTabs() {
+  const labels = { time: '시간순', name: '이름순' };
+  document.querySelectorAll('.ck-sort-tab').forEach(b => {
+    const isActive = b.dataset.sort === _sortMode;
+    b.classList.toggle('active', isActive);
+    b.textContent = labels[b.dataset.sort] + (isActive ? (_sortDir === 'asc' ? ' ▲' : ' ▼') : '');
+  });
+}
+
 function setSortMode(mode) {
-  _sortMode = mode;
-  localStorage.setItem('ck_sort_mode', mode);
-  document.querySelectorAll('.ck-sort-tab').forEach(b => b.classList.toggle('active', b.dataset.sort === mode));
+  if (mode === _sortMode) {
+    _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _sortMode = mode;
+    _sortDir = mode === 'time' ? 'desc' : 'asc';
+  }
+  localStorage.setItem('ck_sort_mode', _sortMode);
+  localStorage.setItem('ck_sort_dir',  _sortDir);
+  _updateSortTabs();
   renderList();
 }
 

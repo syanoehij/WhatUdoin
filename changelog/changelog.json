@@ -14,6 +14,11 @@
           "icon": "✨",
           "title_html": "<span class=\"cl-tag ux\">ux</span> 체크 — 검색 결과 레드닷 표시 확장",
           "detail_html": "<ul><li>검색어 입력 시 매치가 있는 <strong>진행중·완료 토글 버튼</strong>과 <strong>좌측 프로젝트 항목</strong> 모두에 레드닷 표시</li><li>검색 중 프로젝트 클릭 시 검색 결과가 풀리지 않고 해당 프로젝트 내 검색 결과만 필터링하여 유지</li><li>검색어를 지우면 레드닷 전부 초기화</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 체크 — 정렬 탭 오름/내림차순 토글",
+          "detail_html": "<ul><li><strong>시간순 / 이름순</strong> 탭을 다시 누르면 오름차순 ▲ ↔ 내림차순 ▼ 전환</li><li>활성 탭에 현재 방향 화살표(▲/▼) 표시</li><li>선택한 방향은 <code>localStorage</code>에 저장되어 재방문 시 복원</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
         }
       ]
     },
