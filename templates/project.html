@@ -522,12 +522,46 @@ function todayTimeFraction() {
   const n = new Date();
   return (n.getHours() * 60 + n.getMinutes()) / 1440;
 }
-function calcTodayLineLeft(todayOff, dayPx) {
-  return (todayOff + todayTimeFraction()) * dayPx;
-}
+// ── 주말 폭 축소 헬퍼 ────────────────────────────────────
+const WEEKEND_RATIO = 0.55; // 주말 열 폭 = 평일의 55%
+
+// getDayPx() → 평일 기준 1일 폭 (가중치 총합으로 컨테이너 폭 배분)
 function getDayPx() {
   const tl = document.getElementById('gantt-timeline');
-  return tl ? (tl.clientWidth / daysShown) : 10;
+  if (!tl) return 10;
+  let weightedDays = 0;
+  for (let i = 0; i < daysShown; i++) {
+    const dow = addDays(viewStart, i).getDay();
+    weightedDays += (dow === 0 || dow === 6) ? WEEKEND_RATIO : 1;
+  }
+  return weightedDays > 0 ? tl.clientWidth / weightedDays : 10;
+}
+
+// i번째 날의 실제 픽셀 폭 (평일 dayPx, 주말 dayPx * WEEKEND_RATIO)
+function dayWidthAt(i) {
+  const dow = addDays(viewStart, i).getDay();
+  return getDayPx() * ((dow === 0 || dow === 6) ? WEEKEND_RATIO : 1);
+}
+
+// i번째 날까지의 누적 left 오프셋 (prefix sum)
+// _dayLeftCache는 render() 진입 시 초기화됨
+let _dayLeftCache = null;
+function _buildDayLeftCache(dayPx) {
+  _dayLeftCache = new Float64Array(daysShown + 1);
+  for (let i = 0; i < daysShown; i++) {
+    const dow = addDays(viewStart, i).getDay();
+    _dayLeftCache[i + 1] = _dayLeftCache[i] + dayPx * ((dow === 0 || dow === 6) ? WEEKEND_RATIO : 1);
+  }
+}
+function dayLeft(i) {
+  if (!_dayLeftCache) return i * getDayPx();
+  if (i <= 0) return 0;
+  if (i >= daysShown) return _dayLeftCache[daysShown];
+  return _dayLeftCache[i];
+}
+
+function calcTodayLineLeft(todayOff) {
+  return dayLeft(todayOff) + todayTimeFraction() * dayWidthAt(todayOff);
 }
 
 // ── 줌 ────────────────────────────────────────────────────
@@ -681,7 +715,8 @@ let _rowProjectMap = []; // [{ projKey, projName }] — gantt-rows 행 순서와
 function render() {
   _rowProjectMap = [];
   const dayPx  = getDayPx();
-  const totalW = daysShown * dayPx;
+  _buildDayLeftCache(dayPx);        // 주말 폭 누적 오프셋 캐시 초기화
+  const totalW = dayLeft(daysShown);
   const viewEnd = addDays(viewStart, daysShown);
   const tod     = today();
 
@@ -701,7 +736,7 @@ function render() {
   const unitsEl  = document.getElementById('gantt-units');
   monthsEl.innerHTML = unitsEl.innerHTML = '';
 
-  let prevMk = null, mStart = 0;
+  let prevMk = null, mStart = 0, mStartIdx = 0;
   const addMonthLabel = (endPx, startPx, startDay) => {
     const w = endPx - startPx; if (w < 2) return;
     const el = document.createElement('div');
@@ -714,16 +749,16 @@ function render() {
     const d = addDays(viewStart, i);
     const mk = d.getFullYear() * 100 + d.getMonth();
     if (mk !== prevMk) {
-      if (prevMk !== null) addMonthLabel(i * dayPx, mStart, Math.round(mStart / dayPx));
-      prevMk = mk; mStart = i * dayPx;
+      if (prevMk !== null) addMonthLabel(dayLeft(i), mStart, mStartIdx);
+      prevMk = mk; mStart = dayLeft(i); mStartIdx = i;
     }
   }
-  addMonthLabel(daysShown * dayPx, mStart, Math.round(mStart / dayPx));
+  addMonthLabel(dayLeft(daysShown), mStart, mStartIdx);
 
   const DAY_KO = ['일','월','화','수','목','금','토'];
   if (daysShown > 60) {
     // 주차 레이블 (월 단위 이상: 60일 초과)
-    let prevWk = null, wStart = 0;
+    let prevWk = null, wStart = 0, wStartIdx = 0;
     const addWeekLabel = (endPx, startPx, startDay) => {
       const w = endPx - startPx; if (w < 2) return;
       const el = document.createElement('div');
@@ -736,11 +771,11 @@ function render() {
       const d = addDays(viewStart, i);
       const wk = d.getFullYear() * 100 + isoWeek(d);
       if (wk !== prevWk) {
-        if (prevWk !== null) addWeekLabel(i * dayPx, wStart, Math.round(wStart / dayPx));
-        prevWk = wk; wStart = i * dayPx;
+        if (prevWk !== null) addWeekLabel(dayLeft(i), wStart, wStartIdx);
+        prevWk = wk; wStart = dayLeft(i); wStartIdx = i;
       }
     }
-    addWeekLabel(daysShown * dayPx, wStart, Math.round(wStart / dayPx));
+    addWeekLabel(dayLeft(daysShown), wStart, wStartIdx);
   } else if (daysShown >= 14) {
     // 21~60일 뷰: 일(요일) 레이블 + 월요일에 W주차 표시
     for (let i = 0; i < daysShown; i++) {
@@ -748,13 +783,14 @@ function render() {
       const isToday   = daysBetween(tod, d) === 0;
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       const isMon     = d.getDay() === 1;
+      const cellW     = dayWidthAt(i);
       const el = document.createElement('div');
       el.className = 'gantt-header-unit' +
         (isToday ? ' is-today' : isWeekend ? ' is-weekend' : '');
-      el.style.cssText = `left:${i * dayPx}px;width:${dayPx}px`;
+      el.style.cssText = `left:${dayLeft(i)}px;width:${cellW}px`;
       el.title = isMon ? `W${isoWeek(d)}` : '';
       if (daysShown <= 30) {
-        el.textContent = isMon && dayPx >= 28
+        el.textContent = isMon && cellW >= 28
           ? `${d.getDate()}(W${isoWeek(d)})`
           : `${d.getDate()}(${DAY_KO[d.getDay()]})`;
       } else {
@@ -771,7 +807,7 @@ function render() {
       const el = document.createElement('div');
       el.className = 'gantt-header-unit' +
         (isToday ? ' is-today' : isWeekend ? ' is-weekend' : '');
-      el.style.cssText = `left:${i * dayPx}px;width:${dayPx}px`;
+      el.style.cssText = `left:${dayLeft(i)}px;width:${dayWidthAt(i)}px`;
       el.textContent = `${d.getDate()}(${DAY_KO[d.getDay()]})`;
       unitsEl.appendChild(el);
     }
@@ -887,7 +923,7 @@ function render() {
         if (e > s) {
           const span = document.createElement('div');
           span.className = 'gantt-proj-span';
-          span.style.cssText = `left:${s * dayPx}px;width:${(e-s)*dayPx}px;` +
+          span.style.cssText = `left:${dayLeft(s)}px;width:${dayLeft(e)-dayLeft(s)}px;` +
             `top:6px;height:${ROW_H-12}px;background:${color}`;
           pGRow.appendChild(span);
         }
@@ -969,16 +1005,18 @@ function render() {
               const clampedS = Math.max(0, s);
               const clampedE = Math.min(daysShown, e);
               if (clampedE > clampedS || (clampedS === 0 && evEnd >= viewStart)) {
-                const barW = Math.max((clampedE - clampedS) * dayPx - 3, 10);
-                const barL = clampedS * dayPx + 1;
+                const barW = Math.max((dayLeft(clampedE) - dayLeft(clampedS)) - 3, 10);
+                const barL = dayLeft(clampedS) + 1;
                 const barT = Math.floor((ROW_H - BAR_H) / 2);
 
                 const bar = document.createElement('div');
+                // 칸반 미연결 여부 (하위 업무 등 kanban_status가 null인 경우 — overdue/완료 스타일 적용 안 함)
+                const isUnlinked = !ev.kanban_status;
                 // 완료 여부
-                const evDone = ev.kanban_status === 'done' || ev.is_active === 0;
-                // 기한 초과 여부 판단 (완료 제외)
+                const evDone = !isUnlinked && (ev.kanban_status === 'done' || ev.is_active === 0);
+                // 기한 초과 여부 판단 (칸반 미연결·완료 제외)
                 const evOverdue = (() => {
-                  if (evDone) return false;
+                  if (isUnlinked || evDone) return false;
                   const endStr = ev.end_datetime || ev.start_datetime;
                   if (!endStr) return false;
                   const endD = new Date(endStr.slice(0, 10));
@@ -991,13 +1029,6 @@ function render() {
                 bar.style.cssText =
                   `left:${barL}px;width:${barW}px;top:${barT}px;height:${BAR_H}px;background-color:${color}`;
                 bar.textContent = (evOverdue ? '⚠ ' : '') + ev.title;
-                bar.title = [
-                  ev.title,
-                  fmtDate(evStart) + (evEnd && evEnd.getTime() !== evStart.getTime() ? ' ~ ' + fmtDate(evEnd) : ''),
-                  ev.assignee ? '담당: ' + ev.assignee : '',
-                  ev.description ? ev.description : '',
-                  evOverdue ? '⚠ 기한 초과' : '',
-                ].filter(Boolean).join('\n');
                 if (CURRENT_USER) {
                   setupBarProjectDrag(bar, ev);
                 } else {
@@ -1039,7 +1070,7 @@ function render() {
     const line = document.createElement('div');
     line.className = 'gantt-today-line';
     line.id = 'gantt-today-line';
-    line.style.cssText = `left:${calcTodayLineLeft(todayOff, dayPx)}px;height:${totalH}px`;
+    line.style.cssText = `left:${calcTodayLineLeft(todayOff)}px;height:${totalH}px`;
     ganttRowsEl.appendChild(line);
   }
 }
@@ -1049,9 +1080,8 @@ setInterval(function () {
   const line = document.getElementById('gantt-today-line');
   if (!line) return;
   const todayOff = daysBetween(viewStart, today());
-  const dayPx = getDayPx();
   if (todayOff >= 0 && todayOff < daysShown) {
-    line.style.left = calcTodayLineLeft(todayOff, dayPx) + 'px';
+    line.style.left = calcTodayLineLeft(todayOff) + 'px';
   }
 }, 60000);
 
@@ -1069,12 +1099,14 @@ let _tlWheelAccum = 0; // 누적 픽셀
 function _tlDoWheelScroll(e) {
   e.preventDefault();
   _tlWheelAccum += e.deltaY;
-  const dayPx = getDayPx();
-  if (dayPx <= 0) return;
-  const daysDelta = Math.trunc(_tlWheelAccum / dayPx);
+  // 평균 일당 폭 (= 전체 폭 / 표시 일수) 사용 — 휠은 거친 조작이므로 평균으로도 충분
+  const tl = document.getElementById('gantt-timeline');
+  const avgPx = tl && daysShown > 0 ? (tl.clientWidth / daysShown) : 10;
+  if (avgPx <= 0) return;
+  const daysDelta = Math.trunc(_tlWheelAccum / avgPx);
   if (daysDelta !== 0) {
     viewStart = addDays(viewStart, daysDelta);
-    _tlWheelAccum -= daysDelta * dayPx; // 나머지 보존
+    _tlWheelAccum -= daysDelta * avgPx; // 나머지 보존
     saveProjectState();
     render();
   }
@@ -1178,10 +1210,12 @@ function _onBarDragMove(e) {
   _barDragState.bar.classList.add('bar-dragging');
 
   if (_barDragState.mode === 'date') {
-    const dayPx = getDayPx();
-    const offset = Math.round(dx / dayPx);
+    // 드래그 픽셀 → 일수 변환: 평균 일당 폭 사용 (주말 폭이 달라도 거친 조작에는 충분)
+    const tl2 = document.getElementById('gantt-timeline');
+    const avgPx2 = tl2 && daysShown > 0 ? (tl2.clientWidth / daysShown) : getDayPx();
+    const offset = Math.round(dx / avgPx2);
     _barDragState.dateOffset = offset;
-    _barDragState.bar.style.transform = `translateX(${offset * dayPx}px)`;
+    _barDragState.bar.style.transform = `translateX(${offset * avgPx2}px)`;
     const lbl = _getOrCreateDragLabel();
     lbl.style.display = 'block';
     lbl.style.left = (e.clientX + 12) + 'px';
@@ -1256,7 +1290,7 @@ async function _onBarDragEnd(e) {
 // ── 오늘로 스크롤 ─────────────────────────────────────────
 function scrollToToday() {
   const tl  = document.getElementById('gantt-timeline');
-  const off = daysBetween(viewStart, today()) * getDayPx();
+  const off = dayLeft(daysBetween(viewStart, today()));
   tl.scrollLeft = Math.max(0, off - tl.clientWidth / 3);
 }
 

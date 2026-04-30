@@ -170,6 +170,8 @@ def _can_read_checklist(user, cl: dict) -> bool:
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
+    if auth.get_current_user(request) is None:
+        return RedirectResponse("/kanban", status_code=303)
     teams = db.get_all_teams()
     return templates.TemplateResponse(request, "home.html", _ctx(request, teams=teams))
 
