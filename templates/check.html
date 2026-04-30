@@ -770,6 +770,58 @@
   @media (max-width: 767px) {
     .ck-panel-toggle-btn { display: none; }
   }
+
+/* ── 완료/진행중 필터 바 ── */
+.ck-filter-bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+.ck-filter-btn {
+  flex: 1;
+  padding: 5px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.12s, color 0.12s;
+  position: relative;
+}
+.ck-filter-btn.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.ck-filter-btn .ck-dot {
+  display: none;
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--danger, #e74c3c);
+}
+.ck-filter-btn.has-match .ck-dot {
+  display: inline-block;
+}
+.ck-proj-item .ck-dot {
+  display: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--danger, #e74c3c);
+  flex-shrink: 0;
+}
+.ck-proj-item.has-match .ck-dot {
+  display: inline-block;
+}
 </style>
 {% endblock %}
 
@@ -779,6 +831,10 @@
   <!-- ── 왼쪽: 프로젝트 필터 ── -->
   <div class="ck-left">
     <div class="ck-left-header">프로젝트</div>
+    <div class="ck-filter-bar">
+      <button class="ck-filter-btn active" id="ck-filter-active" onclick="setProjFilter('active')">진행중<span class="ck-dot"></span></button>
+      <button class="ck-filter-btn" id="ck-filter-done" onclick="setProjFilter('done')">완료<span class="ck-dot"></span></button>
+    </div>
     <div class="ck-proj-list" id="ck-proj-list">
       <div class="ck-proj-item active" data-proj="" onclick="selectProject('')">
         <span class="ck-proj-label">전체</span>
@@ -1028,11 +1084,14 @@
 const IS_EDITOR    = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
 const IS_LOGGED_IN = {{ 'true' if user else 'false' }};
 const ALL_PROJECTS = {{ projects | tojson | safe }};
+const ALL_DONE_PROJECTS = {{ done_projects | tojson }};
 const TAB_TOKEN = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getItem(k); if (!t) { t = (crypto?.randomUUID?.() ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); })); sessionStorage.setItem(k, t); } return t; })();
 
 let _allChecklists      = [];
 let _curProj            = null;
 let _sortMode           = localStorage.getItem('ck_sort_mode') || 'time'; // 'time' | 'name'
+let _projFilter         = localStorage.getItem('ck_proj_filter') || 'active';
+let _searchTerm         = '';
 let _curId              = null;
 let _curItem            = null;
 let wuInst              = null;   // WUEditor 인스턴스
@@ -1098,71 +1157,131 @@ function applyPanelState(hidden) {
 
 // ── 페이지 초기화 ──────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  // 패널 항상 보임 상태로 시작
   applyPanelState(false);
+
+  document.getElementById('ck-filter-active').classList.toggle('active', _projFilter === 'active');
+  document.getElementById('ck-filter-done').classList.toggle('active', _projFilter === 'done');
 
   await loadAll();
   renderProjList();
 
   const params = new URLSearchParams(location.search);
 
-  // 정렬 모드 복원
   document.querySelectorAll('.ck-sort-tab').forEach(b => b.classList.toggle('active', b.dataset.sort === _sortMode));
 
-  // ?proj= 파라미터 우선, 없으면 localStorage 복원
+  const urlFilter = params.get('filter');
+  if (urlFilter === 'done' || urlFilter === 'active') {
+    if (urlFilter !== _projFilter) {
+      _projFilter = urlFilter;
+      document.getElementById('ck-filter-active').classList.toggle('active', _projFilter === 'active');
+      document.getElementById('ck-filter-done').classList.toggle('active', _projFilter === 'done');
+      renderProjList();
+      renderList();
+    }
+  }
+
   const urlProj   = params.get('proj');
-  const savedProj = urlProj !== null ? urlProj : localStorage.getItem('ck_last_proj');
+  const savedProj = urlProj !== null ? urlProj : localStorage.getItem('ck_last_proj_' + _projFilter);
   if (savedProj !== null && savedProj !== '') {
+    const modeList = _projFilter === 'done'
+      ? _allChecklists.filter(c => c.is_done_project)
+      : _allChecklists.filter(c => !c.is_done_project);
     const allProjNames = [
-      ...ALL_PROJECTS.map(p => p.name),
-      ..._allChecklists.map(c => c.project),
+      ...(_projFilter === 'done' ? ALL_DONE_PROJECTS : ALL_PROJECTS).map(p => p.name),
+      ...modeList.map(c => c.project),
     ].filter(Boolean);
     if (allProjNames.includes(savedProj)) {
       selectProject(savedProj);
     }
   }
 
-  // ?id= 파라미터 우선, 없으면 localStorage ck_last_id 복원
   const urlId    = parseInt(params.get('id'), 10);
-  const savedId  = parseInt(localStorage.getItem('ck_last_id'), 10);
+  const savedId  = parseInt(localStorage.getItem('ck_last_id_' + _projFilter), 10);
   const restoreId = urlId || (savedId || 0);
-  if (restoreId && _allChecklists.find(c => c.id === restoreId)) {
+  const modeForRestore = _projFilter === 'done'
+    ? _allChecklists.filter(c => c.is_done_project)
+    : _allChecklists.filter(c => !c.is_done_project);
+  if (restoreId && modeForRestore.find(c => c.id === restoreId)) {
     openChecklist(restoreId);
   }
 });
 
 async function loadAll() {
-  const res = await fetch('/api/checklists');
+  const res = await fetch('/api/checklists?include_done=1');
   _allChecklists = res.ok ? await res.json() : [];
+  renderList();
+}
+
+// ── 패널 초기화 헬퍼 ──────────────────────────────────────
+function _resetPanel() {
+  _curProj = null;
+  _curId = null;
+  _editMode = false;
+  _lockedByOther = false;
+  _stopPoll();
+  _stopHeartbeat();
+  if (wuInst) { wuInst.destroy(); wuInst = null; }
+  if (_ckViewer) { _ckViewer.destroy(); _ckViewer = null; }
+  document.getElementById('ck-placeholder').style.display = '';
+  document.getElementById('ck-right-header').style.display = 'none';
+  document.getElementById('ck-viewer-wrap').style.display = 'none';
+  document.getElementById('ck-lock-overlay').style.display = 'none';
+  if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
+}
+
+async function setProjFilter(f) {
+  _projFilter = f;
+  localStorage.setItem('ck_proj_filter', f);
+  document.getElementById('ck-filter-active').classList.toggle('active', f === 'active');
+  document.getElementById('ck-filter-done').classList.toggle('active', f === 'done');
+  _resetPanel();
+  renderProjList();
+
+  // 해당 모드의 마지막 선택 복원
+  const modeList = f === 'done'
+    ? _allChecklists.filter(c => c.is_done_project)
+    : _allChecklists.filter(c => !c.is_done_project);
+  const savedProj = localStorage.getItem('ck_last_proj_' + f);
+  if (savedProj) {
+    const allProjNames = [
+      ...(f === 'done' ? ALL_DONE_PROJECTS : ALL_PROJECTS).map(p => p.name),
+      ...modeList.map(c => c.project),
+    ].filter(Boolean);
+    if (allProjNames.includes(savedProj)) {
+      selectProject(savedProj);
+      const savedId = parseInt(localStorage.getItem('ck_last_id_' + f), 10);
+      if (savedId && modeList.find(c => c.id === savedId)) {
+        await openChecklist(savedId);
+      }
+      return;
+    }
+  }
+
+  updateWizardBtnState();
   renderList();
 }
 
 // ── 프로젝트 사이드바 렌더링 ──────────────────────────────
 function renderProjList() {
   const container = document.getElementById('ck-proj-list');
-  // 프로젝트별 카운트
+  const modeList = _projFilter === 'done'
+    ? _allChecklists.filter(c => c.is_done_project)
+    : _allChecklists.filter(c => !c.is_done_project);
+
   const counts = {};
-  _allChecklists.forEach(c => {
+  modeList.forEach(c => {
     const key = (c.project && c.project.trim()) ? c.project : '미지정';
     counts[key] = (counts[key] || 0) + 1;
   });
 
-  // 전체 카운트 업데이트
-  document.getElementById('ck-cnt-all').textContent = _allChecklists.length;
-
-  // 기존 동적 항목 제거
+  document.getElementById('ck-cnt-all').textContent = modeList.length;
   container.querySelectorAll('.ck-proj-dyn').forEach(el => el.remove());
-
-  // 전체 항목 active 상태
   container.querySelector('[data-proj=""]').classList.toggle('active', _curProj === null || _curProj === '');
 
-  // 프로젝트 항목 — ALL_PROJECTS(서버 전달) + 체크리스트에 사용된 프로젝트 합산
-  const fromServer = ALL_PROJECTS.map(p => p.name).filter(Boolean);
-  const fromCklists = _allChecklists.map(c => c.project).filter(Boolean);
+  const fromServer = (_projFilter === 'done' ? ALL_DONE_PROJECTS : ALL_PROJECTS).map(p => p.name).filter(Boolean);
+  const fromCklists = modeList.map(c => c.project).filter(Boolean);
   const allProjSet = [...new Set([...fromServer, ...fromCklists])];
-  // '미지정'은 맨 앞으로 고정, 나머지는 알파벳순
-  const hasUnassigned = allProjSet.includes('미지정')
-    || _allChecklists.some(c => !c.project || !c.project.trim());
+  const hasUnassigned = allProjSet.includes('미지정') || modeList.some(c => !c.project || !c.project.trim());
   const projs = [
     ...(hasUnassigned ? ['미지정'] : []),
     ...allProjSet.filter(p => p !== '미지정').sort(),
@@ -1175,9 +1294,27 @@ function renderProjList() {
     el.innerHTML = `
       <span class="ck-proj-dot" style="background:${projColor(proj)}"></span>
       <span class="ck-proj-label">${proj}</span>
+      <span class="ck-dot"></span>
       <span class="ck-proj-cnt">${counts[proj] || 0}</span>
     `;
     container.appendChild(el);
+  });
+  _applyProjSearchDots();
+}
+
+function _applyProjSearchDots() {
+  if (!_searchTerm) return;
+  const matchedProjs = new Set();
+  _allChecklists.forEach(c => {
+    if (
+      c.title.toLowerCase().includes(_searchTerm) ||
+      (c.project || '').toLowerCase().includes(_searchTerm) ||
+      (c.content || '').toLowerCase().includes(_searchTerm) ||
+      (c.created_by || '').toLowerCase().includes(_searchTerm)
+    ) matchedProjs.add(c.project && c.project.trim() ? c.project : '미지정');
+  });
+  document.querySelectorAll('.ck-proj-item.ck-proj-dyn').forEach(el => {
+    el.classList.toggle('has-match', matchedProjs.has(el.dataset.proj));
   });
 }
 
@@ -1188,7 +1325,7 @@ function selectProject(proj) {
     el.classList.toggle('active', el.dataset.proj === (proj || ''));
   });
   // localStorage에 마지막 선택 프로젝트 저장
-  localStorage.setItem('ck_last_proj', proj || '');
+  localStorage.setItem('ck_last_proj_' + _projFilter, proj || '');
   updateWizardBtnState();
   renderList();
 
@@ -1197,20 +1334,8 @@ function selectProject(proj) {
     ? _allChecklists.filter(c => _curProj === '미지정' ? (!c.project || !c.project.trim()) : c.project === _curProj)
     : _allChecklists;
   if (_curId && !filtered.find(c => c.id === _curId)) {
-    _curId = null;
-    _curItem = null;
-    _editMode = false;
-    _lockedByOther = false;
-    _stopPoll();
-    _stopHeartbeat();
-    if (wuInst) { wuInst.destroy(); wuInst = null; }
-    if (_ckViewer) { _ckViewer.destroy(); _ckViewer = null; }
-    document.getElementById('ck-placeholder').style.display = '';
-    document.getElementById('ck-right-header').style.display = 'none';
-    document.getElementById('ck-viewer-wrap').style.display = 'none';
-    document.getElementById('ck-lock-overlay').style.display = 'none';
-    if (IS_EDITOR) document.getElementById('ck-editor-wrap').style.display = 'none';
-    localStorage.removeItem('ck_last_id');
+    _resetPanel();
+    localStorage.removeItem('ck_last_id_' + _projFilter);
   }
 }
 
@@ -1225,11 +1350,21 @@ function _pubBadge(isPub, project) {
 }
 
 function renderList() {
-  const filtered = _curProj
-    ? _allChecklists.filter(c => _curProj === '미지정' ? (!c.project || !c.project.trim()) : c.project === _curProj)
-    : _allChecklists;
+  const modeList = _projFilter === 'done'
+    ? _allChecklists.filter(c => c.is_done_project)
+    : _allChecklists.filter(c => !c.is_done_project);
+  let filtered = _curProj
+    ? modeList.filter(c => _curProj === '미지정' ? (!c.project || !c.project.trim()) : c.project === _curProj)
+    : modeList;
+  if (_searchTerm) {
+    filtered = filtered.filter(c =>
+      c.title.toLowerCase().includes(_searchTerm) ||
+      (c.project || '').toLowerCase().includes(_searchTerm) ||
+      (c.content || '').toLowerCase().includes(_searchTerm) ||
+      (c.created_by || '').toLowerCase().includes(_searchTerm)
+    );
+  }
 
-  // 정렬 모드에 따라 정렬
   const sorted = [...filtered].sort((a, b) =>
     _sortMode === 'name'
       ? (a.title || '').localeCompare(b.title || '', 'ko')
@@ -1238,7 +1373,7 @@ function renderList() {
 
   const container = document.getElementById('ck-list');
   if (!sorted.length) {
-    container.innerHTML = `<div class="ck-empty">${IS_LOGGED_IN ? '항목이 없습니다.' : '공개된 항목이 없습니다.'}</div>`;
+    container.innerHTML = `<div class="ck-empty">${_searchTerm ? '검색 결과가 없습니다.' : IS_LOGGED_IN ? '항목이 없습니다.' : '공개된 항목이 없습니다.'}</div>`;
     return;
   }
   container.innerHTML = sorted.map(c => `
@@ -1275,10 +1410,11 @@ async function openChecklist(id, forceEdit = false) {
   }
 
   _curId = id;
-  localStorage.setItem('ck_last_id', id);
+  localStorage.setItem('ck_last_id_' + _projFilter, id);
   // URL에 id 반영 (공유 가능한 링크)
   const urlParams = new URLSearchParams(location.search);
   urlParams.set('id', id);
+  if (_projFilter !== 'active') urlParams.set('filter', _projFilter);
   history.replaceState(null, '', `/check?${urlParams.toString()}`);
   renderList();
 
@@ -2202,30 +2338,27 @@ window.__pageSearch = {
   enabled: true,
   placeholder: '체크리스트 검색…',
   onSearch(q) {
-    const term = q.trim().toLowerCase();
-    if (!term) { renderList(); return; }
-    const filtered = _allChecklists
-      .filter(c =>
-        c.title.toLowerCase().includes(term) ||
-        (c.project || '').toLowerCase().includes(term) ||
-        (c.content || '').toLowerCase().includes(term) ||
-        (c.created_by || '').toLowerCase().includes(term)
-      )
-      .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
-    const container = document.getElementById('ck-list');
-    if (!filtered.length) {
-      container.innerHTML = '<div class="ck-empty">검색 결과가 없습니다.</div>';
-      return;
-    }
-    container.innerHTML = filtered.map(c => `
-      <div class="ck-item ${_curId === c.id ? 'active' : ''}" onclick="openChecklist(${c.id})">
-        <div class="ck-item-title">${escHtml(c.title)}</div>
-        <div class="ck-item-meta">
-          ${c.project ? `<span class="ck-item-proj" style="border-left:3px solid ${projColor(c.project)};padding-left:5px;">${escHtml(c.project)}</span>` : ''}
-          <span>${c.updated_at.replace('T',' ').substring(0,16)}</span>
-        </div>
-      </div>
-    `).join('');
+    _searchTerm = q.trim().toLowerCase();
+    document.getElementById('ck-filter-active').classList.remove('has-match');
+    document.getElementById('ck-filter-done').classList.remove('has-match');
+    document.querySelectorAll('.ck-proj-item.ck-proj-dyn').forEach(el => el.classList.remove('has-match'));
+    if (!_searchTerm) { renderList(); return; }
+    const isMatch = c =>
+      c.title.toLowerCase().includes(_searchTerm) ||
+      (c.project || '').toLowerCase().includes(_searchTerm) ||
+      (c.content || '').toLowerCase().includes(_searchTerm) ||
+      (c.created_by || '').toLowerCase().includes(_searchTerm);
+    let hasActiveMatch = false, hasDoneMatch = false;
+    _allChecklists.forEach(c => {
+      if (isMatch(c)) {
+        if (c.is_done_project) hasDoneMatch = true;
+        else hasActiveMatch = true;
+      }
+    });
+    if (hasActiveMatch) document.getElementById('ck-filter-active').classList.add('has-match');
+    if (hasDoneMatch) document.getElementById('ck-filter-done').classList.add('has-match');
+    _applyProjSearchDots();
+    renderList();
   }
 };
 

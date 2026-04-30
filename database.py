@@ -2084,8 +2084,11 @@ def create_checklist(project: str, title: str, content: str, created_by: str, is
     return cur.lastrowid
 
 
-def get_checklists(project: str = None, viewer=None, active_only: bool | None = None) -> list:
-    inactive_filter = """
+def get_checklists(project: str = None, viewer=None, active_only: bool | None = None, include_done_projects: bool = False) -> list:
+    if include_done_projects:
+        inactive_filter = ""
+    else:
+        inactive_filter = """
         AND (project IS NULL OR project = ''
              OR project NOT IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))
     """
@@ -2106,19 +2109,23 @@ def get_checklists(project: str = None, viewer=None, active_only: bool | None = 
     elif active_only is False:
         active_filter = " AND COALESCE(is_active, 1) = 0"
     private_proj_filter = ""  # public_filter에 통합됨
+    is_done_project_col = """
+        CASE WHEN (project IS NOT NULL AND project != ''
+             AND project IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))
+        THEN 1 ELSE 0 END as is_done_project"""
     with get_conn() as conn:
         if project is None:
             rows = conn.execute(
-                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
+                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
             ).fetchall()
         elif project == "":
             # 미지정 (project가 NULL 또는 빈 문자열인 항목)
             rows = conn.execute(
-                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
+                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
             ).fetchall()
         else:
             rows = conn.execute(
-                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC",
+                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC",
                 (project,)
             ).fetchall()
     return [dict(r) for r in rows]

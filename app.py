@@ -339,12 +339,11 @@ def notice_history_page(request: Request):
 def check_page(request: Request):
     user = auth.get_current_user(request)
     all_projs = db.get_all_projects_with_events()
-    projects = [
-        p for p in all_projs
-        if p.get("is_active", 1)
-        and (user or not p.get("is_private", 0))
-    ]
-    return templates.TemplateResponse(request, "check.html", _ctx(request, projects=projects))
+    visible = [p for p in all_projs if user or not p.get("is_private", 0)]
+    active_projs = [p for p in visible if p.get("is_active", 1)]
+    done_projs   = [p for p in visible if not p.get("is_active", 1)]
+    return templates.TemplateResponse(request, "check.html",
+        _ctx(request, projects=active_projs, done_projects=done_projs))
 
 
 @app.get("/check/new/edit", response_class=HTMLResponse)
@@ -413,10 +412,10 @@ def check_history_page(request: Request, checklist_id: int):
 # ── 체크리스트 API ────────────────────────────────────────────
 
 @app.get("/api/checklists")
-def list_checklists(request: Request, project: str = None, active: int = None):
+def list_checklists(request: Request, project: str = None, active: int = None, include_done: int = 0):
     viewer = auth.get_current_user(request)
     active_only = None if active is None else bool(active)
-    return db.get_checklists(project=project, viewer=viewer, active_only=active_only)
+    return db.get_checklists(project=project, viewer=viewer, active_only=active_only, include_done_projects=bool(include_done))
 
 
 @app.post("/api/checklists")

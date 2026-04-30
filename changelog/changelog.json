@@ -1,6 +1,23 @@
 {
   "groups": [
     {
+      "date": "2026-05-01",
+      "phase": "33차 3단계",
+      "phase_class": "phase-3",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 체크 — 완료 프로젝트 보기 기능 추가",
+          "detail_html": "<ul><li>좌측 채널 상단에 <strong>진행중 / 완료</strong> 토글 버튼 추가 — 완료(<code>is_active=0</code>) 프로젝트의 체크리스트도 열람 가능</li><li>토글 전환 시 해당 모드의 마지막으로 봤던 프로젝트·체크리스트를 <code>localStorage</code>에서 복원</li><li>토글·프로젝트 선택 상태를 <code>ck_proj_filter</code> / <code>ck_last_proj_active</code> 등 모드별 키로 분리 저장</li><li>수정 파일: <code>database.py</code>, <code>app.py</code>, <code>templates/check.html</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 체크 — 검색 결과 레드닷 표시 확장",
+          "detail_html": "<ul><li>검색어 입력 시 매치가 있는 <strong>진행중·완료 토글 버튼</strong>과 <strong>좌측 프로젝트 항목</strong> 모두에 레드닷 표시</li><li>검색 중 프로젝트 클릭 시 검색 결과가 풀리지 않고 해당 프로젝트 내 검색 결과만 필터링하여 유지</li><li>검색어를 지우면 레드닷 전부 초기화</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-04-30",
       "phase": "33차 2단계",
       "phase_class": "phase-2",
