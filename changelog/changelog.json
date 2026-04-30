@@ -2,23 +2,6 @@
   "groups": [
     {
       "date": "2026-04-30",
-      "phase": "33차 2단계",
-      "phase_class": "phase-4",
-      "entries": [
-        {
-          "icon": "🔧",
-          "title_html": "<span class=\"cl-tag fix\">fix</span> 간트 — 칸반 미연결 하위 업무 기간 초과 표시 제거",
-          "detail_html": "칸반 카드와 연결되지 않은 하위 업무 일정은 진행 상태를 추적하지 않으므로 overdue·완료 스타일을 적용하지 않도록 수정."
-        },
-        {
-          "icon": "✨",
-          "title_html": "<span class=\"cl-tag ux\">ux</span> 간트 — 주말 열 폭 축소 (평일의 55%)",
-          "detail_html": "주말(토·일)은 미출근일이므로 간트 열 폭을 평일보다 좁게 표시해 시각적으로 구분."
-        }
-      ]
-    },
-    {
-      "date": "2026-04-30",
       "phase": "33차 1단계",
       "phase_class": "phase-4",
       "entries": [
@@ -31,6 +14,16 @@
           "icon": "🔧",
           "title_html": "<span class=\"cl-tag fix\">fix</span> 간트 — 이벤트 바 마우스 오버 툴팁 내용 제거",
           "detail_html": "간트 차트 이벤트 바의 title 속성을 제거해 마우스 오버 시 네이티브 브라우저 툴팁 미표시."
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 간트 — 칸반 미연결 하위 업무 기간 초과 표시 제거",
+          "detail_html": "칸반 카드와 연결되지 않은 하위 업무 일정은 진행 상태를 추적하지 않으므로 overdue·완료 스타일을 적용하지 않도록 수정."
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 간트 — 주말 열 폭 축소 (평일의 55%)",
+          "detail_html": "주말(토·일)은 미출근일이므로 간트 열 폭을 평일보다 좁게 표시해 시각적으로 구분."
         }
       ]
     },
