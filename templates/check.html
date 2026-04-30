@@ -97,15 +97,24 @@
     align-items: center;
     gap: 6px;
   }
-  .ck-mid-title {
+  /* ── 정렬 탭 ── */
+  .ck-sort-tabs {
+    display: flex;
+    gap: 2px;
     flex: 1;
-    font-size: 0.86rem;
-    font-weight: 700;
-    color: var(--text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
+  .ck-sort-tab {
+    background: none;
+    border: none;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .ck-sort-tab:hover { background: var(--hover, rgba(0,0,0,0.06)); color: var(--text); }
+  .ck-sort-tab.active { background: var(--accent-soft, rgba(99,102,241,0.12)); color: var(--accent, #6366f1); font-weight: 600; }
   .ck-new-btn {
     padding: 4px 10px;
     border-radius: 6px;
@@ -187,6 +196,7 @@
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
+    background: var(--surface);
   }
   .ck-right-header {
     padding: 10px 20px 8px;
@@ -781,17 +791,20 @@
   <!-- ── 가운데: 체크리스트 목록 ── -->
   <div class="ck-mid">
     <div class="ck-mid-header">
-      <span class="ck-mid-title" id="ck-mid-title">전체</span>
+      <div class="ck-sort-tabs" id="ck-sort-tabs">
+        <button class="ck-sort-tab active" data-sort="time" onclick="setSortMode('time')">시간순</button>
+        <button class="ck-sort-tab" data-sort="name" onclick="setSortMode('name')">이름순</button>
+      </div>
       {% if user and user.role in ('editor', 'admin') %}
       <div class="ck-new-btn-group">
         <div class="ck-wizard-wrap">
-          <button class="ck-new-btn ck-ai-btn" onclick="toggleWizardMenu(event)">✨ 생성 마법사 ▾</button>
+          <button class="ck-new-btn" onclick="toggleWizardMenu(event)">+ 새 항목 ▾</button>
           <div class="ck-wizard-menu hidden" id="ck-wizard-menu">
-            <button onclick="openAiForm(); closeWizardMenu()">✨ AI 생성</button>
-            <button id="ck-sched-check-btn" onclick="openScheduleCheck()" disabled title="이름이 있는 프로젝트를 선택해야 사용할 수 있습니다.">📅 일정 체크</button>
+            <button onclick="openNewForm(); closeWizardMenu()">📝 일반 새 항목</button>
+            <button onclick="openAiForm(); closeWizardMenu()">✨ AI로 항목 생성</button>
+            <button id="ck-sched-check-btn" onclick="openScheduleCheck()" disabled title="이름이 있는 프로젝트를 선택해야 사용할 수 있습니다.">📅 일정으로 항목 생성</button>
           </div>
         </div>
-        <button class="ck-new-btn" onclick="openNewForm()">+ 새 항목</button>
       </div>
       {% endif %}
     </div>
@@ -1019,6 +1032,7 @@ const TAB_TOKEN = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getI
 
 let _allChecklists      = [];
 let _curProj            = null;
+let _sortMode           = localStorage.getItem('ck_sort_mode') || 'time'; // 'time' | 'name'
 let _curId              = null;
 let _curItem            = null;
 let wuInst              = null;   // WUEditor 인스턴스
@@ -1091,6 +1105,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderProjList();
 
   const params = new URLSearchParams(location.search);
+
+  // 정렬 모드 복원
+  document.querySelectorAll('.ck-sort-tab').forEach(b => b.classList.toggle('active', b.dataset.sort === _sortMode));
 
   // ?proj= 파라미터 우선, 없으면 localStorage 복원
   const urlProj   = params.get('proj');
@@ -1170,7 +1187,6 @@ function selectProject(proj) {
   document.querySelectorAll('.ck-proj-item').forEach(el => {
     el.classList.toggle('active', el.dataset.proj === (proj || ''));
   });
-  document.getElementById('ck-mid-title').textContent = proj || '전체';
   // localStorage에 마지막 선택 프로젝트 저장
   localStorage.setItem('ck_last_proj', proj || '');
   updateWizardBtnState();
@@ -1213,8 +1229,12 @@ function renderList() {
     ? _allChecklists.filter(c => _curProj === '미지정' ? (!c.project || !c.project.trim()) : c.project === _curProj)
     : _allChecklists;
 
-  // 수정일 최신순 정렬
-  const sorted = [...filtered].sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+  // 정렬 모드에 따라 정렬
+  const sorted = [...filtered].sort((a, b) =>
+    _sortMode === 'name'
+      ? (a.title || '').localeCompare(b.title || '', 'ko')
+      : (b.updated_at || '').localeCompare(a.updated_at || '')
+  );
 
   const container = document.getElementById('ck-list');
   if (!sorted.length) {
@@ -1230,6 +1250,13 @@ function renderList() {
       </div>
     </div>
   `).join('');
+}
+
+function setSortMode(mode) {
+  _sortMode = mode;
+  localStorage.setItem('ck_sort_mode', mode);
+  document.querySelectorAll('.ck-sort-tab').forEach(b => b.classList.toggle('active', b.dataset.sort === mode));
+  renderList();
 }
 
 function escHtml(s) {

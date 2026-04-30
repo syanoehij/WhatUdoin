@@ -2,6 +2,28 @@
   "groups": [
     {
       "date": "2026-04-30",
+      "phase": "33차 2단계",
+      "phase_class": "phase-2",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 체크 — 새 항목·생성 마법사 버튼 통합",
+          "detail_html": "<ul><li>상단의 <strong>새 항목</strong>과 <strong>생성 마법사</strong> 버튼을 하나의 드롭다운 버튼으로 통합</li><li>클릭 시 팝업: <code>📝 일반 새 항목</code> / <code>✨ AI로 항목 생성</code> / <code>📅 일정으로 항목 생성</code></li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 체크 — 가운데 패널 정렬 탭 추가",
+          "detail_html": "<ul><li>항목 목록 상단의 프로젝트 이름 표시를 제거하고 <strong>시간순 / 이름순</strong> 정렬 탭으로 교체</li><li>선택한 정렬 모드는 <code>localStorage</code>에 저장되어 재방문 시 복원</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag style\">style</span> 다크 테마 — 체크·문서 패널 배경색 통일",
+          "detail_html": "<ul><li>체크 오른쪽 패널(<code>.ck-right</code>)과 문서 리스트 영역(<code>.docs-content</code>)의 배경색이 다른 패널과 달랐던 문제 수정</li><li>라이트·다크 테마 모두 <code>var(--surface)</code>로 통일</li><li>수정 파일: <code>templates/check.html</code>, <code>static/css/style.css</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-30",
       "phase": "33차 1단계",
       "phase_class": "phase-4",
       "entries": [
