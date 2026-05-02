@@ -200,8 +200,8 @@
   background: #1e1e2e;
   border-color: #333;
 }
-[data-theme="dark"] .ProseMirror pre code.hljs,
-[data-theme="dark"] .wu-editor-content pre code.hljs {
+[data-theme="dark"] .ProseMirror pre code,
+[data-theme="dark"] .wu-editor-content pre code {
   color: #cdd6f4;
 }
 

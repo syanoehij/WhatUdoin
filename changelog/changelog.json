@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-05-02",
+      "phase": "35차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 코드블록 언어별 문법 강조 (Obsidian 스타일)",
+          "detail_html": "<ul><li><code>@tiptap/extension-code-block-lowlight</code> + <code>lowlight</code> 패키지 도입 — Tiptap ProseMirror 레벨에서 하이라이팅 처리</li><li><code>tiptap-entry.js</code>: <code>CodeBlock</code> → <code>CodeBlockLowlight</code> 교체 및 <code>createLowlight(common)</code> 인스턴스 export — JavaScript·TypeScript·Python·Java·C·C++·C#·Go·Rust·HTML·CSS·SQL·Bash·JSON·YAML·Markdown·XML·Kotlin·Swift·PHP·Ruby 22종 지원</li><li><code>wu-editor.js</code>: <code>_buildExtensions</code>에 <code>CodeBlockLowlight.configure({ lowlight })</code> 추가, <code>StarterKit</code>의 내장 <code>codeBlock</code> 비활성화, <code>_applyHighlight</code> no-op 처리 — 편집 / 뷰어 모드 모두 적용</li><li><code>wu-editor.css</code>: 다크 모드 코드 텍스트 색상 셀렉터를 <code>.hljs</code> 클래스 의존 없이 <code>pre code</code>로 수정 — lowlight 출력 구조에 맞게 정합</li><li>번들 재빌드 (<code>tiptap-bundle.min.js</code>, ~715KB)</li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
       "phase": "35차 3단계",
       "phase_class": "phase-3",
       "entries": [

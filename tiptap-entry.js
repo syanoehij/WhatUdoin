@@ -5,7 +5,9 @@
 export { Editor } from '@tiptap/core';
 export { StarterKit } from '@tiptap/starter-kit';
 export { Paragraph } from '@tiptap/extension-paragraph';
-export { CodeBlock } from '@tiptap/extension-code-block';
+export { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
+import { createLowlight, common } from 'lowlight';
+export const lowlight = createLowlight(common);
 export { Table } from '@tiptap/extension-table';
 export { TableRow } from '@tiptap/extension-table-row';
 export { TableHeader } from '@tiptap/extension-table-header';

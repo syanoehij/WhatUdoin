@@ -1206,10 +1206,7 @@
 
     /* ── syntax highlight 적용 ──────────────────────── */
     function _applyHighlight() {
-      if (typeof window.hljs === 'undefined' || !containerEl) return;
-      containerEl.querySelectorAll('pre code').forEach(el => {
-        if (!el.dataset.highlighted) window.hljs.highlightElement(el);
-      });
+      // lowlight (CodeBlockLowlight)가 Tiptap 레벨에서 토큰화를 담당하므로 별도 hljs 호출 불필요
     }
 
     /* ── Markdown 읽기 ──────────────────────────────── */
@@ -1418,7 +1415,8 @@
       const {
         Editor,
         StarterKit,
-        CodeBlock,
+        CodeBlockLowlight,
+        lowlight,
         Table,
         TableRow,
         TableHeader,
@@ -1440,7 +1438,7 @@
         /* 뷰어 모드 — 에디터 영역에 바로 렌더 */
         _editor = new Editor({
           element: containerEl,
-          extensions: _buildExtensions({ StarterKit, CodeBlock, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript }),
+          extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript }),
           content: _preprocessViewerFootnotes(opts.initialMarkdown || ''),
           editable: false,
           injectCSS: false,
@@ -1466,7 +1464,7 @@
 
       _editor = new Editor({
         element: edEl,
-        extensions: _buildExtensions({ StarterKit, CodeBlock, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark }),
+        extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark }),
         content: opts.initialMarkdown || '',
         editable: true,
         injectCSS: false,
@@ -1515,7 +1513,7 @@
       setTimeout(_enforceH1Title, 0);
     }
 
-    function _buildExtensions({ StarterKit, CodeBlock, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript }) {
+    function _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript }) {
       // @tiptap/extension-link은 markdown.serialize가 없어 tiptap-markdown이 <a href> HTML로
       // 직렬화한다. 이를 [text](href) 마크다운 형식으로 고정해 eid: round-trip을 보장한다.
       const LinkMd = Link.extend({
@@ -1591,7 +1589,8 @@
       });
 
       return [
-        StarterKit.configure({ link: false, paragraph: false }),
+        StarterKit.configure({ link: false, paragraph: false, codeBlock: false }),
+        CodeBlockLowlight.configure({ lowlight, defaultLanguage: null }),
         ParagraphMd,
         HighlightMd,
         Superscript,
