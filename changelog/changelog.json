@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-05-03",
+      "phase": "35차 10단계",
+      "phase_class": "phase-10",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 문서 편집기 — 팀 문서 편집 중 '← 뷰어' 버튼 추가",
+          "detail_html": "<ul><li><strong>표시 조건</strong>: 팀 공동 편집 문서(<code>is_team_doc</code>)를 편집 모드로 전환했을 때 <code>← 목록</code> 버튼 바로 옆에 <code>← 뷰어</code> 버튼 노출</li><li><strong>동작</strong>: 미저장 변경이 있으면 '저장하지 않고 나가시겠습니까?' 모달 표시, 변경이 없으면 편집 잠금 해제 후 뷰어로 즉시 이동</li><li>수정 파일: <code>templates/doc_editor.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-03",
       "phase": "35차 9단계",
       "phase_class": "phase-9",
       "entries": [

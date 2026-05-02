@@ -60,7 +60,12 @@
 
   <!-- ── 상단 헤더 ── -->
   <div class="editor-header">
-    <a id="btn-back" href="/doc" class="btn btn-sm">← 목록</a>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <a id="btn-back" href="/doc" class="btn btn-sm">← 목록</a>
+      {% if doc and can_edit and doc.is_team_doc %}
+      <button id="btn-viewer" class="btn btn-sm" onclick="goToViewer()" style="display:none">← 뷰어</button>
+      {% endif %}
+    </div>
 
     <div class="btn-group">
       {% if can_edit %}
@@ -293,6 +298,7 @@ function initDocEditor() {
   // 편집 모드 진입 (잠금 없는 편집자 전용)
   window.startDocEdit = function() {
     document.getElementById('btn-edit-start')?.remove();
+    document.getElementById('btn-viewer')?.style && (document.getElementById('btn-viewer').style.display = '');
     if (wuInst) { wuInst.destroy(); wuInst = null; }
     document.getElementById('doc-content-view').style.display = 'none';
     ['editor-container', 'editor-resizer'].forEach(id => {
@@ -443,6 +449,16 @@ function initDocEditor() {
     const sel = document.getElementById('ai-model-select');
     if (sel) sel.innerHTML = '<option value="gemma4:e2b">gemma4:e2b (빠름)</option>';
   });
+
+  window.goToViewer = function() {
+    const viewerUrl = '/doc/' + DOC_ID;
+    if (wuInst?.dirty) {
+      wuInst.showLeaveModal(viewerUrl);
+    } else {
+      wuInst?.releaseLock?.();
+      location.href = viewerUrl;
+    }
+  };
 
   // 팀 수정 가능 기존 문서: 편집자지만 뷰어로 진입, 편집 버튼 클릭 대기
   if (DOC_ID && IS_TEAM_DOC) {
