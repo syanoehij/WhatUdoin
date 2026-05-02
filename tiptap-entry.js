@@ -2,7 +2,7 @@
 // This file is compiled by rollup into static/lib/tiptap-bundle.min.js
 // Global name: TiptapBundle
 
-export { Editor, InputRule } from '@tiptap/core';
+export { Editor, InputRule, Mark } from '@tiptap/core';
 export { StarterKit } from '@tiptap/starter-kit';
 export { Paragraph } from '@tiptap/extension-paragraph';
 export { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';

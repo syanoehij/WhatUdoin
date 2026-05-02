@@ -632,6 +632,18 @@
 .wu-heading-drop-btn.is-active { background: var(--accent); color: #fff; }
 
 
+/* ── Obsidian 주석 (%% ... %%) ── */
+.wu-comment {
+  color: var(--text-muted, #999);
+  opacity: 0.55;
+  background: rgba(128, 128, 128, 0.08);
+  border-radius: 3px;
+  font-style: italic;
+}
+.ProseMirror[contenteditable="false"] .wu-comment {
+  display: none;
+}
+
 /* ── 각주 뷰어 스타일 (Toast UI viewer) ── */
 sup.wu-fn-ref { line-height: 0; }
 sup.wu-fn-ref a { color: var(--primary, #4c6ef5); text-decoration: none; font-size: 0.75em; padding: 0 1px; }

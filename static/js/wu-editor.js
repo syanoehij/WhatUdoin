@@ -64,38 +64,55 @@
     return typeof s === 'string' ? document.querySelector(s) : s;
   }
 
-  /* ── 목록 아이콘 (Lucide: List / ListOrdered / ListChecks) ── */
-  const _IC_UL   = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>';
-  const _IC_OL   = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" x2="21" y1="6" y2="6"/><line x1="10" x2="21" y1="12" y2="12"/><line x1="10" x2="21" y1="18" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>';
-  const _IC_TASK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><line x1="13" x2="21" y1="8" y2="8"/><line x1="13" x2="21" y1="12" y2="12"/><line x1="13" x2="21" y1="16" y2="16"/></svg>';
+  /* ── Lucide SVG 아이콘 헬퍼 ── */
+  function _ic(inner) {
+    return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+  }
+  const _IC_UL       = _ic('<line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/>');
+  const _IC_OL       = _ic('<line x1="10" x2="21" y1="6" y2="6"/><line x1="10" x2="21" y1="12" y2="12"/><line x1="10" x2="21" y1="18" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>');
+  const _IC_TASK     = _ic('<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><line x1="13" x2="21" y1="8" y2="8"/><line x1="13" x2="21" y1="12" y2="12"/><line x1="13" x2="21" y1="16" y2="16"/>');
+  const _IC_HEADING  = _ic('<path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="m17 12 3-2v8"/>');
+  const _IC_BOLD     = _ic('<path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/>');
+  const _IC_ITALIC   = _ic('<line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/><line x1="15" x2="9" y1="4" y2="20"/>');
+  const _IC_STRIKE   = _ic('<path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/>');
+  const _IC_HL       = _ic('<path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/>');
+  const _IC_CODE     = _ic('<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>');
+  const _IC_HR       = _ic('<path d="M5 12h14"/>');
+  const _IC_QUOTE    = _ic('<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>');
+  const _IC_TABLE    = _ic('<path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>');
+  const _IC_CODEBLK  = _ic('<path d="m10 9-3 3 3 3"/><path d="m14 15 3-3-3-3"/><rect x="3" y="3" width="18" height="18" rx="2"/>');
+  const _IC_SIGMA    = _ic('<path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2"/>');
+  const _IC_PERCENT  = _ic('<line x1="19" x2="5" y1="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>');
+  const _IC_INTEG    = _ic('<path d="M6 20a2 2 0 0 0 2 2c2 0 4-8 4-16a2 2 0 0 1 4 0"/>');  /* 수식 ∫ 모양 */
 
   /* ── 툴바 정의 ──────────────────────────────────── */
   const TOOLBAR_DEFS = [
-    { group: ['heading', 'bold', 'italic', 'strike', 'highlight', 'inlinemath'] },
+    { group: ['heading', 'bold', 'italic', 'strike', 'highlight', 'code', 'inlinemath'] },
     { group: ['hr', 'quote'] },
     { group: ['ul', 'ol', 'task'] },
     { group: ['table', 'link', 'image'] },
-    { group: ['code', 'codeblock', 'math'] },
+    { group: ['codeblock', 'math', 'comment'] },
   ];
 
   const TOOLBAR_LABELS = {
-    heading:    { icon: 'H',   title: '제목' },
-    bold:       { icon: '<b>B</b>', title: '굵게' },
-    italic:     { icon: '<i>I</i>', title: '기울임' },
-    strike:     { icon: '<s>S</s>', title: '취소선' },
-    highlight:  { icon: '<mark>H</mark>', title: '하이라이트 (==text==)' },
-    inlinemath: { icon: '<i>∫</i>', title: '인라인 수식 (선택 영역을 $...$로 변환)' },
-    hr:         { icon: '—',   title: '구분선' },
-    quote:      { icon: '❝',   title: '인용' },
-    ul:         { icon: _IC_UL,   title: '목록' },
-    ol:         { icon: _IC_OL,   title: '번호 목록' },
-    task:       { icon: _IC_TASK, title: '할일 목록' },
-    table:      { icon: '⊞',  title: '표 삽입' },
-    link:       { icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>', title: '링크' },
-    image:      { icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>', title: '이미지' },
-    code:       { icon: '`',   title: '인라인 코드' },
-    codeblock:  { icon: '{ }', title: '코드 블록' },
-    math:       { icon: '∑',   title: '수식 블록' },
+    heading:    { icon: _IC_HEADING,  title: '제목' },
+    bold:       { icon: _IC_BOLD,     title: '굵게' },
+    italic:     { icon: _IC_ITALIC,   title: '기울임' },
+    strike:     { icon: _IC_STRIKE,   title: '취소선' },
+    highlight:  { icon: _IC_HL,       title: '하이라이트 (==text==)' },
+    code:       { icon: _IC_CODE,     title: '인라인 코드' },
+    inlinemath: { icon: _IC_INTEG,    title: '인라인 수식 (선택 영역을 $...$로 변환)' },
+    hr:         { icon: _IC_HR,       title: '구분선' },
+    quote:      { icon: _IC_QUOTE,    title: '인용' },
+    ul:         { icon: _IC_UL,       title: '목록' },
+    ol:         { icon: _IC_OL,       title: '번호 목록' },
+    task:       { icon: _IC_TASK,     title: '할일 목록' },
+    table:      { icon: _IC_TABLE,    title: '표 삽입' },
+    link:       { icon: _ic('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'), title: '링크' },
+    image:      { icon: _ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>'), title: '이미지' },
+    codeblock:  { icon: _IC_CODEBLK,  title: '코드 블록' },
+    math:       { icon: _IC_SIGMA,    title: '수식 블록' },
+    comment:    { icon: _IC_PERCENT,  title: '주석 (%% ... %%)' },
   };
 
   /* 슬래시 커맨드의 math 항목이 create() 스코프 내 _showMathModal을 호출하기 위한 참조 */
@@ -112,11 +129,11 @@
     { id: 'ul',    label: '목록',      icon: _IC_UL,   hint: 'ul list bullet',   cmd: ed => ed.chain().focus().toggleBulletList().run() },
     { id: 'ol',    label: '번호 목록', icon: _IC_OL,   hint: 'ol number list',   cmd: ed => ed.chain().focus().toggleOrderedList().run() },
     { id: 'task',  label: '할일 목록', icon: _IC_TASK, hint: 'task todo check',  cmd: ed => ed.chain().focus().toggleTaskList().run() },
-    { id: 'quote', label: '인용',      icon: '❝',   hint: 'quote blockquote', cmd: ed => ed.chain().focus().toggleBlockquote().run() },
-    { id: 'code',  label: '코드 블록', icon: '{ }', hint: 'code block',       cmd: ed => ed.chain().focus().toggleCodeBlock().run() },
-    { id: 'table', label: '표',        icon: '⊞',   hint: 'table grid',       cmd: ed => ed.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-    { id: 'hr',    label: '구분선',    icon: '—',   hint: 'hr divider line',  cmd: ed => ed.chain().focus().setHorizontalRule().run() },
-    { id: 'highlight', label: '하이라이트', icon: '<mark>H</mark>', hint: 'highlight mark hl 형광펜', cmd: ed => ed.chain().focus().toggleHighlight().run() },
+    { id: 'quote', label: '인용',      icon: _IC_QUOTE,   hint: 'quote blockquote', cmd: ed => ed.chain().focus().toggleBlockquote().run() },
+    { id: 'code',  label: '코드 블록', icon: _IC_CODEBLK, hint: 'code block',       cmd: ed => ed.chain().focus().toggleCodeBlock().run() },
+    { id: 'table', label: '표',        icon: _IC_TABLE,   hint: 'table grid',       cmd: ed => ed.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+    { id: 'hr',    label: '구분선',    icon: _IC_HR,      hint: 'hr divider line',  cmd: ed => ed.chain().focus().setHorizontalRule().run() },
+    { id: 'highlight', label: '하이라이트', icon: _IC_HL, hint: 'highlight mark hl 형광펜', cmd: ed => ed.chain().focus().toggleHighlight().run() },
     { id: 'footnote', label: '각주',  icon: '[^]', hint: 'footnote fn ref',   cmd: ed => {
         const label = String((ed.getText().match(/\[\^[^\]]+\]:/g) || []).length + 1);
         ed.chain()
@@ -131,7 +148,7 @@
           .run();
       },
     },
-    { id: 'inlinemath', label: '인라인 수식', icon: '<i>∫</i>', hint: 'inline math latex katex 인라인 수식',
+    { id: 'inlinemath', label: '인라인 수식', icon: _IC_INTEG, hint: 'inline math latex katex 인라인 수식',
       cmd: ed => {
         const pmSel = ed.state.selection;
         if (pmSel.empty) {
@@ -142,7 +159,17 @@
         }
       },
     },
-    { id: 'math', label: '수식 블록', icon: '∑', hint: 'math latex katex 수식 블록 block formula equation',
+    { id: 'comment', label: '주석', icon: _IC_PERCENT, hint: 'comment obsidian 주석 hidden',
+      cmd: ed => {
+        const pmSel = ed.state.selection;
+        if (pmSel.empty) {
+          ed.chain().focus().insertContent('<span data-type="obsidian-comment">주석 내용</span>').run();
+        } else {
+          ed.chain().focus().toggleMark('obsidianComment').run();
+        }
+      },
+    },
+    { id: 'math', label: '수식 블록', icon: _IC_SIGMA, hint: 'math latex katex 수식 블록 block formula equation',
       cmd: ed => {
         if (_mathSlashCmdFn) _mathSlashCmdFn(ed);
       },
@@ -1434,6 +1461,15 @@
               _editor.chain().focus().insertBlockMath({ latex, align }).run();
             });
             return;
+          case 'comment': {
+            const pmSel = _editor.state.selection;
+            if (pmSel.empty) {
+              _editor.chain().focus().insertContent('<span data-type="obsidian-comment">주석 내용</span>').run();
+            } else {
+              chain.toggleMark('obsidianComment').run();
+            }
+            return;
+          }
         }
         _updateToolbarState(tbEl);
       });
@@ -1458,6 +1494,7 @@
           case 'heading':
             active = _editor.isActive('heading'); break;
           case 'link':      active = _editor.isActive('link'); break;
+          case 'comment':   active = _editor.isActive('obsidianComment'); break;
         }
         btn.classList.toggle('is-active', active);
       });
@@ -1588,6 +1625,7 @@
         BlockMath,
         markdownItMath,
         InputRule,
+        Mark,
         katex,
       } = TiptapBundle;
 
@@ -1597,7 +1635,7 @@
         /* 뷰어 모드 — 에디터 영역에 바로 렌더 */
         _editor = new Editor({
           element: containerEl,
-          extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, editableMath: false }),
+          extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, editableMath: false }),
           content: _preprocessViewerFootnotes(opts.initialMarkdown || ''),
           editable: false,
           injectCSS: false,
@@ -1623,7 +1661,7 @@
 
       _editor = new Editor({
         element: edEl,
-        extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, InlineMath, BlockMath, markdownItMath, InputRule, editableMath: true }),
+        extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, InlineMath, BlockMath, markdownItMath, InputRule, Mark, editableMath: true }),
         content: opts.initialMarkdown || '',
         editable: true,
         injectCSS: false,
@@ -1672,7 +1710,25 @@
       setTimeout(_enforceH1Title, 0);
     }
 
-    function _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, editableMath }) {
+    function _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, editableMath }) {
+      function markdownItObsidianComment(md) {
+        md.inline.ruler.push('obsidian_comment', function(state, silent) {
+          if (state.src.charCodeAt(state.pos) !== 0x25 || state.src.charCodeAt(state.pos + 1) !== 0x25) return false;
+          const start = state.pos + 2;
+          const end = state.src.indexOf('%%', start);
+          if (end === -1) return false;
+          if (!silent) {
+            const token = state.push('obsidian_comment', '', 0);
+            token.content = state.src.slice(start, end);
+          }
+          state.pos = end + 2;
+          return true;
+        });
+        md.renderer.rules.obsidian_comment = (tokens, idx) => {
+          const content = tokens[idx].content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          return `<span data-type="obsidian-comment">${content}</span>`;
+        };
+      }
       // @tiptap/extension-link은 markdown.serialize가 없어 tiptap-markdown이 <a href> HTML로
       // 직렬화한다. 이를 [text](href) 마크다운 형식으로 고정해 eid: round-trip을 보장한다.
       const LinkMd = Link.extend({
@@ -1870,6 +1926,24 @@
            BlockMathMd.configure({ katexOptions: { throwOnError: false }, onClick: _mathOnClick('Block') })]
         : [];
 
+      const ObsidianCommentMd = Mark.create({
+        name: 'obsidianComment',
+        parseHTML() {
+          return [{ tag: 'span[data-type="obsidian-comment"]' }];
+        },
+        renderHTML() {
+          return ['span', { 'data-type': 'obsidian-comment', class: 'wu-comment' }, 0];
+        },
+        addStorage() {
+          return {
+            markdown: {
+              serialize: { open: '%%', close: '%%', mixable: true, expelEnclosingWhitespace: false },
+              parse: { setup(md) { md.use(markdownItObsidianComment); } },
+            },
+          };
+        },
+      });
+
       return [
         StarterKit.configure({ link: false, paragraph: false, codeBlock: false }),
         CodeBlockLowlight.configure({ lowlight, defaultLanguage: null }),
@@ -1883,6 +1957,7 @@
         TableCell,
         TaskList,
         TaskItem.configure({ nested: true }),
+        ObsidianCommentMd,
         LinkMd.configure({ openOnClick: false, autolink: true, protocols: ['eid'], validate: () => true }),
         ImageMd,
         Markdown.configure({

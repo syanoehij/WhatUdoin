@@ -6,9 +6,14 @@
       "phase_class": "phase-6",
       "entries": [
         {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — Obsidian 스타일 인라인 주석(<code>%% ... %%</code>) 추가",
+          "detail_html": "<ul><li>TipTap <code>ObsidianCommentMd</code> Mark 확장 구현 — <code>%% ... %%</code> 구문을 편집 중 회색 반투명 이탤릭체로 표시, 뷰어 모드(<code>contenteditable=false</code>)에서는 완전 숨김</li><li><code>markdown-it</code> 인라인 룰(<code>obsidian_comment</code>)로 <code>%% ... %%</code> 마크다운 파싱 &amp; 라운드트립 보장</li><li>툴바 <code>%</code> 버튼 및 슬래시 커맨드 <code>/주석</code> 지원 — 선택 영역이 있으면 토글, 없으면 빈 주석 노드 삽입</li><li><code>tiptap-entry.js</code>에 <code>Mark</code> export 추가 및 번들 재빌드</li><li>수정 파일: <code>tiptap-entry.js</code>, <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code>, 번들 재빌드</li></ul>"
+        },
+        {
           "icon": "🎨",
-          "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 툴바·슬래시 목록 아이콘 Lucide SVG 교체 및 수직 정렬 개선",
-          "detail_html": "<ul><li><strong>목록 아이콘 교체</strong>: 툴바·슬래시 커맨드의 글머리 목록(<code>• —</code>), 번호 목록(<code>1.</code>), 할일 목록(<code>☑</code>) 텍스트 아이콘을 Lucide SVG(<code>List</code> / <code>ListOrdered</code> / <code>ListChecks</code>)로 교체 — Obsidian 스타일과 동일한 선형 아이콘</li><li><strong>수직 정렬 수정</strong>: <code>.wu-toolbar-btn</code>에 <code>line-height: 1</code> 추가, <code>.wu-toolbar-btn svg { display: block }</code> 추가 — SVG baseline 어긋남 제거, 텍스트·SVG 아이콘 혼재 시 높이 들쭉날쭉 현상 해결</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code></li></ul>"
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 편집기 — 툴바·슬래시 커맨드 전체 아이콘 Lucide SVG 통일 및 수직 정렬 개선",
+          "detail_html": "<ul><li><strong>전체 아이콘 SVG 교체</strong>: <code>TOOLBAR_LABELS</code> 18개·<code>SLASH_ITEMS</code> 전체 항목의 텍스트/문자 아이콘(<code>&lt;/&gt;</code>, <code>&lt; &gt;</code>, <code>∑</code>, <code>∫</code>, <code>%</code>, <code>• —</code>, <code>1.</code>, <code>☑</code> 등)을 모두 Lucide SVG 상수(<code>_ic()</code> 헬퍼 + 15×15 viewBox)로 교체 — 폰트 메트릭 차이로 인한 아이콘 높이 불일치 완전 해소</li><li><strong>인라인 코드 버튼 위치 조정</strong>: 툴바에서 인라인 코드(<code>&lt;/&gt;</code>) 버튼을 인라인 수식(∫) 왼쪽으로 이동</li><li><strong>수직 정렬 수정</strong>: <code>.wu-toolbar-btn</code>에 <code>line-height: 1</code>, <code>svg { display: block }</code> 추가 — SVG baseline 어긋남 제거</li><li><strong>편집기 툴바 표준화</strong>: <code>doc_editor.html</code>의 하드코딩된 <code>toolbarItems</code> 오버라이드 제거 → 문서·체크·공지 편집기 모두 <code>TOOLBAR_DEFS</code> 기본값 공유</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code>, <code>templates/doc_editor.html</code></li></ul>"
         }
       ]
     },

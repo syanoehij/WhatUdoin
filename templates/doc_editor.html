@@ -363,13 +363,6 @@ function initDocEditor() {
       bodyEl: '#editor-body',
       canEdit: true,
       initialMarkdown: initialMd,
-      toolbarItems: [
-        ['heading', 'bold', 'italic', 'strike', 'highlight'],
-        ['hr', 'quote'],
-        ['ul', 'ol', 'task'],
-        ['table', 'link', 'image'],
-        ['code', 'codeblock'],
-      ],
       features: {
         imageResize: true,
         imageUpload: { endpoint: '/api/upload/image' },
