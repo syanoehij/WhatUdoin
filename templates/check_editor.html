@@ -2,9 +2,8 @@
 {% block title %}{{ checklist.title }} — 체크리스트 편집{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
 <link rel="stylesheet" href="/static/css/wu-editor.css" />
-<script src="/static/lib/toastui-editor-all.min.js"></script>
+<script src="/static/lib/tiptap-bundle.min.js"></script>
 <style>
   /* 헤더 내 제목/프로젝트 */
   .ck-edit-meta {
@@ -38,28 +37,26 @@
     display: flex;
     flex-direction: column;
   }
-  #cke-editor-container .toastui-editor-defaultUI {
+  #cke-editor-container .wu-editor-wrap {
     flex: 1 !important;
     display: flex !important;
     flex-direction: column !important;
-    border-radius: 0 !important;
-    border-left: none !important;
-    border-right: none !important;
-    border-bottom: none !important;
+    min-height: 0;
   }
-  #cke-editor-container .toastui-editor-main {
+  #cke-editor-container .wu-editor-content {
     flex: 1 !important;
     overflow-y: auto !important;
+    min-height: 0;
   }
-  #cke-editor-container .toastui-editor-ww-container,
-  #cke-editor-container .toastui-editor-md-container {
+  #cke-editor-container .ProseMirror {
     flex: 1 !important;
-    overflow-y: auto !important;
+    min-height: 0;
   }
 
-  /* eid: 연결 마커 링크 — 프리뷰에서 작게 표시, 클릭 무효화 */
-  a[href^="eid:"] {
-    pointer-events: none;
+  /* eid: 연결 마커 링크 — 편집 모드에서 클릭 허용 */
+  #cke-editor-container a[href^="eid:"] {
+    pointer-events: auto;
+    cursor: pointer;
     font-size: 0.72rem;
     opacity: 0.6;
     text-decoration: none;
@@ -413,7 +410,10 @@ function _parseLinkedIdxMap(md) {
   let idx = 0;
   for (const line of lines) {
     if (/^[ \t]*[-*+] \[[ xX]?\]/.test(line)) {
-      const m = line.match(/\[[^\]]*\]\(eid:(\d+)\)/);
+      // 마크다운 형식: [text](eid:123) — 정상 저장 데이터
+      let m = line.match(/\[[^\]]*\]\(eid:(\d+)\)/);
+      // HTML 형식: <a href="eid:123"> — 구 Tiptap 직렬화 레거시 데이터
+      if (!m) m = line.match(/href="eid:(\d+)"/);
       if (m) linked[idx] = parseInt(m[1]);
       idx++;
     }
@@ -576,6 +576,40 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (CKE_IS_NEW) {
     wuInst.setLeaveMsg('항목이 저장되지 않았습니다', '저장하지 않으면 작성 내용이 사라집니다.');
   }
+
+  // eid 링크 클릭: 일정 수정 모달 열기 (capture phase — target="_blank" 새 창 방지)
+  document.getElementById('cke-editor-container')?.addEventListener('click', async (e) => {
+    const link = e.target.closest('a[href^="eid:"]');
+    if (!link) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const eid = parseInt(link.getAttribute('href').replace('eid:', ''));
+    if (!eid) return;
+    const r = await fetch(`/api/events/${eid}`);
+    if (!r.ok) return;
+    window.openModal('', await r.json());
+  }, true);
+
+  // eid 연결 체크박스: 체크 시 칸반 상태 동기화
+  document.getElementById('cke-editor-container')?.addEventListener('change', async (e) => {
+    if (e.target.type !== 'checkbox') return;
+    const li = e.target.closest('li[data-checked]');
+    if (!li) return;
+    const link = li.querySelector('a[href^="eid:"]');
+    if (!link) return;
+    const eid = parseInt(link.getAttribute('href').replace('eid:', ''));
+    if (!eid) return;
+    const status = e.target.checked ? 'peer_review' : 'todo';
+    const r = await fetch(`/api/events/${eid}/kanban`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kanban_status: status }),
+    });
+    if (r.ok) {
+      wuToast.info(e.target.checked ? '피어 리뷰로 변경되었습니다.' : 'Todo로 변경되었습니다.');
+      if (_evPanelOpen) renderEvPanel();
+    }
+  });
 
   // 리사이저 드래그 (AI 패널 폭 조절)
   const ckResizer  = document.getElementById('cke-editor-resizer');
