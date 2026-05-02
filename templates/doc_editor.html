@@ -3,7 +3,7 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/wu-editor.css" />
-<script src="/static/lib/tiptap-bundle.min.js"></script>
+<script src="/static/lib/tiptap-bundle.min.js?v={{ range(1000,9999) | random }}"></script>
 <style>
 .export-dropdown { position: relative; display: inline-block; }
 .export-menu {
@@ -367,7 +367,7 @@ function initDocEditor() {
       canEdit: true,
       initialMarkdown: initialMd,
       toolbarItems: [
-        ['heading', 'bold', 'italic', 'strike'],
+        ['heading', 'bold', 'italic', 'strike', 'highlight'],
         ['hr', 'quote'],
         ['ul', 'ol', 'task'],
         ['table', 'link', 'image'],

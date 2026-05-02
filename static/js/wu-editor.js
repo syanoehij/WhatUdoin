@@ -4,6 +4,57 @@
   'use strict';
 
   /* ── 헬퍼 ─────────────────────────────────────── */
+
+  /* Tiptap이 각주 id/target 속성을 제거하므로 렌더링 후 DOM을 직접 복원 */
+  function _fixFootnoteAnchors(container) {
+    // 각주 참조 <a href="#fn-X"><sup> → <a id="fnref-X"> 추가
+    container.querySelectorAll('a[href^="#fn-"]').forEach(a => {
+      if (a.querySelector('sup') && !a.id) {
+        a.id = 'fnref-' + a.getAttribute('href').slice(4);
+      }
+    });
+    // 각주 정의 <li> → id="fn-X" 추가 (wu-fn-back의 href에서 추출)
+    container.querySelectorAll('a.wu-fn-back[href^="#fnref-"]').forEach(a => {
+      const li = a.closest('li');
+      if (li && !li.id) {
+        li.id = 'fn-' + a.getAttribute('href').slice(7);
+      }
+    });
+    // 앵커 링크의 target="_blank" / rel 제거 → 같은 페이지 스크롤 이동
+    container.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.removeAttribute('target');
+      a.removeAttribute('rel');
+    });
+  }
+
+  /* 뷰어 모드에서 [^label] 각주를 <sup> + <section> HTML로 변환 */
+  function _preprocessViewerFootnotes(md) {
+    const defs = {};
+    // tiptap-markdown이 [를 \[로 이스케이프하므로 \[^label\]: 와 [^label]: 모두 매칭
+    const defRe = /^\\?\[\^([^\\\]]+)\\?\]:\s+(.+)$/gm;
+    let m;
+    while ((m = defRe.exec(md)) !== null) defs[m[1]] = m[2];
+    if (!Object.keys(defs).length) return md;
+
+    let result = md.replace(/^\\?\[\^([^\\\]]+)\\?\]:\s+.+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+
+    const labels = [];
+    result = result.replace(/\\?\[\^([^\\\]]+)\\?\]/g, (match, label) => {
+      if (!defs[label]) return match;
+      if (!labels.includes(label)) labels.push(label);
+      const n = labels.indexOf(label) + 1;
+      return `<sup class="wu-fn-ref" id="fnref-${label}"><a href="#fn-${label}">[${n}]</a></sup>`;
+    });
+
+    if (labels.length) {
+      const items = labels.map(label =>
+        `<li id="fn-${label}"><p>${defs[label]} <a href="#fnref-${label}" class="wu-fn-back">↩</a></p></li>`
+      ).join('\n');
+      result += `\n\n<hr />\n<section class="wu-footnotes"><ol>\n${items}\n</ol></section>`;
+    }
+    return result;
+  }
+
   function esc(s) {
     return String(s ?? '')
       .replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -15,7 +66,7 @@
 
   /* ── 툴바 정의 ──────────────────────────────────── */
   const TOOLBAR_DEFS = [
-    { group: ['heading', 'bold', 'italic', 'strike'] },
+    { group: ['heading', 'bold', 'italic', 'strike', 'highlight'] },
     { group: ['hr', 'quote'] },
     { group: ['ul', 'ol', 'task'] },
     { group: ['table', 'link', 'image'] },
@@ -27,6 +78,7 @@
     bold:      { icon: '<b>B</b>', title: '굵게' },
     italic:    { icon: '<i>I</i>', title: '기울임' },
     strike:    { icon: '<s>S</s>', title: '취소선' },
+    highlight: { icon: '<mark>H</mark>', title: '하이라이트 (==text==)' },
     hr:        { icon: '—',   title: '구분선' },
     quote:     { icon: '❝',   title: '인용' },
     ul:        { icon: '• —', title: '목록' },
@@ -54,6 +106,7 @@
     { id: 'code',  label: '코드 블록', icon: '{ }', hint: 'code block',       cmd: ed => ed.chain().focus().toggleCodeBlock().run() },
     { id: 'table', label: '표',        icon: '⊞',   hint: 'table grid',       cmd: ed => ed.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
     { id: 'hr',    label: '구분선',    icon: '—',   hint: 'hr divider line',  cmd: ed => ed.chain().focus().setHorizontalRule().run() },
+    { id: 'highlight', label: '하이라이트', icon: '<mark>H</mark>', hint: 'highlight mark hl 형광펜', cmd: ed => ed.chain().focus().toggleHighlight().run() },
     { id: 'footnote', label: '각주',  icon: '[^]', hint: 'footnote fn ref',   cmd: ed => {
         const label = String((ed.getText().match(/\[\^[^\]]+\]:/g) || []).length + 1);
         ed.chain()
@@ -1204,6 +1257,7 @@
           case 'bold':      chain.toggleBold().run(); break;
           case 'italic':    chain.toggleItalic().run(); break;
           case 'strike':    chain.toggleStrike().run(); break;
+          case 'highlight': chain.toggleHighlight().run(); break;
           case 'hr':        chain.setHorizontalRule().run(); break;
           case 'quote':     chain.toggleBlockquote().run(); break;
           case 'ul':        chain.toggleBulletList().run(); break;
@@ -1231,6 +1285,7 @@
           case 'bold':      active = _editor.isActive('bold'); break;
           case 'italic':    active = _editor.isActive('italic'); break;
           case 'strike':    active = _editor.isActive('strike'); break;
+          case 'highlight': active = _editor.isActive('highlight'); break;
           case 'quote':     active = _editor.isActive('blockquote'); break;
           case 'ul':        active = _editor.isActive('bulletList'); break;
           case 'ol':        active = _editor.isActive('orderedList'); break;
@@ -1362,6 +1417,9 @@
         Image,
         Markdown,
         Paragraph,
+        Highlight,
+        markdownItMark,
+        Superscript,
       } = TiptapBundle;
 
       const canEdit = !!opts.canEdit;
@@ -1370,14 +1428,15 @@
         /* 뷰어 모드 — 에디터 영역에 바로 렌더 */
         _editor = new Editor({
           element: containerEl,
-          extensions: _buildExtensions({ StarterKit, CodeBlock, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph }),
-          content: opts.initialMarkdown || '',
+          extensions: _buildExtensions({ StarterKit, CodeBlock, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript }),
+          content: _preprocessViewerFootnotes(opts.initialMarkdown || ''),
           editable: false,
           injectCSS: false,
         });
         if (hooks.onReady) hooks.onReady(_editor);
         setTimeout(_applyHighlight, 150);
         setTimeout(_initCodeHeaders, 100);
+        setTimeout(() => _fixFootnoteAnchors(containerEl), 200);
         return;
       }
 
@@ -1395,7 +1454,7 @@
 
       _editor = new Editor({
         element: edEl,
-        extensions: _buildExtensions({ StarterKit, CodeBlock, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph }),
+        extensions: _buildExtensions({ StarterKit, CodeBlock, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark }),
         content: opts.initialMarkdown || '',
         editable: true,
         injectCSS: false,
@@ -1441,7 +1500,7 @@
       setTimeout(_applyHighlight, 150);
     }
 
-    function _buildExtensions({ StarterKit, CodeBlock, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph }) {
+    function _buildExtensions({ StarterKit, CodeBlock, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript }) {
       // @tiptap/extension-link은 markdown.serialize가 없어 tiptap-markdown이 <a href> HTML로
       // 직렬화한다. 이를 [text](href) 마크다운 형식으로 고정해 eid: round-trip을 보장한다.
       const LinkMd = Link.extend({
@@ -1505,9 +1564,22 @@
         },
       });
 
+      const HighlightMd = Highlight.configure({ multicolor: false }).extend({
+        addStorage() {
+          return {
+            markdown: {
+              serialize: { open: '==', close: '==', mixable: true, expelEnclosingWhitespace: true },
+              parse: { setup(md) { md.use(markdownItMark); } },
+            },
+          };
+        },
+      });
+
       return [
         StarterKit.configure({ link: false, paragraph: false }),
         ParagraphMd,
+        HighlightMd,
+        Superscript,
         Table.configure({ resizable: true }),
         TableRow,
         TableHeader,
