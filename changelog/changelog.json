@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-05-03",
+      "phase": "35차 9단계",
+      "phase_class": "phase-9",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 슬래시 명령어 계층형 그룹 메뉴로 전면 개편",
+          "detail_html": "<ul><li><strong>기존 동작</strong>: <code>/</code> 입력 시 모든 명령어가 단일 목록으로 나열</li><li><strong>변경 동작</strong>: 좌측 그룹 패널 + 우측 서브메뉴 패널 2단 구조로 개편 — VSCode 컨텍스트 메뉴 스타일</li><li><strong>그룹 구성</strong>: 제목(H1~H6·본문), 서식(볼드·기울이기·취소선·하이라이트·인라인코드·인라인수식), 콜아웃(13종), 단락(글머리·숫자·체크박스 목록), 삽입(표·링크·코드블록·수식블록·주석) + 단독 항목 3개(구분선·인용·각주)</li><li><strong>콜아웃 서브메뉴</strong>: 13개 항목을 2열 그리드로 표시</li><li><strong>키보드 네비게이션</strong>: ↑↓로 현재 패널 이동, →로 서브메뉴 진입, ←로 복귀, Esc로 전체 닫기 — 2열 그리드에서는 ↑↓가 열 단위(+2), ←→가 행 단위(+1) 이동</li><li><strong>텍스트 필터</strong>: <code>/</code> 이후 문자 입력 시 전체 리프 항목 flat 검색 모드로 자동 전환</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 슬래시 메뉴 서브패널 선택 잔존 버그 3건 수정",
+          "detail_html": "<ul><li><strong>← 복귀 시 하이라이트 잔존</strong>: 오른쪽 서브메뉴에서 ← 키로 복귀할 때 <code>_slashSubIdx</code>를 <code>-1</code>로 초기화하지 않아 selected 클래스가 남아 있던 문제 수정</li><li><strong>↓↑ 이동 시 서브메뉴 자동 선택</strong>: 왼쪽 그룹 패널에서 ↓↑로 이동할 때 서브메뉴 첫 항목이 자동 선택되던 문제 수정 — <code>_openSubPanel</code>이 <code>_slashSubIdx = -1</code>로 초기화하고, ArrowRight·Enter 진입 시에만 <code>_slashSubIdx = 0</code> 적용</li><li><strong>2열 그리드 방향키 오동작</strong>: 그리드 모드에서 ↑↓가 인덱스 +1 이동(시각적으로 좌우 이동)하던 문제 수정 — <code>cols</code> 단위(+2)로 계산, ArrowRight·Left를 행 단위 이동으로 처리</li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-03",
       "phase": "35차 8단계",
       "phase_class": "phase-8",
       "entries": [

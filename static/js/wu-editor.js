@@ -272,72 +272,114 @@
     callout:    { icon: _IC_CALLOUT,  title: '콜아웃 (> [!note])' },
   };
 
-  /* 슬래시 커맨드의 math/footnote 항목이 create() 스코프 내 함수를 호출하기 위한 참조 */
+  /* 슬래시 커맨드의 math/footnote/link 항목이 create() 스코프 내 함수를 호출하기 위한 참조 */
   let _mathSlashCmdFn     = null;
   let _footnoteSlashCmdFn = null;
+  let _promptLinkFn       = null;
 
-  /* ── 슬래시 커맨드 항목 ─────────────────────────── */
-  const SLASH_ITEMS = [
-    { id: 'h1',    label: '제목 1',    icon: 'H1',   hint: 'h heading',       cmd: ed => ed.chain().focus().setHeading({ level: 1 }).run() },
-    { id: 'h2',    label: '제목 2',    icon: 'H2',   hint: 'h heading',       cmd: ed => ed.chain().focus().setHeading({ level: 2 }).run() },
-    { id: 'h3',    label: '제목 3',    icon: 'H3',   hint: 'h heading',       cmd: ed => ed.chain().focus().setHeading({ level: 3 }).run() },
-    { id: 'h4',    label: '제목 4',    icon: 'H4',   hint: 'h heading',       cmd: ed => ed.chain().focus().setHeading({ level: 4 }).run() },
-    { id: 'h5',    label: '제목 5',    icon: 'H5',   hint: 'h heading',       cmd: ed => ed.chain().focus().setHeading({ level: 5 }).run() },
-    { id: 'h6',    label: '제목 6',    icon: 'H6',   hint: 'h heading',       cmd: ed => ed.chain().focus().setHeading({ level: 6 }).run() },
-    { id: 'ul',    label: '목록',      icon: _IC_UL,   hint: 'ul list bullet',   cmd: ed => ed.chain().focus().toggleBulletList().run() },
-    { id: 'ol',    label: '번호 목록', icon: _IC_OL,   hint: 'ol number list',   cmd: ed => ed.chain().focus().toggleOrderedList().run() },
-    { id: 'task',  label: '할일 목록', icon: _IC_TASK, hint: 'task todo check',  cmd: ed => ed.chain().focus().toggleTaskList().run() },
-    { id: 'quote', label: '인용',      icon: _IC_QUOTE,   hint: 'quote blockquote', cmd: ed => ed.chain().focus().toggleBlockquote().run() },
-    { id: 'code',  label: '코드 블록', icon: _IC_CODEBLK, hint: 'code block',       cmd: ed => ed.chain().focus().toggleCodeBlock().run() },
-    { id: 'table', label: '표',        icon: _IC_TABLE,   hint: 'table grid',       cmd: ed => ed.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-    { id: 'hr',    label: '구분선',    icon: _IC_HR,      hint: 'hr divider line',  cmd: ed => ed.chain().focus().setHorizontalRule().run() },
-    { id: 'highlight', label: '하이라이트', icon: _IC_HL, hint: 'highlight mark hl 형광펜', cmd: ed => ed.chain().focus().toggleHighlight().run() },
-    { id: 'footnote', label: '각주',  icon: '[^]', hint: 'footnote fn ref',   cmd: ed => {
-        if (_footnoteSlashCmdFn) _footnoteSlashCmdFn(ed);
-      },
+  /* ── 슬래시 커맨드 트리 ─────────────────────────── */
+  const SLASH_GROUPS = [
+    {
+      id: 'heading', label: '제목', icon: _IC_HEADING,
+      children: [
+        { id: 'h1', label: '제목 1', icon: 'H1', hint: 'h heading', cmd: ed => ed.chain().focus().setHeading({ level: 1 }).run() },
+        { id: 'h2', label: '제목 2', icon: 'H2', hint: 'h heading', cmd: ed => ed.chain().focus().setHeading({ level: 2 }).run() },
+        { id: 'h3', label: '제목 3', icon: 'H3', hint: 'h heading', cmd: ed => ed.chain().focus().setHeading({ level: 3 }).run() },
+        { id: 'h4', label: '제목 4', icon: 'H4', hint: 'h heading', cmd: ed => ed.chain().focus().setHeading({ level: 4 }).run() },
+        { id: 'h5', label: '제목 5', icon: 'H5', hint: 'h heading', cmd: ed => ed.chain().focus().setHeading({ level: 5 }).run() },
+        { id: 'h6', label: '제목 6', icon: 'H6', hint: 'h heading', cmd: ed => ed.chain().focus().setHeading({ level: 6 }).run() },
+        { id: 'paragraph', label: '본문', icon: _IC_UL, hint: 'paragraph text 본문', cmd: ed => ed.chain().focus().setParagraph().run() },
+      ],
     },
-    { id: 'inlinemath', label: '인라인 수식', icon: _IC_INTEG, hint: 'inline math latex katex 인라인 수식',
-      cmd: ed => {
-        const pmSel = ed.state.selection;
-        if (pmSel.empty) {
-          ed.chain().focus().insertContent({ type: 'inlineMath', attrs: { latex: 'x' } }).run();
-        } else {
-          const text = ed.state.doc.textBetween(pmSel.from, pmSel.to, '');
-          ed.chain().focus().deleteSelection().insertContent({ type: 'inlineMath', attrs: { latex: text } }).run();
-        }
-      },
+    {
+      id: 'format', label: '서식', icon: _IC_BOLD,
+      children: [
+        { id: 'bold',      label: '볼드체',    icon: _IC_BOLD,   hint: 'bold strong 굵게',       cmd: ed => ed.chain().focus().toggleBold().run() },
+        { id: 'italic',    label: '기울이기',  icon: _IC_ITALIC, hint: 'italic em 기울임',       cmd: ed => ed.chain().focus().toggleItalic().run() },
+        { id: 'strike',    label: '취소선',    icon: _IC_STRIKE, hint: 'strike del 취소',        cmd: ed => ed.chain().focus().toggleStrike().run() },
+        { id: 'highlight', label: '하이라이트', icon: _IC_HL,    hint: 'highlight mark hl 형광펜', cmd: ed => ed.chain().focus().toggleHighlight().run() },
+        { id: 'code',      label: '인라인 코드', icon: _IC_CODE, hint: 'code inline 인라인',      cmd: ed => ed.chain().focus().toggleCode().run() },
+        { id: 'inlinemath', label: '인라인 수식', icon: _IC_INTEG, hint: 'inline math latex katex 인라인 수식',
+          cmd: ed => {
+            const pmSel = ed.state.selection;
+            if (pmSel.empty) {
+              ed.chain().focus().insertContent({ type: 'inlineMath', attrs: { latex: 'x' } }).run();
+            } else {
+              const text = ed.state.doc.textBetween(pmSel.from, pmSel.to, '');
+              ed.chain().focus().deleteSelection().insertContent({ type: 'inlineMath', attrs: { latex: text } }).run();
+            }
+          },
+        },
+      ],
     },
-    { id: 'comment', label: '주석', icon: _IC_PERCENT, hint: 'comment obsidian 주석 hidden',
-      cmd: ed => {
-        const pmSel = ed.state.selection;
-        if (pmSel.empty) {
-          ed.chain().focus().insertContent('<span data-type="obsidian-comment">주석 내용</span>').run();
-        } else {
-          ed.chain().focus().toggleMark('obsidianComment').run();
-        }
-      },
-    },
-    { id: 'math', label: '수식 블록', icon: _IC_SIGMA, hint: 'math latex katex 수식 블록 block formula equation',
-      cmd: ed => {
-        if (_mathSlashCmdFn) _mathSlashCmdFn(ed);
-      },
-    },
-    { id: 'callout', label: '콜아웃', icon: _IC_CALLOUT, hint: 'callout admonition note warning tip 콜아웃 박스',
-      cmd: ed => {
-        ed.chain().focus().insertContent({
+    {
+      id: 'callout', label: '콜아웃', icon: _IC_CALLOUT,
+      children: CALLOUT_DROP_ITEMS.map(it => ({
+        id: 'callout-' + it.type,
+        label: it.type.charAt(0).toUpperCase() + it.type.slice(1),
+        icon: (CALLOUT_TYPES[it.type] && CALLOUT_TYPES[it.type].icon) || _IC_CALLOUT,
+        hint: 'callout ' + it.type + ' ' + it.desc,
+        desc: it.desc,
+        cmd: ed => ed.chain().focus().insertContent({
           type: 'blockquote',
           content: [
-            { type: 'paragraph', content: [{ type: 'text', text: '[!note]' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: '[!' + it.type + ']' }] },
             { type: 'paragraph' },
           ],
-        }).run();
-      },
+        }).run(),
+      })),
     },
+    {
+      id: 'block', label: '단락', icon: _IC_UL,
+      children: [
+        { id: 'ul',   label: '글머리 목록', icon: _IC_UL,   hint: 'ul list bullet 글머리',   cmd: ed => ed.chain().focus().toggleBulletList().run() },
+        { id: 'ol',   label: '숫자 목록',   icon: _IC_OL,   hint: 'ol number list 번호',      cmd: ed => ed.chain().focus().toggleOrderedList().run() },
+        { id: 'task', label: '체크박스',    icon: _IC_TASK, hint: 'task todo check 체크박스',  cmd: ed => ed.chain().focus().toggleTaskList().run() },
+      ],
+    },
+    {
+      id: 'insert', label: '삽입', icon: _IC_TABLE,
+      children: [
+        { id: 'table', label: '표',      icon: _IC_TABLE,   hint: 'table grid 표',            cmd: ed => ed.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+        { id: 'link',  label: '링크',    icon: _ic('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'), hint: 'link url 링크', cmd: ed => { if (_promptLinkFn) _promptLinkFn(); } },
+        { id: 'codeblock', label: '코드 블록', icon: _IC_CODEBLK, hint: 'code block codeblock', cmd: ed => ed.chain().focus().toggleCodeBlock().run() },
+        { id: 'math',  label: '수식 블록', icon: _IC_SIGMA, hint: 'math latex katex 수식 블록', cmd: ed => { if (_mathSlashCmdFn) _mathSlashCmdFn(ed); } },
+        { id: 'comment', label: '주석',   icon: _IC_PERCENT, hint: 'comment obsidian 주석 hidden',
+          cmd: ed => {
+            const pmSel = ed.state.selection;
+            if (pmSel.empty) {
+              ed.chain().focus().insertContent('<span data-type="obsidian-comment">주석 내용</span>').run();
+            } else {
+              ed.chain().focus().toggleMark('obsidianComment').run();
+            }
+          },
+        },
+      ],
+    },
+    // 단독 항목 (서브메뉴 없음)
+    { id: 'hr',       label: '구분선', icon: _IC_HR,    hint: 'hr divider line 구분선', cmd: ed => ed.chain().focus().setHorizontalRule().run() },
+    { id: 'quote',    label: '인용',   icon: _IC_QUOTE, hint: 'quote blockquote 인용',  cmd: ed => ed.chain().focus().toggleBlockquote().run() },
+    { id: 'footnote', label: '각주',   icon: _IC_FOOTNOTE, hint: 'footnote fn ref 각주', cmd: ed => { if (_footnoteSlashCmdFn) _footnoteSlashCmdFn(ed); } },
   ];
-  function _matchSlash(query) {
-    if (!query) return SLASH_ITEMS;
+
+  /* 리프 아이템 전체를 평탄화 (검색 필터링용) */
+  function _slashLeaves() {
+    const leaves = [];
+    for (const g of SLASH_GROUPS) {
+      if (g.children) {
+        for (const c of g.children) leaves.push(c);
+      } else {
+        leaves.push(g);
+      }
+    }
+    return leaves;
+  }
+
+  function _matchSlashFlat(query) {
     const q = query.toLowerCase();
-    return SLASH_ITEMS.filter(it => it.id.startsWith(q) || it.label.includes(q) || it.hint.includes(q));
+    return _slashLeaves().filter(it =>
+      it.id.startsWith(q) || it.label.includes(q) || (it.hint || '').includes(q) || (it.desc || '').includes(q)
+    );
   }
 
   /* ── 코드블록 언어 목록 ─────────────────────────── */
@@ -381,11 +423,15 @@
     let _lockHeartbeat = null;
     let _idleTimer    = null;
     let _isDragging   = false;
-    let _slashActive   = false;
-    let _slashStart    = -1;
-    let _slashQuery    = '';
-    let _slashSelIdx   = 0;
-    let _slashFiltered = [];
+    let _slashActive    = false;
+    let _slashStart     = -1;
+    let _slashQuery     = '';
+    let _slashSelIdx    = 0;   // 왼쪽 패널(그룹 목록) 선택 인덱스
+    let _slashSubIdx    = 0;   // 오른쪽 패널(서브메뉴) 선택 인덱스
+    let _slashFocus     = 'left';  // 'left' | 'right'
+    let _slashMode      = 'groups'; // 'groups' | 'flat'
+    let _slashFiltered  = [];  // flat 모드 결과
+    let _slashSubPanel  = null; // 현재 열린 서브메뉴의 그룹 참조
     const _listeners  = [];   // { target, type, fn, capture } — destroy 시 일괄 해제
 
     /* ── listener 등록 헬퍼 ── */
@@ -575,11 +621,11 @@
       _footnoteModal.style.display = 'none';
       _footnoteModal.innerHTML = `
         <div class="wu-leave-box" style="max-width:460px;width:90%">
-          <h3 style="margin:0 0 12px;font-size:1rem">각주 추가</h3>
+          <h3 id="wu-fn-title" style="margin:0 0 12px;font-size:1rem">각주 추가</h3>
           <textarea id="wu-fn-input" rows="3" placeholder="각주 내용을 입력하세요"
             style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text);font-size:0.9rem;outline:none;resize:vertical;margin-bottom:16px;font-family:inherit"></textarea>
           <div class="modal-actions">
-            <span style="margin-right:auto;font-size:0.78rem;color:var(--text-muted)">Ctrl+Enter로 삽입</span>
+            <span id="wu-fn-hint" style="margin-right:auto;font-size:0.78rem;color:var(--text-muted)">Ctrl+Enter로 삽입</span>
             <button id="wu-fn-cancel" class="btn btn-sm">취소</button>
             <button id="wu-fn-confirm" class="btn btn-sm btn-primary">삽입</button>
           </div>
@@ -700,17 +746,27 @@
       });
     };
 
-    function _showFootnoteModal(onConfirm) {
+    function _showFootnoteModal(onConfirm, options = {}) {
+      const initialContent = options.initialContent || '';
+      const title = options.title || '각주 추가';
+      const confirmLabel = options.confirmLabel || '삽입';
+      const hint = options.hint || `Ctrl+Enter로 ${confirmLabel}`;
       if (!_footnoteModal) {
-        const content = window.prompt('각주 내용:') || '';
+        const content = window.prompt('각주 내용:', initialContent) || '';
         onConfirm(content);
         return;
       }
       const input = _footnoteModal.querySelector('#wu-fn-input');
-      input.value = '';
+      const titleEl = _footnoteModal.querySelector('#wu-fn-title');
+      const confirmBtn = _footnoteModal.querySelector('#wu-fn-confirm');
+      const hintEl = _footnoteModal.querySelector('#wu-fn-hint');
+      input.value = initialContent;
+      if (titleEl) titleEl.textContent = title;
+      if (confirmBtn) confirmBtn.textContent = confirmLabel;
+      if (hintEl) hintEl.textContent = hint;
       _footnoteModalCallback = onConfirm;
       _footnoteModal.style.display = 'flex';
-      setTimeout(() => input.focus(), 30);
+      setTimeout(() => { input.focus(); input.select(); }, 30);
     }
 
     function _insertFootnoteWithContent(ed, content) {
@@ -728,16 +784,99 @@
         .run();
     }
 
+    function _escapeRegExp(text) {
+      return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function _findFootnoteDefinition(label) {
+      if (!_editor || !label) return null;
+      const defRe = new RegExp(`^\\\\?\\[\\^${_escapeRegExp(label)}\\\\?\\]:\\s?(.*)$`);
+      let found = null;
+      _editor.state.doc.descendants((node, pos) => {
+        if (found || node.type.name !== 'paragraph') return;
+        const text = node.textContent || '';
+        const match = defRe.exec(text);
+        if (!match) return;
+        found = { node, pos, content: match[1] || '' };
+        return false;
+      });
+      return found;
+    }
+
+    function _setFootnoteDefinition(label, content) {
+      if (!_editor || !label) return;
+      const text = `[^${label}]: ${content || ''}`;
+      const found = _findFootnoteDefinition(label);
+      if (found) {
+        const from = found.pos + 1;
+        const to = from + found.node.content.size;
+        _editor.chain().focus().command(({ tr, dispatch }) => {
+          if (dispatch) tr.insertText(text, from, to);
+          return true;
+        }).run();
+        return;
+      }
+
+      _editor.chain()
+        .focus()
+        .command(({ tr, dispatch }) => {
+          const schema = tr.doc.type.schema;
+          const para = schema.nodes.paragraph.createChecked(null, [schema.text(text)]);
+          if (dispatch) tr.insert(tr.doc.content.size, para);
+          return true;
+        })
+        .run();
+    }
+
+    function _editFootnoteByLabel(label) {
+      if (!_editor || !label) return;
+      const found = _findFootnoteDefinition(label);
+      _showFootnoteModal(
+        content => _setFootnoteDefinition(label, content),
+        {
+          initialContent: found ? found.content : '',
+          title: `각주 ${label} 수정`,
+          confirmLabel: '수정',
+          hint: 'Ctrl+Enter로 수정',
+        }
+      );
+    }
+
+    function _initFootnoteRefEditing(pmEl) {
+      if (!pmEl || opts.canEdit === false) return;
+      pmEl.addEventListener('click', e => {
+        const target = e.target.closest && e.target.closest('.wu-editor-footnote-ref');
+        if (!target || !pmEl.contains(target)) return;
+        const match = (target.textContent || '').match(/\\?\[\^([^\\\]]+)\\?\]/);
+        if (!match) return;
+        e.preventDefault();
+        e.stopPropagation();
+        _editFootnoteByLabel(match[1]);
+      });
+    }
+
     _footnoteSlashCmdFn = ed => {
       _showFootnoteModal(content => _insertFootnoteWithContent(ed, content));
     };
 
-    /* 슬래시 커맨드 메뉴 동적 생성 */
-    let _slashMenuEl = null;
+    /* 슬래시 커맨드 메뉴 동적 생성 (두 패널 구조) */
+    let _slashMenuEl  = null;  // 전체 컨테이너
+    let _slashLeftEl  = null;  // 왼쪽 그룹 패널
+    let _slashRightEl = null;  // 오른쪽 서브메뉴 패널
     if (opts.canEdit !== false) {
       _slashMenuEl = document.createElement('div');
       _slashMenuEl.className = 'wu-slash-menu';
       _slashMenuEl.style.display = 'none';
+
+      _slashLeftEl = document.createElement('div');
+      _slashLeftEl.className = 'wu-slash-panel wu-slash-panel--left';
+
+      _slashRightEl = document.createElement('div');
+      _slashRightEl.className = 'wu-slash-panel wu-slash-panel--right';
+      _slashRightEl.style.display = 'none';
+
+      _slashMenuEl.appendChild(_slashLeftEl);
+      _slashMenuEl.appendChild(_slashRightEl);
       document.body.appendChild(_slashMenuEl);
     }
 
@@ -1385,31 +1524,11 @@
       _codeHeaderMap.clear();
     }
 
-    /* ── 슬래시 커맨드 ──────────────────────────────── */
-    function _renderSlashItems(items) {
-      if (!_slashMenuEl) return;
-      _slashMenuEl.innerHTML = items.map((it, i) =>
-        `<div class="wu-slash-item${i === 0 ? ' selected' : ''}" data-idx="${i}">
-          <span class="wu-slash-icon">${it.icon}</span>
-          <span class="wu-slash-label">${it.label}</span>
-        </div>`
-      ).join('');
-    }
-
-    function _positionSlashMenu() {
-      if (!_editor || !_slashMenuEl) return;
-      const coords = _editor.view.coordsAtPos(_editor.state.selection.from);
-      const mh = _slashMenuEl.offsetHeight || 200;
-      const top = (window.innerHeight - coords.bottom > mh)
-        ? coords.bottom + 4
-        : coords.top - mh - 4;
-      _slashMenuEl.style.top  = (top + window.scrollY) + 'px';
-      _slashMenuEl.style.left = Math.min(coords.left, window.innerWidth - (_slashMenuEl.offsetWidth || 200) - 8) + 'px';
-    }
+    /* ── 슬래시 커맨드 (계층형 그룹 메뉴) ──────────────────────────────── */
 
     function _applySlashItem(item) {
       if (!_editor) return;
-      const to = _editor.state.selection.from;
+      const to   = _editor.state.selection.from;
       const from = _slashStart;
       _hideSlashMenu();
       _editor.chain().focus().deleteRange({ from, to }).run();
@@ -1417,19 +1536,138 @@
     }
 
     function _hideSlashMenu() {
-      if (_slashMenuEl) _slashMenuEl.style.display = 'none';
-      _slashActive = false;
-      _slashStart  = -1;
-      _slashQuery  = '';
+      if (_slashMenuEl)  _slashMenuEl.style.display  = 'none';
+      if (_slashRightEl) _slashRightEl.style.display = 'none';
+      _slashActive   = false;
+      _slashStart    = -1;
+      _slashQuery    = '';
       _slashFiltered = [];
+      _slashSubPanel = null;
+      _slashFocus    = 'left';
+      _slashMode     = 'groups';
     }
 
-    function _updateSlashSelUi() {
-      if (!_slashMenuEl) return;
-      _slashMenuEl.querySelectorAll('.wu-slash-item').forEach((el, i) => {
-        el.classList.toggle('selected', i === _slashSelIdx);
-        if (i === _slashSelIdx) el.scrollIntoView({ block: 'nearest' });
+    /* 왼쪽 패널 선택 하이라이트 갱신 */
+    function _updateLeftSelUi() {
+      if (!_slashLeftEl) return;
+      _slashLeftEl.querySelectorAll('.wu-slash-row').forEach((el, i) => {
+        const active = (i === _slashSelIdx);
+        el.classList.toggle('selected', active);
+        if (active) el.scrollIntoView({ block: 'nearest' });
       });
+    }
+
+    /* 오른쪽 패널 선택 하이라이트 갱신 */
+    function _updateRightSelUi() {
+      if (!_slashRightEl) return;
+      _slashRightEl.querySelectorAll('.wu-slash-row').forEach((el, i) => {
+        const active = (i === _slashSubIdx);
+        el.classList.toggle('selected', active);
+        if (active) el.scrollIntoView({ block: 'nearest' });
+      });
+    }
+
+    /* flat 모드(검색) 선택 UI 갱신 */
+    function _updateFlatSelUi() {
+      if (!_slashLeftEl) return;
+      _slashLeftEl.querySelectorAll('.wu-slash-row').forEach((el, i) => {
+        const active = (i === _slashSelIdx);
+        el.classList.toggle('selected', active);
+        if (active) el.scrollIntoView({ block: 'nearest' });
+      });
+    }
+
+    /* 오른쪽 서브메뉴 패널 열기 */
+    function _openSubPanel(group, rowEl) {
+      if (!_slashRightEl || !group.children) return;
+      _slashSubPanel = group;
+      _slashSubIdx   = -1;
+      _slashRightEl.classList.toggle('wu-slash-panel--grid', group.id === 'callout');
+      _slashRightEl.innerHTML = group.children.map((it, i) => {
+        const iconHtml = typeof it.icon === 'string' && it.icon.startsWith('<svg')
+          ? it.icon
+          : `<span style="font-weight:600;font-size:0.8rem">${it.icon || ''}</span>`;
+        const descHtml = it.desc ? `<span class="wu-slash-desc">${esc(it.desc)}</span>` : '';
+        return `<div class="wu-slash-row" data-idx="${i}">
+          <span class="wu-slash-icon">${iconHtml}</span>
+          <span class="wu-slash-label">${esc(it.label)}</span>${descHtml}
+        </div>`;
+      }).join('');
+      _slashRightEl.style.display = _slashRightEl.classList.contains('wu-slash-panel--grid') ? 'grid' : 'block';
+      _positionSubPanel(rowEl);
+    }
+
+    /* 서브메뉴 패널 닫기 */
+    function _closeSubPanel() {
+      if (_slashRightEl) _slashRightEl.style.display = 'none';
+      _slashSubPanel = null;
+      _slashFocus    = 'left';
+    }
+
+    /* 왼쪽 패널 렌더링 (그룹 모드) */
+    function _renderGroupPanel() {
+      if (!_slashLeftEl) return;
+      _slashLeftEl.innerHTML = SLASH_GROUPS.map((g, i) => {
+        const hasChildren = !!g.children;
+        const iconHtml = typeof g.icon === 'string' && g.icon.startsWith('<svg')
+          ? g.icon
+          : `<span style="font-weight:600;font-size:0.8rem">${g.icon || ''}</span>`;
+        return `<div class="wu-slash-row${hasChildren ? ' wu-slash-row--has-sub' : ''}${i === 0 ? ' selected' : ''}" data-gidx="${i}">
+          <span class="wu-slash-icon">${iconHtml}</span>
+          <span class="wu-slash-label">${esc(g.label)}</span>
+        </div>`;
+      }).join('');
+    }
+
+    /* 왼쪽 패널 렌더링 (flat 검색 모드) */
+    function _renderFlatPanel(items) {
+      if (!_slashLeftEl) return;
+      _slashLeftEl.innerHTML = items.map((it, i) => {
+        const iconHtml = typeof it.icon === 'string' && it.icon.startsWith('<svg')
+          ? it.icon
+          : `<span style="font-weight:600;font-size:0.8rem">${it.icon || ''}</span>`;
+        const descHtml = it.desc ? `<span class="wu-slash-desc">${esc(it.desc)}</span>` : '';
+        return `<div class="wu-slash-row${i === 0 ? ' selected' : ''}" data-fidx="${i}">
+          <span class="wu-slash-icon">${iconHtml}</span>
+          <span class="wu-slash-label">${esc(it.label)}</span>${descHtml}
+        </div>`;
+      }).join('');
+    }
+
+    /* 전체 메뉴 위치 지정 (커서 아래/위) */
+    function _positionSlashMenu() {
+      if (!_editor || !_slashMenuEl) return;
+      const coords = _editor.view.coordsAtPos(_editor.state.selection.from);
+      const mh = _slashMenuEl.offsetHeight || 240;
+      const top = (window.innerHeight - coords.bottom > mh)
+        ? coords.bottom + 4
+        : coords.top - mh - 4;
+      _slashMenuEl.style.top  = Math.max(4, top + window.scrollY) + 'px';
+      _slashMenuEl.style.left = Math.min(coords.left, window.innerWidth - (_slashMenuEl.offsetWidth || 180) - 8) + 'px';
+    }
+
+    /* 서브메뉴 패널 위치: 선택된 행 오른쪽 정렬 */
+    function _positionSubPanel(rowEl) {
+      if (!_slashRightEl || !_slashMenuEl) return;
+      const mr = _slashMenuEl.getBoundingClientRect();
+      const rw = _slashRightEl.offsetWidth || 220;
+      // 오른쪽 공간이 충분한지 확인
+      const spaceRight = window.innerWidth - mr.right;
+      if (spaceRight >= rw + 4) {
+        _slashRightEl.style.left = '100%';
+        _slashRightEl.style.right = '';
+      } else {
+        _slashRightEl.style.right = '100%';
+        _slashRightEl.style.left = '';
+      }
+      // rowEl이 있으면 상단 정렬
+      if (rowEl) {
+        const rr = rowEl.getBoundingClientRect();
+        const mm = _slashMenuEl.getBoundingClientRect();
+        _slashRightEl.style.top = (rr.top - mm.top) + 'px';
+      } else {
+        _slashRightEl.style.top = '0';
+      }
     }
 
     function _checkSlashCommand() {
@@ -1442,46 +1680,197 @@
       _slashStart  = $from.pos - slashText.length;
       _slashActive = true;
       _slashQuery  = slashText.slice(1);
-      const filtered = _matchSlash(_slashQuery);
-      _slashFiltered = filtered;
-      if (!filtered.length) { _slashMenuEl.style.display = 'none'; return; }
-      _slashSelIdx = 0;
-      _renderSlashItems(filtered);
-      _slashMenuEl.style.display = 'block';
+
+      if (!_slashQuery) {
+        // 쿼리 없음 → 그룹 모드
+        _slashMode   = 'groups';
+        _slashSelIdx = 0;
+        _closeSubPanel();
+        _renderGroupPanel();
+        // 첫 번째 그룹의 서브메뉴를 자동으로 열지 않음 — hover/→키로 열도록
+      } else {
+        // 쿼리 있음 → flat 검색 모드
+        const filtered = _matchSlashFlat(_slashQuery);
+        _slashFiltered = filtered;
+        if (!filtered.length) { _slashMenuEl.style.display = 'none'; return; }
+        _slashMode   = 'flat';
+        _slashSelIdx = 0;
+        _closeSubPanel();
+        _renderFlatPanel(filtered);
+      }
+
+      _slashMenuEl.style.display = 'flex';
       _positionSlashMenu();
     }
 
     function _initSlashMenu() {
       if (!_slashMenuEl) return;
-      _slashMenuEl.addEventListener('mousedown', e => {
+
+      /* 왼쪽 패널: mousedown으로 항목 실행 또는 서브메뉴 열기 */
+      _slashLeftEl.addEventListener('mousedown', e => {
         e.preventDefault();
-        const item = e.target.closest('.wu-slash-item');
-        if (!item) return;
-        const idx = +item.dataset.idx;
-        if (_slashFiltered[idx]) _applySlashItem(_slashFiltered[idx]);
+        const row = e.target.closest('.wu-slash-row');
+        if (!row) return;
+        if (_slashMode === 'flat') {
+          const idx = +row.dataset.fidx;
+          if (_slashFiltered[idx]) _applySlashItem(_slashFiltered[idx]);
+          return;
+        }
+        const gidx = +row.dataset.gidx;
+        const group = SLASH_GROUPS[gidx];
+        if (!group) return;
+        if (group.children) {
+          _slashSelIdx = gidx;
+          _updateLeftSelUi();
+          _slashFocus = 'left';
+          _openSubPanel(group, row);
+        } else {
+          _applySlashItem(group);
+        }
       });
-      _slashMenuEl.addEventListener('mousemove', e => {
-        const item = e.target.closest('.wu-slash-item');
-        if (!item) return;
-        _slashSelIdx = +item.dataset.idx;
-        _updateSlashSelUi();
+
+      /* 왼쪽 패널: mousemove로 그룹 서브메뉴 자동 열기 */
+      _slashLeftEl.addEventListener('mousemove', e => {
+        const row = e.target.closest('.wu-slash-row');
+        if (!row || _slashMode === 'flat') return;
+        const gidx = +row.dataset.gidx;
+        if (gidx === _slashSelIdx && _slashRightEl.style.display !== 'none') return; // 이미 열림
+        _slashSelIdx = gidx;
+        _updateLeftSelUi();
+        const group = SLASH_GROUPS[gidx];
+        if (group && group.children) {
+          _openSubPanel(group, row);
+        } else {
+          _closeSubPanel();
+        }
       });
+
+      /* 오른쪽 패널: mousedown으로 항목 실행 */
+      _slashRightEl.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const row = e.target.closest('.wu-slash-row');
+        if (!row || !_slashSubPanel) return;
+        const idx = +row.dataset.idx;
+        if (_slashSubPanel.children[idx]) _applySlashItem(_slashSubPanel.children[idx]);
+      });
+
+      /* 오른쪽 패널: mouseenter로 선택 하이라이트 */
+      _slashRightEl.addEventListener('mouseenter', e => {
+        const row = e.target.closest('.wu-slash-row');
+        if (!row) return;
+        _slashSubIdx = +row.dataset.idx;
+        _updateRightSelUi();
+      }, true);
+
+      /* 키보드 내비게이션 */
       on(document, 'keydown', e => {
-        if (!_slashActive || !_slashFiltered.length) return;
-        if (e.key === 'ArrowDown') {
-          e.preventDefault(); e.stopPropagation();
-          _slashSelIdx = (_slashSelIdx + 1) % _slashFiltered.length;
-          _updateSlashSelUi();
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault(); e.stopPropagation();
-          _slashSelIdx = (_slashSelIdx - 1 + _slashFiltered.length) % _slashFiltered.length;
-          _updateSlashSelUi();
-        } else if (e.key === 'Enter') {
-          e.preventDefault(); e.stopPropagation();
-          if (_slashFiltered[_slashSelIdx]) _applySlashItem(_slashFiltered[_slashSelIdx]);
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          _hideSlashMenu();
+        if (!_slashActive) return;
+
+        if (_slashMode === 'flat') {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault(); e.stopPropagation();
+            _slashSelIdx = (_slashSelIdx + 1) % _slashFiltered.length;
+            _updateFlatSelUi();
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault(); e.stopPropagation();
+            _slashSelIdx = (_slashSelIdx - 1 + _slashFiltered.length) % _slashFiltered.length;
+            _updateFlatSelUi();
+          } else if (e.key === 'Enter') {
+            e.preventDefault(); e.stopPropagation();
+            if (_slashFiltered[_slashSelIdx]) _applySlashItem(_slashFiltered[_slashSelIdx]);
+          } else if (e.key === 'Escape') {
+            e.preventDefault(); _hideSlashMenu();
+          }
+          return;
+        }
+
+        // 그룹 모드
+        if (_slashFocus === 'left') {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault(); e.stopPropagation();
+            _slashSelIdx = (_slashSelIdx + 1) % SLASH_GROUPS.length;
+            _updateLeftSelUi();
+            const g = SLASH_GROUPS[_slashSelIdx];
+            if (g && g.children) {
+              const rowEl = _slashLeftEl.querySelectorAll('.wu-slash-row')[_slashSelIdx];
+              _openSubPanel(g, rowEl || null);
+            } else {
+              _closeSubPanel();
+            }
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault(); e.stopPropagation();
+            _slashSelIdx = (_slashSelIdx - 1 + SLASH_GROUPS.length) % SLASH_GROUPS.length;
+            _updateLeftSelUi();
+            const g = SLASH_GROUPS[_slashSelIdx];
+            if (g && g.children) {
+              const rowEl = _slashLeftEl.querySelectorAll('.wu-slash-row')[_slashSelIdx];
+              _openSubPanel(g, rowEl || null);
+            } else {
+              _closeSubPanel();
+            }
+          } else if (e.key === 'ArrowRight') {
+            e.preventDefault(); e.stopPropagation();
+            const g = SLASH_GROUPS[_slashSelIdx];
+            if (g && g.children) {
+              if (_slashRightEl.style.display === 'none') {
+                const rowEl = _slashLeftEl.querySelectorAll('.wu-slash-row')[_slashSelIdx];
+                _openSubPanel(g, rowEl || null);
+              }
+              _slashFocus = 'right';
+              _slashSubIdx = 0;
+              _updateRightSelUi();
+            } else if (g) {
+              _applySlashItem(g);
+            }
+          } else if (e.key === 'Enter') {
+            e.preventDefault(); e.stopPropagation();
+            const g = SLASH_GROUPS[_slashSelIdx];
+            if (!g) return;
+            if (g.children) {
+              const rowEl = _slashLeftEl.querySelectorAll('.wu-slash-row')[_slashSelIdx];
+              _openSubPanel(g, rowEl || null);
+              _slashFocus = 'right';
+              _slashSubIdx = 0;
+              _updateRightSelUi();
+            } else {
+              _applySlashItem(g);
+            }
+          } else if (e.key === 'Escape') {
+            e.preventDefault(); _hideSlashMenu();
+          }
+        } else {
+          // _slashFocus === 'right'
+          const children = _slashSubPanel ? _slashSubPanel.children : [];
+          const cols = _slashRightEl.classList.contains('wu-slash-panel--grid') ? 2 : 1;
+          if (e.key === 'ArrowDown') {
+            e.preventDefault(); e.stopPropagation();
+            _slashSubIdx = (_slashSubIdx + cols) % children.length;
+            _updateRightSelUi();
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault(); e.stopPropagation();
+            _slashSubIdx = (_slashSubIdx - cols + children.length) % children.length;
+            _updateRightSelUi();
+          } else if (e.key === 'ArrowRight' && cols === 2) {
+            e.preventDefault(); e.stopPropagation();
+            const next = _slashSubIdx + 1;
+            if (next < children.length) { _slashSubIdx = next; _updateRightSelUi(); }
+          } else if (e.key === 'ArrowLeft') {
+            e.preventDefault(); e.stopPropagation();
+            if (cols === 2 && _slashSubIdx % 2 === 1) {
+              _slashSubIdx -= 1;
+              _updateRightSelUi();
+            } else {
+              _slashFocus = 'left';
+              _slashSubIdx = -1;
+              _updateRightSelUi();
+              _updateLeftSelUi();
+            }
+          } else if (e.key === 'Enter') {
+            e.preventDefault(); e.stopPropagation();
+            if (children[_slashSubIdx]) _applySlashItem(children[_slashSubIdx]);
+          } else if (e.key === 'Escape') {
+            e.preventDefault(); _hideSlashMenu();
+          }
         }
       }, true);
     }
@@ -1841,6 +2230,7 @@
       _linkOverlay.style.display = 'flex';
       setTimeout(() => input.focus(), 30);
     }
+    _promptLinkFn = _promptLink;
 
     function _promptImage() {
       if (!_editor) return;
@@ -1998,6 +2388,9 @@
       _bindToolbarEvents(tbEl);
 
       const pmEl = edEl.querySelector('.ProseMirror');
+      if (pmEl) {
+        _initFootnoteRefEditing(pmEl);
+      }
       if (pmEl && feat.imageUpload && feat.imageUpload.endpoint) {
         _initImageUpload(pmEl);
       }
@@ -2069,6 +2462,79 @@
         : null;
       // @tiptap/extension-link은 markdown.serialize가 없어 tiptap-markdown이 <a href> HTML로
       // 직렬화한다. 이를 [text](href) 마크다운 형식으로 고정해 eid: round-trip을 보장한다.
+      const EditorFootnoteDecorations = Extension && Plugin && PluginKey && Decoration && DecorationSet
+        ? Extension.create({
+            name: 'editorFootnoteDecorations',
+            addProseMirrorPlugins() {
+              const footnoteDefRe = /^\\?\[\^([^\\\]]+)\\?\]:/;
+              const footnoteRefRe = /\\?\[\^([^\\\]\s]+)\\?\]/g;
+              return [
+                new Plugin({
+                  key: new PluginKey('editorFootnoteDecorations'),
+                  props: {
+                    decorations(state) {
+                      const decorations = [];
+                      let dividerAdded = false;
+
+                      state.doc.descendants((node, pos, parent) => {
+                        if (node.type.name === 'paragraph') {
+                          const defMatch = footnoteDefRe.exec(node.textContent || '');
+                          if (defMatch) {
+                            decorations.push(Decoration.node(pos, pos + node.nodeSize, {
+                              'data-wu-footnote-def': 'true',
+                            }));
+                            if (!dividerAdded) {
+                              decorations.push(Decoration.widget(pos, () => {
+                                const divider = document.createElement('div');
+                                divider.className = 'wu-editor-footnote-divider';
+                                divider.setAttribute('contenteditable', 'false');
+                                divider.setAttribute('aria-hidden', 'true');
+                                return divider;
+                              }, {
+                                key: 'wu-editor-footnote-divider',
+                                side: -1,
+                              }));
+                              dividerAdded = true;
+                            }
+
+                            node.descendants((child, relPos) => {
+                              if (!child.isText) return;
+                              const text = child.text || '';
+                              const labelEnd = text.indexOf(':');
+                              if (labelEnd < 0) return;
+                              const abs = pos + 1 + relPos;
+                              decorations.push(Decoration.inline(abs, abs + labelEnd + 1, {
+                                class: 'wu-editor-footnote-label',
+                              }));
+                            });
+                            return false;
+                          }
+                        }
+
+                        if (!node.isText || !parent) return;
+                        if (parent.type.name === 'codeBlock') return;
+                        if (parent.type.name === 'paragraph' && footnoteDefRe.test(parent.textContent || '')) return;
+                        if (node.marks && node.marks.some(mark => mark.type && mark.type.name === 'code')) return;
+
+                        const text = node.text || '';
+                        footnoteRefRe.lastIndex = 0;
+                        let match;
+                        while ((match = footnoteRefRe.exec(text))) {
+                          decorations.push(Decoration.inline(pos + match.index, pos + match.index + match[0].length, {
+                            class: 'wu-editor-footnote-ref',
+                          }));
+                        }
+                      });
+
+                      return DecorationSet.create(state.doc, decorations);
+                    },
+                  },
+                }),
+              ];
+            },
+          })
+        : null;
+
       const LinkMd = Link.extend({
         addStorage() {
           const parent = this.parent?.() ?? {};
@@ -2288,6 +2754,7 @@
         ParagraphMd,
         HighlightMd,
         ...(editableMath && EditorCalloutDecorations ? [EditorCalloutDecorations] : []),
+        ...(editableMath && EditorFootnoteDecorations ? [EditorFootnoteDecorations] : []),
         ...mathExtensions,
         Superscript,
         Table.configure({ resizable: true }),

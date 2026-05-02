@@ -569,38 +569,84 @@
 }
 .lock-banner-refresh:hover { background: rgba(0,0,0,0.05); }
 
-/* ── 슬래시 커맨드 메뉴 ── */
+/* ── 슬래시 커맨드 메뉴 (계층형 그룹 메뉴) ── */
 .wu-slash-menu {
   position: fixed;
+  display: flex;
+  flex-direction: row;
+  z-index: 10002;
+  /* 패널 배경/테두리는 각 패널에서 지정 */
+}
+
+/* 왼쪽·오른쪽 패널 공통 */
+.wu-slash-panel {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 4px;
-  z-index: 10002;
   box-shadow: 0 4px 20px rgba(0,0,0,.18);
-  min-width: 180px;
-  max-height: 280px;
+  min-width: 160px;
+  max-height: 320px;
   overflow-y: auto;
 }
-.wu-slash-item {
+
+.wu-slash-panel--right {
+  position: absolute;
+  min-width: 200px;
+}
+.wu-slash-panel--right.wu-slash-panel--grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-width: 340px;
+}
+
+/* 행 공통 스타일 */
+.wu-slash-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 7px 10px;
   border-radius: 5px;
   cursor: pointer;
   font-size: 0.88rem;
   transition: background 0.08s;
+  white-space: nowrap;
 }
-.wu-slash-item.selected { background: var(--surface-3); }
+.wu-slash-row:hover,
+.wu-slash-row.selected {
+  background: var(--surface-3);
+}
+
+/* 서브메뉴 있는 그룹 행: 오른쪽에 ▶ 표시 */
+.wu-slash-row--has-sub {
+  padding-right: 28px;
+  position: relative;
+}
+.wu-slash-row--has-sub::after {
+  content: '▶';
+  position: absolute;
+  right: 8px;
+  font-size: 0.6rem;
+  color: var(--text-muted, #999);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 .wu-slash-icon {
-  min-width: 32px;
-  text-align: center;
-  font-weight: 600;
-  font-size: 0.82rem;
+  min-width: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-muted, #888);
+  flex-shrink: 0;
 }
-.wu-slash-label { color: var(--text); }
+.wu-slash-icon svg { width: 15px; height: 15px; display: block; }
+.wu-slash-label { color: var(--text); flex: 1; }
+.wu-slash-desc {
+  font-size: 0.76rem;
+  color: var(--text-muted, #888);
+  margin-left: 4px;
+}
 
 /* ── 헤딩 드롭다운 ── */
 .wu-heading-drop {
@@ -705,6 +751,42 @@ sup.wu-fn-ref a:hover { text-decoration: underline; }
 .ProseMirror a:has(sup):hover sup { text-decoration: underline; }
 
 /* ── 하이라이트 스타일 ── */
+/* 편집기 모드 각주 시각 보조 */
+.ProseMirror .wu-editor-footnote-ref {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  border-radius: 4px;
+  padding: 0 3px;
+  font-size: 0.88em;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ProseMirror .wu-editor-footnote-ref:hover { background: rgba(37, 99, 235, 0.16); }
+.ProseMirror p[data-wu-footnote-def="true"] {
+  color: var(--text-2, #4b5563);
+  font-size: 0.9em;
+  margin: 0.35rem 0;
+}
+.ProseMirror .wu-editor-footnote-label {
+  color: #2563eb;
+  font-weight: 600;
+}
+.ProseMirror .wu-editor-footnote-divider {
+  border-top: 1px solid var(--border, #d0d7de);
+  margin: 2rem 0 0.8rem;
+  height: 0;
+  pointer-events: none;
+}
+[data-theme="dark"] .ProseMirror .wu-editor-footnote-ref {
+  color: #93c5fd;
+  background: rgba(96, 165, 250, 0.14);
+  border-color: rgba(147, 197, 253, 0.28);
+}
+[data-theme="dark"] .ProseMirror .wu-editor-footnote-label {
+  color: #93c5fd;
+}
+
 .ProseMirror mark { background: #fff59d; color: inherit; border-radius: 2px; padding: 0 1px; }
 .toastui-editor-contents mark { background: #fff59d; color: inherit; border-radius: 2px; padding: 0 1px; }
 [data-theme="dark"] .ProseMirror mark { background: #7c6e0a; color: #f5e96d; }
