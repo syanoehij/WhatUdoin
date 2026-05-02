@@ -295,6 +295,10 @@
   #ck-viewer.no-check-interaction li.task-list-item {
     cursor: default !important;
   }
+  #ck-viewer li.task-list-item.checked {
+    text-decoration: line-through;
+    color: var(--text-faint, #999);
+  }
 
   /* ── 편집기 ── */
   .ck-editor-wrap {
@@ -1851,6 +1855,34 @@ function initEditor(content) {
 
 function toggleTocInline() { wuInst?.toggleToc(); }
 
+// ── 각주 전처리 (Toast UI Editor용) ───────────────────────
+function _preprocessFootnotes(md) {
+  const defs = {};
+  // tiptap-markdown이 [를 \[로 이스케이프하므로 \[^label\]: 와 [^label]: 모두 매칭
+  const defRe = /^\\?\[\^([^\\\]]+)\\?\]:\s+(.+)$/gm;
+  let m;
+  while ((m = defRe.exec(md)) !== null) defs[m[1]] = m[2];
+  if (!Object.keys(defs).length) return md;
+
+  let result = md.replace(/^\\?\[\^([^\\\]]+)\\?\]:\s+.+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+
+  const labels = [];
+  result = result.replace(/\\?\[\^([^\\\]]+)\\?\]/g, (match, label) => {
+    if (!defs[label]) return match;
+    if (!labels.includes(label)) labels.push(label);
+    const n = labels.indexOf(label) + 1;
+    return `<sup class="wu-fn-ref" id="fnref-${label}"><a href="#fn-${label}">[${n}]</a></sup>`;
+  });
+
+  if (labels.length) {
+    const items = labels.map((label, i) =>
+      `<li id="fn-${label}"><p>${defs[label]} <a href="#fnref-${label}" class="wu-fn-back">↩</a></p></li>`
+    ).join('\n');
+    result += `\n\n<hr />\n<section class="wu-footnotes"><ol>\n${items}\n</ol></section>`;
+  }
+  return result;
+}
+
 // ── 뷰어 렌더링 ───────────────────────────────────────────
 function renderViewer(content) {
   // ck-right-title이 제목을 표시하므로 content 첫 줄 H1은 제거 (기존 데이터 호환)
@@ -1864,11 +1896,25 @@ function renderViewer(content) {
   _ckViewer = toastui.Editor.factory({
     el: container,
     viewer: true,
-    initialValue: displayContent,
+    initialValue: _preprocessFootnotes(displayContent),
     usageStatistics: false,
     customHTMLSanitizer: html => html,
     customHTMLRenderer: {
       ...(window.WUEditor?.renderer || {}),
+      image(node, { origin }) {
+        const result = origin();
+        if (!result || !result.attributes) return result;
+        const alt = result.attributes.alt || '';
+        const pi = alt.lastIndexOf('|');
+        if (pi !== -1) {
+          const w = alt.slice(pi + 1).trim();
+          if (/^\d+$/.test(w)) {
+            result.attributes.style = `width:${w}px;max-width:none`;
+            result.attributes.alt = alt.slice(0, pi).trim();
+          }
+        }
+        return result;
+      },
       item(node, { entering }) {
         if (entering) {
           const attrs = {};
@@ -1886,6 +1932,35 @@ function renderViewer(content) {
   // 잠금/비로그인 시 체크박스 클릭 차단 (시각적 반응 포함)
   container.classList.toggle('no-check-interaction', !CURRENT_USER || _contentLocked || _lockedByOther);
   setTimeout(() => { if (typeof hljs !== 'undefined') container.querySelectorAll('pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); }); }, 150);
+
+  // 이미지 너비 폴백: Obsidian/legacy 포맷에서 너비를 읽어 DOM에 적용
+  setTimeout(() => {
+    const widthMap = {};
+    let m;
+    // Obsidian format: ![alt|NNN](src)
+    const regObs = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    while ((m = regObs.exec(displayContent)) !== null) {
+      const pi = m[1].lastIndexOf('|');
+      if (pi !== -1) {
+        const w = m[1].slice(pi + 1).trim();
+        if (/^\d+$/.test(w)) widthMap[m[2]] = parseInt(w);
+      }
+    }
+    // Legacy HTML format: <img style="width:Npx">
+    const regHtml = /<img[^>]*src="([^"]+)"[^>]*style="[^"]*width\s*:\s*(\d+)px/g;
+    while ((m = regHtml.exec(displayContent)) !== null) {
+      if (!widthMap[m[1]]) widthMap[m[1]] = parseInt(m[2]);
+    }
+    if (!Object.keys(widthMap).length) return;
+    const contentsEl = container.querySelector('.toastui-editor-contents') || container;
+    contentsEl.querySelectorAll('img').forEach(img => {
+      const src = img.getAttribute('src');
+      if (src && widthMap[src] != null) {
+        img.style.setProperty('width', widthMap[src] + 'px', 'important');
+        img.style.setProperty('max-width', 'none', 'important');
+      }
+    });
+  }, 200);
 
   // 뷰어 TOC 자동 동기화 — 본문 DOM 변경(체크박스 토글 등) 시 목차 갱신
   if (_viewerTocObserver) { _viewerTocObserver.disconnect(); _viewerTocObserver = null; }
@@ -1913,7 +1988,10 @@ function _parseLinkedCheckboxes(mdContent) {
   const lines = (mdContent || '').split('\n');
   lines.forEach((line, i) => {
     if (/^[ \t]*[-*+] \[[ xX]?\]/.test(line)) {
-      const m = line.match(/\[[^\]]*\]\(eid:(\d+)\)/);
+      // 마크다운 형식: [text](eid:123) — 정상 저장 데이터
+      let m = line.match(/\[[^\]]*\]\(eid:(\d+)\)/);
+      // HTML 형식: <a href="eid:123"> — 구 Tiptap 직렬화 레거시 데이터
+      if (!m) m = line.match(/href="eid:(\d+)"/);
       if (m) linked[i + 1] = parseInt(m[1]);
     }
   });
