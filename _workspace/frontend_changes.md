@@ -1,82 +1,71 @@
-# 프론트엔드 변경 이력
+# Frontend Changes: TUI Editor → Tiptap 교체
 
-## 2026-04-30 — 간트 차트 버그 2건 수정
+## 변경된 파일 목록
 
-### 수정 파일
-- `templates/project.html`
+| 파일 | 종류 | 주요 변경 내용 |
+|------|------|---------------|
+| `static/lib/tiptap-bundle.min.js` | 신규 (538KB) | rollup으로 빌드한 Tiptap IIFE 번들. 글로벌 `TiptapBundle` 노출 |
+| `static/js/wu-editor.js` | 전면 재작성 | Tiptap 기반으로 전환, 기존 editor-agnostic 코드(자동저장·잠금·TOC 등) 보존 |
+| `static/css/wu-editor.css` | 전면 재작성 | `.toastui-editor-*` → `.ProseMirror`/`.wu-toolbar` 계열 셀렉터로 교체 |
+| `templates/doc_editor.html` | 수정 | `toastui-editor-all.min.js` → `tiptap-bundle.min.js` 교체, CSS 링크 정리 |
+| `templates/check_editor.html` | 수정 | 라이브러리 교체 + 인라인 CSS `.ProseMirror` double-scroll 제거 |
+| `tiptap-entry.js` | 신규 | rollup 진입점. 모든 Tiptap extension 명명 재수출 |
+| `rollup.config.mjs` | 신규 | IIFE 빌드 설정 (`node-resolve`, `commonjs`, `terser`) |
 
----
+## 번들 재빌드 명령
 
-### 버그 1: 칸반 미연결 하위 업무 overdue 표시 제거
+```bash
+npx rollup --config rollup.config.mjs
+```
 
-**변경 위치**: `templates/project.html` 약 1012~1031줄 (`renderEventRow` 내 bar 생성 로직)
+`static/lib/tiptap-bundle.min.js`가 갱신됩니다.
 
-**변경 내용**:
-- `isUnlinked = !ev.kanban_status` 변수 추가: `kanban_status`가 `null`이면 칸반 미연결로 판단
-- `evDone` 계산에 `!isUnlinked` 조건 추가 — 칸반 미연결 일정은 완료 스타일 적용 안 함
-- `evOverdue` IIFE에 `isUnlinked` 단락 조건 추가 — 칸반 미연결이면 overdue 판정 건너뜀
-- 결과: 하위 업무(`parent_event_id` 있음)처럼 `kanban_status: null`인 일정은 기한 초과 빗살·아이콘 없이 일반 바로 표시
+## 주요 구현 사항
 
-**근거**: `database.py:432` — 하위 이벤트 생성 시 `kanban_status: None` 하드코딩. `llm_parser.py:887` — 최상위 schedule은 항상 `"backlog"` 이상의 값으로 초기화.
+### 1. TiptapBundle 글로벌 구조
+rollup이 `TiptapBundle = { Editor, StarterKit, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown }` 형태의 IIFE를 생성합니다. `wu-editor.js`는 `typeof TiptapBundle === 'undefined'` 가드 후 구조분해 접근합니다.
 
----
+### 2. 커스텀 툴바
+Tiptap은 headless이므로 DOM 툴바를 직접 생성합니다 (`_buildToolbar`, `_bindToolbarEvents`). 헤딩 버튼은 H1 → H2 → H3 → 단락을 순환하고, `onSelectionUpdate`/`onTransaction` 콜백에서 `.is-active` 상태를 갱신합니다.
 
-### 버그 2: 주말(토/일) 간트 열 폭 축소 (평일의 55%)
+### 3. Markdown 입출력
+`tiptap-markdown` extension (`Markdown.configure({ html: true, tightLists: true })`)을 사용합니다.
+- 읽기: `editor.storage.markdown.getMarkdown()`
+- 쓰기: `editor.commands.setContent(md)` — markdown 파싱 포함
 
-**변경 위치**: `templates/project.html` — 헬퍼 함수, `render()`, 관련 이벤트 핸들러
+### 4. eid: 링크 round-trip
+`Link.configure({ openOnClick: false, autolink: true, validate: () => true })` 적용으로 비표준 프로토콜(`eid:123`) 링크를 허용합니다. wu-editor.css에 `pointer-events: none` 스타일이 있어 클릭 무효화도 동작합니다.
 
-#### 추가된 헬퍼 (약 525~565줄)
+### 5. 이미지 업로드
+TUI의 `addImageBlobHook` 대신 `.ProseMirror` 요소의 `paste`/`drop` 이벤트 리스너로 구현합니다. 이미지 파일을 감지하면 `feat.imageUpload.endpoint`로 FormData POST 후 `editor.chain().focus().setImage({ src: url }).run()` 삽입합니다.
 
-| 이름 | 역할 |
+### 6. 이미지 리사이즈
+`tiptap-markdown`의 `html: true` 설정으로 `<img style="width:Npx">` raw HTML을 마크다운에 포함·복원합니다. `_injectImgStyles(md)`가 저장 전 주입하고, `_parseInitialWidths(md)`가 로드 시 `_imgWidthMap`을 복원합니다.
+
+### 7. 하위 호환
+- `global.WUEditor = { create, renderer: undefined }`: `home.html`의 `customHTMLRenderer: window.WUEditor?.renderer` 참조를 위한 스텁. `undefined`를 넘기면 TUI가 기본 렌더러를 사용하므로 안전합니다.
+- 뷰어 모드: `editable: false`로 생성. `wu-editor-wrap`이 없으므로 `.wu-editor-wrap .ProseMirror { min-height: 200px }` 규칙이 적용되지 않습니다.
+
+## CSS 변경 요점
+
+| 이전 | 이후 |
 |------|------|
-| `WEEKEND_RATIO = 0.55` | 주말 열 폭 비율 상수 |
-| `getDayPx()` | 평일 기준 1일 폭 반환. 가중 합계(`weekday*1 + weekend*0.55`)로 컨테이너 폭 배분 |
-| `dayWidthAt(i)` | i번째 날의 실제 픽셀 폭 (주말이면 `dayPx * 0.55`) |
-| `_buildDayLeftCache(dayPx)` | render() 진입 시 누적 left 오프셋 배열 초기화 |
-| `dayLeft(i)` | i번째 날의 누적 left 픽셀 오프셋 (prefix sum 조회) |
-| `calcTodayLineLeft(todayOff)` | `dayPx` 파라미터 제거 — `dayLeft()` + `dayWidthAt()` 사용으로 변경 |
+| `.toastui-editor-defaultUI` | `.wu-editor-wrap` |
+| `.toastui-editor-main` | `.wu-editor-content` |
+| `.toastui-editor-ww-container` | `.ProseMirror` |
+| `.toastui-editor-md-container` | (없음, WYSIWYG only) |
 
-#### render() 진입부 (약 715~719줄)
-- `_buildDayLeftCache(dayPx)` 호출 추가 (주말 폭 캐시 초기화)
-- `totalW = dayLeft(daysShown)` — 균등 폭 대신 누적 폭 사용
+스크롤은 `.wu-editor-content` 하나만 담당합니다. `.ProseMirror`에는 `overflow-y` 없음.
 
-#### 월 레이블 루프 (약 739~756줄)
-- `mStart`, `mStartIdx` 분리 추적 — `dayLeft(i)` 픽셀과 인덱스를 별도 변수로 관리
-- `addMonthLabel` 호출 시 `mStartIdx`를 day index로 전달 (이전 `Math.round(mStart/dayPx)` 오차 제거)
+## eid round-trip 수동 검증 방법
 
-#### 주차 레이블 루프 (약 761~778줄)
-- `wStart`, `wStartIdx` 분리 추적 — 월 레이블과 동일한 방식
-- `addWeekLabel` 호출 시 정확한 day index 전달
+1. `/check/<id>/edit` 접속
+2. 에디터에 `[x] 태스크 제목 [🔗](eid:123)` 입력 후 저장
+3. 재접속 후 에디터 내용이 동일 형태로 복원되는지 확인
+4. 에디터 내 `eid:` 링크는 `pointer-events: none`으로 클릭 불가 (정상)
 
-#### 일(day) 레이블 루프 — 14~60일 뷰 (약 781~800줄)
-- `el.style.cssText` 에서 `left:${i * dayPx}px;width:${dayPx}px` → `left:${dayLeft(i)}px;width:${cellW}px`
-- `isMon && dayPx >= 28` 조건을 `isMon && cellW >= 28`로 수정
+## 알려진 제한 사항
 
-#### 일(day) 레이블 루프 — 7~13일 뷰 (약 802~812줄)
-- 동일하게 `dayLeft(i)`, `dayWidthAt(i)` 사용
-
-#### 프로젝트 스팬 바 (약 890줄)
-- `left:${s * dayPx}px;width:${(e-s)*dayPx}px` → `left:${dayLeft(s)}px;width:${dayLeft(e)-dayLeft(s)}px`
-
-#### 이벤트 바 위치 계산 (약 1008~1009줄)
-- `barW = (clampedE - clampedS) * dayPx - 3` → `dayLeft(clampedE) - dayLeft(clampedS) - 3`
-- `barL = clampedS * dayPx + 1` → `dayLeft(clampedS) + 1`
-
-#### 오늘 선 (약 1073줄, 1084줄)
-- `calcTodayLineLeft(todayOff, dayPx)` → `calcTodayLineLeft(todayOff)` (dayPx 파라미터 제거)
-
-#### 휠 스크롤 (약 1102~1110줄)
-- `dayPx` 대신 `avgPx = tl.clientWidth / daysShown` (평균 폭) 사용 — 휠은 거친 조작이므로 평균으로 충분
-
-#### 드래그 이동 (약 1213~1216줄)
-- `getDayPx()` 대신 `avgPx2 = tl.clientWidth / daysShown` 사용 — 드래그 픽셀→일수 변환에 평균 폭 사용
-
-#### scrollToToday (약 1293줄)
-- `daysBetween(viewStart, today()) * getDayPx()` → `dayLeft(daysBetween(viewStart, today()))` 사용
-
----
-
-### UI 동작 설명
-
-- **버그 1**: 하위 업무(칸반 카드 없음)는 기간이 지나도 빨간 빗살·⚠ 아이콘 없이 일반 색상 바로 표시됨
-- **버그 2**: 주말 열이 평일 대비 55% 폭으로 표시되어 달력처럼 주말이 시각적으로 좁게 렌더링됨. 헤더·바·오늘선이 모두 동일한 누적 오프셋을 사용하므로 정렬이 맞음
+- **md ↔ WYSIWYG 모드 전환 없음**: Tiptap은 단일 WYSIWYG 모드만 지원. 구 TUI의 마크다운/WYSIWYG 탭 전환은 제거됨
+- **sanitizerOff 상태**: `html: true`로 raw HTML을 허용함. 내부 인트라넷 용도이므로 XSS 위험 낮음
+- **테이블 셀 내 이미지 리사이즈**: 테이블 셀 안의 이미지는 클릭 이벤트에서 `e.target.closest('td, th')` 가드로 리사이즈 툴바를 표시하지 않음

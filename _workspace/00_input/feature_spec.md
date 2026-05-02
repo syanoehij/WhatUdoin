@@ -1,35 +1,85 @@
-# 버그 수정 스펙
+# Feature Spec: TUI Editor → Tiptap 교체
 
-## 분류: 프론트엔드 버그 수정 × 2건
-## 실행 모드: 서브 에이전트 (frontend-dev)
+## 작업 분류
+- **타입:** UI 개선 (프론트엔드 전용, 백엔드 변경 없음)
+- **담당:** frontend-dev 단독
 
----
+## 목표
+TUI Editor(toastui-editor-all.min.js)를 Tiptap으로 교체하여 테이블 셀 드래그 선택 문제(A·B) 해결.
 
-## 버그 1: 칸반 미반영 하위 업무의 overdue 표시 제거
+## 핵심 제약
+1. **인트라넷 환경** — CDN 사용 불가. 모든 JS는 `static/lib/`에서 로컬 서빙
+2. **Tiptap은 단일 파일 UMD 번들 미제공** → rollup으로 직접 빌드하여 `static/lib/tiptap-bundle.min.js` 생성
+3. **Markdown 입출력 포맷 보존 필수** — DB 스키마 변경 없음, 기존 문서 호환
+4. **eid 링크 round-trip 필수** — `[x] 제목 [🔗](eid:123)` 형태가 저장/불러오기 후 동일해야 함
 
-### 현상
-간트 차트의 하위 업무(sub-task) 일정 중 칸반 카드가 없는 일정(칸반 미반영)은
-실제 진행 상태를 알 수 없음에도 무조건 기간 초과(overdue, 빨간색 등) 스타일로 표시됨.
+## 변경 파일
+| 파일 | 변경 내용 |
+|------|----------|
+| `static/lib/tiptap-bundle.min.js` | 신규 생성 (rollup 빌드) |
+| `static/lib/tiptap-bundle.min.css` | 신규 생성 (Tiptap 스타일) |
+| `static/js/wu-editor.js` | Tiptap API로 전면 재작성 (711줄) |
+| `static/css/wu-editor.css` | Tiptap용 스타일 업데이트 |
+| `templates/doc_editor.html` | 라이브러리 로드 태그 + 초기화 코드 교체 |
+| `templates/check_editor.html` | 라이브러리 로드 태그 + 초기화 코드 교체 |
 
-### 요구사항
-- 칸반 카드와 연결되지 않은 하위 업무 일정은 overdue 판정에서 제외
-- 칸반 미반영 = 진행 상태를 칸반으로 추적하지 않는 일정 → overdue/완료 스타일 모두 미적용
-- 칸반 연결 여부 판단 기준: 기존 코드에서 사용하는 필드(kanban_card_id, is_kanban 등) 확인 필요
+## 번들 빌드 계획
+npm으로 Tiptap 패키지 설치 후 rollup으로 단일 파일 생성:
 
----
+```bash
+npm install @tiptap/core @tiptap/starter-kit \
+  @tiptap/extension-table @tiptap/extension-table-row \
+  @tiptap/extension-table-header @tiptap/extension-table-cell \
+  @tiptap/extension-task-list @tiptap/extension-task-item \
+  @tiptap/extension-link @tiptap/extension-image \
+  tiptap-markdown
 
-## 버그 2: 주말(토/일) 간트 바 폭 축소
+npm install --save-dev rollup @rollup/plugin-node-resolve \
+  @rollup/plugin-commonjs @rollup/plugin-terser
+```
 
-### 현상
-간트 차트에서 주말(토요일·일요일)에 걸친 일정 바가 평일과 동일한 폭으로 표시됨.
-주말은 미출근일이므로 일정 바가 평일과 같은 폭이면 "일을 안 한 것처럼 둥 떠 있어 보임".
+## 유지해야 할 기존 기능 (wu-editor.js)
+| 기능 | 현재 구현 | Tiptap 대응 |
+|------|----------|-------------|
+| Markdown 읽기·쓰기 | `editor.getMarkdown()` / `editor.setMarkdown()` | `tiptap-markdown` extension |
+| 자동 저장 | `_scheduleAutosave` | 그대로 재사용 (editor-agnostic) |
+| Edit lock + heartbeat | `_acquireLock` / `_lockHeartbeat` | 그대로 재사용 |
+| Idle timeout | `_scheduleIdleTimer` | 그대로 재사용 |
+| 이탈 확인 모달 | `_initLeaveConfirm` | 그대로 재사용 |
+| TOC | `_buildToc` / `_tocJumpTo` | DOM 기반, 그대로 재사용 |
+| Dirty 상태 | `_setDirty` | Tiptap `onUpdate` 훅 |
+| Ctrl+S | keydown 이벤트 | 그대로 재사용 |
+| 이미지 업로드 | `addImageBlobHook` | Tiptap Image extension `uploadFile` |
+| 이미지 리사이즈 | `.toastui-editor-ww-container img` | Tiptap `.ProseMirror img` 로 변경 |
+| Autocomplete | `_showAc` | 그대로 재사용 |
+| Syntax highlight | `hljs.highlightElement` | 그대로 재사용 |
+| Viewer 모드 | `toastui.Editor.factory({ viewer: true })` | Tiptap `editable: false` |
 
-### 요구사항
-- 주말에 해당하는 날의 간트 칸(cell) 폭을 평일보다 약간 작게 표시
-- 또는 주말 구간에 걸친 일정 바(bar)의 주말 부분 폭을 줄여 시각적으로 구분
-- 구현 방식은 FullCalendar 간트(resourceTimeline) 설정 또는 CSS로 처리
+## WUEditor 공개 API (유지 필요)
+```javascript
+wuInst.editor        // 내부 Tiptap Editor 인스턴스
+wuInst.dirty         // 수정 여부
+wuInst.cooldown      // 저장 쿨다운 중인지
+wuInst.setDirty(v)
+wuInst.save()
+wuInst.afterSave()
+wuInst.getMarkdown()
+wuInst.setContent(md)
+wuInst.toggleToc()
+wuInst.releaseLock()
+wuInst.destroy()
+wuInst.ac            // autocomplete 헬퍼
+```
 
----
+## eid round-trip 검증 항목
+- `[x] 제목 [🔗](eid:123)` → Tiptap 로드 → getMarkdown() → 동일 형태 확인
+- `[ ] 미완료 [🔗](eid:456)` 동일 검증
+- 일반 링크 `[텍스트](https://...)` 보존 확인
+- 테이블 파이프 형식 `| col | col |` 보존 확인
 
-## 변경 예상 파일
-- `templates/project.html` (간트 관련 JS/CSS)
+## 완료 기준
+1. `static/lib/tiptap-bundle.min.js` 파일 존재
+2. `wu-editor.js`가 Tiptap API만 사용 (toastui 참조 없음)
+3. 기존 WUEditor 공개 API 100% 동작
+4. eid round-trip 수동 확인 가능
+5. 기존 doc_editor, check_editor 페이지 정상 로드
