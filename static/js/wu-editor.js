@@ -66,30 +66,35 @@
 
   /* ── 툴바 정의 ──────────────────────────────────── */
   const TOOLBAR_DEFS = [
-    { group: ['heading', 'bold', 'italic', 'strike', 'highlight'] },
+    { group: ['heading', 'bold', 'italic', 'strike', 'highlight', 'inlinemath'] },
     { group: ['hr', 'quote'] },
     { group: ['ul', 'ol', 'task'] },
     { group: ['table', 'link', 'image'] },
-    { group: ['code', 'codeblock'] },
+    { group: ['code', 'codeblock', 'math'] },
   ];
 
   const TOOLBAR_LABELS = {
-    heading:   { icon: 'H',   title: '제목' },
-    bold:      { icon: '<b>B</b>', title: '굵게' },
-    italic:    { icon: '<i>I</i>', title: '기울임' },
-    strike:    { icon: '<s>S</s>', title: '취소선' },
-    highlight: { icon: '<mark>H</mark>', title: '하이라이트 (==text==)' },
-    hr:        { icon: '—',   title: '구분선' },
-    quote:     { icon: '❝',   title: '인용' },
-    ul:        { icon: '• —', title: '목록' },
-    ol:        { icon: '1.',  title: '번호 목록' },
-    task:      { icon: '☑',  title: '할일 목록' },
-    table:     { icon: '⊞',  title: '표 삽입' },
-    link:      { icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>', title: '링크' },
-    image:     { icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>', title: '이미지' },
-    code:      { icon: '`',   title: '인라인 코드' },
-    codeblock: { icon: '{ }', title: '코드 블록' },
+    heading:    { icon: 'H',   title: '제목' },
+    bold:       { icon: '<b>B</b>', title: '굵게' },
+    italic:     { icon: '<i>I</i>', title: '기울임' },
+    strike:     { icon: '<s>S</s>', title: '취소선' },
+    highlight:  { icon: '<mark>H</mark>', title: '하이라이트 (==text==)' },
+    inlinemath: { icon: '<i>∫</i>', title: '인라인 수식 (선택 영역을 $...$로 변환)' },
+    hr:         { icon: '—',   title: '구분선' },
+    quote:      { icon: '❝',   title: '인용' },
+    ul:         { icon: '• —', title: '목록' },
+    ol:         { icon: '1.',  title: '번호 목록' },
+    task:       { icon: '☑',  title: '할일 목록' },
+    table:      { icon: '⊞',  title: '표 삽입' },
+    link:       { icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>', title: '링크' },
+    image:      { icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>', title: '이미지' },
+    code:       { icon: '`',   title: '인라인 코드' },
+    codeblock:  { icon: '{ }', title: '코드 블록' },
+    math:       { icon: '∑',   title: '수식 블록' },
   };
+
+  /* 슬래시 커맨드의 math 항목이 create() 스코프 내 _showMathModal을 호출하기 위한 참조 */
+  let _mathSlashCmdFn = null;
 
   /* ── 슬래시 커맨드 항목 ─────────────────────────── */
   const SLASH_ITEMS = [
@@ -119,6 +124,22 @@
             return true;
           })
           .run();
+      },
+    },
+    { id: 'inlinemath', label: '인라인 수식', icon: '<i>∫</i>', hint: 'inline math latex katex 인라인 수식',
+      cmd: ed => {
+        const pmSel = ed.state.selection;
+        if (pmSel.empty) {
+          ed.chain().focus().insertContent({ type: 'inlineMath', attrs: { latex: 'x' } }).run();
+        } else {
+          const text = ed.state.doc.textBetween(pmSel.from, pmSel.to, '');
+          ed.chain().focus().deleteSelection().insertContent({ type: 'inlineMath', attrs: { latex: text } }).run();
+        }
+      },
+    },
+    { id: 'math', label: '수식 블록', icon: '∑', hint: 'math latex katex 수식 블록 block formula equation',
+      cmd: ed => {
+        if (_mathSlashCmdFn) _mathSlashCmdFn(ed);
       },
     },
   ];
@@ -353,6 +374,119 @@
         </div>`;
       document.body.appendChild(_linkOverlay);
     }
+
+    /* 수식 입력 모달 동적 생성 */
+    let _mathModal = null;
+    let _mathModalCallback = null;
+    let _mathCurrentAlign = 'center';
+    if (opts.canEdit !== false) {
+      _mathModal = document.createElement('div');
+      _mathModal.className = 'wu-leave-overlay wu-math-modal-overlay';
+      _mathModal.style.display = 'none';
+      _mathModal.innerHTML = `
+        <div class="wu-leave-box wu-math-modal-box">
+          <h3 class="wu-math-modal-title">수식 입력</h3>
+          <div class="wu-math-modal-body">
+            <label class="wu-math-modal-label">LaTeX</label>
+            <input id="wu-math-input" type="text" class="wu-math-modal-input" placeholder="예: E=mc^2, \\sum_{i=0}^n i^2" autocomplete="off" spellcheck="false">
+            <label class="wu-math-modal-label">정렬</label>
+            <div class="wu-math-align-row">
+              <button class="wu-math-align-btn active" data-align="left">◀ 왼쪽</button>
+              <button class="wu-math-align-btn" data-align="center">■ 가운데</button>
+              <button class="wu-math-align-btn" data-align="right">▶ 오른쪽</button>
+            </div>
+            <label class="wu-math-modal-label">미리보기</label>
+            <div id="wu-math-preview" class="wu-math-modal-preview"></div>
+          </div>
+          <div class="modal-actions">
+            <button id="wu-math-cancel" class="btn btn-sm">취소</button>
+            <button id="wu-math-confirm" class="btn btn-sm btn-primary">삽입</button>
+          </div>
+        </div>`;
+      document.body.appendChild(_mathModal);
+
+      const _mathInput   = _mathModal.querySelector('#wu-math-input');
+      const _mathPreview = _mathModal.querySelector('#wu-math-preview');
+      const _mathConfirm = _mathModal.querySelector('#wu-math-confirm');
+      const _mathCancel  = _mathModal.querySelector('#wu-math-cancel');
+      const _mathAlignBtns = Array.from(_mathModal.querySelectorAll('.wu-math-align-btn'));
+
+      _mathAlignBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          _mathCurrentAlign = btn.dataset.align;
+          _mathAlignBtns.forEach(b => b.classList.toggle('active', b === btn));
+          _mathPreview.dataset.align = _mathCurrentAlign;
+        });
+      });
+
+      function _renderMathPreview() {
+        const val = _mathInput.value.trim();
+        if (!val) { _mathPreview.textContent = ''; return; }
+        const _katex = window.TiptapBundle && window.TiptapBundle.katex;
+        if (!_katex) { _mathPreview.textContent = val; return; }
+        try {
+          _katex.render(val, _mathPreview, { throwOnError: false, displayMode: true });
+          _mathPreview.classList.remove('wu-math-preview-error');
+        } catch (e) {
+          _mathPreview.textContent = e.message;
+          _mathPreview.classList.add('wu-math-preview-error');
+        }
+      }
+
+      _mathInput.addEventListener('input', _renderMathPreview);
+
+      function _closeMathModal() {
+        _mathModal.style.display = 'none';
+        _mathModalCallback = null;
+      }
+
+      _mathCancel.addEventListener('click', _closeMathModal);
+      _mathConfirm.addEventListener('click', () => {
+        const val = _mathInput.value.trim();
+        if (val && _mathModalCallback) _mathModalCallback(val, _mathCurrentAlign);
+        _closeMathModal();
+      });
+      _mathModal.addEventListener('click', e => {
+        if (e.target === _mathModal) _closeMathModal();
+      });
+      _mathInput.addEventListener('keydown', e => {
+        if (e.key === 'Escape') _closeMathModal();
+        if (e.key === 'Enter') { e.preventDefault(); _mathConfirm.click(); }
+      });
+    }
+
+    function _showMathModal(initialLatex, confirmLabel, initialAlign, onConfirm) {
+      if (!_mathModal) {
+        const latex = window.prompt('LaTeX 수식:', initialLatex || '') || '';
+        if (latex) onConfirm(latex, initialAlign || 'center');
+        return;
+      }
+      const _mathInput   = _mathModal.querySelector('#wu-math-input');
+      const _mathPreview = _mathModal.querySelector('#wu-math-preview');
+      const _mathConfirm = _mathModal.querySelector('#wu-math-confirm');
+      const _mathAlignBtns = Array.from(_mathModal.querySelectorAll('.wu-math-align-btn'));
+
+      // 정렬 초기화
+      _mathCurrentAlign = initialAlign || 'center';
+      _mathAlignBtns.forEach(b => b.classList.toggle('active', b.dataset.align === _mathCurrentAlign));
+
+      _mathInput.value = initialLatex || '';
+      _mathConfirm.textContent = confirmLabel || '삽입';
+      _mathPreview.textContent = '';
+      if (initialLatex) {
+        const _katex = window.TiptapBundle && window.TiptapBundle.katex;
+        if (_katex) try { _katex.render(initialLatex, _mathPreview, { throwOnError: false, displayMode: true }); } catch (_) {}
+      }
+      _mathModalCallback = onConfirm;
+      _mathModal.style.display = 'flex';
+      setTimeout(() => _mathInput.focus(), 30);
+    }
+
+    _mathSlashCmdFn = ed => {
+      _showMathModal('', '삽입', 'center', (latex, align) => {
+        ed.chain().focus().insertBlockMath({ latex, align }).run();
+      });
+    };
 
     /* 슬래시 커맨드 메뉴 동적 생성 */
     let _slashMenuEl = null;
@@ -1280,6 +1414,21 @@
           case 'image':     _promptImage(); break;
           case 'code':      chain.toggleCode().run(); break;
           case 'codeblock': chain.toggleCodeBlock().run(); break;
+          case 'inlinemath': {
+            const pmSel = _editor.state.selection;
+            if (pmSel.empty) {
+              _editor.chain().focus().insertContent({ type: 'inlineMath', attrs: { latex: 'x' } }).run();
+            } else {
+              const text = _editor.state.doc.textBetween(pmSel.from, pmSel.to, '');
+              _editor.chain().focus().deleteSelection().insertContent({ type: 'inlineMath', attrs: { latex: text } }).run();
+            }
+            return;
+          }
+          case 'math':
+            _showMathModal('', '삽입', 'center', (latex, align) => {
+              _editor.chain().focus().insertBlockMath({ latex, align }).run();
+            });
+            return;
         }
         _updateToolbarState(tbEl);
       });
@@ -1430,6 +1579,11 @@
         Highlight,
         markdownItMark,
         Superscript,
+        InlineMath,
+        BlockMath,
+        markdownItMath,
+        InputRule,
+        katex,
       } = TiptapBundle;
 
       const canEdit = !!opts.canEdit;
@@ -1438,7 +1592,7 @@
         /* 뷰어 모드 — 에디터 영역에 바로 렌더 */
         _editor = new Editor({
           element: containerEl,
-          extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript }),
+          extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, editableMath: false }),
           content: _preprocessViewerFootnotes(opts.initialMarkdown || ''),
           editable: false,
           injectCSS: false,
@@ -1464,7 +1618,7 @@
 
       _editor = new Editor({
         element: edEl,
-        extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark }),
+        extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, InlineMath, BlockMath, markdownItMath, InputRule, editableMath: true }),
         content: opts.initialMarkdown || '',
         editable: true,
         injectCSS: false,
@@ -1513,7 +1667,7 @@
       setTimeout(_enforceH1Title, 0);
     }
 
-    function _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript }) {
+    function _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, editableMath }) {
       // @tiptap/extension-link은 markdown.serialize가 없어 tiptap-markdown이 <a href> HTML로
       // 직렬화한다. 이를 [text](href) 마크다운 형식으로 고정해 eid: round-trip을 보장한다.
       const LinkMd = Link.extend({
@@ -1588,11 +1742,135 @@
         },
       });
 
+      const InlineMathMd = InlineMath && InlineMath.extend({
+        addInputRules() {
+          // Obsidian 스타일: $content$ (단일 달러, 공백 없이 시작·끝)
+          return [new InputRule({
+            find: /(?<!\$)\$([^\s$][^$\n]*?[^\s$]|[^\s$])\$(?!\$)/,
+            handler: ({ state, range, match }) => {
+              const { tr } = state;
+              tr.replaceWith(range.from, range.to, this.type.create({ latex: match[1] }));
+            },
+          })];
+        },
+        addStorage() {
+          return {
+            markdown: {
+              serialize(state, node) {
+                state.write('$' + (node.attrs.latex || '') + '$');
+              },
+              parse: { setup(md) { if (markdownItMath) md.use(markdownItMath); } },
+            },
+          };
+        },
+      });
+
+      const BlockMathMd = BlockMath && BlockMath.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            align: {
+              default: 'center',
+              parseHTML: el => el.getAttribute('data-align') || 'center',
+              renderHTML: attrs => ({ 'data-align': attrs.align || 'center' }),
+            },
+          };
+        },
+        addNodeView() {
+          const parentView = this.parent?.();
+          return (props) => {
+            const view = parentView(props);
+            // data-align을 wrapper DOM에 반영
+            function _applyAlign() {
+              const align = props.node.attrs.align || 'center';
+              view.dom.setAttribute('data-align', align);
+            }
+            _applyAlign();
+            const origUpdate = view.update;
+            view.update = (node) => {
+              const result = origUpdate ? origUpdate(node) : false;
+              if (node.attrs.align !== props.node.attrs.align) {
+                view.dom.setAttribute('data-align', node.attrs.align || 'center');
+              }
+              return result;
+            };
+            return view;
+          };
+        },
+        addCommands() {
+          return {
+            ...this.parent?.(),
+            insertBlockMath: (options) => ({ commands, editor }) => {
+              const { latex, align, pos } = options;
+              if (!latex) return false;
+              return commands.insertContentAt(pos != null ? pos : editor.state.selection.from, {
+                type: 'blockMath',
+                attrs: { latex, align: align || 'center' },
+              });
+            },
+            updateBlockMath: (options) => ({ editor, tr }) => {
+              const { latex, align, pos } = options;
+              let nodePos = pos != null ? pos : editor.state.selection.$from.pos;
+              const node = editor.state.doc.nodeAt(nodePos);
+              if (!node || node.type.name !== 'blockMath') return false;
+              tr.setNodeMarkup(nodePos, undefined, { ...node.attrs, latex: latex ?? node.attrs.latex, align: align ?? node.attrs.align });
+              return true;
+            },
+          };
+        },
+        addInputRules() {
+          // $$ content $$ 한 줄짜리 블록 수식 → 단일 줄 입력 지원
+          return [new InputRule({
+            find: /^\$\$([^$\n]+)\$\$$/,
+            handler: ({ state, range, match }) => {
+              const { tr } = state;
+              tr.replaceWith(range.from, range.to, this.type.create({ latex: match[1].trim() }));
+            },
+          })];
+        },
+        addStorage() {
+          return {
+            markdown: {
+              serialize(state, node) {
+                const latex = (node.attrs.latex || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+                const align = node.attrs.align || 'center';
+                if (align !== 'center') {
+                  // 비중앙 정렬은 HTML로 저장해야 재로드 시 data-align이 복원됨
+                  state.write(`<div data-type="block-math" data-align="${align}" data-latex="${latex}"></div>`);
+                } else {
+                  state.write('$$\n' + (node.attrs.latex || '') + '\n$$');
+                }
+                state.closeBlock(node);
+              },
+              parse: {},
+            },
+          };
+        },
+      });
+
+      function _mathOnClick(type) {
+        return editableMath ? function(node, pos) {
+          const curLatex = node.attrs.latex || '';
+          const curAlign = node.attrs.align || 'center';
+          _showMathModal(curLatex, '수정', curAlign, (nextLatex, nextAlign) => {
+            if (nextLatex !== curLatex || nextAlign !== curAlign) {
+              _editor.commands['update' + type + 'Math']({ latex: nextLatex, align: nextAlign, pos });
+            }
+          });
+        } : undefined;
+      }
+
+      const mathExtensions = (InlineMathMd && BlockMathMd)
+        ? [InlineMathMd.configure({ katexOptions: { throwOnError: false }, onClick: _mathOnClick('Inline') }),
+           BlockMathMd.configure({ katexOptions: { throwOnError: false }, onClick: _mathOnClick('Block') })]
+        : [];
+
       return [
         StarterKit.configure({ link: false, paragraph: false, codeBlock: false }),
         CodeBlockLowlight.configure({ lowlight, defaultLanguage: null }),
         ParagraphMd,
         HighlightMd,
+        ...mathExtensions,
         Superscript,
         Table.configure({ resizable: true }),
         TableRow,

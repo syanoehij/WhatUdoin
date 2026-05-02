@@ -652,3 +652,51 @@ sup.wu-fn-ref a:hover { text-decoration: underline; }
 .toastui-editor-contents mark { background: #fff59d; color: inherit; border-radius: 2px; padding: 0 1px; }
 [data-theme="dark"] .ProseMirror mark { background: #7c6e0a; color: #f5e96d; }
 [data-theme="dark"] .toastui-editor-contents mark { background: #7c6e0a; color: #f5e96d; }
+
+/* ── 수식 입력 모달 ── */
+.wu-math-modal-box { max-width: 520px; width: 92%; }
+.wu-math-modal-title { margin: 0 0 14px; font-size: 1rem; font-weight: 600; }
+.wu-math-modal-body { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.wu-math-modal-label { font-size: 0.78rem; color: var(--text-2, #666); font-weight: 500; margin-bottom: 2px; }
+.wu-math-modal-input {
+  width: 100%; box-sizing: border-box;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--surface); color: var(--text);
+  font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.9rem;
+  outline: none;
+}
+.wu-math-modal-input:focus { border-color: var(--primary, #4c6ef5); }
+.wu-math-align-row { display: flex; gap: 6px; }
+.wu-math-align-btn {
+  flex: 1; padding: 5px 0; font-size: 0.82rem; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--surface); color: var(--text-2, #666);
+  transition: background 0.15s, color 0.15s;
+}
+.wu-math-align-btn.active {
+  background: var(--primary, #4c6ef5); color: #fff; border-color: var(--primary, #4c6ef5);
+}
+.wu-math-align-btn:hover:not(.active) { background: var(--surface-2, #f0f0f0); }
+.wu-math-modal-preview {
+  min-height: 52px; padding: 10px 12px;
+  background: var(--surface-2, #f8f8f8); border: 1px solid var(--border);
+  border-radius: 5px; overflow-x: auto;
+}
+.wu-math-modal-preview[data-align="left"]   { text-align: left; }
+.wu-math-modal-preview[data-align="center"] { text-align: center; }
+.wu-math-modal-preview[data-align="right"]  { text-align: right; }
+.wu-math-modal-preview:not([data-align])    { text-align: center; }
+.wu-math-preview-error { color: #e03131; font-size: 0.8em; text-align: left; }
+[data-theme="dark"] .wu-math-modal-preview { background: var(--surface-2, #1e1e1e); }
+
+/* ── 수식(KaTeX) 스타일 ── */
+.tiptap-mathematics-render { cursor: default; user-select: none; }
+.tiptap-mathematics-render--editable { cursor: pointer; }
+.tiptap-mathematics-render--editable:hover { outline: 2px dashed var(--primary, #4c6ef5); border-radius: 3px; }
+.block-math-error, .inline-math-error { color: #e03131; font-family: monospace; font-size: 0.85em; }
+.ProseMirror .tiptap-mathematics-render[data-type="block-math"] {
+  display: block; padding: 0.6em 0; overflow-x: auto; text-align: center;
+}
+.ProseMirror .tiptap-mathematics-render[data-type="block-math"][data-align="left"]  { text-align: left; }
+.ProseMirror .tiptap-mathematics-render[data-type="block-math"][data-align="right"] { text-align: right; }
+[data-theme="dark"] .katex { color: var(--text, #e0e0e0); }

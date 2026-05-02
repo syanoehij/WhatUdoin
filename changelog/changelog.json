@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-05-02",
+      "phase": "35차 5단계",
+      "phase_class": "phase-5",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — LaTeX 수식 블록 &amp; 인라인 수식 지원 (Obsidian 스타일)",
+          "detail_html": "<ul><li><code>@tiptap/extension-mathematics</code> + <code>katex</code> 연동으로 LaTeX 수식 렌더링 — <code>markdown-it-texmath</code> 플러그인 기반 <code>$...$</code>(인라인) / <code>$$...$$</code>(블록) 마크다운 파싱 &amp; 라운드트립 보장</li><li><strong>수식 블록</strong>: 툴바 <code>∑</code> 버튼 + <code>/수식 블록</code> 슬래시 커맨드로 삽입; 좌·중·우 정렬 속성 지원 (center는 <code>$$...$$</code>로 직렬화, non-center는 HTML 속성 보존)</li><li><strong>인라인 수식</strong>: 툴바 <code>∫</code> 버튼으로 삽입 — 텍스트 선택 영역이 있으면 해당 텍스트를 <code>$...$</code> 인라인 수식으로 변환, 선택 없으면 <code>$x$</code> 기본 수식 삽입; <code>/인라인 수식</code> 슬래시 커맨드도 동일하게 동작</li><li><strong>수식 입력 모달</strong>: 브라우저 기본 <code>prompt()</code> 대신 커스텀 모달로 교체 — KaTeX 실시간 미리보기, 정렬 선택 버튼(좌·중·우) 포함; 수식 노드 클릭 시 기존 값·정렬 유지하며 편집 모달 재오픈</li><li><code>static/lib/katex.min.css</code> + 폰트 파일 정적 포함, <code>templates/base.html</code>에 KaTeX CSS 전역 로드 추가</li><li>수정 파일: <code>tiptap-entry.js</code>, <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code>, <code>templates/base.html</code>, 번들 재빌드</li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
       "phase": "35차 4단계",
       "phase_class": "phase-4",
       "entries": [
