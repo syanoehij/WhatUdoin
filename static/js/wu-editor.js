@@ -64,6 +64,11 @@
     return typeof s === 'string' ? document.querySelector(s) : s;
   }
 
+  /* ── 목록 아이콘 (Lucide: List / ListOrdered / ListChecks) ── */
+  const _IC_UL   = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>';
+  const _IC_OL   = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" x2="21" y1="6" y2="6"/><line x1="10" x2="21" y1="12" y2="12"/><line x1="10" x2="21" y1="18" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>';
+  const _IC_TASK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><line x1="13" x2="21" y1="8" y2="8"/><line x1="13" x2="21" y1="12" y2="12"/><line x1="13" x2="21" y1="16" y2="16"/></svg>';
+
   /* ── 툴바 정의 ──────────────────────────────────── */
   const TOOLBAR_DEFS = [
     { group: ['heading', 'bold', 'italic', 'strike', 'highlight', 'inlinemath'] },
@@ -82,9 +87,9 @@
     inlinemath: { icon: '<i>∫</i>', title: '인라인 수식 (선택 영역을 $...$로 변환)' },
     hr:         { icon: '—',   title: '구분선' },
     quote:      { icon: '❝',   title: '인용' },
-    ul:         { icon: '• —', title: '목록' },
-    ol:         { icon: '1.',  title: '번호 목록' },
-    task:       { icon: '☑',  title: '할일 목록' },
+    ul:         { icon: _IC_UL,   title: '목록' },
+    ol:         { icon: _IC_OL,   title: '번호 목록' },
+    task:       { icon: _IC_TASK, title: '할일 목록' },
     table:      { icon: '⊞',  title: '표 삽입' },
     link:       { icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>', title: '링크' },
     image:      { icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>', title: '이미지' },
@@ -104,9 +109,9 @@
     { id: 'h4',    label: '제목 4',    icon: 'H4',   hint: 'h heading',       cmd: ed => ed.chain().focus().setHeading({ level: 4 }).run() },
     { id: 'h5',    label: '제목 5',    icon: 'H5',   hint: 'h heading',       cmd: ed => ed.chain().focus().setHeading({ level: 5 }).run() },
     { id: 'h6',    label: '제목 6',    icon: 'H6',   hint: 'h heading',       cmd: ed => ed.chain().focus().setHeading({ level: 6 }).run() },
-    { id: 'ul',    label: '목록',      icon: '• —',  hint: 'ul list bullet',   cmd: ed => ed.chain().focus().toggleBulletList().run() },
-    { id: 'ol',    label: '번호 목록', icon: '1.',   hint: 'ol number list',   cmd: ed => ed.chain().focus().toggleOrderedList().run() },
-    { id: 'task',  label: '할일 목록', icon: '☑',   hint: 'task todo check',  cmd: ed => ed.chain().focus().toggleTaskList().run() },
+    { id: 'ul',    label: '목록',      icon: _IC_UL,   hint: 'ul list bullet',   cmd: ed => ed.chain().focus().toggleBulletList().run() },
+    { id: 'ol',    label: '번호 목록', icon: _IC_OL,   hint: 'ol number list',   cmd: ed => ed.chain().focus().toggleOrderedList().run() },
+    { id: 'task',  label: '할일 목록', icon: _IC_TASK, hint: 'task todo check',  cmd: ed => ed.chain().focus().toggleTaskList().run() },
     { id: 'quote', label: '인용',      icon: '❝',   hint: 'quote blockquote', cmd: ed => ed.chain().focus().toggleBlockquote().run() },
     { id: 'code',  label: '코드 블록', icon: '{ }', hint: 'code block',       cmd: ed => ed.chain().focus().toggleCodeBlock().run() },
     { id: 'table', label: '표',        icon: '⊞',   hint: 'table grid',       cmd: ed => ed.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },

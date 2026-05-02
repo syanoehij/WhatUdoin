@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-05-02",
+      "phase": "35차 6단계",
+      "phase_class": "phase-6",
+      "entries": [
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 툴바·슬래시 목록 아이콘 Lucide SVG 교체 및 수직 정렬 개선",
+          "detail_html": "<ul><li><strong>목록 아이콘 교체</strong>: 툴바·슬래시 커맨드의 글머리 목록(<code>• —</code>), 번호 목록(<code>1.</code>), 할일 목록(<code>☑</code>) 텍스트 아이콘을 Lucide SVG(<code>List</code> / <code>ListOrdered</code> / <code>ListChecks</code>)로 교체 — Obsidian 스타일과 동일한 선형 아이콘</li><li><strong>수직 정렬 수정</strong>: <code>.wu-toolbar-btn</code>에 <code>line-height: 1</code> 추가, <code>.wu-toolbar-btn svg { display: block }</code> 추가 — SVG baseline 어긋남 제거, 텍스트·SVG 아이콘 혼재 시 높이 들쭉날쭉 현상 해결</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
       "phase": "35차 5단계",
       "phase_class": "phase-5",
       "entries": [
