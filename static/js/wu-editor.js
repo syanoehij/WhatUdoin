@@ -51,6 +51,13 @@
     return out.join('\n');
   }
 
+  function _getCalloutCssType(text) {
+    const m = /^\\?\[!([^\\\]]+?)\\?\]/.exec((text || '').trim());
+    if (!m) return null;
+    const rawType = m[1].trim().toLowerCase();
+    return CALLOUT_TYPES[rawType] ? rawType : 'note';
+  }
+
   /* Tiptap이 blockquote로 렌더링한 > [!type] 패턴을 콜아웃 div로 변환.
    * _preprocessViewerCallouts가 빈 > 줄을 삽입하면 multi-p로 파싱됨(primary path).
    * 단일 <p>인 경우 ']' 위치로 헤더/body 분리(fallback). */
@@ -1828,6 +1835,7 @@
 
       const {
         Editor,
+        Extension,
         StarterKit,
         CodeBlockLowlight,
         lowlight,
@@ -1849,6 +1857,10 @@
         markdownItMath,
         InputRule,
         Mark,
+        Plugin,
+        PluginKey,
+        Decoration,
+        DecorationSet,
         katex,
       } = TiptapBundle;
 
@@ -1860,7 +1872,7 @@
            onTransaction에서 _fixCallouts를 재실행해 callout div를 유지 */
         _editor = new Editor({
           element: containerEl,
-          extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, editableMath: false }),
+          extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, Extension, Plugin, PluginKey, Decoration, DecorationSet, editableMath: false }),
           content: _preprocessViewerFootnotes(_preprocessViewerCallouts(opts.initialMarkdown || '')),
           editable: false,
           injectCSS: false,
@@ -1887,7 +1899,7 @@
 
       _editor = new Editor({
         element: edEl,
-        extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, InlineMath, BlockMath, markdownItMath, InputRule, Mark, editableMath: true }),
+        extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, InlineMath, BlockMath, markdownItMath, InputRule, Mark, Extension, Plugin, PluginKey, Decoration, DecorationSet, editableMath: true }),
         content: opts.initialMarkdown || '',
         editable: true,
         injectCSS: false,
@@ -1937,7 +1949,7 @@
       setTimeout(_enforceH1Title, 0);
     }
 
-    function _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, editableMath }) {
+    function _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, Extension, Plugin, PluginKey, Decoration, DecorationSet, editableMath }) {
       function markdownItObsidianComment(md) {
         md.inline.ruler.push('obsidian_comment', function(state, silent) {
           if (state.src.charCodeAt(state.pos) !== 0x25 || state.src.charCodeAt(state.pos + 1) !== 0x25) return false;
@@ -1956,6 +1968,35 @@
           return `<span data-type="obsidian-comment">${content}</span>`;
         };
       }
+
+      const EditorCalloutDecorations = Extension && Plugin && PluginKey && Decoration && DecorationSet
+        ? Extension.create({
+            name: 'editorCalloutDecorations',
+            addProseMirrorPlugins() {
+              return [
+                new Plugin({
+                  key: new PluginKey('editorCalloutDecorations'),
+                  props: {
+                    decorations(state) {
+                      const decorations = [];
+                      state.doc.descendants((node, pos) => {
+                        if (node.type.name !== 'blockquote') return;
+                        const first = node.firstChild;
+                        if (!first || first.type.name !== 'paragraph') return;
+                        const cssType = _getCalloutCssType(first.textContent);
+                        if (!cssType) return;
+                        decorations.push(Decoration.node(pos, pos + node.nodeSize, {
+                          'data-callout-type': cssType,
+                        }));
+                      });
+                      return DecorationSet.create(state.doc, decorations);
+                    },
+                  },
+                }),
+              ];
+            },
+          })
+        : null;
       // @tiptap/extension-link은 markdown.serialize가 없어 tiptap-markdown이 <a href> HTML로
       // 직렬화한다. 이를 [text](href) 마크다운 형식으로 고정해 eid: round-trip을 보장한다.
       const LinkMd = Link.extend({
@@ -2176,6 +2217,7 @@
         CodeBlockLowlight.configure({ lowlight, defaultLanguage: null }),
         ParagraphMd,
         HighlightMd,
+        ...(editableMath && EditorCalloutDecorations ? [EditorCalloutDecorations] : []),
         ...mathExtensions,
         Superscript,
         Table.configure({ resizable: true }),

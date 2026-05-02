@@ -730,10 +730,31 @@ sup.wu-fn-ref a:hover { text-decoration: underline; }
   gap: 7px;
   font-weight: 600;
   font-size: 0.93rem;
+  line-height: 16px;
   color: var(--callout-color, #3b82f6);
   margin-bottom: 6px;
 }
-.wu-callout-icon svg { width: 16px; height: 16px; flex-shrink: 0; }
+.wu-callout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  line-height: 0;
+  transform: translateY(1.5px);
+}
+.wu-callout-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.wu-callout-title > span:not(.wu-callout-icon) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 16px;
+}
 .wu-callout-body { font-size: 0.9rem; line-height: 1.6; }
 .wu-callout-body > *:first-child { margin-top: 0; }
 .wu-callout-body > *:last-child { margin-bottom: 0; }
@@ -779,5 +800,134 @@ sup.wu-fn-ref a:hover { text-decoration: underline; }
   .wu-callout-abstract, .wu-callout-summary, .wu-callout-tldr,
   .wu-callout-example, .wu-callout-bug {
     background: color-mix(in srgb, var(--callout-color) 8%, var(--surface, #fff));
+  }
+}
+
+/* ── 편집기 모드 콜아웃 (data-callout-type 마킹 기반) ────────────── */
+.ProseMirror blockquote[data-callout-type] {
+  --callout-color: #3b82f6;
+  border-left: 4px solid var(--callout-color);
+  background: rgba(59, 130, 246, 0.06);
+  border-radius: 4px;
+  padding: 0;
+  overflow: hidden;
+  color: inherit;
+}
+.ProseMirror blockquote[data-callout-type] > p:first-child {
+  font-weight: 600;
+  color: var(--callout-color);
+  margin: 0;
+  padding: 5px 14px;
+  background: rgba(59, 130, 246, 0.1);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+}
+.ProseMirror blockquote[data-callout-type] > p:not(:first-child),
+.ProseMirror blockquote[data-callout-type] > ul,
+.ProseMirror blockquote[data-callout-type] > ol {
+  margin: 0;
+  padding: 4px 14px;
+}
+.ProseMirror blockquote[data-callout-type] > *:last-child { padding-bottom: 8px; }
+
+/* 타입별 색상 + fallback 배경 */
+.ProseMirror blockquote[data-callout-type="note"],
+.ProseMirror blockquote[data-callout-type="info"] {
+  --callout-color: #3b82f6; background: rgba(59, 130, 246, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="note"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="info"] > p:first-child {
+  background: rgba(59, 130, 246, 0.1); border-bottom-color: rgba(59, 130, 246, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="tip"],
+.ProseMirror blockquote[data-callout-type="hint"],
+.ProseMirror blockquote[data-callout-type="success"],
+.ProseMirror blockquote[data-callout-type="check"],
+.ProseMirror blockquote[data-callout-type="done"] {
+  --callout-color: #22c55e; background: rgba(34, 197, 94, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="tip"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="hint"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="success"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="check"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="done"] > p:first-child {
+  background: rgba(34, 197, 94, 0.1); border-bottom-color: rgba(34, 197, 94, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="warning"],
+.ProseMirror blockquote[data-callout-type="caution"],
+.ProseMirror blockquote[data-callout-type="attention"] {
+  --callout-color: #f59e0b; background: rgba(245, 158, 11, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="warning"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="caution"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="attention"] > p:first-child {
+  background: rgba(245, 158, 11, 0.1); border-bottom-color: rgba(245, 158, 11, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="danger"],
+.ProseMirror blockquote[data-callout-type="error"],
+.ProseMirror blockquote[data-callout-type="failure"],
+.ProseMirror blockquote[data-callout-type="fail"] {
+  --callout-color: #ef4444; background: rgba(239, 68, 68, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="danger"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="error"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="failure"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="fail"] > p:first-child {
+  background: rgba(239, 68, 68, 0.1); border-bottom-color: rgba(239, 68, 68, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="important"] {
+  --callout-color: #a855f7; background: rgba(168, 85, 247, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="important"] > p:first-child {
+  background: rgba(168, 85, 247, 0.1); border-bottom-color: rgba(168, 85, 247, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="question"],
+.ProseMirror blockquote[data-callout-type="faq"],
+.ProseMirror blockquote[data-callout-type="help"] {
+  --callout-color: #06b6d4; background: rgba(6, 182, 212, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="question"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="faq"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="help"] > p:first-child {
+  background: rgba(6, 182, 212, 0.1); border-bottom-color: rgba(6, 182, 212, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="quote"],
+.ProseMirror blockquote[data-callout-type="cite"] {
+  --callout-color: #6b7280; background: rgba(107, 114, 128, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="quote"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="cite"] > p:first-child {
+  background: rgba(107, 114, 128, 0.1); border-bottom-color: rgba(107, 114, 128, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="abstract"],
+.ProseMirror blockquote[data-callout-type="summary"],
+.ProseMirror blockquote[data-callout-type="tldr"] {
+  --callout-color: #14b8a6; background: rgba(20, 184, 166, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="abstract"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="summary"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="tldr"] > p:first-child {
+  background: rgba(20, 184, 166, 0.1); border-bottom-color: rgba(20, 184, 166, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="example"] {
+  --callout-color: #7c3aed; background: rgba(124, 58, 237, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="example"] > p:first-child {
+  background: rgba(124, 58, 237, 0.1); border-bottom-color: rgba(124, 58, 237, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="bug"] {
+  --callout-color: #ef4444; background: rgba(239, 68, 68, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="bug"] > p:first-child {
+  background: rgba(239, 68, 68, 0.1); border-bottom-color: rgba(239, 68, 68, 0.2);
+}
+
+/* color-mix 지원 브라우저 오버라이드 */
+@supports (background: color-mix(in srgb, red, blue)) {
+  .ProseMirror blockquote[data-callout-type] {
+    background: color-mix(in srgb, var(--callout-color) 6%, var(--surface, #fff));
+  }
+  .ProseMirror blockquote[data-callout-type] > p:first-child {
+    background: color-mix(in srgb, var(--callout-color) 12%, var(--surface, #fff));
+    border-bottom-color: color-mix(in srgb, var(--callout-color) 25%, transparent);
   }
 }
