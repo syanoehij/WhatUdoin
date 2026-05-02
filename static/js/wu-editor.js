@@ -78,17 +78,18 @@
   const _IC_HL       = _ic('<path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/>');
   const _IC_CODE     = _ic('<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>');
   const _IC_HR       = _ic('<path d="M5 12h14"/>');
-  const _IC_QUOTE    = _ic('<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>');
+  const _IC_QUOTE    = _ic('<g transform="translate(3.6,3.6) scale(0.7)"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/></g>');
   const _IC_TABLE    = _ic('<path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>');
   const _IC_CODEBLK  = _ic('<path d="m10 9-3 3 3 3"/><path d="m14 15 3-3-3-3"/><rect x="3" y="3" width="18" height="18" rx="2"/>');
   const _IC_SIGMA    = _ic('<path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2"/>');
   const _IC_PERCENT  = _ic('<line x1="19" x2="5" y1="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>');
   const _IC_INTEG    = _ic('<path d="M6 20a2 2 0 0 0 2 2c2 0 4-8 4-16a2 2 0 0 1 4 0"/>');  /* 수식 ∫ 모양 */
+  const _IC_FOOTNOTE = _ic('<path d="M6 4H4v16h2"/><path d="M18 4h2v16h-2"/><path d="M9 16 L12 8 L15 16"/>');
 
   /* ── 툴바 정의 ──────────────────────────────────── */
   const TOOLBAR_DEFS = [
     { group: ['heading', 'bold', 'italic', 'strike', 'highlight', 'code', 'inlinemath'] },
-    { group: ['hr', 'quote'] },
+    { group: ['hr', 'quote', 'footnote'] },
     { group: ['ul', 'ol', 'task'] },
     { group: ['table', 'link', 'image'] },
     { group: ['codeblock', 'math', 'comment'] },
@@ -113,6 +114,7 @@
     codeblock:  { icon: _IC_CODEBLK,  title: '코드 블록' },
     math:       { icon: _IC_SIGMA,    title: '수식 블록' },
     comment:    { icon: _IC_PERCENT,  title: '주석 (%% ... %%)' },
+    footnote:   { icon: _IC_FOOTNOTE, title: '각주 ([^N])' },
   };
 
   /* 슬래시 커맨드의 math 항목이 create() 스코프 내 _showMathModal을 호출하기 위한 참조 */
@@ -1468,6 +1470,20 @@
             } else {
               chain.toggleMark('obsidianComment').run();
             }
+            return;
+          }
+          case 'footnote': {
+            const label = String((_editor.getText().match(/\[\^[^\]]+\]:/g) || []).length + 1);
+            _editor.chain()
+              .focus()
+              .insertContent(`[^${label}]`)
+              .command(({ tr, dispatch }) => {
+                const schema = tr.doc.type.schema;
+                const para = schema.nodes.paragraph.createChecked(null, [schema.text(`[^${label}]: `)]);
+                if (dispatch) tr.insert(tr.doc.content.size, para);
+                return true;
+              })
+              .run();
             return;
           }
         }
