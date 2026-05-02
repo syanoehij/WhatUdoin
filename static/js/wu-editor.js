@@ -129,6 +129,7 @@
   const _IC_CO_CLIP  = _ic('<rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>');
   const _IC_CO_LIST  = _ic('<line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/>');
   const _IC_CO_BUG   = _ic('<rect x="8" y="6" width="8" height="14" rx="4"/><path d="m19 7-3 2"/><path d="m5 7 3 2"/><path d="m19 19-3-2"/><path d="m5 19 3-2"/><path d="M20 13h-4"/><path d="M4 13h4"/><path d="m10 4 1 2h2l1-2"/>');
+  const _IC_CO_TODO  = _ic('<rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><line x1="13" x2="21" y1="6" y2="6"/><line x1="13" x2="21" y1="18" y2="18"/><line x1="13" x2="21" y1="12" y2="12"/>');
 
   const CALLOUT_TYPES = {
     note:       { title: 'Note',       icon: _IC_CO_INFO  },
@@ -156,7 +157,24 @@
     tldr:       { title: 'TL;DR',      icon: _IC_CO_CLIP  },
     example:    { title: 'Example',    icon: _IC_CO_LIST  },
     bug:        { title: 'Bug',        icon: _IC_CO_BUG   },
+    todo:       { title: 'Todo',       icon: _IC_CO_TODO  },
   };
+
+  const CALLOUT_DROP_ITEMS = [
+    { type: 'note',     desc: '메모'       },
+    { type: 'abstract', desc: '문서 요약'  },
+    { type: 'info',     desc: '참고 정보'  },
+    { type: 'todo',     desc: '할 일'      },
+    { type: 'tip',      desc: '팁'         },
+    { type: 'success',  desc: '완료'       },
+    { type: 'question', desc: '질문'       },
+    { type: 'warning',  desc: '주의'       },
+    { type: 'failure',  desc: '실패/누락'  },
+    { type: 'danger',   desc: '위험'       },
+    { type: 'bug',      desc: '버그'       },
+    { type: 'example',  desc: '예제'       },
+    { type: 'quote',    desc: '인용문'     },
+  ];
 
   /* 뷰어 모드에서 [^label] 각주를 <sup> + <section> HTML로 변환 */
   function _preprocessViewerFootnotes(md) {
@@ -738,6 +756,26 @@
         <button class="wu-heading-drop-btn" data-level="5" style="font-size:0.82em;font-weight:600">제목 5</button>
         <button class="wu-heading-drop-btn" data-level="6" style="font-size:0.78em;font-weight:500">제목 6</button>`;
       document.body.appendChild(_headingDropEl);
+    }
+
+    /* 콜아웃 타입 드롭다운 동적 생성 */
+    let _calloutDropEl = null;
+    if (opts.canEdit !== false) {
+      _calloutDropEl = document.createElement('div');
+      _calloutDropEl.className = 'wu-callout-drop';
+      _calloutDropEl.style.display = 'none';
+      CALLOUT_DROP_ITEMS.forEach(({ type, desc }) => {
+        const cfg = CALLOUT_TYPES[type];
+        const btn = document.createElement('button');
+        btn.className = 'wu-callout-drop-btn';
+        btn.dataset.calloutType = type;
+        btn.innerHTML =
+          `<span class="wu-callout-drop-icon">${cfg.icon}</span>` +
+          `<span class="wu-callout-drop-name">${cfg.title}</span>` +
+          `<span class="wu-callout-drop-desc">${desc}</span>`;
+        _calloutDropEl.appendChild(btn);
+      });
+      document.body.appendChild(_calloutDropEl);
     }
 
     /* 자동완성 드롭다운 동적 생성 */
@@ -1478,6 +1516,37 @@
       });
     }
 
+    /* ── 콜아웃 드롭다운 ───────────────────────────── */
+    function _showCalloutDrop(btnEl) {
+      if (!_calloutDropEl) return;
+      if (_calloutDropEl.style.display !== 'none') {
+        _calloutDropEl.style.display = 'none';
+        return;
+      }
+      const r = btnEl.getBoundingClientRect();
+      _calloutDropEl.style.top  = (r.bottom + 4) + 'px';
+      _calloutDropEl.style.left = r.left + 'px';
+      _calloutDropEl.style.display = 'grid';
+    }
+
+    function _initCalloutDrop() {
+      if (!_calloutDropEl) return;
+      _calloutDropEl.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const btn = e.target.closest('[data-callout-type]');
+        if (!btn || !_editor) return;
+        const type = btn.dataset.calloutType;
+        _editor.chain().focus().insertContent({
+          type: 'blockquote',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: `[!${type}]` }] },
+            { type: 'paragraph' },
+          ],
+        }).run();
+        _calloutDropEl.style.display = 'none';
+      });
+    }
+
     /* ── 테이블 컨텍스트 메뉴 ──────────────────────── */
     function _clearCellFocus() {
       if (!containerEl) return;
@@ -1553,6 +1622,7 @@
         }
         if (_slashMenuEl && !_slashMenuEl.contains(e.target)) _hideSlashMenu();
         if (_headingDropEl && !_headingDropEl.contains(e.target)) _headingDropEl.style.display = 'none';
+        if (_calloutDropEl && !_calloutDropEl.contains(e.target)) _calloutDropEl.style.display = 'none';
       }, false);
 
       /* mouseup에서 드래그 종료 — 이 시점에 한 번만 메뉴·포커스 갱신 */
@@ -1631,14 +1701,9 @@
           case 'hr':           chain.setHorizontalRule().run(); break;
           case 'quote':     chain.toggleBlockquote().run(); break;
           case 'callout':
-            chain.insertContent({
-              type: 'blockquote',
-              content: [
-                { type: 'paragraph', content: [{ type: 'text', text: '[!note]' }] },
-                { type: 'paragraph' },
-              ],
-            }).run();
-            break;
+            e.stopPropagation();
+            _showCalloutDrop(btn);
+            return;
           case 'ul':        chain.toggleBulletList().run(); break;
           case 'ol':        chain.toggleOrderedList().run(); break;
           case 'task':      chain.toggleTaskList().run(); break;
@@ -1946,6 +2011,7 @@
       _initFootnoteModal();
       _initSlashMenu();
       _initHeadingDrop();
+      _initCalloutDrop();
       setTimeout(_initCodeHeaders, 100);
 
       if (hooks.onReady) hooks.onReady(_editor);
@@ -2320,6 +2386,7 @@
         if (_footnoteModal && _footnoteModal.parentNode) _footnoteModal.parentNode.removeChild(_footnoteModal);
         if (_slashMenuEl   && _slashMenuEl.parentNode)   _slashMenuEl.parentNode.removeChild(_slashMenuEl);
         if (_headingDropEl && _headingDropEl.parentNode) _headingDropEl.parentNode.removeChild(_headingDropEl);
+        if (_calloutDropEl && _calloutDropEl.parentNode) _calloutDropEl.parentNode.removeChild(_calloutDropEl);
         if (_acDd && _acDd.parentNode)             _acDd.parentNode.removeChild(_acDd);
         // 래퍼 제거
         const wrapEl = containerEl && containerEl.querySelector('.wu-editor-wrap');

@@ -632,6 +632,49 @@
 .wu-heading-drop-btn.is-active { background: var(--accent); color: #fff; }
 
 
+/* ── 콜아웃 드롭다운 ── */
+.wu-callout-drop {
+  position: fixed;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 10002;
+  box-shadow: 0 4px 20px rgba(0,0,0,.18);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  min-width: 280px;
+}
+.wu-callout-drop-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  text-align: left;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.08s;
+}
+.wu-callout-drop-btn:hover { background: var(--surface-3); }
+.wu-callout-drop-icon { flex-shrink: 0; display: flex; opacity: 0.75; }
+.wu-callout-drop-icon svg { width: 15px; height: 15px; }
+.wu-callout-drop-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  min-width: 54px;
+}
+.wu-callout-drop-desc {
+  font-size: 0.76rem;
+  color: var(--text-muted, #888);
+}
+
+
 /* ── Obsidian 주석 (%% ... %%) ── */
 .wu-comment {
   color: var(--text-muted, #999);

@@ -1,10 +1,15 @@
 {
   "groups": [
     {
-      "date": "2026-05-02",
+      "date": "2026-05-03",
       "phase": "35차 8단계",
       "phase_class": "phase-8",
       "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 콜아웃 타입 선택 드롭다운 추가",
+          "detail_html": "<ul><li><strong>기존 동작</strong>: 콜아웃 툴바 버튼 클릭 시 <code>note</code> 타입으로 즉시 삽입</li><li><strong>변경 동작</strong>: 헤딩 선택과 동일한 방식으로 2열 드롭다운 팝업 표시 — 아이콘 + 영문명 + 한국어 설명 표시</li><li><strong>선택 가능한 13종</strong>: note(메모) / abstract(문서 요약) / info(참고 정보) / todo(할 일) / tip(팁) / success(완료) / question(질문) / warning(주의) / failure(실패/누락) / danger(위험) / bug(버그) / example(예제) / quote(인용문)</li><li><strong><code>todo</code> 타입 신규 추가</strong>: 기존 <code>CALLOUT_TYPES</code>에 없던 할일 체크박스 스타일 콜아웃 타입 추가</li><li>팝업 바깥 클릭 시 자동 닫힘, 에디터 정리 시 DOM 자동 제거</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        },
         {
           "icon": "✨",
           "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 툴바 '서식 지우기' 버튼 추가",
