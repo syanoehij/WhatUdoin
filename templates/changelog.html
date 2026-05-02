@@ -60,6 +60,8 @@
   .dark .cl-phase-badge.phase-6     { background: #141033; color: #a5b4fc; border-color: #312e81; }
   .cl-phase-badge.phase-7     { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
   .dark .cl-phase-badge.phase-7     { background: #3d1500; color: #fb923c; border-color: #7c2d00; }
+  .cl-phase-badge.phase-8     { background: #fdf2f8; color: #9d174d; border-color: #fbcfe8; }
+  .dark .cl-phase-badge.phase-8     { background: #3d0a26; color: #f472b6; border-color: #7c1a44; }
 
   .cl-rule {
     flex: 1;
@@ -91,17 +93,36 @@
     font-weight: 600;
     color: var(--text);
     margin-bottom: 3px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   .cl-item-detail {
     font-size: 0.8rem;
     color: var(--text-muted);
     line-height: 1.55;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   .cl-item-detail ul {
     margin: 4px 0 0 0;
     padding-left: 16px;
   }
-  .cl-item-detail li { margin-bottom: 2px; }
+  .cl-item-detail li {
+    margin-bottom: 2px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .cl-item-detail code,
+  .cl-item-title code {
+    display: inline;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
   .cl-tag {
     display: inline-block;
     font-size: 0.68rem;

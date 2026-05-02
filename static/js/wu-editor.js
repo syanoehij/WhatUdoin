@@ -207,6 +207,7 @@
   const _IC_ITALIC   = _ic('<line x1="19" x2="10" y1="4" y2="4"/><line x1="14" x2="5" y1="20" y2="20"/><line x1="15" x2="9" y1="4" y2="20"/>');
   const _IC_STRIKE   = _ic('<path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/>');
   const _IC_HL       = _ic('<path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/>');
+  const _IC_CLEARFMT = _ic('<path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>');
   const _IC_CODE     = _ic('<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>');
   const _IC_HR       = _ic('<path d="M5 12h14"/>');
   const _IC_QUOTE    = _ic('<g transform="translate(3.6,3.6) scale(0.7)"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/></g>');
@@ -221,7 +222,8 @@
 
   /* ── 툴바 정의 ──────────────────────────────────── */
   const TOOLBAR_DEFS = [
-    { group: ['heading', 'bold', 'italic', 'strike', 'highlight', 'code', 'inlinemath'] },
+    { group: ['heading', 'bold', 'italic', 'strike', 'highlight', 'clearformat'] },
+    { group: ['code', 'inlinemath'] },
     { group: ['hr', 'quote', 'callout', 'footnote'] },
     { group: ['ul', 'ol', 'task'] },
     { group: ['table', 'link', 'image'] },
@@ -233,8 +235,9 @@
     bold:       { icon: _IC_BOLD,     title: '굵게' },
     italic:     { icon: _IC_ITALIC,   title: '기울임' },
     strike:     { icon: _IC_STRIKE,   title: '취소선' },
-    highlight:  { icon: _IC_HL,       title: '하이라이트 (==text==)' },
-    code:       { icon: _IC_CODE,     title: '인라인 코드' },
+    highlight:   { icon: _IC_HL,       title: '하이라이트 (==text==)' },
+    clearformat: { icon: _IC_CLEARFMT, title: '서식 지우기' },
+    code:        { icon: _IC_CODE,     title: '인라인 코드' },
     inlinemath: { icon: _IC_INTEG,    title: '인라인 수식 (선택 영역을 $...$로 변환)' },
     hr:         { icon: _IC_HR,       title: '구분선' },
     quote:      { icon: _IC_QUOTE,    title: '인용' },
@@ -1623,8 +1626,9 @@
           case 'bold':      chain.toggleBold().run(); break;
           case 'italic':    chain.toggleItalic().run(); break;
           case 'strike':    chain.toggleStrike().run(); break;
-          case 'highlight': chain.toggleHighlight().run(); break;
-          case 'hr':        chain.setHorizontalRule().run(); break;
+          case 'highlight':    chain.toggleHighlight().run(); break;
+          case 'clearformat':  chain.clearNodes().unsetAllMarks().run(); break;
+          case 'hr':           chain.setHorizontalRule().run(); break;
           case 'quote':     chain.toggleBlockquote().run(); break;
           case 'callout':
             chain.insertContent({
