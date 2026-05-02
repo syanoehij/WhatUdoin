@@ -1,6 +1,86 @@
 {
   "groups": [
     {
+      "date": "2026-05-02",
+      "phase": "35차 2단계",
+      "phase_class": "phase-2",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — Obsidian 스타일 하이라이트(<code>==text==</code>) 추가",
+          "detail_html": "<ul><li>WUEditor에 <code>==text==</code> 형광펜 하이라이트 기능 추가 — 체크·문서 편집기 양쪽 모두 적용</li><li>툴바 <code><mark>H</mark></code> 버튼 및 슬래시 커맨드 <code>/hl</code> / <code>/하이라이트</code> 지원</li><li>Tiptap <code>HighlightMd</code> 확장 구현: <code>==text==</code> ↔ <code>&lt;mark&gt;</code> 마크다운 라운드트립 보장 (<code>markdown-it-mark</code> 플러그인 연동)</li><li>라이트·다크 테마 mark 스타일 추가 (<code>wu-editor.css</code>)</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 각주 앵커 클릭 시 새 탭 열림 문제 수정",
+          "detail_html": "<ul><li>각주 링크(<code>[^1]</code>) 클릭 시 새 탭이 열리던 문제 수정 → <code>a[href^=\"#\"]</code>에서 <code>target=\"_blank\"</code> 제거해 같은 페이지 내 이동</li><li>Tiptap이 <code>id</code> 속성을 제거해 앵커 점프가 작동하지 않던 문제 수정 → <code>_fixFootnoteAnchors()</code>로 렌더링 후 DOM 복원</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 편집기 — 체크·문서 기능 표준화",
+          "detail_html": "<ul><li><code>doc_editor.html</code>의 툴바 항목에 <code>highlight</code> 추가 → 체크·문서 편집기 툴바 동일하게 통일</li><li>각주(<code>/fn</code>)·하이라이트(<code>/hl</code>) 슬래시 커맨드가 두 편집기 모두에서 작동하도록 확인</li><li>두 편집기에 번들 캐시버스터(<code>?v=random</code>) 적용 — 구 버전 번들 서빙 방지</li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
+      "phase": "35차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "📦",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> Tiptap 번들 — Highlight·Superscript·markdownItMark 추가",
+          "detail_html": "<ul><li><code>tiptap-entry.js</code>에 <code>@tiptap/extension-highlight</code>, <code>@tiptap/extension-superscript</code>, <code>markdown-it-mark</code> 익스포트 추가</li><li>번들 재빌드(<code>tiptap-bundle.min.js</code>, ~541KB) — WUEditor 뷰어에서 <code>&lt;sup&gt;</code> 태그가 제거되던 문제 해결</li><li>수정 파일: <code>tiptap-entry.js</code>, <code>static/lib/tiptap-bundle.min.js</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 체크 뷰어 — <code>==text==</code> 하이라이트 및 각주 <code>&lt;sup&gt;</code> 렌더링",
+          "detail_html": "<ul><li><code>check.html</code>에 <code>_preprocessHighlights()</code> 추가 → <code>==text==</code>를 <code>&lt;mark&gt;</code>로 변환 후 Toast UI 뷰어에 전달</li><li>WUEditor 뷰어 모드(<code>canEdit:false</code>)에 <code>_preprocessViewerFootnotes()</code> 추가 → <code>[^N]</code> 참조와 <code>[^N]: 정의</code>를 HTML로 변환</li><li>수정 파일: <code>templates/check.html</code>, <code>templates/check_editor.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
+      "phase": "34차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 체크 뷰어 — 각주(<code>[^N]</code>) 렌더링 지원",
+          "detail_html": "<ul><li>Toast UI 뷰어용 <code>_preprocessFootnotes()</code> 추가 — <code>[^N]: 정의</code>를 수집해 <code>&lt;section class=\"wu-footnotes\"&gt;</code>로 변환, 인라인 <code>[^N]</code>을 <code>&lt;sup&gt;</code> 슈퍼스크립트로 치환</li><li>tiptap-markdown이 <code>[</code>를 <code>\\[</code>로 이스케이프하는 문제 대응 — 양쪽 패턴 모두 매칭하는 정규식 적용</li><li><code>customHTMLSanitizer: html =&gt; html</code>로 raw HTML 통과 허용</li><li>각주 스타일 추가: <code>.wu-fn-ref</code> / <code>.wu-footnotes</code> / <code>.wu-fn-back</code></li><li>수정 파일: <code>templates/check.html</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-01",
+      "phase": "34차 3단계",
+      "phase_class": "phase-3",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 각주(<code>/fn</code>) 슬래시 커맨드 추가",
+          "detail_html": "<ul><li>슬래시 커맨드 <code>/fn</code> / <code>/각주</code>로 각주 삽입: 커서 위치에 <code>[^N]</code> 참조 삽입 + 문서 끝에 <code>[^N]: </code> 정의 단락 자동 생성</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 편집기 — 빈줄 보존·H4~H6·SVG 아이콘 개선",
+          "detail_html": "<ul><li><strong>빈줄 보존</strong>: <code>ParagraphMd</code>가 빈 단락을 <code>&lt;p&gt;&lt;/p&gt;</code> HTML 블록으로 직렬화 → 연속 빈줄 저장·재로드 라운드트립 안정화</li><li><strong>H4~H6</strong>: 슬래시 커맨드, 제목 드롭다운, TOC 쿼리에 H4·H5·H6 추가</li><li><strong>SVG 아이콘</strong>: 링크·이미지 툴바 아이콘을 이모지 → 인라인 SVG로 교체</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-01",
+      "phase": "34차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "🚀",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — Toast UI Editor → WUEditor(Tiptap) 마이그레이션 완성",
+          "detail_html": "<ul><li>체크 편집기(<code>check_editor.html</code>)·문서 편집기(<code>doc_editor.html</code>)를 기존 TUI Editor에서 <strong>WUEditor(Tiptap 기반)</strong>로 교체</li><li>WUEditor: 마크다운 직렬화·파싱(<code>tiptap-markdown</code>), 툴바, 슬래시 커맨드, TOC, 이미지 업로드, 링크 다이얼로그 통합 제공</li><li>CSS 셀렉터·레이아웃을 <code>wu-editor-wrap</code> / <code>.ProseMirror</code> 기준으로 정리</li><li>수정 파일: <code>templates/check_editor.html</code>, <code>templates/doc_editor.html</code></li></ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-05-01",
       "phase": "33차 3단계",
       "phase_class": "phase-3",
