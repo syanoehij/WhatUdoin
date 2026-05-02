@@ -15,3 +15,6 @@ export { TaskItem } from '@tiptap/extension-task-item';
 export { Link } from '@tiptap/extension-link';
 export { Image } from '@tiptap/extension-image';
 export { Markdown } from 'tiptap-markdown';
+export { Highlight } from '@tiptap/extension-highlight';
+export { default as markdownItMark } from 'markdown-it-mark';
+export { Superscript } from '@tiptap/extension-superscript';

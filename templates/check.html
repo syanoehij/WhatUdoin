@@ -1855,6 +1855,11 @@ function initEditor(content) {
 
 function toggleTocInline() { wuInst?.toggleToc(); }
 
+// ── 하이라이트 전처리 (Toast UI Editor용) ─────────────────
+function _preprocessHighlights(md) {
+  return md.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
+}
+
 // ── 각주 전처리 (Toast UI Editor용) ───────────────────────
 function _preprocessFootnotes(md) {
   const defs = {};
@@ -1896,7 +1901,7 @@ function renderViewer(content) {
   _ckViewer = toastui.Editor.factory({
     el: container,
     viewer: true,
-    initialValue: _preprocessFootnotes(displayContent),
+    initialValue: _preprocessFootnotes(_preprocessHighlights(displayContent)),
     usageStatistics: false,
     customHTMLSanitizer: html => html,
     customHTMLRenderer: {

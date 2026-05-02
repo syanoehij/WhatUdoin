@@ -630,7 +630,7 @@
 .wu-heading-drop-btn.is-active { background: var(--accent); color: #fff; }
 
 
-/* ── 각주 뷰어 스타일 ── */
+/* ── 각주 뷰어 스타일 (Toast UI viewer) ── */
 sup.wu-fn-ref { line-height: 0; }
 sup.wu-fn-ref a { color: var(--primary, #4c6ef5); text-decoration: none; font-size: 0.75em; padding: 0 1px; }
 sup.wu-fn-ref a:hover { text-decoration: underline; }
@@ -640,3 +640,15 @@ sup.wu-fn-ref a:hover { text-decoration: underline; }
 .wu-footnotes li p { margin: 0; display: inline; }
 .wu-fn-back { color: var(--text-2, #888); text-decoration: none; margin-left: 0.3em; font-size: 0.9em; }
 .wu-fn-back:hover { color: var(--primary, #4c6ef5); }
+
+/* ── 각주 뷰어 스타일 (WUEditor Tiptap viewer) ── */
+/* Tiptap이 <sup class="wu-fn-ref"><a> 구조를 <a><sup>로 재배치하므로 클래스 없이 선택 */
+.ProseMirror a sup { color: var(--primary, #4c6ef5); font-size: 0.75em; padding: 0 1px; line-height: 0; }
+.ProseMirror a:has(sup) { text-decoration: none; }
+.ProseMirror a:has(sup):hover sup { text-decoration: underline; }
+
+/* ── 하이라이트 스타일 ── */
+.ProseMirror mark { background: #fff59d; color: inherit; border-radius: 2px; padding: 0 1px; }
+.toastui-editor-contents mark { background: #fff59d; color: inherit; border-radius: 2px; padding: 0 1px; }
+[data-theme="dark"] .ProseMirror mark { background: #7c6e0a; color: #f5e96d; }
+[data-theme="dark"] .toastui-editor-contents mark { background: #7c6e0a; color: #f5e96d; }
