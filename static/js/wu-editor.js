@@ -117,8 +117,9 @@
     footnote:   { icon: _IC_FOOTNOTE, title: '각주 ([^N])' },
   };
 
-  /* 슬래시 커맨드의 math 항목이 create() 스코프 내 _showMathModal을 호출하기 위한 참조 */
-  let _mathSlashCmdFn = null;
+  /* 슬래시 커맨드의 math/footnote 항목이 create() 스코프 내 함수를 호출하기 위한 참조 */
+  let _mathSlashCmdFn     = null;
+  let _footnoteSlashCmdFn = null;
 
   /* ── 슬래시 커맨드 항목 ─────────────────────────── */
   const SLASH_ITEMS = [
@@ -137,17 +138,7 @@
     { id: 'hr',    label: '구분선',    icon: _IC_HR,      hint: 'hr divider line',  cmd: ed => ed.chain().focus().setHorizontalRule().run() },
     { id: 'highlight', label: '하이라이트', icon: _IC_HL, hint: 'highlight mark hl 형광펜', cmd: ed => ed.chain().focus().toggleHighlight().run() },
     { id: 'footnote', label: '각주',  icon: '[^]', hint: 'footnote fn ref',   cmd: ed => {
-        const label = String((ed.getText().match(/\[\^[^\]]+\]:/g) || []).length + 1);
-        ed.chain()
-          .focus()
-          .insertContent(`[^${label}]`)
-          .command(({ tr, dispatch }) => {
-            const schema = tr.doc.type.schema;
-            const para = schema.nodes.paragraph.createChecked(null, [schema.text(`[^${label}]: `)]);
-            if (dispatch) tr.insert(tr.doc.content.size, para);
-            return true;
-          })
-          .run();
+        if (_footnoteSlashCmdFn) _footnoteSlashCmdFn(ed);
       },
     },
     { id: 'inlinemath', label: '인라인 수식', icon: _IC_INTEG, hint: 'inline math latex katex 인라인 수식',
@@ -409,6 +400,27 @@
       document.body.appendChild(_linkOverlay);
     }
 
+    /* 각주 입력 모달 동적 생성 */
+    let _footnoteModal = null;
+    let _footnoteModalCallback = null;
+    if (opts.canEdit !== false) {
+      _footnoteModal = document.createElement('div');
+      _footnoteModal.className = 'wu-leave-overlay';
+      _footnoteModal.style.display = 'none';
+      _footnoteModal.innerHTML = `
+        <div class="wu-leave-box" style="max-width:460px;width:90%">
+          <h3 style="margin:0 0 12px;font-size:1rem">각주 추가</h3>
+          <textarea id="wu-fn-input" rows="3" placeholder="각주 내용을 입력하세요"
+            style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text);font-size:0.9rem;outline:none;resize:vertical;margin-bottom:16px;font-family:inherit"></textarea>
+          <div class="modal-actions">
+            <span style="margin-right:auto;font-size:0.78rem;color:var(--text-muted)">Ctrl+Enter로 삽입</span>
+            <button id="wu-fn-cancel" class="btn btn-sm">취소</button>
+            <button id="wu-fn-confirm" class="btn btn-sm btn-primary">삽입</button>
+          </div>
+        </div>`;
+      document.body.appendChild(_footnoteModal);
+    }
+
     /* 수식 입력 모달 동적 생성 */
     let _mathModal = null;
     let _mathModalCallback = null;
@@ -520,6 +532,38 @@
       _showMathModal('', '삽입', 'center', (latex, align) => {
         ed.chain().focus().insertBlockMath({ latex, align }).run();
       });
+    };
+
+    function _showFootnoteModal(onConfirm) {
+      if (!_footnoteModal) {
+        const content = window.prompt('각주 내용:') || '';
+        onConfirm(content);
+        return;
+      }
+      const input = _footnoteModal.querySelector('#wu-fn-input');
+      input.value = '';
+      _footnoteModalCallback = onConfirm;
+      _footnoteModal.style.display = 'flex';
+      setTimeout(() => input.focus(), 30);
+    }
+
+    function _insertFootnoteWithContent(ed, content) {
+      const label = String((ed.getText().match(/\[\^[^\]]+\]:/g) || []).length + 1);
+      ed.chain()
+        .focus()
+        .insertContent(`[^${label}]`)
+        .command(({ tr, dispatch }) => {
+          const schema = tr.doc.type.schema;
+          const text = content ? `[^${label}]: ${content}` : `[^${label}]: `;
+          const para = schema.nodes.paragraph.createChecked(null, [schema.text(text)]);
+          if (dispatch) tr.insert(tr.doc.content.size, para);
+          return true;
+        })
+        .run();
+    }
+
+    _footnoteSlashCmdFn = ed => {
+      _showFootnoteModal(content => _insertFootnoteWithContent(ed, content));
     };
 
     /* 슬래시 커맨드 메뉴 동적 생성 */
@@ -1472,20 +1516,9 @@
             }
             return;
           }
-          case 'footnote': {
-            const label = String((_editor.getText().match(/\[\^[^\]]+\]:/g) || []).length + 1);
-            _editor.chain()
-              .focus()
-              .insertContent(`[^${label}]`)
-              .command(({ tr, dispatch }) => {
-                const schema = tr.doc.type.schema;
-                const para = schema.nodes.paragraph.createChecked(null, [schema.text(`[^${label}]: `)]);
-                if (dispatch) tr.insert(tr.doc.content.size, para);
-                return true;
-              })
-              .run();
+          case 'footnote':
+            _showFootnoteModal(content => _insertFootnoteWithContent(_editor, content));
             return;
-          }
         }
         _updateToolbarState(tbEl);
       });
@@ -1545,6 +1578,33 @@
       });
       _linkOverlay.addEventListener('click', e => {
         if (e.target === _linkOverlay) _linkOverlay.style.display = 'none';
+      });
+    }
+
+    function _initFootnoteModal() {
+      if (!_footnoteModal) return;
+      const input      = _footnoteModal.querySelector('#wu-fn-input');
+      const cancelBtn  = _footnoteModal.querySelector('#wu-fn-cancel');
+      const confirmBtn = _footnoteModal.querySelector('#wu-fn-confirm');
+
+      function _apply() {
+        _footnoteModal.style.display = 'none';
+        if (_footnoteModalCallback) _footnoteModalCallback(input.value.trim());
+        _footnoteModalCallback = null;
+      }
+      function _cancel() {
+        _footnoteModal.style.display = 'none';
+        _footnoteModalCallback = null;
+      }
+
+      cancelBtn.addEventListener('click', _cancel);
+      confirmBtn.addEventListener('click', _apply);
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Escape') _cancel();
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); _apply(); }
+      });
+      _footnoteModal.addEventListener('click', e => {
+        if (e.target === _footnoteModal) _cancel();
       });
     }
 
@@ -1717,6 +1777,7 @@
 
       _initTableMenu();
       _initLinkModal();
+      _initFootnoteModal();
       _initSlashMenu();
       _initHeadingDrop();
       setTimeout(_initCodeHeaders, 100);
@@ -2060,6 +2121,7 @@
         if (_tbEl       && _tbEl.parentNode)       _tbEl.parentNode.removeChild(_tbEl);
         if (_leaveOverlay && _leaveOverlay.parentNode) _leaveOverlay.parentNode.removeChild(_leaveOverlay);
         if (_linkOverlay   && _linkOverlay.parentNode)   _linkOverlay.parentNode.removeChild(_linkOverlay);
+        if (_footnoteModal && _footnoteModal.parentNode) _footnoteModal.parentNode.removeChild(_footnoteModal);
         if (_slashMenuEl   && _slashMenuEl.parentNode)   _slashMenuEl.parentNode.removeChild(_slashMenuEl);
         if (_headingDropEl && _headingDropEl.parentNode) _headingDropEl.parentNode.removeChild(_headingDropEl);
         if (_acDd && _acDd.parentNode)             _acDd.parentNode.removeChild(_acDd);

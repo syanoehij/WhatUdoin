@@ -12,6 +12,11 @@
         },
         {
           "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 각주 삽입 모달 추가",
+          "detail_html": "<ul><li>툴바 각주 버튼 및 슬래시 커맨드(<code>/fn</code>) 클릭 시 \"각주 추가\" 모달이 열림 — textarea에 내용 입력 후 삽입하면 커서 위치에 <code>[^N]</code> 참조 + 문서 하단에 <code>[^N]: 내용</code> 정의가 한 번에 삽입</li><li>기존: 빈 <code>[^N]: </code>만 생성되어 사용자가 직접 하단으로 이동해 내용을 채워야 했음</li><li>Ctrl+Enter로 빠른 삽입, Esc·배경 클릭으로 취소 지원</li><li>슬래시 커맨드도 동일한 모달 사용 (<code>_footnoteSlashCmdFn</code> 공통화)</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "✨",
           "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 툴바에 각주(<code>[^N]</code>) 버튼 추가",
           "detail_html": "<ul><li>슬래시 커맨드(<code>/fn</code>)에만 있던 각주 삽입 기능을 툴바 버튼으로도 추가 — 클릭 시 커서 위치에 <code>[^N]</code> 참조 삽입 + 문서 끝에 <code>[^N]: </code> 정의 단락 자동 생성</li><li><code>[^]</code> 브래킷+캐럿 모양의 Lucide 스타일 SVG 아이콘(<code>_IC_FOOTNOTE</code>) 신규 추가</li><li>툴바 배치: 구분선·인용 그룹(<code>— &quot;&quot; [^]</code>)에 인용 바로 오른쪽에 위치</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
         },
