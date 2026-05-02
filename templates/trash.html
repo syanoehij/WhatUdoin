@@ -2,8 +2,6 @@
 {% block title %}휴지통 – WhatUDoin{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
-<script src="/static/lib/toastui-editor-all.min.js"></script>
 <style>
   html, body { height: 100%; overflow: hidden; }
   main { max-width: none; padding: 0; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
@@ -315,18 +313,6 @@
     letter-spacing: 0.05em;
     margin-bottom: 10px;
   }
-  /* ToastUI 뷰어 다크모드 */
-  .dark .toastui-editor-contents { color: var(--text); }
-  .dark .toastui-editor-contents p { color: var(--text); }
-  .dark .toastui-editor-contents h1,
-  .dark .toastui-editor-contents h2,
-  .dark .toastui-editor-contents h3 { color: var(--text); border-color: var(--border); }
-  .dark .toastui-editor-contents blockquote { border-color: var(--accent); background: var(--surface-2); }
-  .dark .toastui-editor-contents code { background: var(--surface-3); color: var(--text); }
-  .dark .toastui-editor-contents pre { background: var(--surface-3); }
-  .dark .toastui-editor-contents table th { background: var(--surface-3); }
-  .dark .toastui-editor-contents table td,
-  .dark .toastui-editor-contents table th { border-color: var(--border); }
   /* 일정 설명 */
   .tr-event-desc {
     font-size: 0.88rem;
@@ -696,18 +682,7 @@ function renderDetail(item) {
     contentSection.style.display = '';
     contentViewer.style.display = '';
     contentViewer.innerHTML = '';
-    // ToastUI 뷰어로 마크다운 렌더링
-    if (window.toastui && window.toastui.Editor) {
-      toastui.Editor.factory({
-        el: contentViewer,
-        viewer: true,
-        initialValue: item.content || '',
-        customHTMLSanitizer: html => html,
-        customHTMLRenderer: window.WUEditor?.renderer,
-      });
-    } else {
-      contentViewer.textContent = item.content;
-    }
+    WUEditor.create({ el: contentViewer, canEdit: false, initialMarkdown: item.content || '' });
   } else if (item._type === 'event' && item.description) {
     contentSection.style.display = '';
     eventDesc.style.display = '';

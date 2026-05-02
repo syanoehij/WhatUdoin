@@ -49,9 +49,11 @@
   <link rel="stylesheet" href="/static/lib/highlight-github.min.css" />
   <script src="/static/lib/highlight.min.js"></script>
 
-  <!-- TUI Editor (체크 바인딩 뷰어용) -->
-  <link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
-  <script src="/static/lib/toastui-editor-all.min.js"></script>
+  <!-- WUEditor (Tiptap 기반 공용 에디터/뷰어) -->
+  <link rel="stylesheet" href="/static/lib/katex.min.css" />
+  <link rel="stylesheet" href="/static/css/wu-editor.css?v={{ range(1000,9999) | random }}" />
+  <script src="/static/lib/tiptap-bundle.min.js?v={{ range(1000,9999) | random }}"></script>
+  <script src="/static/js/wu-editor.js?v={{ range(1000,9999) | random }}"></script>
   {% block extra_head %}{% endblock %}
   <style>
   /* ── 링크 버튼 & 드롭다운 ── */
@@ -280,9 +282,9 @@
     font-size: 14px;
     line-height: 1.6;
   }
-  .bound-content-viewer .toastui-editor-contents { font-size: 14px; }
+  .bound-content-viewer .ProseMirror { font-size: 14px; }
   /* 바인딩된 체크의 체크박스는 보기 전용 — 클릭/포인터 차단 */
-  .bound-content-viewer.no-check-interaction .toastui-editor-contents input[type="checkbox"] {
+  .bound-content-viewer.no-check-interaction .ProseMirror input[type="checkbox"] {
     pointer-events: none;
   }
   .bind-check-item {

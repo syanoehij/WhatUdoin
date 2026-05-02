@@ -1,4 +1,513 @@
-/* wu-editor.css — WUEditor 공용 편집기 모듈 전용 스타일 */
+/* wu-editor.css — WUEditor 공용 편집기 모듈 전용 스타일 (Tiptap 기반) */
+
+/* ── 에디터 래퍼 레이아웃 ── */
+.wu-editor-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+/* ── 툴바 ── */
+.wu-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  flex-shrink: 0;
+}
+
+.wu-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  height: 42px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1.275rem;
+  line-height: 1;
+  font-family: inherit;
+  transition: background 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+.wu-toolbar-btn svg { display: block; }
+
+.wu-toolbar-btn:hover {
+  background: var(--surface-3);
+  border-color: var(--border);
+}
+
+.wu-toolbar-btn.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.wu-toolbar-sep {
+  display: inline-block;
+  width: 1px;
+  height: 30px;
+  background: var(--border);
+  margin: 0 6px;
+}
+
+/* ── 에디터 콘텐츠 영역 ── */
+.wu-editor-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ── ProseMirror 기본 ── */
+.ProseMirror {
+  padding: 16px 20px;
+  outline: none;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--text);
+  word-break: break-word;
+}
+
+/* 편집 모드에서만 최소 높이 적용 — 뷰어 모드(contenteditable=false)에는 불필요 */
+.wu-editor-wrap .ProseMirror {
+  min-height: 200px;
+}
+
+.ProseMirror:focus {
+  outline: none;
+}
+
+/* 플레이스홀더 */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--text-faint, #aaa);
+  pointer-events: none;
+  height: 0;
+}
+
+/* ── 헤딩 ── */
+.ProseMirror h1 { font-size: 1.8rem; font-weight: 700; margin: 1em 0 0.5em; }
+.ProseMirror h2 { font-size: 1.4rem; font-weight: 600; margin: 0.9em 0 0.4em; }
+.ProseMirror h3 { font-size: 1.15rem; font-weight: 600; margin: 0.8em 0 0.35em; }
+.ProseMirror h4, .ProseMirror h5, .ProseMirror h6 { font-weight: 600; margin: 0.7em 0 0.3em; }
+
+/* ── 단락 / 줄바꿈 ── */
+.ProseMirror p { margin: 0.5em 0; }
+.ProseMirror br { display: block; content: ''; }
+
+/* ── 인용 ── */
+.ProseMirror blockquote {
+  border-left: 3px solid var(--accent, #a29bfe);
+  margin: 0.8em 0;
+  padding: 6px 14px;
+  color: var(--text-muted, #888);
+  background: var(--surface-2);
+  border-radius: 0 4px 4px 0;
+}
+
+/* ── 목록 ── */
+.ProseMirror ul, .ProseMirror ol {
+  margin: 0.5em 0 0.5em 1.5em;
+  padding: 0;
+}
+.ProseMirror li { margin: 0.15em 0; }
+
+/* ── 할일 목록 ── */
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  margin-left: 0.5em;
+  padding-left: 0;
+}
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.ProseMirror ul[data-type="taskList"] li > label {
+  flex-shrink: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.ProseMirror ul[data-type="taskList"] li > div {
+  flex: 1;
+  min-width: 0;
+}
+.ProseMirror ul[data-type="taskList"] li > div > p {
+  margin: 0;
+}
+.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: var(--text-faint, #999);
+  text-decoration: line-through;
+}
+
+/* ── 구분선 ── */
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
+
+/* ── 코드블록 ── */
+.ProseMirror pre,
+.wu-editor-content pre {
+  background: #f6f8fa;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  overflow-x: auto;
+  padding: 0;
+  margin: 0.6em 0;
+}
+.ProseMirror pre code,
+.wu-editor-content pre code {
+  display: block;
+  padding: 12px 160px 12px 16px;
+  font-size: 0.85em;
+  line-height: 1.6;
+  font-family: 'Consolas', 'Menlo', 'Monaco', monospace;
+  background: transparent;
+}
+.ProseMirror pre code.hljs,
+.wu-editor-content pre code.hljs {
+  display: block;
+  padding: 12px 160px 12px 16px;
+  font-size: 0.85em;
+  line-height: 1.6;
+  font-family: 'Consolas', 'Menlo', 'Monaco', monospace;
+  background: transparent;
+}
+[data-theme="dark"] .ProseMirror pre,
+[data-theme="dark"] .wu-editor-content pre {
+  background: #1e1e2e;
+  border-color: #333;
+}
+[data-theme="dark"] .ProseMirror pre code,
+[data-theme="dark"] .wu-editor-content pre code {
+  color: #cdd6f4;
+}
+
+/* ── 코드블록 헤더 (언어 선택 + 복사 버튼) ── */
+.wu-code-header {
+  position: fixed; /* JS가 top/right 지정 — document.body에 마운트 */
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 100;
+  pointer-events: none;
+}
+.wu-code-header > * { pointer-events: auto; }
+
+/* 언어 선택 래퍼 (드롭다운 화살표 위치 제어) */
+.wu-code-lang-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.wu-code-lang-wrap::after {
+  content: '';
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.wu-code-lang-select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 3px 22px 3px 9px;
+  border: 1px solid rgba(120,120,120,0.2);
+  border-radius: 5px;
+  background: rgba(0,0,0,0.06);
+  color: rgba(0,0,0,0.5);
+  font-size: 0.76rem;
+  cursor: pointer;
+  outline: none;
+  min-width: 60px;
+  max-width: 140px;
+  transition: background 0.1s, border-color 0.1s;
+}
+.wu-code-lang-select:hover,
+.wu-code-lang-select:focus {
+  background: rgba(0,0,0,0.1);
+  border-color: rgba(120,120,120,0.35);
+}
+[data-theme="dark"] .wu-code-lang-select {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.55);
+}
+[data-theme="dark"] .wu-code-lang-select:hover,
+[data-theme="dark"] .wu-code-lang-select:focus {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.28);
+}
+[data-theme="dark"] .wu-code-lang-wrap::after { color: rgba(255,255,255,0.55); }
+
+.wu-code-copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(120,120,120,0.2);
+  border-radius: 5px;
+  background: rgba(0,0,0,0.06);
+  color: rgba(0,0,0,0.45);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.wu-code-copy-btn:hover {
+  background: rgba(0,0,0,0.12);
+  border-color: rgba(120,120,120,0.35);
+  color: rgba(0,0,0,0.7);
+}
+.wu-code-copy-btn.copied {
+  color: #22c55e;
+  border-color: rgba(34,197,94,0.35);
+  background: rgba(34,197,94,0.08);
+}
+[data-theme="dark"] .wu-code-copy-btn {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.45);
+}
+[data-theme="dark"] .wu-code-copy-btn:hover {
+  background: rgba(255,255,255,0.13);
+  border-color: rgba(255,255,255,0.28);
+  color: rgba(255,255,255,0.8);
+}
+[data-theme="dark"] .wu-code-copy-btn.copied {
+  color: #4ade80;
+  border-color: rgba(74,222,128,0.3);
+  background: rgba(74,222,128,0.08);
+}
+
+/* ── 인라인 코드 ── */
+.ProseMirror code:not(pre code) {
+  background: var(--surface-3, #f0f0f0);
+  border: 1px solid var(--border, #ddd);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 0.88em;
+  font-family: 'Consolas', 'Menlo', 'Monaco', monospace;
+}
+
+/* ── 링크 ── */
+.ProseMirror a {
+  color: var(--accent, #a29bfe);
+  text-decoration: underline;
+}
+.ProseMirror a:hover { opacity: 0.8; }
+
+/* eid: 연결 마커 링크 */
+.ProseMirror a[href^="eid:"] {
+  pointer-events: none;   /* 뷰어/읽기 전용 모드: 클릭 무효화 */
+  font-size: 0.72rem;
+  opacity: 0.6;
+  text-decoration: none;
+  color: var(--accent, #a29bfe);
+}
+/* 편집 모드: eid 링크 클릭 허용 */
+.wu-editor-content .ProseMirror a[href^="eid:"] {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* ── 이미지 ── */
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+/* ── 테이블 ── */
+.ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: auto;
+  margin: 0.8em 0;
+  overflow: auto;
+  display: block;
+}
+.ProseMirror table td,
+.ProseMirror table th {
+  border: 1px solid var(--border, #ddd);
+  padding: 6px 10px;
+  position: relative;
+  min-width: 40px;
+  vertical-align: top;
+}
+.ProseMirror table th {
+  background: var(--surface-2, #f0f0f0);
+  font-weight: 600;
+}
+[data-theme="dark"] .ProseMirror table th {
+  background: var(--surface-2, #252535);
+}
+
+/* 테이블 열 리사이즈 핸들 (Tiptap Table resizable) */
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: var(--accent, #a29bfe);
+  cursor: col-resize;
+  z-index: 20;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.ProseMirror .column-resize-handle:hover,
+.ProseMirror .resize-cursor .column-resize-handle {
+  opacity: 1;
+}
+
+/* 편집 중인 셀 하이라이트 */
+.ProseMirror td.wu-cell-focus,
+.ProseMirror th.wu-cell-focus {
+  outline: 2px solid var(--accent, #a29bfe);
+  outline-offset: -2px;
+}
+
+/* 테이블 셀 선택 */
+.ProseMirror .selectedCell::after {
+  position: absolute;
+  content: '';
+  left: 0; right: 0; top: 0; bottom: 0;
+  background: rgba(162, 155, 254, 0.15);
+  pointer-events: none;
+}
+
+/* ── 뷰어 모드 ── */
+.ProseMirror[contenteditable="false"] {
+  cursor: default;
+}
+
+/* ── 테이블 그리드 피커 ── */
+.wu-table-picker {
+  position: absolute;
+  display: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  z-index: 10001;
+  box-shadow: 0 6px 24px rgba(0,0,0,.15);
+  user-select: none;
+}
+.wu-table-picker-grid {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.wu-table-picker-cell {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background 0.08s, border-color 0.08s;
+}
+.wu-table-picker-cell.active {
+  background: var(--accent, #a29bfe);
+  border-color: var(--accent, #a29bfe);
+  opacity: 0.85;
+}
+.wu-table-picker-label {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--text-muted, #888);
+  min-height: 1.2em;
+}
+
+/* ── 테이블 컨텍스트 메뉴 ── */
+.wu-table-menu {
+  position: fixed;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  z-index: 9998;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  font-size: 0.78rem;
+}
+.wu-table-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  transition: background 0.1s, border-color 0.1s;
+}
+.wu-table-menu-btn:hover {
+  background: var(--surface-3);
+  border-color: var(--border);
+}
+.wu-table-menu-btn[data-cmd="deleteRow"]:hover,
+.wu-table-menu-btn[data-cmd="deleteColumn"]:hover,
+.wu-table-menu-btn[data-cmd="deleteTable"]:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+[data-theme="dark"] .wu-table-menu-btn[data-cmd="deleteRow"]:hover,
+[data-theme="dark"] .wu-table-menu-btn[data-cmd="deleteColumn"]:hover,
+[data-theme="dark"] .wu-table-menu-btn[data-cmd="deleteTable"]:hover {
+  background: #3f1212;
+  border-color: #7f1d1d;
+  color: #f87171;
+}
+.wu-table-menu-sep {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 3px;
+}
 
 /* ── 이미지 리사이즈 툴바 ── */
 .wu-img-resize-toolbar {
@@ -44,36 +553,6 @@
 .wu-leave-box p  { margin: 0 0 20px; font-size: 0.88rem; color: var(--text-muted); }
 .wu-leave-box .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
-/* ── 코드블록 ── */
-.toastui-editor-contents pre,
-.toastui-editor-ww-container pre {
-  background: #f6f8fa;
-  border: 1px solid #e1e4e8;
-  border-radius: 6px;
-  overflow-x: auto;
-  padding: 0;
-  margin: 0.6em 0;
-}
-.toastui-editor-contents pre code.hljs,
-.toastui-editor-ww-container pre code.hljs {
-  display: block;
-  padding: 12px 16px;
-  font-size: 0.85em;
-  line-height: 1.6;
-  font-family: 'Consolas', 'Menlo', 'Monaco', monospace;
-  background: transparent;
-  border-radius: 6px;
-}
-[data-theme="dark"] .toastui-editor-contents pre,
-[data-theme="dark"] .toastui-editor-ww-container pre {
-  background: #1e1e2e;
-  border-color: #333;
-}
-[data-theme="dark"] .toastui-editor-contents pre code.hljs,
-[data-theme="dark"] .toastui-editor-ww-container pre code.hljs {
-  color: #cdd6f4;
-}
-
 /* ── 잠금 배너 (전역 공용) ── */
 .lock-banner {
   display: flex; align-items: center; gap: 10px;
@@ -89,3 +568,491 @@
   padding: 3px 10px; font-size: 0.8rem; cursor: pointer; color: inherit;
 }
 .lock-banner-refresh:hover { background: rgba(0,0,0,0.05); }
+
+/* ── 슬래시 커맨드 메뉴 (계층형 그룹 메뉴) ── */
+.wu-slash-menu {
+  position: fixed;
+  display: flex;
+  flex-direction: row;
+  z-index: 10002;
+  /* 패널 배경/테두리는 각 패널에서 지정 */
+}
+
+/* 왼쪽·오른쪽 패널 공통 */
+.wu-slash-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.18);
+  min-width: 160px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.wu-slash-panel--right {
+  position: absolute;
+  min-width: 200px;
+}
+.wu-slash-panel--right.wu-slash-panel--grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-width: 340px;
+}
+
+/* 행 공통 스타일 */
+.wu-slash-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  transition: background 0.08s;
+  white-space: nowrap;
+}
+.wu-slash-row:hover,
+.wu-slash-row.selected {
+  background: var(--surface-3);
+}
+
+/* 서브메뉴 있는 그룹 행: 오른쪽에 ▶ 표시 */
+.wu-slash-row--has-sub {
+  padding-right: 28px;
+  position: relative;
+}
+.wu-slash-row--has-sub::after {
+  content: '▶';
+  position: absolute;
+  right: 8px;
+  font-size: 0.6rem;
+  color: var(--text-muted, #999);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.wu-slash-icon {
+  min-width: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted, #888);
+  flex-shrink: 0;
+}
+.wu-slash-icon svg { width: 15px; height: 15px; display: block; }
+.wu-slash-label { color: var(--text); flex: 1; }
+.wu-slash-desc {
+  font-size: 0.76rem;
+  color: var(--text-muted, #888);
+  margin-left: 4px;
+}
+
+/* ── 헤딩 드롭다운 ── */
+.wu-heading-drop {
+  position: fixed;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 10002;
+  box-shadow: 0 4px 20px rgba(0,0,0,.18);
+  min-width: 140px;
+}
+.wu-heading-drop-btn {
+  display: block;
+  width: 100%;
+  padding: 7px 14px;
+  text-align: left;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.08s;
+  line-height: 1.4;
+}
+.wu-heading-drop-btn:hover { background: var(--surface-3); }
+.wu-heading-drop-btn.is-active { background: var(--accent); color: #fff; }
+
+
+/* ── 콜아웃 드롭다운 ── */
+.wu-callout-drop {
+  position: fixed;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 10002;
+  box-shadow: 0 4px 20px rgba(0,0,0,.18);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  min-width: 280px;
+}
+.wu-callout-drop-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  text-align: left;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.08s;
+}
+.wu-callout-drop-btn:hover { background: var(--surface-3); }
+.wu-callout-drop-icon { flex-shrink: 0; display: flex; opacity: 0.75; }
+.wu-callout-drop-icon svg { width: 15px; height: 15px; }
+.wu-callout-drop-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  min-width: 54px;
+}
+.wu-callout-drop-desc {
+  font-size: 0.76rem;
+  color: var(--text-muted, #888);
+}
+
+
+/* ── Obsidian 주석 (%% ... %%) ── */
+.wu-comment {
+  color: var(--text-muted, #999);
+  opacity: 0.55;
+  background: rgba(128, 128, 128, 0.08);
+  border-radius: 3px;
+  font-style: italic;
+}
+.ProseMirror[contenteditable="false"] .wu-comment {
+  display: none;
+}
+
+/* ── 각주 뷰어 스타일 (Toast UI viewer) ── */
+sup.wu-fn-ref { line-height: 0; }
+sup.wu-fn-ref a { color: var(--primary, #4c6ef5); text-decoration: none; font-size: 0.75em; padding: 0 1px; }
+sup.wu-fn-ref a:hover { text-decoration: underline; }
+.wu-footnotes { font-size: 0.85em; color: var(--text-2, #555); margin-top: 0.5rem; }
+.wu-footnotes ol { padding-left: 1.6em; margin: 0.4rem 0; }
+.wu-footnotes li { margin: 0.2rem 0; }
+.wu-footnotes li p { margin: 0; display: inline; }
+.wu-fn-back { color: var(--text-2, #888); text-decoration: none; margin-left: 0.3em; font-size: 0.9em; }
+.wu-fn-back:hover { color: var(--primary, #4c6ef5); }
+
+/* ── 각주 뷰어 스타일 (WUEditor Tiptap viewer) ── */
+/* Tiptap이 <sup class="wu-fn-ref"><a> 구조를 <a><sup>로 재배치하므로 클래스 없이 선택 */
+.ProseMirror a sup { color: var(--primary, #4c6ef5); font-size: 0.75em; padding: 0 1px; line-height: 0; }
+.ProseMirror a:has(sup) { text-decoration: none; }
+.ProseMirror a:has(sup):hover sup { text-decoration: underline; }
+
+/* ── 하이라이트 스타일 ── */
+/* 편집기 모드 각주 시각 보조 */
+.ProseMirror .wu-editor-footnote-ref {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  border-radius: 4px;
+  padding: 0 3px;
+  font-size: 0.88em;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ProseMirror .wu-editor-footnote-ref:hover { background: rgba(37, 99, 235, 0.16); }
+.ProseMirror p[data-wu-footnote-def="true"] {
+  color: var(--text-2, #4b5563);
+  font-size: 0.9em;
+  margin: 0.35rem 0;
+}
+.ProseMirror .wu-editor-footnote-label {
+  color: #2563eb;
+  font-weight: 600;
+}
+.ProseMirror .wu-editor-footnote-divider {
+  border-top: 1px solid var(--border, #d0d7de);
+  margin: 2rem 0 0.8rem;
+  height: 0;
+  pointer-events: none;
+}
+[data-theme="dark"] .ProseMirror .wu-editor-footnote-ref {
+  color: #93c5fd;
+  background: rgba(96, 165, 250, 0.14);
+  border-color: rgba(147, 197, 253, 0.28);
+}
+[data-theme="dark"] .ProseMirror .wu-editor-footnote-label {
+  color: #93c5fd;
+}
+
+.ProseMirror mark { background: #fff59d; color: inherit; border-radius: 2px; padding: 0 1px; }
+.toastui-editor-contents mark { background: #fff59d; color: inherit; border-radius: 2px; padding: 0 1px; }
+[data-theme="dark"] .ProseMirror mark { background: #7c6e0a; color: #f5e96d; }
+[data-theme="dark"] .toastui-editor-contents mark { background: #7c6e0a; color: #f5e96d; }
+
+/* ── 수식 입력 모달 ── */
+.wu-math-modal-box { max-width: 520px; width: 92%; }
+.wu-math-modal-title { margin: 0 0 14px; font-size: 1rem; font-weight: 600; }
+.wu-math-modal-body { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.wu-math-modal-label { font-size: 0.78rem; color: var(--text-2, #666); font-weight: 500; margin-bottom: 2px; }
+.wu-math-modal-input {
+  width: 100%; box-sizing: border-box;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--surface); color: var(--text);
+  font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.9rem;
+  outline: none;
+}
+.wu-math-modal-input:focus { border-color: var(--primary, #4c6ef5); }
+.wu-math-align-row { display: flex; gap: 6px; }
+.wu-math-align-btn {
+  flex: 1; padding: 5px 0; font-size: 0.82rem; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--surface); color: var(--text-2, #666);
+  transition: background 0.15s, color 0.15s;
+}
+.wu-math-align-btn.active {
+  background: var(--primary, #4c6ef5); color: #fff; border-color: var(--primary, #4c6ef5);
+}
+.wu-math-align-btn:hover:not(.active) { background: var(--surface-2, #f0f0f0); }
+.wu-math-modal-preview {
+  min-height: 52px; padding: 10px 12px;
+  background: var(--surface-2, #f8f8f8); border: 1px solid var(--border);
+  border-radius: 5px; overflow-x: auto;
+}
+.wu-math-modal-preview[data-align="left"]   { text-align: left; }
+.wu-math-modal-preview[data-align="center"] { text-align: center; }
+.wu-math-modal-preview[data-align="right"]  { text-align: right; }
+.wu-math-modal-preview:not([data-align])    { text-align: center; }
+.wu-math-preview-error { color: #e03131; font-size: 0.8em; text-align: left; }
+[data-theme="dark"] .wu-math-modal-preview { background: var(--surface-2, #1e1e1e); }
+
+/* ── 수식(KaTeX) 스타일 ── */
+.tiptap-mathematics-render { cursor: default; user-select: none; }
+.tiptap-mathematics-render--editable { cursor: pointer; }
+.tiptap-mathematics-render--editable:hover { outline: 2px dashed var(--primary, #4c6ef5); border-radius: 3px; }
+.block-math-error, .inline-math-error { color: #e03131; font-family: monospace; font-size: 0.85em; }
+.ProseMirror .tiptap-mathematics-render[data-type="block-math"] {
+  display: block; padding: 0.6em 0; overflow-x: auto; text-align: center;
+}
+.ProseMirror .tiptap-mathematics-render[data-type="block-math"][data-align="left"]  { text-align: left; }
+.ProseMirror .tiptap-mathematics-render[data-type="block-math"][data-align="right"] { text-align: right; }
+[data-theme="dark"] .katex { color: var(--text, #e0e0e0); }
+
+/* ── 콜아웃(Callout/Admonition) ────────────────────────── */
+.wu-callout {
+  border-left: 4px solid var(--callout-color, #3b82f6);
+  background: rgba(59, 130, 246, 0.08); /* fallback */
+  background: color-mix(in srgb, var(--callout-color, #3b82f6) 8%, var(--surface, #fff));
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 12px 0;
+}
+.wu-callout-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  font-size: 0.93rem;
+  line-height: 16px;
+  color: var(--callout-color, #3b82f6);
+  margin-bottom: 6px;
+}
+.wu-callout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  line-height: 0;
+  transform: translateY(1.5px);
+}
+.wu-callout-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.wu-callout-title > span:not(.wu-callout-icon) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 16px;
+}
+.wu-callout-body { font-size: 0.9rem; line-height: 1.6; }
+.wu-callout-body > *:first-child { margin-top: 0; }
+.wu-callout-body > *:last-child { margin-bottom: 0; }
+
+/* 타입별 색상 */
+.wu-callout-note, .wu-callout-info    { --callout-color: #3b82f6; }
+.wu-callout-tip, .wu-callout-hint     { --callout-color: #22c55e; }
+.wu-callout-success, .wu-callout-check, .wu-callout-done { --callout-color: #22c55e; }
+.wu-callout-warning, .wu-callout-caution, .wu-callout-attention { --callout-color: #f59e0b; }
+.wu-callout-danger, .wu-callout-error, .wu-callout-failure, .wu-callout-fail { --callout-color: #ef4444; }
+.wu-callout-important                 { --callout-color: #a855f7; }
+.wu-callout-question, .wu-callout-faq, .wu-callout-help { --callout-color: #06b6d4; }
+.wu-callout-quote, .wu-callout-cite   { --callout-color: #6b7280; }
+.wu-callout-abstract, .wu-callout-summary, .wu-callout-tldr { --callout-color: #14b8a6; }
+.wu-callout-example                   { --callout-color: #7c3aed; }
+.wu-callout-bug                       { --callout-color: #ef4444; }
+
+/* 타입별 background fallback (color-mix 미지원 브라우저) */
+.wu-callout-note, .wu-callout-info    { background: rgba(59, 130, 246, 0.08); }
+.wu-callout-tip, .wu-callout-hint,
+.wu-callout-success, .wu-callout-check, .wu-callout-done { background: rgba(34, 197, 94, 0.08); }
+.wu-callout-warning, .wu-callout-caution, .wu-callout-attention { background: rgba(245, 158, 11, 0.08); }
+.wu-callout-danger, .wu-callout-error,
+.wu-callout-failure, .wu-callout-fail { background: rgba(239, 68, 68, 0.08); }
+.wu-callout-important                 { background: rgba(168, 85, 247, 0.08); }
+.wu-callout-question, .wu-callout-faq, .wu-callout-help { background: rgba(6, 182, 212, 0.08); }
+.wu-callout-quote, .wu-callout-cite   { background: rgba(107, 114, 128, 0.08); }
+.wu-callout-abstract, .wu-callout-summary, .wu-callout-tldr { background: rgba(20, 184, 166, 0.08); }
+.wu-callout-example                   { background: rgba(124, 58, 237, 0.08); }
+.wu-callout-bug                       { background: rgba(239, 68, 68, 0.08); }
+
+/* color-mix 지원 브라우저에서 오버라이드 */
+@supports (background: color-mix(in srgb, red, blue)) {
+  .wu-callout { background: color-mix(in srgb, var(--callout-color, #3b82f6) 8%, var(--surface, #fff)); }
+  .wu-callout-note, .wu-callout-info,
+  .wu-callout-tip, .wu-callout-hint,
+  .wu-callout-success, .wu-callout-check, .wu-callout-done,
+  .wu-callout-warning, .wu-callout-caution, .wu-callout-attention,
+  .wu-callout-danger, .wu-callout-error, .wu-callout-failure, .wu-callout-fail,
+  .wu-callout-important,
+  .wu-callout-question, .wu-callout-faq, .wu-callout-help,
+  .wu-callout-quote, .wu-callout-cite,
+  .wu-callout-abstract, .wu-callout-summary, .wu-callout-tldr,
+  .wu-callout-example, .wu-callout-bug {
+    background: color-mix(in srgb, var(--callout-color) 8%, var(--surface, #fff));
+  }
+}
+
+/* ── 편집기 모드 콜아웃 (data-callout-type 마킹 기반) ────────────── */
+.ProseMirror blockquote[data-callout-type] {
+  --callout-color: #3b82f6;
+  border-left: 4px solid var(--callout-color);
+  background: rgba(59, 130, 246, 0.06);
+  border-radius: 4px;
+  padding: 0;
+  overflow: hidden;
+  color: inherit;
+}
+.ProseMirror blockquote[data-callout-type] > p:first-child {
+  font-weight: 600;
+  color: var(--callout-color);
+  margin: 0;
+  padding: 5px 14px;
+  background: rgba(59, 130, 246, 0.1);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+}
+.ProseMirror blockquote[data-callout-type] > p:not(:first-child),
+.ProseMirror blockquote[data-callout-type] > ul,
+.ProseMirror blockquote[data-callout-type] > ol {
+  margin: 0;
+  padding: 4px 14px;
+}
+.ProseMirror blockquote[data-callout-type] > *:last-child { padding-bottom: 8px; }
+
+/* 타입별 색상 + fallback 배경 */
+.ProseMirror blockquote[data-callout-type="note"],
+.ProseMirror blockquote[data-callout-type="info"] {
+  --callout-color: #3b82f6; background: rgba(59, 130, 246, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="note"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="info"] > p:first-child {
+  background: rgba(59, 130, 246, 0.1); border-bottom-color: rgba(59, 130, 246, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="tip"],
+.ProseMirror blockquote[data-callout-type="hint"],
+.ProseMirror blockquote[data-callout-type="success"],
+.ProseMirror blockquote[data-callout-type="check"],
+.ProseMirror blockquote[data-callout-type="done"] {
+  --callout-color: #22c55e; background: rgba(34, 197, 94, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="tip"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="hint"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="success"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="check"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="done"] > p:first-child {
+  background: rgba(34, 197, 94, 0.1); border-bottom-color: rgba(34, 197, 94, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="warning"],
+.ProseMirror blockquote[data-callout-type="caution"],
+.ProseMirror blockquote[data-callout-type="attention"] {
+  --callout-color: #f59e0b; background: rgba(245, 158, 11, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="warning"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="caution"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="attention"] > p:first-child {
+  background: rgba(245, 158, 11, 0.1); border-bottom-color: rgba(245, 158, 11, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="danger"],
+.ProseMirror blockquote[data-callout-type="error"],
+.ProseMirror blockquote[data-callout-type="failure"],
+.ProseMirror blockquote[data-callout-type="fail"] {
+  --callout-color: #ef4444; background: rgba(239, 68, 68, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="danger"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="error"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="failure"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="fail"] > p:first-child {
+  background: rgba(239, 68, 68, 0.1); border-bottom-color: rgba(239, 68, 68, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="important"] {
+  --callout-color: #a855f7; background: rgba(168, 85, 247, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="important"] > p:first-child {
+  background: rgba(168, 85, 247, 0.1); border-bottom-color: rgba(168, 85, 247, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="question"],
+.ProseMirror blockquote[data-callout-type="faq"],
+.ProseMirror blockquote[data-callout-type="help"] {
+  --callout-color: #06b6d4; background: rgba(6, 182, 212, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="question"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="faq"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="help"] > p:first-child {
+  background: rgba(6, 182, 212, 0.1); border-bottom-color: rgba(6, 182, 212, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="quote"],
+.ProseMirror blockquote[data-callout-type="cite"] {
+  --callout-color: #6b7280; background: rgba(107, 114, 128, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="quote"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="cite"] > p:first-child {
+  background: rgba(107, 114, 128, 0.1); border-bottom-color: rgba(107, 114, 128, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="abstract"],
+.ProseMirror blockquote[data-callout-type="summary"],
+.ProseMirror blockquote[data-callout-type="tldr"] {
+  --callout-color: #14b8a6; background: rgba(20, 184, 166, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="abstract"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="summary"] > p:first-child,
+.ProseMirror blockquote[data-callout-type="tldr"] > p:first-child {
+  background: rgba(20, 184, 166, 0.1); border-bottom-color: rgba(20, 184, 166, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="example"] {
+  --callout-color: #7c3aed; background: rgba(124, 58, 237, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="example"] > p:first-child {
+  background: rgba(124, 58, 237, 0.1); border-bottom-color: rgba(124, 58, 237, 0.2);
+}
+.ProseMirror blockquote[data-callout-type="bug"] {
+  --callout-color: #ef4444; background: rgba(239, 68, 68, 0.06);
+}
+.ProseMirror blockquote[data-callout-type="bug"] > p:first-child {
+  background: rgba(239, 68, 68, 0.1); border-bottom-color: rgba(239, 68, 68, 0.2);
+}
+
+/* color-mix 지원 브라우저 오버라이드 */
+@supports (background: color-mix(in srgb, red, blue)) {
+  .ProseMirror blockquote[data-callout-type] {
+    background: color-mix(in srgb, var(--callout-color) 6%, var(--surface, #fff));
+  }
+  .ProseMirror blockquote[data-callout-type] > p:first-child {
+    background: color-mix(in srgb, var(--callout-color) 12%, var(--surface, #fff));
+    border-bottom-color: color-mix(in srgb, var(--callout-color) 25%, transparent);
+  }
+}

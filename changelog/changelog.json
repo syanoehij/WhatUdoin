@@ -1,6 +1,220 @@
 {
   "groups": [
     {
+      "date": "2026-05-03",
+      "phase": "35차 9단계",
+      "phase_class": "phase-9",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 슬래시 명령어 계층형 그룹 메뉴로 전면 개편",
+          "detail_html": "<ul><li><strong>기존 동작</strong>: <code>/</code> 입력 시 모든 명령어가 단일 목록으로 나열</li><li><strong>변경 동작</strong>: 좌측 그룹 패널 + 우측 서브메뉴 패널 2단 구조로 개편 — VSCode 컨텍스트 메뉴 스타일</li><li><strong>그룹 구성</strong>: 제목(H1~H6·본문), 서식(볼드·기울이기·취소선·하이라이트·인라인코드·인라인수식), 콜아웃(13종), 단락(글머리·숫자·체크박스 목록), 삽입(표·링크·코드블록·수식블록·주석) + 단독 항목 3개(구분선·인용·각주)</li><li><strong>콜아웃 서브메뉴</strong>: 13개 항목을 2열 그리드로 표시</li><li><strong>키보드 네비게이션</strong>: ↑↓로 현재 패널 이동, →로 서브메뉴 진입, ←로 복귀, Esc로 전체 닫기 — 2열 그리드에서는 ↑↓가 열 단위(+2), ←→가 행 단위(+1) 이동</li><li><strong>텍스트 필터</strong>: <code>/</code> 이후 문자 입력 시 전체 리프 항목 flat 검색 모드로 자동 전환</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 슬래시 메뉴 서브패널 선택 잔존 버그 3건 수정",
+          "detail_html": "<ul><li><strong>← 복귀 시 하이라이트 잔존</strong>: 오른쪽 서브메뉴에서 ← 키로 복귀할 때 <code>_slashSubIdx</code>를 <code>-1</code>로 초기화하지 않아 selected 클래스가 남아 있던 문제 수정</li><li><strong>↓↑ 이동 시 서브메뉴 자동 선택</strong>: 왼쪽 그룹 패널에서 ↓↑로 이동할 때 서브메뉴 첫 항목이 자동 선택되던 문제 수정 — <code>_openSubPanel</code>이 <code>_slashSubIdx = -1</code>로 초기화하고, ArrowRight·Enter 진입 시에만 <code>_slashSubIdx = 0</code> 적용</li><li><strong>2열 그리드 방향키 오동작</strong>: 그리드 모드에서 ↑↓가 인덱스 +1 이동(시각적으로 좌우 이동)하던 문제 수정 — <code>cols</code> 단위(+2)로 계산, ArrowRight·Left를 행 단위 이동으로 처리</li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-03",
+      "phase": "35차 8단계",
+      "phase_class": "phase-8",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 콜아웃 타입 선택 드롭다운 추가",
+          "detail_html": "<ul><li><strong>기존 동작</strong>: 콜아웃 툴바 버튼 클릭 시 <code>note</code> 타입으로 즉시 삽입</li><li><strong>변경 동작</strong>: 헤딩 선택과 동일한 방식으로 2열 드롭다운 팝업 표시 — 아이콘 + 영문명 + 한국어 설명 표시</li><li><strong>선택 가능한 13종</strong>: note(메모) / abstract(문서 요약) / info(참고 정보) / todo(할 일) / tip(팁) / success(완료) / question(질문) / warning(주의) / failure(실패/누락) / danger(위험) / bug(버그) / example(예제) / quote(인용문)</li><li><strong><code>todo</code> 타입 신규 추가</strong>: 기존 <code>CALLOUT_TYPES</code>에 없던 할일 체크박스 스타일 콜아웃 타입 추가</li><li>팝업 바깥 클릭 시 자동 닫힘, 에디터 정리 시 DOM 자동 제거</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 툴바 '서식 지우기' 버튼 추가",
+          "detail_html": "<ul><li><strong>버튼 위치</strong>: 하이라이트 버튼 바로 오른쪽, 오른쪽에 <code>|</code> 구분선 배치</li><li><strong>동작</strong>: 선택 영역의 모든 인라인 서식(굵게·기울임·취소선·하이라이트·코드·수식 등) 및 블록 노드 서식 일괄 제거 — Tiptap <code>clearNodes().unsetAllMarks()</code> 조합</li><li><strong>아이콘</strong>: Lucide Eraser SVG — Obsidian 서식 지우기와 동일한 지우개 모양</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 정적 파일 캐시 무효화 쿼리스트링 적용",
+          "detail_html": "<ul><li><code>wu-editor.css</code>, <code>tiptap-bundle.min.js</code>, <code>wu-editor.js</code> 로드 URL에 <code>?v={{ range(1000,9999) | random }}</code> 쿼리스트링 추가 — 브라우저 캐시로 인해 CSS·JS 변경사항이 반영되지 않는 문제 해소</li><li>적용 파일: <code>templates/base.html</code>, <code>templates/check.html</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> Tiptap 번들 — <code>Extension</code>, <code>Plugin</code>, <code>PluginKey</code>, <code>Decoration</code>, <code>DecorationSet</code> export 추가 및 번들 재빌드",
+          "detail_html": "<ul><li>콜아웃 편집기 데코레이션(<code>EditorCalloutDecorations</code>) 구현에 필요한 ProseMirror/Tiptap 심볼이 번들에 미노출되어 <code>undefined</code> 오류 발생 → <code>tiptap-entry.js</code>에 <code>Extension</code>(@tiptap/core), <code>Plugin</code>·<code>PluginKey</code>(@tiptap/pm/state), <code>Decoration</code>·<code>DecorationSet</code>(@tiptap/pm/view) export 추가 후 재빌드</li><li>수정 파일: <code>tiptap-entry.js</code>, <code>static/lib/tiptap-bundle.min.js</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
+      "phase": "35차 7단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 편집 모드 콜아웃 실시간 스타일 적용",
+          "detail_html": "<ul><li><strong>편집 중 콜아웃 시각 구분</strong>: <code>data-callout-type</code> 속성 기반 CSS로 편집기에서도 콜아웃 타입별 색상·굵은 제목 표시 — 뷰어와 동일한 타입별 색상 팔레트 공유</li><li><strong>PM 내부 updateState 대응</strong>: ProseMirror가 트랜잭션 외 내부 상태 업데이트(포커스/선택 등)에서도 비스키마 속성을 제거하는 문제를 <code>view.updateState</code> 패치로 해결 — 모든 상태 업데이트 직후 속성을 재적용</li><li><strong>초기 로드 즉시 적용</strong>: 패치 설치 후 <code>_applyEditorCalloutStyles</code> 최초 1회 호출 추가 — 기존 콜아웃 포함 문서를 열었을 때 사용자 인터랙션 없이도 즉시 스타일 적용</li><li><strong>알 수 없는 타입 fallback</strong>: <code>CALLOUT_TYPES</code>에 없는 커스텀 타입도 <code>note</code>로 fallback — 뷰어와 동일한 동작으로 불일치 해소</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — Obsidian 스타일 콜아웃(Callout/Admonition) 기능 추가",
+          "detail_html": "<ul><li><strong>Obsidian 호환 문법 지원</strong>: <code>&gt; [!note]</code>, <code>&gt; [!warning] 커스텀 제목</code>, <code>&gt; [!tip]</code> 등 — 24개 타입 키워드(note/info/tip/hint/success/check/done/warning/caution/attention/danger/error/failure/fail/important/question/faq/help/quote/cite/abstract/summary/tldr/example/bug) 지원, 각 타입별 색상 + Lucide SVG 아이콘 구분</li><li><strong>뷰어 렌더링 이중 파이프라인</strong>: <code>_preprocessViewerCallouts(md)</code>가 헤더·바디 줄 사이에 빈 <code>&gt;</code> 줄을 삽입해 Tiptap-markdown이 별도 <code>&lt;p&gt;</code>로 파싱하도록 유도 → <code>_fixCallouts(container)</code> DOM 후처리가 <code>&lt;blockquote&gt;</code>를 <code>.wu-callout.wu-callout-{type}</code> div로 교체 (단일 <code>&lt;p&gt;</code> 병합 케이스 fallback 포함)</li><li><strong>ProseMirror 재조정 대응</strong>: <code>onTransaction</code> 콜백에서 <code>_fixCallouts</code> 재실행 — 클릭 시 선택 트랜잭션으로 callout div가 blockquote로 복원되던 버그 수정</li><li><strong>삽입 UI</strong>: 툴바 콜아웃 버튼(<code>_IC_CALLOUT</code> megaphone 아이콘) + 슬래시 커맨드 <code>/callout</code> — ProseMirror 노드 디스크립터로 삽입해 저장·재로드 시에도 콜아웃 렌더링 보장 (기존 문자열 <code>insertContent</code> 방식 대비 개선)</li><li><strong>보안</strong>: 커스텀 제목을 <code>innerHTML</code>이 아닌 <code>textContent</code>로 삽입해 XSS 차단</li><li><strong>CSS</strong>: 타입별 <code>--callout-color</code> CSS 변수, <code>@supports (background: color-mix(...))</code> 기반 현대 브라우저 fallback, 다크/라이트 테마 모두 가독성 유지</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
+      "phase": "35차 6단계",
+      "phase_class": "phase-6",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — Obsidian 스타일 인라인 주석(<code>%% ... %%</code>) 추가",
+          "detail_html": "<ul><li>TipTap <code>ObsidianCommentMd</code> Mark 확장 구현 — <code>%% ... %%</code> 구문을 편집 중 회색 반투명 이탤릭체로 표시, 뷰어 모드(<code>contenteditable=false</code>)에서는 완전 숨김</li><li><code>markdown-it</code> 인라인 룰(<code>obsidian_comment</code>)로 <code>%% ... %%</code> 마크다운 파싱 &amp; 라운드트립 보장</li><li>툴바 <code>%</code> 버튼 및 슬래시 커맨드 <code>/주석</code> 지원 — 선택 영역이 있으면 토글, 없으면 빈 주석 노드 삽입</li><li><code>tiptap-entry.js</code>에 <code>Mark</code> export 추가 및 번들 재빌드</li><li>수정 파일: <code>tiptap-entry.js</code>, <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code>, 번들 재빌드</li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 각주 삽입 모달 추가",
+          "detail_html": "<ul><li>툴바 각주 버튼 및 슬래시 커맨드(<code>/fn</code>) 클릭 시 \"각주 추가\" 모달이 열림 — textarea에 내용 입력 후 삽입하면 커서 위치에 <code>[^N]</code> 참조 + 문서 하단에 <code>[^N]: 내용</code> 정의가 한 번에 삽입</li><li>기존: 빈 <code>[^N]: </code>만 생성되어 사용자가 직접 하단으로 이동해 내용을 채워야 했음</li><li>Ctrl+Enter로 빠른 삽입, Esc·배경 클릭으로 취소 지원</li><li>슬래시 커맨드도 동일한 모달 사용 (<code>_footnoteSlashCmdFn</code> 공통화)</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 툴바에 각주(<code>[^N]</code>) 버튼 추가",
+          "detail_html": "<ul><li>슬래시 커맨드(<code>/fn</code>)에만 있던 각주 삽입 기능을 툴바 버튼으로도 추가 — 클릭 시 커서 위치에 <code>[^N]</code> 참조 삽입 + 문서 끝에 <code>[^N]: </code> 정의 단락 자동 생성</li><li><code>[^]</code> 브래킷+캐럿 모양의 Lucide 스타일 SVG 아이콘(<code>_IC_FOOTNOTE</code>) 신규 추가</li><li>툴바 배치: 구분선·인용 그룹(<code>— &quot;&quot; [^]</code>)에 인용 바로 오른쪽에 위치</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 편집기 — 툴바 아이콘 크기·형태 조정",
+          "detail_html": "<ul><li>인용(<code>blockquote</code>) 아이콘이 다른 버튼 대비 과도하게 크게 보이던 문제 → SVG <code>transform=\"translate(3.6,3.6) scale(0.7)\"</code>으로 70% 크기로 축소</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 편집기 — 툴바·슬래시 커맨드 전체 아이콘 Lucide SVG 통일 및 수직 정렬 개선",
+          "detail_html": "<ul><li><strong>전체 아이콘 SVG 교체</strong>: <code>TOOLBAR_LABELS</code> 18개·<code>SLASH_ITEMS</code> 전체 항목의 텍스트/문자 아이콘(<code>&lt;/&gt;</code>, <code>&lt; &gt;</code>, <code>∑</code>, <code>∫</code>, <code>%</code>, <code>• —</code>, <code>1.</code>, <code>☑</code> 등)을 모두 Lucide SVG 상수(<code>_ic()</code> 헬퍼 + 15×15 viewBox)로 교체 — 폰트 메트릭 차이로 인한 아이콘 높이 불일치 완전 해소</li><li><strong>인라인 코드 버튼 위치 조정</strong>: 툴바에서 인라인 코드(<code>&lt;/&gt;</code>) 버튼을 인라인 수식(∫) 왼쪽으로 이동</li><li><strong>수직 정렬 수정</strong>: <code>.wu-toolbar-btn</code>에 <code>line-height: 1</code>, <code>svg { display: block }</code> 추가 — SVG baseline 어긋남 제거</li><li><strong>편집기 툴바 표준화</strong>: <code>doc_editor.html</code>의 하드코딩된 <code>toolbarItems</code> 오버라이드 제거 → 문서·체크·공지 편집기 모두 <code>TOOLBAR_DEFS</code> 기본값 공유</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code>, <code>templates/doc_editor.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
+      "phase": "35차 5단계",
+      "phase_class": "phase-5",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — LaTeX 수식 블록 &amp; 인라인 수식 지원 (Obsidian 스타일)",
+          "detail_html": "<ul><li><code>@tiptap/extension-mathematics</code> + <code>katex</code> 연동으로 LaTeX 수식 렌더링 — <code>markdown-it-texmath</code> 플러그인 기반 <code>$...$</code>(인라인) / <code>$$...$$</code>(블록) 마크다운 파싱 &amp; 라운드트립 보장</li><li><strong>수식 블록</strong>: 툴바 <code>∑</code> 버튼 + <code>/수식 블록</code> 슬래시 커맨드로 삽입; 좌·중·우 정렬 속성 지원 (center는 <code>$$...$$</code>로 직렬화, non-center는 HTML 속성 보존)</li><li><strong>인라인 수식</strong>: 툴바 <code>∫</code> 버튼으로 삽입 — 텍스트 선택 영역이 있으면 해당 텍스트를 <code>$...$</code> 인라인 수식으로 변환, 선택 없으면 <code>$x$</code> 기본 수식 삽입; <code>/인라인 수식</code> 슬래시 커맨드도 동일하게 동작</li><li><strong>수식 입력 모달</strong>: 브라우저 기본 <code>prompt()</code> 대신 커스텀 모달로 교체 — KaTeX 실시간 미리보기, 정렬 선택 버튼(좌·중·우) 포함; 수식 노드 클릭 시 기존 값·정렬 유지하며 편집 모달 재오픈</li><li><code>static/lib/katex.min.css</code> + 폰트 파일 정적 포함, <code>templates/base.html</code>에 KaTeX CSS 전역 로드 추가</li><li>수정 파일: <code>tiptap-entry.js</code>, <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code>, <code>templates/base.html</code>, 번들 재빌드</li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
+      "phase": "35차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 코드블록 언어별 문법 강조 (Obsidian 스타일)",
+          "detail_html": "<ul><li><code>@tiptap/extension-code-block-lowlight</code> + <code>lowlight</code> 패키지 도입 — Tiptap ProseMirror 레벨에서 하이라이팅 처리</li><li><code>tiptap-entry.js</code>: <code>CodeBlock</code> → <code>CodeBlockLowlight</code> 교체 및 <code>createLowlight(common)</code> 인스턴스 export — JavaScript·TypeScript·Python·Java·C·C++·C#·Go·Rust·HTML·CSS·SQL·Bash·JSON·YAML·Markdown·XML·Kotlin·Swift·PHP·Ruby 22종 지원</li><li><code>wu-editor.js</code>: <code>_buildExtensions</code>에 <code>CodeBlockLowlight.configure({ lowlight })</code> 추가, <code>StarterKit</code>의 내장 <code>codeBlock</code> 비활성화, <code>_applyHighlight</code> no-op 처리 — 편집 / 뷰어 모드 모두 적용</li><li><code>wu-editor.css</code>: 다크 모드 코드 텍스트 색상 셀렉터를 <code>.hljs</code> 클래스 의존 없이 <code>pre code</code>로 수정 — lowlight 출력 구조에 맞게 정합</li><li>번들 재빌드 (<code>tiptap-bundle.min.js</code>, ~715KB)</li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
+      "phase": "35차 3단계",
+      "phase_class": "phase-3",
+      "entries": [
+        {
+          "icon": "🚀",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 전체 — Toast UI Editor 완전 제거",
+          "detail_html": "<ul><li><strong>체크 뷰어</strong>(<code>check.html</code>): Toast UI 뷰어 → <code>WUEditor.create({ canEdit: false })</code> 교체 — 마크다운 체크박스·표·하이라이트·각주 Tiptap 기반으로 렌더링</li><li><strong>홈·공지·휴지통·공지이력·프로젝트관리</strong>(<code>home.html</code>, <code>notice.html</code>, <code>trash.html</code>, <code>notice/history</code>, <code>project-manage</code>): 모든 뷰어/편집기 WUEditor로 교체</li><li><strong>이벤트 모달</strong>(<code>event-modal.js</code>): bound-content-viewer·칸반 상세 뷰어 WUEditor로 교체</li><li><strong>전역 로드</strong>(<code>base.html</code>): <code>toastui-editor.min.css</code> / <code>toastui-editor-all.min.js</code> 제거 → <code>wu-editor.css</code> + <code>tiptap-bundle.min.js</code> + <code>wu-editor.js</code> 전역 로드로 전환. <code>check_editor.html</code> / <code>doc_editor.html</code>의 중복 스크립트 제거</li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 체크 뷰어 — 새로고침 없이 체크박스 반복 토글 불가 버그 수정",
+          "detail_html": "<ul><li><strong>SSE race condition</strong>: 체크박스 PATCH 후 SSE 300ms 디바운스가 GET 완료 전에 <code>_doPoll</code>을 실행해 Tiptap이 구포맷 체크 상태를 unchecked로 재렌더링하던 문제 → <code>_toggleInProgress</code> 플래그로 토글 완료 전 <code>renderViewer</code> 차단</li><li><strong>stale closure</strong>: 클릭 핸들러가 첫 렌더 시점의 <code>mdContent</code>를 클로저로 캡처해, 첫 토글 후 이후 토글에서 구버전 내용을 기반으로 수정하던 문제 → <code>_curItem.content</code>(항상 최신)를 직접 참조하도록 수정</li><li><strong>isChecked 판단</strong>: 라인 기반 체크박스에서 <code>mdContent</code>로 상태를 재파싱하던 로직 → DOM의 <code>li.dataset.checked</code>에서 직접 읽도록 수정</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
+      "phase": "35차 2단계",
+      "phase_class": "phase-2",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — Obsidian 스타일 하이라이트(<code>==text==</code>) 추가",
+          "detail_html": "<ul><li>WUEditor에 <code>==text==</code> 형광펜 하이라이트 기능 추가 — 체크·문서 편집기 양쪽 모두 적용</li><li>툴바 <code><mark>H</mark></code> 버튼 및 슬래시 커맨드 <code>/hl</code> / <code>/하이라이트</code> 지원</li><li>Tiptap <code>HighlightMd</code> 확장 구현: <code>==text==</code> ↔ <code>&lt;mark&gt;</code> 마크다운 라운드트립 보장 (<code>markdown-it-mark</code> 플러그인 연동)</li><li>라이트·다크 테마 mark 스타일 추가 (<code>wu-editor.css</code>)</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 각주 앵커 클릭 시 새 탭 열림 문제 수정",
+          "detail_html": "<ul><li>각주 링크(<code>[^1]</code>) 클릭 시 새 탭이 열리던 문제 수정 → <code>a[href^=\"#\"]</code>에서 <code>target=\"_blank\"</code> 제거해 같은 페이지 내 이동</li><li>Tiptap이 <code>id</code> 속성을 제거해 앵커 점프가 작동하지 않던 문제 수정 → <code>_fixFootnoteAnchors()</code>로 렌더링 후 DOM 복원</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 편집기 — 체크·문서 기능 표준화",
+          "detail_html": "<ul><li><code>doc_editor.html</code>의 툴바 항목에 <code>highlight</code> 추가 → 체크·문서 편집기 툴바 동일하게 통일</li><li>각주(<code>/fn</code>)·하이라이트(<code>/hl</code>) 슬래시 커맨드가 두 편집기 모두에서 작동하도록 확인</li><li>두 편집기에 번들 캐시버스터(<code>?v=random</code>) 적용 — 구 버전 번들 서빙 방지</li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
+      "phase": "35차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "📦",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> Tiptap 번들 — Highlight·Superscript·markdownItMark 추가",
+          "detail_html": "<ul><li><code>tiptap-entry.js</code>에 <code>@tiptap/extension-highlight</code>, <code>@tiptap/extension-superscript</code>, <code>markdown-it-mark</code> 익스포트 추가</li><li>번들 재빌드(<code>tiptap-bundle.min.js</code>, ~541KB) — WUEditor 뷰어에서 <code>&lt;sup&gt;</code> 태그가 제거되던 문제 해결</li><li>수정 파일: <code>tiptap-entry.js</code>, <code>static/lib/tiptap-bundle.min.js</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 체크 뷰어 — <code>==text==</code> 하이라이트 및 각주 <code>&lt;sup&gt;</code> 렌더링",
+          "detail_html": "<ul><li><code>check.html</code>에 <code>_preprocessHighlights()</code> 추가 → <code>==text==</code>를 <code>&lt;mark&gt;</code>로 변환 후 Toast UI 뷰어에 전달</li><li>WUEditor 뷰어 모드(<code>canEdit:false</code>)에 <code>_preprocessViewerFootnotes()</code> 추가 → <code>[^N]</code> 참조와 <code>[^N]: 정의</code>를 HTML로 변환</li><li>수정 파일: <code>templates/check.html</code>, <code>templates/check_editor.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
+      "phase": "34차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 체크 뷰어 — 각주(<code>[^N]</code>) 렌더링 지원",
+          "detail_html": "<ul><li>Toast UI 뷰어용 <code>_preprocessFootnotes()</code> 추가 — <code>[^N]: 정의</code>를 수집해 <code>&lt;section class=\"wu-footnotes\"&gt;</code>로 변환, 인라인 <code>[^N]</code>을 <code>&lt;sup&gt;</code> 슈퍼스크립트로 치환</li><li>tiptap-markdown이 <code>[</code>를 <code>\\[</code>로 이스케이프하는 문제 대응 — 양쪽 패턴 모두 매칭하는 정규식 적용</li><li><code>customHTMLSanitizer: html =&gt; html</code>로 raw HTML 통과 허용</li><li>각주 스타일 추가: <code>.wu-fn-ref</code> / <code>.wu-footnotes</code> / <code>.wu-fn-back</code></li><li>수정 파일: <code>templates/check.html</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-01",
+      "phase": "34차 3단계",
+      "phase_class": "phase-3",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 각주(<code>/fn</code>) 슬래시 커맨드 추가",
+          "detail_html": "<ul><li>슬래시 커맨드 <code>/fn</code> / <code>/각주</code>로 각주 삽입: 커서 위치에 <code>[^N]</code> 참조 삽입 + 문서 끝에 <code>[^N]: </code> 정의 단락 자동 생성</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 편집기 — 빈줄 보존·H4~H6·SVG 아이콘 개선",
+          "detail_html": "<ul><li><strong>빈줄 보존</strong>: <code>ParagraphMd</code>가 빈 단락을 <code>&lt;p&gt;&lt;/p&gt;</code> HTML 블록으로 직렬화 → 연속 빈줄 저장·재로드 라운드트립 안정화</li><li><strong>H4~H6</strong>: 슬래시 커맨드, 제목 드롭다운, TOC 쿼리에 H4·H5·H6 추가</li><li><strong>SVG 아이콘</strong>: 링크·이미지 툴바 아이콘을 이모지 → 인라인 SVG로 교체</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-01",
+      "phase": "34차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "🚀",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — Toast UI Editor → WUEditor(Tiptap) 마이그레이션 완성",
+          "detail_html": "<ul><li>체크 편집기(<code>check_editor.html</code>)·문서 편집기(<code>doc_editor.html</code>)를 기존 TUI Editor에서 <strong>WUEditor(Tiptap 기반)</strong>로 교체</li><li>WUEditor: 마크다운 직렬화·파싱(<code>tiptap-markdown</code>), 툴바, 슬래시 커맨드, TOC, 이미지 업로드, 링크 다이얼로그 통합 제공</li><li>CSS 셀렉터·레이아웃을 <code>wu-editor-wrap</code> / <code>.ProseMirror</code> 기준으로 정리</li><li>수정 파일: <code>templates/check_editor.html</code>, <code>templates/doc_editor.html</code></li></ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-05-01",
       "phase": "33차 3단계",
       "phase_class": "phase-3",
