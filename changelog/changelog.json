@@ -14,6 +14,16 @@
           "icon": "✨",
           "title_html": "<span class=\"cl-tag feat\">feat</span> 편집기 — 툴바 '서식 지우기' 버튼 추가",
           "detail_html": "<ul><li><strong>버튼 위치</strong>: 하이라이트 버튼 바로 오른쪽, 오른쪽에 <code>|</code> 구분선 배치</li><li><strong>동작</strong>: 선택 영역의 모든 인라인 서식(굵게·기울임·취소선·하이라이트·코드·수식 등) 및 블록 노드 서식 일괄 제거 — Tiptap <code>clearNodes().unsetAllMarks()</code> 조합</li><li><strong>아이콘</strong>: Lucide Eraser SVG — Obsidian 서식 지우기와 동일한 지우개 모양</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 정적 파일 캐시 무효화 쿼리스트링 적용",
+          "detail_html": "<ul><li><code>wu-editor.css</code>, <code>tiptap-bundle.min.js</code>, <code>wu-editor.js</code> 로드 URL에 <code>?v={{ range(1000,9999) | random }}</code> 쿼리스트링 추가 — 브라우저 캐시로 인해 CSS·JS 변경사항이 반영되지 않는 문제 해소</li><li>적용 파일: <code>templates/base.html</code>, <code>templates/check.html</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> Tiptap 번들 — <code>Extension</code>, <code>Plugin</code>, <code>PluginKey</code>, <code>Decoration</code>, <code>DecorationSet</code> export 추가 및 번들 재빌드",
+          "detail_html": "<ul><li>콜아웃 편집기 데코레이션(<code>EditorCalloutDecorations</code>) 구현에 필요한 ProseMirror/Tiptap 심볼이 번들에 미노출되어 <code>undefined</code> 오류 발생 → <code>tiptap-entry.js</code>에 <code>Extension</code>(@tiptap/core), <code>Plugin</code>·<code>PluginKey</code>(@tiptap/pm/state), <code>Decoration</code>·<code>DecorationSet</code>(@tiptap/pm/view) export 추가 후 재빌드</li><li>수정 파일: <code>tiptap-entry.js</code>, <code>static/lib/tiptap-bundle.min.js</code></li></ul>"
         }
       ]
     },

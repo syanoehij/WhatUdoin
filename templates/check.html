@@ -2,7 +2,7 @@
 {% block title %}체크리스트 – WhatUDoin{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/css/wu-editor.css" />
+<link rel="stylesheet" href="/static/css/wu-editor.css?v={{ range(1000,9999) | random }}" />
 <script src="/static/lib/tiptap-bundle.min.js?v={{ range(1000,9999) | random }}"></script>
 <style>
 
@@ -1061,7 +1061,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/wu-editor.js"></script>
+<script src="/static/js/wu-editor.js?v={{ range(1000,9999) | random }}"></script>
 <script>
 const IS_EDITOR    = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
 const IS_LOGGED_IN = {{ 'true' if user else 'false' }};

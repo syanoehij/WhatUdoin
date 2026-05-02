@@ -51,9 +51,9 @@
 
   <!-- WUEditor (Tiptap 기반 공용 에디터/뷰어) -->
   <link rel="stylesheet" href="/static/lib/katex.min.css" />
-  <link rel="stylesheet" href="/static/css/wu-editor.css" />
-  <script src="/static/lib/tiptap-bundle.min.js"></script>
-  <script src="/static/js/wu-editor.js"></script>
+  <link rel="stylesheet" href="/static/css/wu-editor.css?v={{ range(1000,9999) | random }}" />
+  <script src="/static/lib/tiptap-bundle.min.js?v={{ range(1000,9999) | random }}"></script>
+  <script src="/static/js/wu-editor.js?v={{ range(1000,9999) | random }}"></script>
   {% block extra_head %}{% endblock %}
   <style>
   /* ── 링크 버튼 & 드롭다운 ── */
