@@ -19,6 +19,21 @@
           "icon": "🔧",
           "title_html": "<span class=\"cl-tag fix\">fix</span> 내 스케줄 — 프로젝트 색상 팔레트를 칸반 페이지와 동일하게 통일",
           "detail_html": "<ul><li><strong>기존</strong>: 8색 팔레트와 <code>&amp; 0xffffffff</code> 해시 → 칸반 페이지와 다른 색상 표시</li><li><strong>변경</strong>: 15색 팔레트와 <code>&amp; 0xffff</code> 해시로 교체 — 같은 프로젝트가 두 페이지에서 동일한 색상으로 표시</li><li>수정 파일: <code>templates/home.html</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 문서 목록 — 제목·날짜 컬럼 클릭 정렬 기능 추가",
+          "detail_html": "<ul><li><strong>제목 헤더 클릭</strong>: 제목 기준 오름차순/내림차순 토글 정렬 (한국어 <code>localeCompare</code> 적용)</li><li><strong>작성 날짜 헤더 클릭</strong>: 날짜 기준 오름차순/내림차순 토글 정렬</li><li><strong>정렬 아이콘</strong>: 비활성 컬럼 <code>⇅</code>, 활성 오름차순 <code>▲</code>, 활성 내림차순 <code>▼</code></li><li><strong>모든 재렌더 경로 자동 적용</strong>: 필터 변경·검색·공개범위 변경 시에도 정렬 상태 유지</li><li>백엔드 변경 없이 프론트엔드 JS만으로 구현</li><li>수정 파일: <code>templates/doc_list.html</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 문서 목록 — 정렬 아이콘 레이아웃 개선",
+          "detail_html": "<ul><li><strong>문제</strong>: <code>⇅</code> 아이콘이 텍스트와 겹치거나 가로 스크롤 유발</li><li><strong>해결</strong>: 날짜 컬럼 grid 너비 <code>72px → 90px</code>로 확장, 정렬 아이콘 inline 배치, 테이블 오른쪽 <code>padding-right: 12px</code> 추가</li><li>수정 파일: <code>templates/doc_list.html</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 체크 페이지 — 프로젝트 필터 전환 시 필터 초기화 버그 수정",
+          "detail_html": "<ul><li><strong>현상</strong>: 프로젝트 A → 프로젝트 B 전환 후 항목 클릭 시 필터가 <code>null</code>(전체)로 초기화됨</li><li><strong>원인</strong>: <code>selectProject()</code> 내부의 <code>_resetPanel()</code> 호출이 방금 설정한 <code>_curProj</code>를 <code>null</code>로 덮어씀</li><li><strong>수정</strong>: <code>_resetPanel()</code> 호출 전후로 <code>_curProj</code>를 보존·복원하는 2줄 추가</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
         }
       ]
     },

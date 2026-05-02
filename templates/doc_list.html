@@ -5,6 +5,37 @@
 <style>
   html, body { height: 100%; overflow: hidden; }
   main { max-width: none; padding: 0; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* 정렬 헤더 */
+  th.sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  th.sortable:hover {
+    background: var(--hover-bg, rgba(0,0,0,0.05));
+  }
+  .sort-indicator {
+    display: inline-block;
+    margin-left: 3px;
+    font-size: 0.7em;
+    opacity: 0.45;
+    vertical-align: middle;
+  }
+  th.sort-active .sort-indicator {
+    opacity: 1;
+    color: var(--accent, #4f7cff);
+  }
+  /* 날짜 컬럼 확장 및 오른쪽 여백 — sort-indicator 수용 */
+  .docs-content .doc-table tr {
+    grid-template-columns: 1fr 64px 80px 80px 90px;
+  }
+  .docs-content .doc-table.logged-in tr {
+    grid-template-columns: 100px 1fr 64px 80px 80px 84px 90px;
+  }
+  .docs-content .doc-table {
+    padding-right: 12px;
+  }
 </style>
 {% endblock %}
 
@@ -104,12 +135,12 @@
       <thead>
         <tr>
           {% if user %}<th class="col-visibility">공개 여부</th>{% endif %}
-          <th class="col-title">제목</th>
+          <th class="col-title sortable" id="th-title" onclick="toggleSort('title')">제목<span class="sort-indicator">⇅</span></th>
           <th class="col-event-count">연결 일정</th>
           <th class="col-author">작성자</th>
           <th class="col-team">소속 팀</th>
           {% if user %}<th class="col-doc-type">수정 가능</th>{% endif %}
-          <th class="col-date">작성 날짜</th>
+          <th class="col-date sortable" id="th-date" onclick="toggleSort('date')">작성 날짜<span class="sort-indicator">⇅</span></th>
         </tr>
       </thead>
       <tbody id="docs-tbody"></tbody>
@@ -161,11 +192,15 @@ const EMPTY_MONTH_MSG = IS_LOGGED_IN ? '해당 월에 등록된 문서가 없습
 // selectedVisibility: null=전체, 'public'=외부 공개, 'team-shared'=팀 공유, 'private'=비공개
 // selectedAuthor:     null=전체, '__me__'=내가 작성, 'name'=특정 작성자
 // selectedYM:         'YYYY-MM'=특정 월, '__all__'=전체
+// sortField:          null=기본, 'title'=제목, 'date'=날짜
+// sortDir:            'asc' | 'desc'
 let selectedDocType    = null;
 let selectedVisibility = null;
 let selectedAuthor     = null;
 let selectedYM         = null;
 let searchQuery        = '';
+let sortField          = null;
+let sortDir            = 'asc';
 
 // ── 필터 적용 ──────────────────────────────────────────
 function getFiltered() {
@@ -379,13 +414,66 @@ function renderMonthNav(byMonth, byYear, filtered) {
   body.innerHTML = allItem + '<div class="month-nav-divider"></div>' + yearHtml;
 }
 
+// ── 정렬 적용 ────────────────────────────────────────────
+function applySort(docs) {
+  if (sortField === null) return docs;
+  return [...docs].sort((a, b) => {
+    let va, vb;
+    if (sortField === 'title') {
+      va = a.title || '';
+      vb = b.title || '';
+      const cmp = va.localeCompare(vb, 'ko');
+      return sortDir === 'asc' ? cmp : -cmp;
+    } else {
+      va = a.meeting_date || a.updated_at || '';
+      vb = b.meeting_date || b.updated_at || '';
+      const cmp = va.localeCompare(vb);
+      return sortDir === 'asc' ? cmp : -cmp;
+    }
+  });
+}
+
+// ── 헤더 아이콘 갱신 ─────────────────────────────────────
+function renderSortIndicators() {
+  const thTitle = document.getElementById('th-title');
+  const thDate  = document.getElementById('th-date');
+  if (!thTitle || !thDate) return;
+
+  thTitle.classList.toggle('sort-active', sortField === 'title');
+  thDate.classList.toggle('sort-active',  sortField === 'date');
+
+  const titleIcon = thTitle.querySelector('.sort-indicator');
+  const dateIcon  = thDate.querySelector('.sort-indicator');
+  if (titleIcon) titleIcon.textContent = sortField === 'title' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅';
+  if (dateIcon)  dateIcon.textContent  = sortField === 'date'  ? (sortDir === 'asc' ? '▲' : '▼') : '⇅';
+}
+
+// ── 정렬 토글 ────────────────────────────────────────────
+function toggleSort(field) {
+  if (sortField === field) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortField = field;
+    sortDir   = 'asc';
+  }
+  renderSortIndicators();
+  const { byMonth, byYear, filtered } = buildGroups();
+  if (selectedYM === '__all__') renderAllList(filtered);
+  else if (selectedYM && byMonth[selectedYM]) renderDocList(selectedYM, byMonth);
+}
+
 // ── 전체 목록 렌더링 ─────────────────────────────────────
 function renderAllList(filtered) {
-  const docs = [...filtered].sort((a, b) => {
-    const da = a.meeting_date || a.updated_at || '';
-    const db = b.meeting_date || b.updated_at || '';
-    return db.localeCompare(da);
-  });
+  let docs;
+  if (sortField === null) {
+    docs = [...filtered].sort((a, b) => {
+      const da = a.meeting_date || a.updated_at || '';
+      const db = b.meeting_date || b.updated_at || '';
+      return db.localeCompare(da);
+    });
+  } else {
+    docs = applySort(filtered);
+  }
 
   document.getElementById('docs-header').style.display = '';
   document.getElementById('current-month-label').textContent = '전체';
@@ -409,7 +497,7 @@ function renderAllList(filtered) {
 
 // ── 월별 목록 렌더링 ─────────────────────────────────────
 function renderDocList(ym, byMonth) {
-  const docs = byMonth[ym] || [];
+  const docs = applySort(byMonth[ym] || []);
   const [yr, mo] = ym.split('-');
   document.getElementById('docs-header').style.display = '';
   document.getElementById('current-month-label').textContent = `${yr}년 ${parseInt(mo)}월`;

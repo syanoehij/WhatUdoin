@@ -1318,7 +1318,9 @@ function selectProject(proj) {
     ? _allChecklists.filter(c => _curProj === '미지정' ? (!c.project || !c.project.trim()) : c.project === _curProj)
     : _allChecklists;
   if (_curId && !filtered.find(c => c.id === _curId)) {
+    const keepProj = _curProj;  // _resetPanel이 _curProj를 null로 초기화하므로 보존
     _resetPanel();
+    _curProj = keepProj;
     localStorage.removeItem('ck_last_id_' + _projFilter);
   }
 }
