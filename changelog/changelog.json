@@ -9,6 +9,16 @@
           "icon": "✨",
           "title_html": "<span class=\"cl-tag ux\">ux</span> 문서 편집기 — 팀 문서 편집 중 '← 뷰어' 버튼 추가",
           "detail_html": "<ul><li><strong>표시 조건</strong>: 팀 공동 편집 문서(<code>is_team_doc</code>)를 편집 모드로 전환했을 때 <code>← 목록</code> 버튼 바로 옆에 <code>← 뷰어</code> 버튼 노출</li><li><strong>동작</strong>: 미저장 변경이 있으면 '저장하지 않고 나가시겠습니까?' 모달 표시, 변경이 없으면 편집 잠금 해제 후 뷰어로 즉시 이동</li><li>수정 파일: <code>templates/doc_editor.html</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 내 스케줄 — 칸반 카드 UI를 칸반 페이지와 동일하게 통일",
+          "detail_html": "<ul><li><strong>날짜 표시</strong>: <code>start_datetime</code> 단독 → <code>시작~종료</code> 범위 문자열로 변경</li><li><strong>priority-dot</strong>: 날짜 행 앞에 우선순위 색상 점 추가</li><li><strong>자동완료 배지</strong>: done 상태 카드에 <code>⏳ N일 후 자동완료</code> 배지 표시</li><li><strong>레이아웃</strong>: 날짜행 / 담당자행 / 상태행 세 줄로 분리</li><li><strong>클릭 이벤트</strong>: inline <code>onclick</code> → <code>addEventListener</code> 방식으로 변경</li><li>수정 파일: <code>templates/home.html</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 내 스케줄 — 프로젝트 색상 팔레트를 칸반 페이지와 동일하게 통일",
+          "detail_html": "<ul><li><strong>기존</strong>: 8색 팔레트와 <code>&amp; 0xffffffff</code> 해시 → 칸반 페이지와 다른 색상 표시</li><li><strong>변경</strong>: 15색 팔레트와 <code>&amp; 0xffff</code> 해시로 교체 — 같은 프로젝트가 두 페이지에서 동일한 색상으로 표시</li><li>수정 파일: <code>templates/home.html</code></li></ul>"
         }
       ]
     },
