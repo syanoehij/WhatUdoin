@@ -27,6 +27,130 @@
     });
   }
 
+  /* 뷰어 마크다운에서 callout 헤더 다음 body 줄마다 빈 '>' 줄을 삽입해
+   * Tiptap-markdown이 헤더와 body를 별도 <p>로 파싱하도록 유도 */
+  function _preprocessViewerCallouts(md) {
+    const lines = md.split('\n');
+    const out = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (/^>\s+\\?\[!/.test(line)) {
+        out.push(line);
+        i++;
+        while (i < lines.length && /^>\s?/.test(lines[i])) {
+          out.push('>');
+          out.push(lines[i]);
+          i++;
+        }
+      } else {
+        out.push(line);
+        i++;
+      }
+    }
+    return out.join('\n');
+  }
+
+  /* Tiptap이 blockquote로 렌더링한 > [!type] 패턴을 콜아웃 div로 변환.
+   * _preprocessViewerCallouts가 빈 > 줄을 삽입하면 multi-p로 파싱됨(primary path).
+   * 단일 <p>인 경우 ']' 위치로 헤더/body 분리(fallback). */
+  function _fixCallouts(container) {
+    container.querySelectorAll('blockquote').forEach(bq => {
+      const firstP = bq.querySelector('p');
+      if (!firstP) return;
+      const bqPs = Array.from(bq.children);
+      const firstPText = firstP.textContent.trim();
+
+      let headerText = firstPText;
+      let fallbackBody = '';
+      if (bqPs.length === 1) {
+        /* 단일 <p>: ']' 위치로 [!type] 부분과 나머지 body 분리 */
+        const rb = firstPText.indexOf(']');
+        if (rb >= 0) {
+          headerText = firstPText.slice(0, rb + 1);
+          fallbackBody = firstPText.slice(rb + 1).trim();
+        }
+      }
+
+      const m = /^\\?\[!([^\\\]]+?)\\?\](?:\s+(.+))?$/.exec(headerText);
+      if (!m) return;
+      const rawType = m[1].trim().toLowerCase();
+      const customTitle = (bqPs.length > 1 && m[2]) ? m[2].trim() : '';
+      const cfg = CALLOUT_TYPES[rawType] || CALLOUT_TYPES['note'];
+      const cssType = CALLOUT_TYPES[rawType] ? rawType : 'note';
+      const title = customTitle || cfg.title;
+
+      const div = document.createElement('div');
+      div.className = `wu-callout wu-callout-${cssType}`;
+
+      const titleDiv = document.createElement('div');
+      titleDiv.className = 'wu-callout-title';
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'wu-callout-icon';
+      iconSpan.innerHTML = cfg.icon;   // cfg.icon은 정적 SVG 상수 — 사용자 입력 아님
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = title;   // XSS 방지: textContent로 삽입
+      titleDiv.appendChild(iconSpan);
+      titleDiv.appendChild(labelSpan);
+
+      const bodyDiv = document.createElement('div');
+      bodyDiv.className = 'wu-callout-body';
+      if (bqPs.length > 1) {
+        bqPs.slice(1).forEach(child => bodyDiv.appendChild(child.cloneNode(true)));
+      } else if (fallbackBody) {
+        const p = document.createElement('p');
+        p.textContent = fallbackBody;
+        bodyDiv.appendChild(p);
+      }
+
+      div.appendChild(titleDiv);
+      div.appendChild(bodyDiv);
+      bq.replaceWith(div);
+    });
+  }
+
+  /* ── 콜아웃 타입 설정 ─────────────────────────────── */
+  /* Lucide SVG (뷰어 내 아이콘): info / flame / check / alert-triangle / x-circle / zap / help-circle / quote / clipboard-list / list / bug */
+  const _IC_CO_INFO  = _ic('<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>');
+  const _IC_CO_FLAME = _ic('<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 3z"/>');
+  const _IC_CO_CHECK = _ic('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>');
+  const _IC_CO_WARN  = _ic('<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/>');
+  const _IC_CO_ERR   = _ic('<circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/>');
+  const _IC_CO_ZAP   = _ic('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>');
+  const _IC_CO_HELP  = _ic('<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" x2="12.01" y1="17" y2="17"/>');
+  const _IC_CO_QUOTE = _ic('<g transform="translate(3.6,3.6) scale(0.7)"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/></g>');
+  const _IC_CO_CLIP  = _ic('<rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>');
+  const _IC_CO_LIST  = _ic('<line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/>');
+  const _IC_CO_BUG   = _ic('<rect x="8" y="6" width="8" height="14" rx="4"/><path d="m19 7-3 2"/><path d="m5 7 3 2"/><path d="m19 19-3-2"/><path d="m5 19 3-2"/><path d="M20 13h-4"/><path d="M4 13h4"/><path d="m10 4 1 2h2l1-2"/>');
+
+  const CALLOUT_TYPES = {
+    note:       { title: 'Note',       icon: _IC_CO_INFO  },
+    info:       { title: 'Info',       icon: _IC_CO_INFO  },
+    tip:        { title: 'Tip',        icon: _IC_CO_FLAME },
+    hint:       { title: 'Hint',       icon: _IC_CO_FLAME },
+    success:    { title: 'Success',    icon: _IC_CO_CHECK },
+    check:      { title: 'Check',      icon: _IC_CO_CHECK },
+    done:       { title: 'Done',       icon: _IC_CO_CHECK },
+    warning:    { title: 'Warning',    icon: _IC_CO_WARN  },
+    caution:    { title: 'Caution',    icon: _IC_CO_WARN  },
+    attention:  { title: 'Attention',  icon: _IC_CO_WARN  },
+    danger:     { title: 'Danger',     icon: _IC_CO_ERR   },
+    error:      { title: 'Error',      icon: _IC_CO_ERR   },
+    failure:    { title: 'Failure',    icon: _IC_CO_ERR   },
+    fail:       { title: 'Fail',       icon: _IC_CO_ERR   },
+    important:  { title: 'Important',  icon: _IC_CO_ZAP   },
+    question:   { title: 'Question',   icon: _IC_CO_HELP  },
+    faq:        { title: 'FAQ',        icon: _IC_CO_HELP  },
+    help:       { title: 'Help',       icon: _IC_CO_HELP  },
+    quote:      { title: 'Quote',      icon: _IC_CO_QUOTE },
+    cite:       { title: 'Cite',       icon: _IC_CO_QUOTE },
+    abstract:   { title: 'Abstract',   icon: _IC_CO_CLIP  },
+    summary:    { title: 'Summary',    icon: _IC_CO_CLIP  },
+    tldr:       { title: 'TL;DR',      icon: _IC_CO_CLIP  },
+    example:    { title: 'Example',    icon: _IC_CO_LIST  },
+    bug:        { title: 'Bug',        icon: _IC_CO_BUG   },
+  };
+
   /* 뷰어 모드에서 [^label] 각주를 <sup> + <section> HTML로 변환 */
   function _preprocessViewerFootnotes(md) {
     const defs = {};
@@ -85,11 +209,13 @@
   const _IC_PERCENT  = _ic('<line x1="19" x2="5" y1="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>');
   const _IC_INTEG    = _ic('<path d="M6 20a2 2 0 0 0 2 2c2 0 4-8 4-16a2 2 0 0 1 4 0"/>');  /* 수식 ∫ 모양 */
   const _IC_FOOTNOTE = _ic('<path d="M6 4H4v16h2"/><path d="M18 4h2v16h-2"/><path d="M9 16 L12 8 L15 16"/>');
+  /* 콜아웃 툴바 아이콘 (megaphone) */
+  const _IC_CALLOUT  = _ic('<path d="m3 11 19-9-9 19-2-8-8-2z"/>');
 
   /* ── 툴바 정의 ──────────────────────────────────── */
   const TOOLBAR_DEFS = [
     { group: ['heading', 'bold', 'italic', 'strike', 'highlight', 'code', 'inlinemath'] },
-    { group: ['hr', 'quote', 'footnote'] },
+    { group: ['hr', 'quote', 'callout', 'footnote'] },
     { group: ['ul', 'ol', 'task'] },
     { group: ['table', 'link', 'image'] },
     { group: ['codeblock', 'math', 'comment'] },
@@ -115,6 +241,7 @@
     math:       { icon: _IC_SIGMA,    title: '수식 블록' },
     comment:    { icon: _IC_PERCENT,  title: '주석 (%% ... %%)' },
     footnote:   { icon: _IC_FOOTNOTE, title: '각주 ([^N])' },
+    callout:    { icon: _IC_CALLOUT,  title: '콜아웃 (> [!note])' },
   };
 
   /* 슬래시 커맨드의 math/footnote 항목이 create() 스코프 내 함수를 호출하기 위한 참조 */
@@ -165,6 +292,17 @@
     { id: 'math', label: '수식 블록', icon: _IC_SIGMA, hint: 'math latex katex 수식 블록 block formula equation',
       cmd: ed => {
         if (_mathSlashCmdFn) _mathSlashCmdFn(ed);
+      },
+    },
+    { id: 'callout', label: '콜아웃', icon: _IC_CALLOUT, hint: 'callout admonition note warning tip 콜아웃 박스',
+      cmd: ed => {
+        ed.chain().focus().insertContent({
+          type: 'blockquote',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: '[!note]' }] },
+            { type: 'paragraph' },
+          ],
+        }).run();
       },
     },
   ];
@@ -1481,6 +1619,15 @@
           case 'highlight': chain.toggleHighlight().run(); break;
           case 'hr':        chain.setHorizontalRule().run(); break;
           case 'quote':     chain.toggleBlockquote().run(); break;
+          case 'callout':
+            chain.insertContent({
+              type: 'blockquote',
+              content: [
+                { type: 'paragraph', content: [{ type: 'text', text: '[!note]' }] },
+                { type: 'paragraph' },
+              ],
+            }).run();
+            break;
           case 'ul':        chain.toggleBulletList().run(); break;
           case 'ol':        chain.toggleOrderedList().run(); break;
           case 'task':      chain.toggleTaskList().run(); break;
@@ -1709,17 +1856,20 @@
 
       if (!canEdit) {
         /* 뷰어 모드 — 에디터 영역에 바로 렌더 */
+        /* ProseMirror가 selection 등 트랜잭션마다 DOM을 재조정하므로
+           onTransaction에서 _fixCallouts를 재실행해 callout div를 유지 */
         _editor = new Editor({
           element: containerEl,
           extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, editableMath: false }),
-          content: _preprocessViewerFootnotes(opts.initialMarkdown || ''),
+          content: _preprocessViewerFootnotes(_preprocessViewerCallouts(opts.initialMarkdown || '')),
           editable: false,
           injectCSS: false,
+          onTransaction: () => { _fixFootnoteAnchors(containerEl); _fixCallouts(containerEl); },
         });
         if (hooks.onReady) hooks.onReady(_editor);
         setTimeout(_applyHighlight, 150);
         setTimeout(_initCodeHeaders, 100);
-        setTimeout(() => _fixFootnoteAnchors(containerEl), 200);
+        setTimeout(() => { _fixFootnoteAnchors(containerEl); _fixCallouts(containerEl); }, 200);
         return;
       }
 

@@ -714,3 +714,70 @@ sup.wu-fn-ref a:hover { text-decoration: underline; }
 .ProseMirror .tiptap-mathematics-render[data-type="block-math"][data-align="left"]  { text-align: left; }
 .ProseMirror .tiptap-mathematics-render[data-type="block-math"][data-align="right"] { text-align: right; }
 [data-theme="dark"] .katex { color: var(--text, #e0e0e0); }
+
+/* ── 콜아웃(Callout/Admonition) ────────────────────────── */
+.wu-callout {
+  border-left: 4px solid var(--callout-color, #3b82f6);
+  background: rgba(59, 130, 246, 0.08); /* fallback */
+  background: color-mix(in srgb, var(--callout-color, #3b82f6) 8%, var(--surface, #fff));
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 12px 0;
+}
+.wu-callout-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  font-size: 0.93rem;
+  color: var(--callout-color, #3b82f6);
+  margin-bottom: 6px;
+}
+.wu-callout-icon svg { width: 16px; height: 16px; flex-shrink: 0; }
+.wu-callout-body { font-size: 0.9rem; line-height: 1.6; }
+.wu-callout-body > *:first-child { margin-top: 0; }
+.wu-callout-body > *:last-child { margin-bottom: 0; }
+
+/* 타입별 색상 */
+.wu-callout-note, .wu-callout-info    { --callout-color: #3b82f6; }
+.wu-callout-tip, .wu-callout-hint     { --callout-color: #22c55e; }
+.wu-callout-success, .wu-callout-check, .wu-callout-done { --callout-color: #22c55e; }
+.wu-callout-warning, .wu-callout-caution, .wu-callout-attention { --callout-color: #f59e0b; }
+.wu-callout-danger, .wu-callout-error, .wu-callout-failure, .wu-callout-fail { --callout-color: #ef4444; }
+.wu-callout-important                 { --callout-color: #a855f7; }
+.wu-callout-question, .wu-callout-faq, .wu-callout-help { --callout-color: #06b6d4; }
+.wu-callout-quote, .wu-callout-cite   { --callout-color: #6b7280; }
+.wu-callout-abstract, .wu-callout-summary, .wu-callout-tldr { --callout-color: #14b8a6; }
+.wu-callout-example                   { --callout-color: #7c3aed; }
+.wu-callout-bug                       { --callout-color: #ef4444; }
+
+/* 타입별 background fallback (color-mix 미지원 브라우저) */
+.wu-callout-note, .wu-callout-info    { background: rgba(59, 130, 246, 0.08); }
+.wu-callout-tip, .wu-callout-hint,
+.wu-callout-success, .wu-callout-check, .wu-callout-done { background: rgba(34, 197, 94, 0.08); }
+.wu-callout-warning, .wu-callout-caution, .wu-callout-attention { background: rgba(245, 158, 11, 0.08); }
+.wu-callout-danger, .wu-callout-error,
+.wu-callout-failure, .wu-callout-fail { background: rgba(239, 68, 68, 0.08); }
+.wu-callout-important                 { background: rgba(168, 85, 247, 0.08); }
+.wu-callout-question, .wu-callout-faq, .wu-callout-help { background: rgba(6, 182, 212, 0.08); }
+.wu-callout-quote, .wu-callout-cite   { background: rgba(107, 114, 128, 0.08); }
+.wu-callout-abstract, .wu-callout-summary, .wu-callout-tldr { background: rgba(20, 184, 166, 0.08); }
+.wu-callout-example                   { background: rgba(124, 58, 237, 0.08); }
+.wu-callout-bug                       { background: rgba(239, 68, 68, 0.08); }
+
+/* color-mix 지원 브라우저에서 오버라이드 */
+@supports (background: color-mix(in srgb, red, blue)) {
+  .wu-callout { background: color-mix(in srgb, var(--callout-color, #3b82f6) 8%, var(--surface, #fff)); }
+  .wu-callout-note, .wu-callout-info,
+  .wu-callout-tip, .wu-callout-hint,
+  .wu-callout-success, .wu-callout-check, .wu-callout-done,
+  .wu-callout-warning, .wu-callout-caution, .wu-callout-attention,
+  .wu-callout-danger, .wu-callout-error, .wu-callout-failure, .wu-callout-fail,
+  .wu-callout-important,
+  .wu-callout-question, .wu-callout-faq, .wu-callout-help,
+  .wu-callout-quote, .wu-callout-cite,
+  .wu-callout-abstract, .wu-callout-summary, .wu-callout-tldr,
+  .wu-callout-example, .wu-callout-bug {
+    background: color-mix(in srgb, var(--callout-color) 8%, var(--surface, #fff));
+  }
+}
