@@ -3,6 +3,7 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/wu-editor.css" />
+<script src="/static/lib/tiptap-bundle.min.js?v={{ range(1000,9999) | random }}"></script>
 <style>
 
   html, body { height: 100%; overflow: hidden; }
@@ -279,25 +280,21 @@
     overflow-y: auto;
     padding: 20px 28px;
   }
-  #ck-viewer .toastui-editor-contents { font-size: 0.92rem; }
+  #ck-viewer .ProseMirror { font-size: 0.92rem; }
 
   /* 체크박스 interactive */
-  #ck-viewer .toastui-editor-contents input[type="checkbox"] {
+  #ck-viewer .ProseMirror input[type="checkbox"] {
     cursor: pointer;
     width: 15px;
     height: 15px;
     accent-color: var(--accent);
   }
-  #ck-viewer.no-check-interaction .toastui-editor-contents input[type="checkbox"] {
+  #ck-viewer.no-check-interaction .ProseMirror input[type="checkbox"] {
     pointer-events: none;
     cursor: default;
   }
-  #ck-viewer.no-check-interaction li.task-list-item {
+  #ck-viewer.no-check-interaction li[data-checked] {
     cursor: default !important;
-  }
-  #ck-viewer li.task-list-item.checked {
-    text-decoration: line-through;
-    color: var(--text-faint, #999);
   }
 
   /* ── 편집기 ── */
@@ -313,25 +310,6 @@
     display: flex;
     flex-direction: column;
   }
-  .ck-editor-wrap .toastui-editor-defaultUI {
-    flex: 1 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    border-radius: 0 !important;
-    border-left: none !important;
-    border-right: none !important;
-    border-bottom: none !important;
-  }
-  .ck-editor-wrap .toastui-editor-main {
-    flex: 1 !important;
-    overflow-y: auto !important;
-  }
-  .ck-editor-wrap .toastui-editor-ww-container,
-  .ck-editor-wrap .toastui-editor-md-container {
-    flex: 1 !important;
-    overflow-y: auto !important;
-  }
-
   /* ── 빈 상태 ── */
   .ck-placeholder {
     flex: 1;
@@ -1111,6 +1089,7 @@ let _contentLocked      = false;
 let _heartbeatInterval  = null;
 let _pollTimer          = null;
 let _pollUpdatedAt      = null;
+let _toggleInProgress   = false; // 체크박스 토글 중 SSE re-render 방지
 let _isNewItem          = false;
 
 // 자동 새로고침 훅: 편집 중 dirty면 저장 후 reload
@@ -1645,6 +1624,7 @@ const POLL_INTERVAL = 30000; // SSE가 주 경로, 폴링은 30초 백업
 
 async function _doPoll(id) {
   if (_editMode || !_curId || _curId !== id) { _stopPoll(); return; }
+  if (_toggleInProgress) return; // 체크박스 토글 완료 전 re-render 방지
   if (document.visibilityState === 'hidden') return; // 탭 백그라운드면 스킵
   try {
     // 편집 잠금 상태 항상 확인 (편집 시작·종료 실시간 감지)
@@ -1855,39 +1835,6 @@ function initEditor(content) {
 
 function toggleTocInline() { wuInst?.toggleToc(); }
 
-// ── 하이라이트 전처리 (Toast UI Editor용) ─────────────────
-function _preprocessHighlights(md) {
-  return md.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
-}
-
-// ── 각주 전처리 (Toast UI Editor용) ───────────────────────
-function _preprocessFootnotes(md) {
-  const defs = {};
-  // tiptap-markdown이 [를 \[로 이스케이프하므로 \[^label\]: 와 [^label]: 모두 매칭
-  const defRe = /^\\?\[\^([^\\\]]+)\\?\]:\s+(.+)$/gm;
-  let m;
-  while ((m = defRe.exec(md)) !== null) defs[m[1]] = m[2];
-  if (!Object.keys(defs).length) return md;
-
-  let result = md.replace(/^\\?\[\^([^\\\]]+)\\?\]:\s+.+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
-
-  const labels = [];
-  result = result.replace(/\\?\[\^([^\\\]]+)\\?\]/g, (match, label) => {
-    if (!defs[label]) return match;
-    if (!labels.includes(label)) labels.push(label);
-    const n = labels.indexOf(label) + 1;
-    return `<sup class="wu-fn-ref" id="fnref-${label}"><a href="#fn-${label}">[${n}]</a></sup>`;
-  });
-
-  if (labels.length) {
-    const items = labels.map((label, i) =>
-      `<li id="fn-${label}"><p>${defs[label]} <a href="#fnref-${label}" class="wu-fn-back">↩</a></p></li>`
-    ).join('\n');
-    result += `\n\n<hr />\n<section class="wu-footnotes"><ol>\n${items}\n</ol></section>`;
-  }
-  return result;
-}
-
 // ── 뷰어 렌더링 ───────────────────────────────────────────
 function renderViewer(content) {
   // ck-right-title이 제목을 표시하므로 content 첫 줄 H1은 제거 (기존 데이터 호환)
@@ -1898,51 +1845,19 @@ function renderViewer(content) {
   if (_ckViewer) { _ckViewer.destroy(); _ckViewer = null; }
   container.innerHTML = '';
 
-  _ckViewer = toastui.Editor.factory({
+  _ckViewer = WUEditor.create({
     el: container,
-    viewer: true,
-    initialValue: _preprocessFootnotes(_preprocessHighlights(displayContent)),
-    usageStatistics: false,
-    customHTMLSanitizer: html => html,
-    customHTMLRenderer: {
-      ...(window.WUEditor?.renderer || {}),
-      image(node, { origin }) {
-        const result = origin();
-        if (!result || !result.attributes) return result;
-        const alt = result.attributes.alt || '';
-        const pi = alt.lastIndexOf('|');
-        if (pi !== -1) {
-          const w = alt.slice(pi + 1).trim();
-          if (/^\d+$/.test(w)) {
-            result.attributes.style = `width:${w}px;max-width:none`;
-            result.attributes.alt = alt.slice(0, pi).trim();
-          }
-        }
-        return result;
-      },
-      item(node, { entering }) {
-        if (entering) {
-          const attrs = {};
-          if (node.listData && node.listData.task) {
-            attrs['class'] = 'task-list-item' + (node.listData.checked ? ' checked' : '');
-            if (node.sourcepos) attrs['data-mdline'] = String(node.sourcepos[0][0]);
-          }
-          return { type: 'openTag', tagName: 'li', classNames: [], attributes: attrs };
-        }
-        return { type: 'closeTag', tagName: 'li' };
-      },
-    },
+    canEdit: false,
+    initialMarkdown: displayContent,
   });
 
   // 잠금/비로그인 시 체크박스 클릭 차단 (시각적 반응 포함)
   container.classList.toggle('no-check-interaction', !CURRENT_USER || _contentLocked || _lockedByOther);
-  setTimeout(() => { if (typeof hljs !== 'undefined') container.querySelectorAll('pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); }); }, 150);
 
   // 이미지 너비 폴백: Obsidian/legacy 포맷에서 너비를 읽어 DOM에 적용
   setTimeout(() => {
     const widthMap = {};
     let m;
-    // Obsidian format: ![alt|NNN](src)
     const regObs = /!\[([^\]]*)\]\(([^)]+)\)/g;
     while ((m = regObs.exec(displayContent)) !== null) {
       const pi = m[1].lastIndexOf('|');
@@ -1951,13 +1866,12 @@ function renderViewer(content) {
         if (/^\d+$/.test(w)) widthMap[m[2]] = parseInt(w);
       }
     }
-    // Legacy HTML format: <img style="width:Npx">
     const regHtml = /<img[^>]*src="([^"]+)"[^>]*style="[^"]*width\s*:\s*(\d+)px/g;
     while ((m = regHtml.exec(displayContent)) !== null) {
       if (!widthMap[m[1]]) widthMap[m[1]] = parseInt(m[2]);
     }
     if (!Object.keys(widthMap).length) return;
-    const contentsEl = container.querySelector('.toastui-editor-contents') || container;
+    const contentsEl = container.querySelector('.ProseMirror') || container;
     contentsEl.querySelectorAll('img').forEach(img => {
       const src = img.getAttribute('src');
       if (src && widthMap[src] != null) {
@@ -1970,7 +1884,7 @@ function renderViewer(content) {
   // 뷰어 TOC 자동 동기화 — 본문 DOM 변경(체크박스 토글 등) 시 목차 갱신
   if (_viewerTocObserver) { _viewerTocObserver.disconnect(); _viewerTocObserver = null; }
   setTimeout(() => {
-    const tocTarget = container.querySelector('.toastui-editor-contents') || container;
+    const tocTarget = container.querySelector('.ProseMirror') || container;
     let _tocDebounce = null;
     _viewerTocObserver = new MutationObserver(() => {
       clearTimeout(_tocDebounce);
@@ -1981,6 +1895,7 @@ function renderViewer(content) {
     });
     _viewerTocObserver.observe(tocTarget, { childList: true, subtree: true, characterData: true });
     // 연결 체크박스 상태 동기화
+    _assignMdLines(displayContent, container);
     attachCheckboxHandlers(displayContent);
     // renderViewer가 어느 경로로 호출되든 TOC 패널이 열려 있으면 즉시 갱신
     _scheduleViewerTocRebuild();
@@ -2046,13 +1961,14 @@ async function _syncLinkedCheckboxes(mdContent, viewerEl) {
 
   // 각 연결 체크박스에 상태 적용 + 뱃지 추가 (data-mdline 기반)
   Object.entries(linked).forEach(([lineStr, eventId]) => {
-    const li = viewerEl.querySelector(`li.task-list-item[data-mdline="${lineStr}"]`);
+    const li = viewerEl.querySelector(`li[data-checked][data-mdline="${lineStr}"]`);
     if (!li) return;
     const ev = eventMap[eventId];
     const isChecked = !!(ev && (ev.kanban_status === 'peer_review' || ev.kanban_status === 'done'));
 
-    // ToastUI Viewer는 input 없이 .checked 클래스로 체크 표시
-    li.classList.toggle('checked', isChecked);
+    li.dataset.checked = isChecked ? 'true' : 'false';
+    const inp = li.querySelector('input[type="checkbox"]');
+    if (inp) inp.checked = isChecked;
 
     // 연결 뱃지 — <p> 안에 인라인으로 추가해 1줄 유지
     const para = li.querySelector('p') || li;
@@ -2079,12 +1995,39 @@ async function _syncLinkedCheckboxes(mdContent, viewerEl) {
   });
 }
 
+// task-list 아이템에 식별자 부여 (WUEditor 뷰어 후처리)
+// 마크다운 - [ ] 항목 → data-mdline, HTML 임베디드(표 등) → data-htmlidx
+function _assignMdLines(mdContent, container) {
+  const taskEntries = [];
+  let htmlTaskGlobalIdx = 0;
+  mdContent.split('\n').forEach((line, i) => {
+    if (/^[ \t]*[-*+] \[[ xX]?\]/.test(line)) {
+      taskEntries.push({ type: 'md', lineNum: i + 1 });
+    } else {
+      // 신포맷(data-checked="…") + 구포맷(<li data-task …>) 모두 카운트
+      const re = /data-checked="(?:false|true)"|<li[^>]*\bdata-task\b[^>]*>/g;
+      while (re.exec(line) !== null) {
+        taskEntries.push({ type: 'html', htmlIdx: htmlTaskGlobalIdx++ });
+      }
+    }
+  });
+  container.querySelectorAll('li[data-checked]').forEach((li, idx) => {
+    const entry = taskEntries[idx];
+    if (!entry) return;
+    if (entry.type === 'md') {
+      li.dataset.mdline = String(entry.lineNum);
+    } else {
+      li.dataset.htmlidx = String(entry.htmlIdx);
+    }
+  });
+}
+
 function attachCheckboxHandlers(mdContent) {
   const viewerEl = document.getElementById('ck-viewer');
   const linked = _parseLinkedCheckboxes(mdContent);
   const canInteract = !!(CURRENT_USER && !_lockedByOther && !_contentLocked);
 
-  viewerEl.querySelectorAll('li.task-list-item[data-mdline]').forEach((li) => {
+  viewerEl.querySelectorAll('li[data-checked][data-mdline], li[data-checked][data-htmlidx]').forEach((li) => {
     if (canInteract) {
       if (li.dataset.ckBound) return; // 중복 바인딩 방지
       li.dataset.ckBound = '1';
@@ -2095,39 +2038,24 @@ function attachCheckboxHandlers(mdContent) {
         if (_lockedByOther || _contentLocked) return;
         if (e.target.closest('.ck-linked-badge')) return; // 뱃지 클릭은 별도 처리
 
-        const mdLine = parseInt(li.dataset.mdline);
-        const eventId = linked[mdLine];
-        if (eventId) {
-          const isChecked = li.dataset.linkedChecked === '1';
-          toggleLinkedCheckbox(li, eventId, !isChecked);
+        if (li.dataset.htmlidx != null) {
+          // HTML 임베디드 task item (표 셀 등) — _curItem.content 사용(stale closure 방지)
+          const isChecked = li.dataset.checked === 'true';
+          toggleCheckboxByHtmlIdx(parseInt(li.dataset.htmlidx), !isChecked, _curItem.content, li);
         } else {
-          // 현재 라인의 체크 상태를 마크다운에서 직접 읽음
-          const lineContent = (mdContent.split('\n')[mdLine - 1] || '');
-          const isChecked = /^[ \t]*[-*+] \[[xX]\]/.test(lineContent);
-          toggleCheckboxByLine(mdLine, !isChecked, mdContent);
+          const mdLine = parseInt(li.dataset.mdline);
+          const eventId = linked[mdLine];
+          if (eventId) {
+            const isChecked = li.dataset.linkedChecked === '1';
+            toggleLinkedCheckbox(li, eventId, !isChecked);
+          } else {
+            // DOM 상태로 isChecked 판단 — mdContent closure는 첫 렌더 시점에 고정되므로 stale
+            const isChecked = li.dataset.checked === 'true';
+            toggleCheckboxByLine(mdLine, !isChecked, _curItem.content, li);
+          }
         }
       });
     }
-  });
-
-  // 표 안 체크박스 (data-task 속성, data-mdline 없음 — HTML 직렬화 방식)
-  viewerEl.querySelectorAll('li[data-task]:not([data-mdline])').forEach((li, idx) => {
-    if (!canInteract) return;
-    if (li.dataset.ckBound) return;
-    li.dataset.ckBound = '1';
-    li.style.cursor = 'pointer';
-    li.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (_lockedByOther || _contentLocked) return;
-      // ToastUI 내부 핸들러가 ::before 클릭 시 DOM 클래스를 먼저 토글하므로
-      // DOM 클래스 대신 마크다운 소스에서 현재 상태를 직접 읽어 사용
-      let cnt = 0, isChecked = false;
-      mdContent.replace(/<li([^>]*\bdata-task\b[^>]*)>/g, (m, a) => {
-        if (cnt++ === idx) isChecked = /\bchecked\b/.test(a.match(/class="([^"]*)"/)?.[1] || '');
-      });
-      toggleTableCheckboxByIndex(idx, !isChecked, mdContent);
-    });
   });
 
   // 연결 체크박스 칸반 상태 동기화 — 로그인 여부 무관하게 항상 실행
@@ -2149,7 +2077,7 @@ async function toggleLinkedCheckbox(li, eventId, toChecked) {
   }
 }
 
-async function toggleCheckboxByLine(mdLine, checked, mdContent) {
+async function toggleCheckboxByLine(mdLine, checked, mdContent, liEl) {
   // markdown에서 지정된 라인번호(1-base)의 체크박스를 토글
   const lines = mdContent.split('\n');
   const i = mdLine - 1;
@@ -2157,34 +2085,103 @@ async function toggleCheckboxByLine(mdLine, checked, mdContent) {
   lines[i] = lines[i].replace(/^([ \t]*[-*+] \[)[xX ]?(\])/, (_, pre, post) => pre + (checked ? 'x' : ' ') + post);
   const newMd = lines.join('\n');
 
-  const res = await fetch(`/api/checklists/${_curId}/content`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content: newMd, save_history: false, source: 'viewer_toggle' }),
-  });
-  if (!res.ok) {
-    if (res.status === 423) {
-      showSaveToast('잠금 상태입니다. 체크박스를 변경할 수 없습니다.');
-      renderViewer(_curItem.content);
-      const lockInfo = await fetch(`/api/checklists/${_curId}/lock`);
-      if (lockInfo.ok) { const d = await lockInfo.json(); _setLockState(d.locked_by, d.lock_type ?? null); }
+  _toggleInProgress = true;
+  try {
+    const res = await fetch(`/api/checklists/${_curId}/content`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: newMd, save_history: false, source: 'viewer_toggle' }),
+    });
+    if (!res.ok) {
+      if (res.status === 423) {
+        showSaveToast('잠금 상태입니다. 체크박스를 변경할 수 없습니다.');
+        renderViewer(_curItem.content);
+        const lockInfo = await fetch(`/api/checklists/${_curId}/lock`);
+        if (lockInfo.ok) { const d = await lockInfo.json(); _setLockState(d.locked_by, d.lock_type ?? null); }
+      }
+      return;
     }
-    return;
+    // DOM 직접 업데이트 — 스크롤 위치 유지를 위해 renderViewer 호출하지 않음
+    _curItem.content = newMd;
+    if (liEl) {
+      liEl.dataset.checked = checked ? 'true' : 'false';
+      const inp = liEl.querySelector('input[type="checkbox"]');
+      if (inp) inp.checked = checked;
+    }
+    _scheduleViewerTocRebuild();
+    // 목록 갱신 (updated_at 반영)
+    const updated = await fetch(`/api/checklists/${_curId}`);
+    if (updated.ok) {
+      _curItem = await updated.json();
+      _pollUpdatedAt = _curItem.updated_at; // SSE 트리거 renderViewer 방지
+      const idx = _allChecklists.findIndex(c => c.id === _curId);
+      if (idx >= 0) _allChecklists[idx] = {..._allChecklists[idx], updated_at: _curItem.updated_at};
+      renderList();
+    }
+    showSaveToast('체크 상태가 저장되었습니다.');
+  } finally {
+    _toggleInProgress = false;
   }
-  // 내용 갱신
-  _curItem.content = newMd;
-  renderViewer(newMd);
-  // TOC가 열려있으면 재빌드하여 언매핑 방지 (renderViewer DOM 안정 대기)
-  _scheduleViewerTocRebuild();
-  // 목록 갱신 (updated_at 반영)
-  const updated = await fetch(`/api/checklists/${_curId}`);
-  if (updated.ok) {
-    _curItem = await updated.json();
-    const idx = _allChecklists.findIndex(c => c.id === _curId);
-    if (idx >= 0) _allChecklists[idx] = {..._allChecklists[idx], updated_at: _curItem.updated_at};
-    renderList();
+}
+
+// HTML 임베디드 task item(표 셀 등)을 N번째 순서로 찾아 토글 (신포맷·구포맷 모두 지원)
+async function toggleCheckboxByHtmlIdx(htmlIdx, checked, mdContent, liEl) {
+  let cnt = 0;
+  const newMd = mdContent.replace(
+    /data-checked="(?:false|true)"|<li([^>]*\bdata-task\b[^>]*)>/g,
+    (match, oldAttrs) => {
+      if (cnt++ !== htmlIdx) return match;
+      if (oldAttrs === undefined) {
+        // 신포맷: data-checked="…" 값만 교체
+        return `data-checked="${checked ? 'true' : 'false'}"`;
+      }
+      // 구포맷: class에 checked 추가/제거, data-task-checked 속성 토글
+      let a = oldAttrs;
+      if (checked) {
+        a = a.replace(/(class="[^"]*task-list-item)([^"]*")/, (m, pre, post) =>
+          post.includes('checked') ? m : `${pre} checked${post}`);
+        if (!a.includes('data-task-checked')) a = a.replace(/\bdata-task\b/, 'data-task data-task-checked=""');
+      } else {
+        a = a.replace(/(\bclass="[^"]*?)\s*\bchecked\b([^"]*")/, '$1$2');
+        a = a.replace(/\s*data-task-checked(?:="[^"]*")?/g, '');
+      }
+      return `<li${a}>`;
+    }
+  );
+  _toggleInProgress = true;
+  try {
+    const res = await fetch(`/api/checklists/${_curId}/content`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: newMd, save_history: false, source: 'viewer_toggle' }),
+    });
+    if (!res.ok) {
+      if (res.status === 423) {
+        showSaveToast('잠금 상태입니다. 체크박스를 변경할 수 없습니다.');
+        renderViewer(_curItem.content);
+      }
+      return;
+    }
+    // DOM 직접 업데이트 — 스크롤 위치 유지를 위해 renderViewer 호출하지 않음
+    _curItem.content = newMd;
+    if (liEl) {
+      liEl.dataset.checked = checked ? 'true' : 'false';
+      const inp = liEl.querySelector('input[type="checkbox"]');
+      if (inp) inp.checked = checked;
+    }
+    _scheduleViewerTocRebuild();
+    const updated = await fetch(`/api/checklists/${_curId}`);
+    if (updated.ok) {
+      _curItem = await updated.json();
+      _pollUpdatedAt = _curItem.updated_at; // SSE 트리거 renderViewer 방지
+      const idx2 = _allChecklists.findIndex(c => c.id === _curId);
+      if (idx2 >= 0) _allChecklists[idx2] = {..._allChecklists[idx2], updated_at: _curItem.updated_at};
+      renderList();
+    }
+    showSaveToast('체크 상태가 저장되었습니다.');
+  } finally {
+    _toggleInProgress = false;
   }
-  showSaveToast('체크 상태가 저장되었습니다.');
 }
 
 async function toggleTableCheckboxByIndex(idx, checked, mdContent) {
@@ -2750,7 +2747,7 @@ document.addEventListener('keydown', e => {
 
 // ── 뷰어 목차 ───────────────────────────────────────────
 function buildViewerToc() {
-  const root  = document.querySelector('#ck-viewer .toastui-editor-contents') || document.getElementById('ck-viewer');
+  const root  = document.querySelector('#ck-viewer .ProseMirror') || document.getElementById('ck-viewer');
   const panel = document.getElementById('ck-viewer-toc');
   const list  = document.getElementById('ck-viewer-toc-list');
   const empty = document.getElementById('ck-viewer-toc-empty');

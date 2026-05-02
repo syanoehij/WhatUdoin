@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-05-02",
+      "phase": "35차 3단계",
+      "phase_class": "phase-3",
+      "entries": [
+        {
+          "icon": "🚀",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 전체 — Toast UI Editor 완전 제거",
+          "detail_html": "<ul><li><strong>체크 뷰어</strong>(<code>check.html</code>): Toast UI 뷰어 → <code>WUEditor.create({ canEdit: false })</code> 교체 — 마크다운 체크박스·표·하이라이트·각주 Tiptap 기반으로 렌더링</li><li><strong>홈·공지·휴지통·공지이력·프로젝트관리</strong>(<code>home.html</code>, <code>notice.html</code>, <code>trash.html</code>, <code>notice/history</code>, <code>project-manage</code>): 모든 뷰어/편집기 WUEditor로 교체</li><li><strong>이벤트 모달</strong>(<code>event-modal.js</code>): bound-content-viewer·칸반 상세 뷰어 WUEditor로 교체</li><li><strong>전역 로드</strong>(<code>base.html</code>): <code>toastui-editor.min.css</code> / <code>toastui-editor-all.min.js</code> 제거 → <code>wu-editor.css</code> + <code>tiptap-bundle.min.js</code> + <code>wu-editor.js</code> 전역 로드로 전환. <code>check_editor.html</code> / <code>doc_editor.html</code>의 중복 스크립트 제거</li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 체크 뷰어 — 새로고침 없이 체크박스 반복 토글 불가 버그 수정",
+          "detail_html": "<ul><li><strong>SSE race condition</strong>: 체크박스 PATCH 후 SSE 300ms 디바운스가 GET 완료 전에 <code>_doPoll</code>을 실행해 Tiptap이 구포맷 체크 상태를 unchecked로 재렌더링하던 문제 → <code>_toggleInProgress</code> 플래그로 토글 완료 전 <code>renderViewer</code> 차단</li><li><strong>stale closure</strong>: 클릭 핸들러가 첫 렌더 시점의 <code>mdContent</code>를 클로저로 캡처해, 첫 토글 후 이후 토글에서 구버전 내용을 기반으로 수정하던 문제 → <code>_curItem.content</code>(항상 최신)를 직접 참조하도록 수정</li><li><strong>isChecked 판단</strong>: 라인 기반 체크박스에서 <code>mdContent</code>로 상태를 재파싱하던 로직 → DOM의 <code>li.dataset.checked</code>에서 직접 읽도록 수정</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-02",
       "phase": "35차 2단계",
       "phase_class": "phase-2",
       "entries": [

@@ -2,8 +2,6 @@
 {% block title %}WhatUDoin — 팀 공지 이력{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
-<script src="/static/lib/toastui-editor-all.min.js"></script>
 <style>
   .history-page { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
   .history-header {
@@ -75,14 +73,11 @@ let viewer = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   if (HISTORIES.length > 0) {
-    viewer = new toastui.Editor.factory({
+    viewer = WUEditor.create({
       el: document.getElementById('viewer-container'),
-      viewer: true,
-      initialValue: HISTORIES[0].content || '',
-      customHTMLSanitizer: html => html,
-      customHTMLRenderer: window.WUEditor?.renderer,
+      canEdit: false,
+      initialMarkdown: HISTORIES[0].content || '',
     });
-    setTimeout(() => { if (typeof hljs !== 'undefined') document.querySelectorAll('#viewer-container pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); }); }, 150);
   }
 });
 
@@ -93,8 +88,10 @@ function showHistory(idx) {
   });
 
   if (!viewer) return;
-  viewer.setMarkdown(HISTORIES[idx].content || '(내용 없음)');
-  setTimeout(() => { if (typeof hljs !== 'undefined') document.querySelectorAll('#viewer-container pre code').forEach(el => { delete el.dataset.highlighted; hljs.highlightElement(el); }); }, 150);
+  const container = document.getElementById('viewer-container');
+  viewer.destroy();
+  container.innerHTML = '';
+  viewer = WUEditor.create({ el: container, canEdit: false, initialMarkdown: HISTORIES[idx].content || '(내용 없음)' });
 }
 </script>
 {% endblock %}

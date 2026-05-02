@@ -424,8 +424,6 @@
   .pm-ev-title[data-ck-id] { cursor: pointer; }
   .pm-ev-title[data-ck-id]:hover { text-decoration: underline; color: var(--accent); }
 </style>
-<link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
-<script src="/static/lib/toastui-editor-all.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -723,14 +721,7 @@ async function openCkDrawer(id, title) {
     if (/^\s*#\s/.test(content)) content = content.replace(/^\s*#[^\n]*\n*/, '');
     if (!content.trim()) { body.innerHTML = '<div style="color:var(--text-muted);padding:12px 0;font-style:italic;">내용 없음</div>'; return; }
 
-    _pmCkViewer = toastui.Editor.factory({
-      el: body, viewer: true, initialValue: content, usageStatistics: false,
-      customHTMLSanitizer: html => html,
-      customHTMLRenderer: window.WUEditor?.renderer,
-    });
-    if (typeof hljs !== 'undefined') {
-      setTimeout(() => body.querySelectorAll('pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); }), 100);
-    }
+    _pmCkViewer = WUEditor.create({ el: body, canEdit: false, initialMarkdown: content });
   } catch {
     body.innerHTML = '<div style="color:var(--text-muted);padding:12px 0;">불러오기 실패</div>';
   }

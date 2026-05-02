@@ -2,8 +2,6 @@
 {% block title %}WhatUDoin{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/lib/toastui-editor.min.css" />
-<script src="/static/lib/toastui-editor-all.min.js"></script>
 <style>
   main { max-width: none; padding: 20px 28px; }
 
@@ -421,13 +419,7 @@ function renderNotice(notice) {
     return;
   }
   wrap.innerHTML = '';
-  if (window.toastui?.Editor) {
-    const _nv = new toastui.Editor.factory({ el: wrap, viewer: true, initialValue: notice.content, customHTMLSanitizer: html => html, customHTMLRenderer: window.WUEditor?.renderer });
-    void _nv;
-    setTimeout(() => { if (typeof hljs !== 'undefined') wrap.querySelectorAll('pre code').forEach(el => { if (!el.dataset.highlighted) hljs.highlightElement(el); }); }, 150);
-  } else {
-    wrap.textContent = notice.content;
-  }
+  WUEditor.create({ el: wrap, canEdit: false, initialMarkdown: notice.content });
   if (metaInline && notice.created_at) {
     const dateStr = notice.created_at.slice(0, 16).replace('T', ' ');
     metaInline.textContent = `(${dateStr} · ${notice.created_by})`;

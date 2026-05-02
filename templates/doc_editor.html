@@ -2,8 +2,6 @@
 {% block title %}WhatUDoin — {% if doc %}{{ doc.title }}{% else %}새 문서{% endif %}{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/css/wu-editor.css" />
-<script src="/static/lib/tiptap-bundle.min.js?v={{ range(1000,9999) | random }}"></script>
 <style>
 .export-dropdown { position: relative; display: inline-block; }
 .export-menu {
@@ -171,7 +169,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/wu-editor.js?v={{ range(1000,9999) | random }}"></script>
 <script>
 const DOC_ID         = {{ doc.id if doc else 'null' }};
 const IS_EDITOR      = {{ 'true' if can_edit else 'false' }};

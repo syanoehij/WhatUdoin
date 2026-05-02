@@ -523,6 +523,18 @@
       return md;
     }
 
+    /* ── 첫 번째 줄 H1 강제 ────────────────────────────── */
+    function _enforceH1Title() {
+      if (!_editor) return;
+      const state = _editor.state;
+      const first = state.doc.firstChild;
+      if (!first) return;
+      if (first.type.name === 'heading' && first.attrs.level === 1) return;
+      const tr = state.tr.setNodeMarkup(0, state.schema.nodes.heading, { level: 1 });
+      tr.setMeta('titleEnforce', true);
+      _editor.view.dispatch(tr);
+    }
+
     /* ── Dirty 상태 ─────────────────────────────────── */
     function _setDirty(v) {
       if (_dirty === v) return;
@@ -1458,7 +1470,9 @@
         content: opts.initialMarkdown || '',
         editable: true,
         injectCSS: false,
-        onUpdate: () => {
+        onUpdate: ({ transaction }) => {
+          if (transaction.getMeta('titleEnforce')) return;
+          _enforceH1Title();
           _setDirty(true);
           if (hooks.onChange) hooks.onChange();
           _scheduleAutosave();
@@ -1498,6 +1512,7 @@
 
       if (hooks.onReady) hooks.onReady(_editor);
       setTimeout(_applyHighlight, 150);
+      setTimeout(_enforceH1Title, 0);
     }
 
     function _buildExtensions({ StarterKit, CodeBlock, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript }) {
@@ -1682,9 +1697,5 @@
     };
   }
 
-  /* ── 하위 호환 renderer 스텁 ──────────────────────────────────────────
-     home.html 의 toastui.Editor.factory({ customHTMLRenderer: WUEditor?.renderer })
-     는 TUI Editor가 있을 때만 실행되며, undefined를 넘기면 TUI 기본 렌더러가 사용됨.
-     Tiptap 기반으로 전환 후 별도 커스텀 렌더러가 없으므로 undefined 전달이 안전함. */
-  global.WUEditor = { create, renderer: undefined };
+  global.WUEditor = { create };
 })(window);
