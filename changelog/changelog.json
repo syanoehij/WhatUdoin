@@ -29,6 +29,11 @@
           "icon": "✨",
           "title_html": "<span class=\"cl-tag ux\">ux</span> 체크 — 정렬 버튼 순서 변경 (이름순 → 시간순)",
           "detail_html": "<ul><li><strong>기존</strong>: 시간순 · 이름순 순서로 배치</li><li><strong>변경</strong>: 이름순 · 시간순 순서로 교체</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 링크 패널 Google favicon API 외부 호출 제거",
+          "detail_html": "<ul><li><strong>기존</strong>: 링크 패널에서 저장된 URL의 도메인 favicon을 <code>https://www.google.com/s2/favicons?sz=32&amp;domain=...</code>로 실시간 요청</li><li><strong>변경</strong>: 외부 API 호출 제거 → 🔗 이모지로 대체 (인트라넷 환경에서 외부망 연결 차단)</li><li>수정 파일: <code>templates/base.html</code></li></ul>"
         }
       ]
     },
