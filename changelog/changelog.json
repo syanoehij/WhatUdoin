@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-05-03",
+      "phase": "35차 14단계",
+      "phase_class": "phase-14",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 설정 — 모달창에서 오른쪽 슬라이드 사이드 패널로 변경",
+          "detail_html": "<ul><li><strong>기존</strong>: ⚙️ 설정 클릭 시 작은 모달창으로 표시</li><li><strong>변경</strong>: 오른쪽에서 340px 너비 사이드 패널로 슬라이드인 (0.25s 애니메이션)</li><li>오버레이 배경 클릭·ESC 키·✕ 버튼으로 닫힘, 패널 내부 클릭은 닫힘 방지</li><li>다크 테마 자동 지원 (<code>--surface</code> CSS 변수 사용)</li><li>기존 로컬 저장 데이터 초기화 기능 그대로 유지</li><li>수정 파일: <code>templates/base.html</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 설정 — 메뉴 레이블 표시 토글 추가",
+          "detail_html": "<ul><li>설정 패널에 <strong>메뉴 레이블 표시</strong> 토글 추가</li><li><strong>ON(기본)</strong>: 아이콘+이름 표시 (<code>🏠 내 스케줄</code>)</li><li><strong>OFF</strong>: 아이콘만 표시 (<code>🏠</code>)</li><li>설정 변경 즉시 반영, 새로고침 후에도 유지 (<code>nav_label_mode</code> localStorage)</li><li>페이지 로드 시 <code>&lt;head&gt;</code> 인라인 스크립트로 깜빡임(FOUC) 없이 즉시 적용</li><li>수정 파일: <code>templates/base.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-03",
       "phase": "35차 13단계",
       "phase_class": "phase-13",
       "entries": [

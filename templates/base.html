@@ -298,6 +298,45 @@
   .bind-check-item-title { font-weight: 600; font-size: 14px; }
   .bind-check-item-proj  { font-size: 12px; color: var(--text-secondary, #888); margin-top:2px; }
   .bind-check-modal .modal-header { display:flex; justify-content:space-between; align-items:center; }
+
+  /* ── 아이콘만 모드 ── */
+  html[data-nav="icon"] nav .nav-label { display: none; }
+  html[data-nav="icon"] nav .nav-link { padding: 0 8px; }
+
+  /* ── 사용자 설정 사이드 패널 ── */
+  #user-settings-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    z-index: 1000; display: flex; justify-content: flex-end;
+    opacity: 1; visibility: visible;
+    transition: opacity 0.25s ease;
+  }
+  #user-settings-overlay.hidden {
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+  }
+  #user-settings-panel {
+    width: 340px; height: 100%; background: var(--surface);
+    display: flex; flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+  }
+  #user-settings-overlay:not(.hidden) #user-settings-panel {
+    transform: translateX(0);
+  }
+  .settings-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .settings-header h2 { margin: 0; font-size: 1rem; }
+  .settings-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .settings-section { margin-bottom: 24px; }
+  .settings-section-title { font-weight: 600; margin-bottom: 12px; color: var(--text); }
+  .settings-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; cursor: pointer;
+  }
+  .settings-hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
   </style>
   {% set current_user_payload = {'role': user.role, 'team_id': user.team_id, 'name': user.name} if user else none %}
   <script type="application/json" id="current-user-json">{{ current_user_payload | tojson }}</script>
@@ -307,6 +346,11 @@
     (function() {
       if (localStorage.getItem('theme') === 'dark')
         document.documentElement.setAttribute('data-theme', 'dark');
+    })();
+    // 내비 레이블 모드 깜빡임 방지: 렌더링 전에 적용
+    (function() {
+      if (localStorage.getItem('nav_label_mode') === 'icon')
+        document.documentElement.setAttribute('data-nav', 'icon');
     })();
   </script>
 </head>
@@ -318,14 +362,14 @@
       <span class="subtitle">너 뭐하니?</span>
     </div>
     <nav>
-      {% if user %}<a href="/" class="nav-link {% if request.url.path == '/' %}nav-active{% endif %}">🏠 내 스케줄</a>{% endif %}
-      <a href="/doc" class="nav-link {% if request.url.path.startswith('/doc') %}nav-active{% endif %}">📄 문서</a>
-      <a href="/check" class="nav-link {% if request.url.path.startswith('/check') %}nav-active{% endif %}">✅ 체크</a>
-      {% if user %}<a href="/calendar" class="nav-link {% if request.url.path == '/calendar' %}nav-active{% endif %}">📅 캘린더</a>{% endif %}
-      <a href="/kanban" class="nav-link {% if request.url.path.startswith('/kanban') %}nav-active{% endif %}">📌 칸반</a>
-      <a href="/gantt" class="nav-link {% if request.url.path.startswith('/gantt') %}nav-active{% endif %}">📊 간트</a>
-      {% if user %}<a href="/project-manage" class="nav-link {% if request.url.path.startswith('/project-manage') %}nav-active{% endif %}">🗂 프로젝트 관리</a>{% endif %}
-      {% if user and user.avr_enabled and user.login_via == 'ip' %}<a href="/avr" class="nav-link {% if request.url.path.startswith('/avr') %}nav-active{% endif %}">🖥 AVR</a>{% endif %}
+      {% if user %}<a href="/" class="nav-link {% if request.url.path == '/' %}nav-active{% endif %}"><span class="nav-icon">🏠</span><span class="nav-label"> 내 스케줄</span></a>{% endif %}
+      <a href="/doc" class="nav-link {% if request.url.path.startswith('/doc') %}nav-active{% endif %}"><span class="nav-icon">📄</span><span class="nav-label"> 문서</span></a>
+      <a href="/check" class="nav-link {% if request.url.path.startswith('/check') %}nav-active{% endif %}"><span class="nav-icon">✅</span><span class="nav-label"> 체크</span></a>
+      {% if user %}<a href="/calendar" class="nav-link {% if request.url.path == '/calendar' %}nav-active{% endif %}"><span class="nav-icon">📅</span><span class="nav-label"> 캘린더</span></a>{% endif %}
+      <a href="/kanban" class="nav-link {% if request.url.path.startswith('/kanban') %}nav-active{% endif %}"><span class="nav-icon">📌</span><span class="nav-label"> 칸반</span></a>
+      <a href="/gantt" class="nav-link {% if request.url.path.startswith('/gantt') %}nav-active{% endif %}"><span class="nav-icon">📊</span><span class="nav-label"> 간트</span></a>
+      {% if user %}<a href="/project-manage" class="nav-link {% if request.url.path.startswith('/project-manage') %}nav-active{% endif %}"><span class="nav-icon">🗂</span><span class="nav-label"> 프로젝트 관리</span></a>{% endif %}
+      {% if user and user.avr_enabled and user.login_via == 'ip' %}<a href="/avr" class="nav-link {% if request.url.path.startswith('/avr') %}nav-active{% endif %}"><span class="nav-icon">🖥</span><span class="nav-label"> AVR</span></a>{% endif %}
     </nav>
     <!-- 전역 검색바 -->
     <div class="global-search-wrap" id="global-search-wrap">
@@ -779,27 +823,35 @@
     </div>
   </div>
 
-  <!-- ── 사용자 설정 모달 ── -->
+  <!-- ── 사용자 설정 사이드 패널 ── -->
   <div id="user-settings-overlay" class="modal-overlay hidden" onclick="closeUserSettings(event)">
-    <div class="modal modal-sm">
-      <div class="modal-header">
+    <div id="user-settings-panel" onclick="event.stopPropagation()">
+      <div class="settings-header">
         <h2>⚙️ 사용자 설정</h2>
         <button class="icon-btn" onclick="closeUserSettings()">✕</button>
       </div>
-      <div class="user-settings-content">
-        <!-- 로컬 저장 데이터 초기화 -->
-        <div class="user-settings-card">
-          <div class="user-settings-title">로컬 저장 데이터 초기화</div>
+      <div class="settings-body">
+        <!-- 섹션 1: 메뉴 표시 -->
+        <div class="settings-section">
+          <div class="settings-section-title">메뉴 표시</div>
+          <label class="settings-row">
+            <span>메뉴 레이블 표시</span>
+            <label class="switch switch-sm" onclick="event.stopPropagation()">
+              <input type="checkbox" id="nav-label-toggle" onchange="applyNavLabelMode(this.checked)">
+              <span class="slider round"></span>
+            </label>
+          </label>
+          <p class="settings-hint">끄면 아이콘만 표시됩니다.</p>
+        </div>
+        <!-- 섹션 2: 로컬 저장 데이터 초기화 -->
+        <div class="settings-section">
+          <div class="settings-section-title">로컬 저장 데이터</div>
           <p class="text-muted user-settings-text">
             캘린더 뷰·날짜, 칸반 필터, 문서 정렬 등 브라우저에 저장된 화면 상태와 HTTPS 연결 캐시를 모두 지웁니다.
             페이지가 느리거나 화면이 이상하게 동작할 때 시도해 보세요. 초기화 후 페이지가 새로고침됩니다.
           </p>
           <button class="btn btn-secondary btn-danger-outline" id="clear-storage-btn" onclick="clearLocalStorage()">초기화</button>
         </div>
-      </div>
-      <div class="modal-actions user-settings-actions">
-        <div></div>
-        <button class="btn" onclick="closeUserSettings()">닫기</button>
       </div>
     </div>
   </div>
@@ -972,7 +1024,7 @@
     function closeChangePwModalOuter(e) {
       if (e.target === document.getElementById('change-pw-overlay')) closeChangePwModal();
     }
-    /* ── 사용자 설정 모달 ── */
+    /* ── 사용자 설정 사이드 패널 ── */
     function openUserSettings() {
       document.getElementById('user-settings-overlay').classList.remove('hidden');
     }
@@ -986,6 +1038,16 @@
       localStorage.clear();
       location.reload();
     }
+    function applyNavLabelMode(showLabel) {
+      var mode = showLabel ? 'full' : 'icon';
+      localStorage.setItem('nav_label_mode', mode);
+      document.documentElement.setAttribute('data-nav', showLabel ? 'full' : 'icon');
+    }
+    // 페이지 로드 시 nav-label-toggle 초기 상태 동기화
+    document.addEventListener('DOMContentLoaded', function() {
+      var toggle = document.getElementById('nav-label-toggle');
+      if (toggle) toggle.checked = localStorage.getItem('nav_label_mode') !== 'icon';
+    });
 
     async function doChangePw() {
       const current = document.getElementById('change-pw-current').value.trim();
