@@ -2758,11 +2758,13 @@ def get_checklists_summary(project: str = None, viewer=None) -> list:
     return result
 
 
-def search_all(query: str, type: str = None, viewer=None) -> list[dict]:
+def search_all(query: str, type: str = None, viewer=None,
+               start_after: str | None = None, end_before: str | None = None) -> list[dict]:
     """이벤트·문서·체크리스트 통합 키워드 검색 (MCP search 도구용).
     - query: 검색 키워드. 비어있으면 빈 리스트 반환.
     - type: "event"|"document"|"checklist"|None(전체)
     - viewer: None=비로그인, dict=로그인 사용자
+    - start_after/end_before: 이벤트 날짜 범위 (겹치는 이벤트 포함). 문서·체크리스트는 미적용.
     반환: 경량 필드 + type 필드 포함 (content 미포함)
     정렬: event → document → checklist 순
     """
@@ -2775,16 +2777,22 @@ def search_all(query: str, type: str = None, viewer=None) -> list[dict]:
     with get_conn() as conn:
         # ── events ──────────────────────────────────────────────
         if type_filter is None or type_filter == "event":
-            rows = conn.execute(
-                """SELECT id, title, project, start_datetime, end_datetime, assignee, kanban_status
+            sql = """SELECT id, title, project, start_datetime, end_datetime, assignee, kanban_status
                    FROM events
                    WHERE deleted_at IS NULL
                      AND title LIKE ?
                      AND (project IS NULL OR project = ''
-                          OR project NOT IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))
-                   ORDER BY start_datetime""",
-                (like,)
-            ).fetchall()
+                          OR project NOT IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))"""
+            params: list = [like]
+            if start_after is not None:
+                # end_datetime이 NULL이면 start_datetime을 종료로 간주
+                sql += " AND (end_datetime IS NULL OR end_datetime >= ?)"
+                params.append(start_after)
+            if end_before is not None:
+                sql += " AND start_datetime <= ?"
+                params.append(end_before)
+            sql += " ORDER BY start_datetime"
+            rows = conn.execute(sql, params).fetchall()
             for r in rows:
                 d = dict(r)
                 d["type"] = "event"
@@ -2859,3 +2867,252 @@ def search_all(query: str, type: str = None, viewer=None) -> list[dict]:
                 results.append(d)
 
     return results
+
+
+def search_events_mcp(query: str, start_after: str | None = None,
+                      end_before: str | None = None) -> list[dict]:
+    """MCP search_events 도구용 이벤트 키워드 검색.
+    - query: 검색 키워드. 비어있으면 빈 리스트 반환.
+    - start_after/end_before: 날짜 겹침 조건 적용 (search_all events 부분과 동일 로직).
+    반환: 경량 필드 목록 (id, title, project, start_datetime, end_datetime,
+                          assignee, kanban_status, event_type)
+    """
+    if not query or not query.strip():
+        return []
+    like = f"%{query}%"
+    sql = """SELECT id, title, project, start_datetime, end_datetime, assignee, kanban_status, event_type
+             FROM events
+             WHERE deleted_at IS NULL
+               AND title LIKE ?
+               AND (project IS NULL OR project = ''
+                    OR project NOT IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))"""
+    params: list = [like]
+    if start_after is not None:
+        sql += " AND (end_datetime IS NULL OR end_datetime >= ?)"
+        params.append(start_after)
+    if end_before is not None:
+        sql += " AND start_datetime <= ?"
+        params.append(end_before)
+    sql += " ORDER BY start_datetime"
+    with get_conn() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_kanban_summary(project: str | None = None, viewer=None) -> list[dict]:
+    """MCP list_kanban 도구용 칸반 항목 경량 조회.
+    get_kanban_events()의 필터 조건을 재사용하되 경량 필드만 SELECT.
+    - project: None=전체, ""=프로젝트 미지정 항목만, 문자열=해당 프로젝트만
+    - viewer: None=공개 항목만, dict=인증 사용자(비공개 프로젝트 포함)
+    반환 필드: id, title, project, kanban_status, priority, assignee, start_datetime, end_datetime
+    """
+    private_clause = """
+        AND (
+          e.is_public = 1
+          OR (
+            e.is_public IS NULL
+            AND e.project IS NOT NULL AND e.project != ''
+            AND e.project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+          )
+        )
+    """ if viewer is None else ""
+    base_filter = f"""
+        AND (
+            e.kanban_status IS NOT NULL
+            OR (e.project IS NULL OR e.project = '')
+        )
+        AND (e.project IS NULL OR e.project = '' OR e.project NOT IN (
+            SELECT name FROM projects WHERE is_active = 0
+        ))
+        AND (e.is_active IS NULL OR e.is_active = 1)
+        AND (e.kanban_hidden IS NULL OR e.kanban_hidden = 0)
+        AND (e.done_at IS NULL OR e.done_at > datetime('now', '-7 days'))
+        AND (e.event_type IS NULL OR e.event_type = 'schedule')
+        AND e.recurrence_parent_id IS NULL
+        AND e.deleted_at IS NULL
+        {private_clause}
+    """
+    select = "SELECT e.id, e.title, e.project, e.kanban_status, e.priority, e.assignee, e.start_datetime, e.end_datetime FROM events e"
+    with get_conn() as conn:
+        if project is None:
+            rows = conn.execute(
+                f"{select} WHERE 1=1 {base_filter} ORDER BY e.start_datetime"
+            ).fetchall()
+        elif project == "":
+            rows = conn.execute(
+                f"{select} WHERE (e.project IS NULL OR e.project = '') {base_filter} ORDER BY e.start_datetime"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                f"{select} WHERE e.project = ? {base_filter} ORDER BY e.start_datetime",
+                (project,)
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def search_kanban_mcp(query: str, project: str | None = None, viewer=None) -> list[dict]:
+    """MCP search_kanban 도구용 칸반 항목 키워드 검색.
+    - query: 검색 키워드. 비어있으면 빈 리스트 반환.
+    - project: None=전체, ""=프로젝트 미지정 항목만, 문자열=해당 프로젝트만
+    - viewer: None=공개 항목만, dict=인증 사용자(비공개 프로젝트 포함)
+    반환 필드: id, title, project, kanban_status, priority, assignee
+    """
+    if not query or not query.strip():
+        return []
+    like = f"%{query}%"
+    private_clause = """
+        AND (
+          e.is_public = 1
+          OR (
+            e.is_public IS NULL
+            AND e.project IS NOT NULL AND e.project != ''
+            AND e.project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+          )
+        )
+    """ if viewer is None else ""
+    base_filter = f"""
+        AND (
+            e.kanban_status IS NOT NULL
+            OR (e.project IS NULL OR e.project = '')
+        )
+        AND (e.project IS NULL OR e.project = '' OR e.project NOT IN (
+            SELECT name FROM projects WHERE is_active = 0
+        ))
+        AND (e.is_active IS NULL OR e.is_active = 1)
+        AND (e.kanban_hidden IS NULL OR e.kanban_hidden = 0)
+        AND (e.done_at IS NULL OR e.done_at > datetime('now', '-7 days'))
+        AND (e.event_type IS NULL OR e.event_type = 'schedule')
+        AND e.recurrence_parent_id IS NULL
+        AND e.deleted_at IS NULL
+        {private_clause}
+    """
+    select = "SELECT e.id, e.title, e.project, e.kanban_status, e.priority, e.assignee FROM events e"
+    with get_conn() as conn:
+        if project is None:
+            rows = conn.execute(
+                f"{select} WHERE e.title LIKE ? {base_filter} ORDER BY e.start_datetime",
+                (like,)
+            ).fetchall()
+        elif project == "":
+            rows = conn.execute(
+                f"{select} WHERE e.title LIKE ? AND (e.project IS NULL OR e.project = '') {base_filter} ORDER BY e.start_datetime",
+                (like,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                f"{select} WHERE e.title LIKE ? AND e.project = ? {base_filter} ORDER BY e.start_datetime",
+                (like, project)
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def search_documents_mcp(query: str, viewer=None) -> list[dict]:
+    """MCP search_documents 도구용 문서 키워드 검색.
+    - query: 검색 키워드. 비어있으면 빈 리스트 반환.
+    - viewer: None=공개 문서만, dict=인증 사용자(열람 가능 문서)
+    가시성 로직은 search_all의 meetings 부분과 동일.
+    반환 필드: id, title, author_name, team_name, updated_at
+    """
+    if not query or not query.strip():
+        return []
+    like = f"%{query}%"
+    base = """SELECT m.id, m.title, u.name as author_name, t.name as team_name, m.updated_at
+              FROM meetings m
+              LEFT JOIN users u ON m.created_by = u.id
+              LEFT JOIN teams t ON m.team_id = t.id
+              WHERE m.deleted_at IS NULL
+                AND (m.title LIKE ? OR m.content LIKE ?)"""
+    with get_conn() as conn:
+        if viewer is None:
+            rows = conn.execute(
+                base + " AND m.is_public = 1 ORDER BY m.updated_at DESC",
+                (like, like)
+            ).fetchall()
+        elif viewer.get("role") == "admin":
+            rows = conn.execute(
+                base + " ORDER BY m.updated_at DESC",
+                (like, like)
+            ).fetchall()
+        else:
+            uid = viewer["id"]
+            tid = viewer.get("team_id")
+            rows = conn.execute(
+                base + """
+                  AND (
+                    m.created_by = ?
+                    OR m.is_public = 1
+                    OR (m.is_team_doc = 1 AND m.team_id = ?)
+                    OR (m.is_team_doc = 0 AND m.team_share = 1 AND m.team_id = ?)
+                  )
+                  ORDER BY m.updated_at DESC""",
+                (like, like, uid, tid, tid)
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def search_checklists_mcp(query: str, project: str | None = None, viewer=None) -> list[dict]:
+    """MCP search_checklists 도구용 체크리스트 키워드 검색.
+    - query: 검색 키워드. 비어있으면 빈 리스트 반환.
+    - project: None=전체, ""=프로젝트 미지정 항목만, 문자열=해당 프로젝트만
+    - viewer: None=공개 항목만, dict=인증 사용자
+    가시성·필터 로직은 search_all의 checklists 부분과 동일.
+    반환 필드: id, title, project, updated_at, item_count, done_count
+    """
+    import re
+    if not query or not query.strip():
+        return []
+    like = f"%{query}%"
+    inactive_filter = """
+        AND (project IS NULL OR project = ''
+             OR project NOT IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))
+    """
+    public_filter = """
+        AND (
+          is_public = 1
+          OR (
+            is_public IS NULL
+            AND project IS NOT NULL AND project != ''
+            AND project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+          )
+        )
+    """ if viewer is None else ""
+    with get_conn() as conn:
+        if project is None:
+            rows = conn.execute(
+                f"""SELECT id, title, project, content, updated_at FROM checklists
+                    WHERE deleted_at IS NULL
+                      AND (title LIKE ? OR content LIKE ?)
+                      {inactive_filter}{public_filter}
+                    ORDER BY updated_at DESC""",
+                (like, like)
+            ).fetchall()
+        elif project == "":
+            rows = conn.execute(
+                f"""SELECT id, title, project, content, updated_at FROM checklists
+                    WHERE (project IS NULL OR project = '')
+                      AND deleted_at IS NULL
+                      AND (title LIKE ? OR content LIKE ?)
+                      {public_filter}
+                    ORDER BY updated_at DESC""",
+                (like, like)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                f"""SELECT id, title, project, content, updated_at FROM checklists
+                    WHERE project = ?
+                      AND deleted_at IS NULL
+                      AND (title LIKE ? OR content LIKE ?)
+                      {inactive_filter}{public_filter}
+                    ORDER BY updated_at DESC""",
+                (project, like, like)
+            ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        content = d.pop("content") or ""
+        item_count = len(re.findall(r'(?m)^\s*-\s+\[[ xX]\]', content))
+        done_count = len(re.findall(r'(?m)^\s*-\s+\[[xX]\]', content))
+        d["item_count"] = item_count
+        d["done_count"] = done_count
+        result.append(d)
+    return result

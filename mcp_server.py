@@ -210,10 +210,12 @@ async def get_checklist(ctx: Context, checklist_id: int) -> dict:
 
 
 @mcp.tool()
-async def search(
+async def search_all(
     ctx: Context,
     query: str,
     type: str | None = None,
+    start_after: str | None = None,
+    end_before: str | None = None,
 ) -> list[dict]:
     """
     WhatUdoin 전체 데이터를 키워드로 검색합니다.
@@ -226,6 +228,11 @@ async def search(
     파라미터:
     - query: 검색 키워드 (빈 문자열이면 빈 결과 반환)
     - type: "event" | "document" | "checklist" | None(전체 검색, 기본값)
+    - start_after: 이벤트 날짜 범위 시작 (ISO 8601, 예: "2026-01-01"). 미지정 시 오늘-7일.
+    - end_before: 이벤트 날짜 범위 종료 (ISO 8601, 예: "2026-12-31"). 미지정 시 오늘+7일.
+      → 시작일이 범위를 벗어나도 종료일이 범위 안에 들어오면 포함됩니다.
+      → 날짜 필터는 이벤트에만 적용됩니다. 문서·체크리스트는 날짜 무관 전체 매칭.
+      → 특정 날짜 제한 없이 전체 이벤트를 검색하려면 start_after="2000-01-01"처럼 넓게 지정하세요.
 
     반환: type 필드 포함 경량 결과 목록
     - type="event": id, title, project, start_datetime, end_datetime, assignee, kanban_status
@@ -234,7 +241,182 @@ async def search(
 
     상세 내용은 결과의 id로 get_event()/get_document()/get_checklist()를 호출하세요.
     """
+    from datetime import datetime, timedelta
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.search_all(query=query, type=type, viewer=user)
+    if start_after is None and end_before is None:
+        today = datetime.now().date()
+        start_after = (today - timedelta(days=7)).isoformat()
+        end_before = (today + timedelta(days=7)).isoformat()
+    return db.search_all(query=query, type=type, viewer=user,
+                         start_after=start_after, end_before=end_before)
+
+
+@mcp.tool()
+async def search_events(
+    ctx: Context,
+    query: str,
+    start_after: str | None = None,
+    end_before: str | None = None,
+) -> list[dict]:
+    """
+    WhatUdoin 일정을 키워드로 검색합니다.
+
+    Use this tool when:
+    - 특정 제목의 일정을 찾을 때
+    - 특정 기간 안의 일정을 키워드로 검색할 때
+    - 일정 타입 결과만 필요하고 문서·체크리스트는 불필요할 때
+
+    파라미터:
+    - query: 검색 키워드 (빈 문자열이면 빈 결과 반환)
+    - start_after: 이벤트 날짜 범위 시작 (ISO 8601). 미지정 시 오늘-7일.
+    - end_before: 이벤트 날짜 범위 종료 (ISO 8601). 미지정 시 오늘+7일.
+      → 시작일이 범위를 벗어나도 종료일이 범위 안에 들어오면 포함됩니다.
+      → 특정 날짜 제한 없이 전체를 검색하려면 start_after="2000-01-01"처럼 넓게 지정하세요.
+
+    반환 필드: id, title, project, start_datetime, end_datetime, assignee, kanban_status, event_type
+    상세 내용은 get_event()를 사용하세요.
+    """
+    from datetime import datetime, timedelta
+    user = _user_from_ctx(ctx)
+    if user is None:
+        raise PermissionError("인증이 필요합니다.")
+    if start_after is None and end_before is None:
+        today = datetime.now().date()
+        start_after = (today - timedelta(days=7)).isoformat()
+        end_before = (today + timedelta(days=7)).isoformat()
+    return db.search_events_mcp(query=query, start_after=start_after, end_before=end_before)
+
+
+@mcp.tool()
+async def list_kanban(
+    ctx: Context,
+    project: str | None = None,
+) -> list[dict]:
+    """
+    칸반 보드 항목 목록을 조회합니다 (경량 메타데이터만 반환).
+
+    Use this tool when:
+    - 칸반 보드에 표시되는 전체 항목 현황을 파악할 때
+    - 특정 프로젝트의 칸반 항목을 확인할 때
+    - get_kanban_item 호출 전 id를 파악할 때
+
+    칸반 항목 기준: kanban_status 설정됐거나 프로젝트 미지정 항목.
+    삭제됐거나 비활성 프로젝트, 숨김 처리된 항목은 제외됩니다.
+    반환 필드: id, title, project, kanban_status, priority, assignee, start_datetime, end_datetime
+    상세 내용은 get_kanban_item()을 사용하세요.
+
+    파라미터:
+    - project=None(기본값): 열람 가능한 모든 칸반 항목 반환
+    - project="프로젝트명": 해당 프로젝트 칸반 항목만 반환
+    - project="": 프로젝트 미지정 항목만 반환 (None과 다름)
+    """
+    user = _user_from_ctx(ctx)
+    if user is None:
+        raise PermissionError("인증이 필요합니다.")
+    return db.get_kanban_summary(project=project, viewer=user)
+
+
+@mcp.tool()
+async def get_kanban_item(ctx: Context, event_id: int) -> dict:
+    """
+    특정 칸반 항목의 상세 정보를 조회합니다.
+
+    Use this tool when:
+    - list_kanban으로 얻은 id로 칸반 항목의 전체 내용을 확인할 때
+    - 칸반 맥락에서 특정 태스크의 설명, 담당자, 기간 등 상세 정보가 필요할 때
+
+    내부적으로 get_event와 동일한 DB 함수를 사용합니다.
+    삭제된 항목이나 존재하지 않는 id는 error 객체를 반환합니다.
+    """
+    if _user_from_ctx(ctx) is None:
+        raise PermissionError("인증이 필요합니다.")
+    result = db.get_event_for_mcp(event_id)
+    if result is None:
+        return {"error": "not_found", "id": event_id, "reason": "칸반 항목이 존재하지 않거나 접근 권한이 없습니다."}
+    return result
+
+
+@mcp.tool()
+async def search_kanban(
+    ctx: Context,
+    query: str,
+    project: str | None = None,
+) -> list[dict]:
+    """
+    칸반 항목을 키워드로 검색합니다.
+
+    Use this tool when:
+    - 특정 제목의 칸반 태스크를 찾을 때
+    - 특정 프로젝트의 칸반 항목을 키워드로 검색할 때
+    - 날짜 무관하게 태스크 중심으로 검색할 때
+
+    날짜 필터 없음 (칸반은 태스크 중심, 날짜 무관).
+    반환 필드: id, title, project, kanban_status, priority, assignee
+    상세 내용은 get_kanban_item()을 사용하세요.
+
+    파라미터:
+    - query: 검색 키워드 (빈 문자열이면 빈 결과 반환)
+    - project=None(기본값): 전체 칸반 항목에서 검색
+    - project="프로젝트명": 해당 프로젝트 항목만 검색
+    - project="": 프로젝트 미지정 항목만 검색
+    """
+    user = _user_from_ctx(ctx)
+    if user is None:
+        raise PermissionError("인증이 필요합니다.")
+    return db.search_kanban_mcp(query=query, project=project, viewer=user)
+
+
+@mcp.tool()
+async def search_documents(ctx: Context, query: str) -> list[dict]:
+    """
+    문서(회의록)를 키워드로 검색합니다.
+
+    Use this tool when:
+    - 특정 내용이 담긴 문서를 찾을 때
+    - 문서 타입 결과만 필요하고 일정·체크리스트는 불필요할 때
+    - 회의 내용, 결정 사항을 키워드로 검색할 때
+
+    title과 content를 모두 검색합니다.
+    열람 권한에 따라 접근 가능한 문서만 반환됩니다.
+    반환 필드: id, title, author_name, team_name, updated_at
+    본문은 get_document()를 사용하세요.
+
+    파라미터:
+    - query: 검색 키워드 (빈 문자열이면 빈 결과 반환)
+    """
+    user = _user_from_ctx(ctx)
+    if user is None:
+        raise PermissionError("인증이 필요합니다.")
+    return db.search_documents_mcp(query=query, viewer=user)
+
+
+@mcp.tool()
+async def search_checklists(
+    ctx: Context,
+    query: str,
+    project: str | None = None,
+) -> list[dict]:
+    """
+    체크리스트를 키워드로 검색합니다.
+
+    Use this tool when:
+    - 특정 내용이 담긴 체크리스트를 찾을 때
+    - 체크리스트 타입 결과만 필요할 때
+    - 특정 프로젝트의 체크리스트를 키워드로 검색할 때
+
+    title과 content를 모두 검색합니다.
+    반환 필드: id, title, project, updated_at, item_count, done_count
+    항목 상세는 get_checklist()를 사용하세요.
+
+    파라미터:
+    - query: 검색 키워드 (빈 문자열이면 빈 결과 반환)
+    - project=None(기본값): 전체 체크리스트에서 검색
+    - project="프로젝트명": 해당 프로젝트 체크리스트만 검색
+    - project="": 프로젝트 미지정 체크리스트만 검색
+    """
+    user = _user_from_ctx(ctx)
+    if user is None:
+        raise PermissionError("인증이 필요합니다.")
+    return db.search_checklists_mcp(query=query, project=project, viewer=user)

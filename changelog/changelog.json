@@ -1,6 +1,30 @@
 {
   "groups": [
     {
+      "date": "2026-05-04",
+      "phase": "36차 5단계",
+      "phase_class": "phase-5",
+      "entries": [
+        {
+          "icon": "🔌",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> MCP — 도메인별 3단계 구조 재편 (search·list·get × 4도메인)",
+          "detail_html": "<ul><li><strong>도메인 4개 × search·list·get 3단계</strong>로 MCP 도구 완전 재편 (총 14개)</li><li><code>search</code> → <code>search_all</code>로 rename (통합 검색 유지)</li><li><strong>일정</strong>: <code>search_events</code> 신규 — 캘린더 기준 일정 키워드 검색, 날짜 범위 파라미터 지원</li><li><strong>칸반</strong>: <code>list_kanban</code> · <code>get_kanban_item</code> · <code>search_kanban</code> 신규 — 칸반 보드 조건 그대로 적용 (kanban_status 설정 + 프로젝트 미지정 항목)</li><li><strong>문서</strong>: <code>search_documents</code> 신규 — title + content 전문 검색</li><li><strong>체크리스트</strong>: <code>search_checklists</code> 신규 — 검색 결과에 <code>item_count</code>·<code>done_count</code> 포함</li><li>수정 파일: <code>mcp_server.py</code> · <code>database.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-04",
+      "phase": "36차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "🔌",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> MCP search — 날짜 필터 + 겹침 조건",
+          "detail_html": "<ul><li><code>search_all</code> 도구에 <code>start_after</code> · <code>end_before</code> 파라미터 추가</li><li><strong>기본값 오늘 ±7일</strong>: 파라미터 미지정 시 현재 날짜 기준 앞뒤 7일 범위 이벤트만 반환</li><li><strong>겹침 조건</strong>: 시작일이 범위를 벗어나도 종료일이 범위 안에 들어오면 포함 (<code>end_datetime ≥ start_after AND start_datetime ≤ end_before</code>)</li><li>날짜 필터는 이벤트에만 적용 — 문서·체크리스트는 날짜 무관 전체 매칭</li><li>전체 이력 검색 시 <code>start_after=\"2000-01-01\"</code>처럼 넓게 지정하도록 docstring 안내 추가</li><li>수정 파일: <code>mcp_server.py</code> · <code>database.py</code></li></ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-05-03",
       "phase": "36차 3단계",
       "phase_class": "phase-3",
