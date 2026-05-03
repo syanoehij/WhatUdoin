@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import asyncio
 import json
 import os
+import hashlib
 import re
+import secrets
 import uuid
 
 import requests as _requests
@@ -25,6 +27,8 @@ import auth
 import crypto
 import backup
 from broker import wu_broker
+from permissions import _can_read_doc, _can_read_checklist
+from mcp_server import mcp, mount_mcp, verify_bearer_token, _mcp_user
 
 scheduler = AsyncIOScheduler()
 
@@ -77,6 +81,40 @@ app = FastAPI(title="WhatUDoin", lifespan=lifespan)
 app.mount("/static",          StaticFiles(directory=str(_BASE_DIR / "static")),   name="static")
 app.mount("/uploads/meetings", StaticFiles(directory=str(MEETINGS_DIR)),           name="meetings_files")
 templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
+mount_mcp(app)
+
+
+class _MCPBearerAuthMiddleware:
+    """순수 ASGI 미들웨어. BaseHTTPMiddleware는 SSE 스트리밍을 버퍼링해 깨진다."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("path", "").startswith("/mcp"):
+            headers = {k.lower(): v for k, v in scope.get("headers", [])}
+            auth = headers.get(b"authorization", b"").decode()
+            user = verify_bearer_token(auth)
+            if user is None:
+                body = b'{"error":"unauthorized"}'
+                await send({
+                    "type": "http.response.start",
+                    "status": 401,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode()),
+                    ],
+                })
+                await send({"type": "http.response.body", "body": body})
+                return
+            token = _mcp_user.set(user)
+            try:
+                await self.app(scope, receive, send)
+            finally:
+                _mcp_user.reset(token)
+        else:
+            await self.app(scope, receive, send)
+
+app.add_middleware(_MCPBearerAuthMiddleware)
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -120,24 +158,6 @@ def _require_admin(request: Request):
     return user
 
 
-def _can_read_doc(user, doc: dict) -> bool:
-    if not doc:
-        return False
-    if user and user.get("role") == "admin":
-        return True
-    if doc.get("is_public"):
-        return True
-    if not user:
-        return False
-    if doc.get("created_by") == user["id"]:
-        return True
-    if doc.get("is_team_doc") and doc.get("team_id") == user.get("team_id"):
-        return True
-    if not doc.get("is_team_doc") and doc.get("team_share") and doc.get("team_id") == user.get("team_id"):
-        return True
-    return False
-
-
 def _can_write_doc(user, doc: dict) -> bool:
     if not user or not doc:
         return False
@@ -148,22 +168,6 @@ def _can_write_doc(user, doc: dict) -> bool:
     if doc.get("is_team_doc"):
         return doc.get("team_id") == user.get("team_id")
     return doc.get("created_by") == user["id"]
-
-
-def _can_read_checklist(user, cl: dict) -> bool:
-    if user and user.get("role") == "admin":
-        return True
-    if user:
-        return True
-    is_pub = cl.get("is_public")
-    if is_pub == 1:
-        return True
-    if is_pub is None:
-        proj_name = cl.get("project") or ""
-        if proj_name:
-            proj = db.get_project(proj_name)
-            return bool(proj and not proj.get("is_private"))
-    return False
 
 
 # ── 페이지 ──────────────────────────────────────────────
@@ -302,6 +306,64 @@ def alarm_setup_page(request: Request):
     return templates.TemplateResponse(
         request, "alarm_setup.html",
         _ctx(request, cert_ready=cert_path.is_file()),
+    )
+
+
+# ── MCP 설정 페이지 ──────────────────────────────────────
+@app.get("/settings/mcp", response_class=HTMLResponse)
+def settings_mcp_page(request: Request):
+    _require_editor(request)
+    base = str(request.base_url).rstrip("/")
+    http_base = f"http://{request.base_url.hostname}:8000"
+    cline_config = json.dumps({
+        "mcpServers": {
+            "whatudoin": {
+                "url": f"{http_base}/mcp/",
+                "headers": {"Authorization": "Bearer <YOUR_TOKEN>"},
+                "disabled": False,
+            }
+        }
+    }, indent=2, ensure_ascii=False)
+    codex_config = (
+        '[mcp_servers.WhatUdoin]\n'
+        'command = "npx"\n'
+        'args = [\n'
+        '  "-y",\n'
+        '  "mcp-remote",\n'
+        f'  "{http_base}/mcp/",\n'
+        '  "--transport",\n'
+        '  "sse-only",\n'
+        '  "--allow-http",\n'
+        '  "--header",\n'
+        '  "Authorization: Bearer <YOUR_TOKEN>"\n'
+        ']'
+    )
+    claude_desktop_config = json.dumps({
+        "mcpServers": {
+            "WhatUdoin": {
+                "command": "mcp-remote",
+                "args": [
+                    f"{http_base}/mcp/",
+                    "--transport", "sse-only",
+                    "--allow-http",
+                    "--header",
+                    "Authorization: Bearer <YOUR_TOKEN>",
+                ],
+            }
+        }
+    }, indent=2, ensure_ascii=False)
+    claude_code_cmd = (
+        f'claude mcp add --transport http WhatUdoin {http_base}/mcp/'
+        ' --header "Authorization: Bearer <YOUR_TOKEN>"'
+    )
+    return templates.TemplateResponse(
+        request, "settings_mcp.html",
+        _ctx(request,
+             base_url=base,
+             cline_config=cline_config,
+             codex_config=codex_config,
+             claude_desktop_config=claude_desktop_config,
+             claude_code_cmd=claude_code_cmd),
     )
 
 
@@ -2954,6 +3016,42 @@ async def admin_put_avr_user(user_id: int, request: Request):
     body = await request.json()
     enabled = bool(body.get("enabled", False))
     db.set_user_avr_enabled(user_id, enabled)
+    return {"ok": True}
+
+
+# ── MCP 토큰 API ─────────────────────────────────────────
+
+@app.get("/api/me/mcp-token")
+def api_get_mcp_token(request: Request):
+    """MCP 토큰 메타 조회. 평문 토큰은 절대 반환하지 않는다."""
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    return db.get_mcp_token_meta(user["id"])
+
+
+@app.post("/api/me/mcp-token/regenerate")
+async def api_regenerate_mcp_token(request: Request):
+    """MCP 토큰 발급/재발급. 평문 토큰을 1회만 반환한다 (이후 재조회 불가)."""
+    import sqlite3
+    user = _require_editor(request)
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    for _ in range(2):
+        token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        try:
+            db.set_mcp_token_hash(user["id"], token_hash, now)
+            return {"token": token}
+        except sqlite3.IntegrityError:
+            continue
+    raise HTTPException(status_code=500, detail="토큰 생성에 실패했습니다. 다시 시도해 주세요.")
+
+
+@app.delete("/api/me/mcp-token")
+def api_delete_mcp_token(request: Request):
+    """MCP 토큰 삭제."""
+    user = _require_editor(request)
+    db.clear_mcp_token(user["id"])
     return {"ok": True}
 
 

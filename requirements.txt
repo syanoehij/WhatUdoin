@@ -9,3 +9,4 @@ rapidfuzz>=3.6
 pystray
 Pillow
 apscheduler
+mcp>=1.27,<2

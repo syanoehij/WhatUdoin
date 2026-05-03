@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-05-03",
+      "phase": "36차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "🔌",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> MCP 서버 — 4개 클라이언트 연동 (Cline·Codex·Claude Desktop·Claude Code)",
+          "detail_html": "<ul><li><strong>FastMCP 기반 read-only 도구 6개</strong>: <code>list_events</code> · <code>get_event</code> · <code>list_documents</code> · <code>get_document</code> · <code>list_checklists</code> · <code>get_checklist</code></li><li>SSE transport: <code>/mcp/</code> (Cline · Claude Desktop · Claude Code 공용)</li><li>Streamable HTTP transport: <code>/mcp-codex/</code> (미사용 예비 엔드포인트)</li><li>Bearer 토큰 인증 — SHA-256 해시만 DB 저장, 발급 시 평문 1회 표시 후 폐기</li><li>순수 ASGI 미들웨어 (<code>_MCPBearerAuthMiddleware</code>) 도입 — <code>BaseHTTPMiddleware</code>의 SSE 버퍼링 문제 해결</li><li><strong>클라이언트별 설정 안내 페이지</strong> <code>/settings/mcp</code> 추가: 토큰 발급·재발급·삭제 UI + 4개 클라이언트 설정 스니펫 자동 생성</li><li>Codex CLI: Streamable HTTP 직접 연결 → <code>mcp-remote</code> stdio→SSE 브릿지 방식으로 변경 (<code>--transport sse-only</code>)</li><li>수정 파일: <code>mcp_server.py</code> · <code>app.py</code> · <code>database.py</code> · <code>templates/settings_mcp.html</code> · <code>permissions.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-03",
       "phase": "35차 14단계",
       "phase_class": "phase-14",
       "entries": [

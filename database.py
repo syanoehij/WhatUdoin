@@ -183,12 +183,18 @@ def init_db():
                 "UPDATE events SET event_type = 'schedule' WHERE event_type IS NULL"
             )
         _migrate(conn, "users", [
-            ("password",    "TEXT NOT NULL DEFAULT ''"),
-            ("team_id",     "INTEGER"),
-            ("is_active",   "INTEGER DEFAULT 1"),
-            ("created_at",  "TEXT DEFAULT CURRENT_TIMESTAMP"),
-            ("avr_enabled", "INTEGER DEFAULT 0"),
+            ("password",            "TEXT NOT NULL DEFAULT ''"),
+            ("team_id",             "INTEGER"),
+            ("is_active",           "INTEGER DEFAULT 1"),
+            ("created_at",          "TEXT DEFAULT CURRENT_TIMESTAMP"),
+            ("avr_enabled",         "INTEGER DEFAULT 0"),
+            ("mcp_token_hash",      "TEXT"),
+            ("mcp_token_created_at", "TEXT"),
         ])
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mcp_token_hash "
+            "ON users(mcp_token_hash) WHERE mcp_token_hash IS NOT NULL"
+        )
         _migrate(conn, "sessions", [
             ("expires_at", "TEXT"),
         ])
@@ -2558,3 +2564,65 @@ def cleanup_old_trash():
         conn.execute("DELETE FROM meetings WHERE deleted_at IS NOT NULL AND deleted_at < ?", (threshold,))
         conn.execute("DELETE FROM checklists WHERE deleted_at IS NOT NULL AND deleted_at < ?", (threshold,))
         conn.execute("DELETE FROM projects WHERE deleted_at IS NOT NULL AND deleted_at < ?", (threshold,))
+
+
+# ── MCP 토큰 ─────────────────────────────────────────────
+
+def get_user_by_mcp_token_hash(token_hash: str):
+    """SHA-256 해시로 활성 사용자 조회 (is_active=1 필수)"""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE mcp_token_hash = ? AND is_active = 1",
+            (token_hash,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def set_mcp_token_hash(user_id: int, token_hash: str, created_at: str) -> None:
+    """MCP 토큰 해시 저장. UNIQUE 충돌 시 sqlite3.IntegrityError 발생 (호출자가 1회 재시도)"""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET mcp_token_hash = ?, mcp_token_created_at = ? WHERE id = ?",
+            (token_hash, created_at, user_id)
+        )
+
+
+def clear_mcp_token(user_id: int) -> None:
+    """MCP 토큰 삭제 (hash와 created_at 모두 NULL)"""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET mcp_token_hash = NULL, mcp_token_created_at = NULL WHERE id = ?",
+            (user_id,)
+        )
+
+
+def get_mcp_token_meta(user_id: int) -> dict:
+    """토큰 존재 여부와 발급 시각 반환. 평문 토큰 절대 반환 금지."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT mcp_token_hash, mcp_token_created_at FROM users WHERE id = ?",
+            (user_id,)
+        ).fetchone()
+    if not row:
+        return {"has_token": False, "created_at": None}
+    return {
+        "has_token": bool(row["mcp_token_hash"]),
+        "created_at": row["mcp_token_created_at"],
+    }
+
+
+def get_event_for_mcp(event_id: int) -> dict | None:
+    """MCP용 이벤트 조회: ① visibility check → ② get_event() 호출.
+    종료 프로젝트(is_active=0) 소속 이벤트, 삭제된 이벤트는 None 반환."""
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT 1 FROM events
+               WHERE id = ?
+                 AND deleted_at IS NULL
+                 AND (project IS NULL OR project = ''
+                      OR project NOT IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))""",
+            (event_id,)
+        ).fetchone()
+    if not row:
+        return None
+    return get_event(event_id)
