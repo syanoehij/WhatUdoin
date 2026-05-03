@@ -1688,7 +1688,7 @@ def _build_doc_md(doc: dict, exported_at: str,
         lines += [f"← [[index]]", ""]
     raw = (doc.get("content") or "").replace("\r\n", "\n").strip()
     if raw:
-        rewritten, found = _rewrite_image_paths(raw)
+        rewritten, found = _rewrite_image_paths(_convert_html_tables_to_gfm(raw))
         if images is not None:
             images.extend(found)
         lines.append(rewritten)
@@ -1735,8 +1735,98 @@ def _build_event_md(project_name: str | None, ev: dict, exported_at: str,
     return "\n".join(lines)
 
 
+_HTML_TABLE_RE = re.compile(r'<table[\s\S]*?</table>', re.IGNORECASE)
+
+
+def _html_table_to_gfm(html: str) -> str | None:
+    """단일 HTML <table>을 GFM 마크다운 테이블로 변환.
+    colspan/rowspan > 1 이거나 변환 불가 시 None 반환."""
+    from html.parser import HTMLParser
+
+    class _P(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.rows: list[list[str]] = []
+            self._row: list[str] | None = None
+            self._cell: list[str] | None = None
+            self.bad = False
+
+        def handle_starttag(self, tag, attrs):
+            a = dict(attrs)
+            if tag == 'tr':
+                self._row = []
+            elif tag in ('td', 'th'):
+                if int(a.get('colspan', 1)) > 1 or int(a.get('rowspan', 1)) > 1:
+                    self.bad = True
+                self._cell = []
+            elif tag == 'img' and self._cell is not None:
+                src = a.get('src', '')
+                alt = a.get('alt', '')
+                style = a.get('style', '')
+                w = re.search(r'width:\s*(\d+)px', style)
+                # GFM 테이블 셀 안에서는 | 를 \| 로 이스케이프
+                self._cell.append(f'![{alt}\\|{w.group(1)}]({src})' if w else f'![{alt}]({src})')
+            elif tag == 'br' and self._cell is not None:
+                self._cell.append(' ')
+
+        def handle_endtag(self, tag):
+            if tag in ('td', 'th') and self._cell is not None and self._row is not None:
+                raw = ''.join(self._cell).strip()
+                # 이미 이스케이프된 \| 는 건드리지 않고 나머지 | 만 \| 로 변환
+                escaped = re.sub(r'(?<!\\)\|', r'\\|', raw)
+                self._row.append(escaped)
+                self._cell = None
+            elif tag == 'tr' and self._row is not None:
+                if self._row:
+                    self.rows.append(self._row)
+                self._row = None
+
+        def handle_data(self, data):
+            if self._cell is not None:
+                t = data.strip()
+                if t:
+                    self._cell.append(t)
+
+        def handle_entityref(self, name):
+            if self._cell is not None:
+                self._cell.append({'amp': '&', 'lt': '<', 'gt': '>', 'quot': '"', 'nbsp': ' '}.get(name, ''))
+
+        def handle_charref(self, name):
+            if self._cell is not None:
+                try:
+                    self._cell.append(chr(int(name[1:], 16) if name.startswith('x') else int(name)))
+                except (ValueError, OverflowError):
+                    pass
+
+    p = _P()
+    p.feed(html)
+    if p.bad or not p.rows:
+        return None
+    max_cols = max(len(r) for r in p.rows)
+    if max_cols == 0:
+        return None
+
+    lines = []
+    for i, row in enumerate(p.rows):
+        padded = row + [''] * (max_cols - len(row))
+        lines.append('| ' + ' | '.join(padded) + ' |')
+        if i == 0:
+            lines.append('| ' + ' | '.join(['---'] * max_cols) + ' |')
+    return '\n'.join(lines)
+
+
+def _convert_html_tables_to_gfm(md: str) -> str:
+    """마크다운 텍스트 내 <table>…</table> 블록을 GFM 테이블로 변환.
+    변환 불가(colspan/rowspan)인 경우 원본 HTML 유지."""
+    def _repl(m: re.Match) -> str:
+        result = _html_table_to_gfm(m.group(0))
+        return result if result is not None else m.group(0)
+    return _HTML_TABLE_RE.sub(_repl, md)
+
+
 def _rewrite_image_paths(content: str) -> tuple[str, list[tuple[Path, str]]]:
-    """content 내 /uploads/meetings/… URL을 ../attachments/{basename} 로 치환.
+    """content 내 /uploads/meetings/… URL을 attachments/{basename} 로 치환.
+    ZIP 내 .md 파일과 attachments/ 폴더는 같은 레벨에 위치하므로 ../ 불필요.
     Returns (rewritten_content, [(disk_path, zip_archive_path), ...])"""
     collected: list[tuple[Path, str]] = []
     seen: set[str] = set()
@@ -1749,7 +1839,7 @@ def _rewrite_image_paths(content: str) -> tuple[str, list[tuple[Path, str]]]:
             rel = url.replace("/uploads/meetings/", "", 1)
             disk = MEETINGS_DIR / rel
             collected.append((disk, f"attachments/{basename}"))
-        return f"../attachments/{basename}"
+        return f"attachments/{basename}"
 
     return _IMG_URL_RE.sub(_repl, content), collected
 
@@ -1770,7 +1860,7 @@ def _build_checklist_md(project_name: str | None, cl: dict, exported_at: str,
         lines += [f"← [[index]]", ""]
     raw = (cl.get("content") or "").replace("\r\n", "\n").strip()
     if raw:
-        rewritten, found = _rewrite_image_paths(raw)
+        rewritten, found = _rewrite_image_paths(_convert_html_tables_to_gfm(raw))
         if images is not None:
             images.extend(found)
         lines.append(rewritten)
