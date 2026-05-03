@@ -204,6 +204,46 @@
     return result;
   }
 
+  /* Tiptap 로드 전: HTML 컨텍스트 내 <p>![alt|NNN](url)</p> 텍스트를
+   * <img src="url" style="width:NNNpx"> HTML 태그로 변환한다.
+   * HTML 블록 안에서는 markdown-it 인라인 파서가 동작하지 않으므로
+   * 마크다운 이미지 구문이 텍스트로 남는다 — 이를 로드 전에 처리한다. */
+  function _preprocessHtmlTableImages(md) {
+    return md.replace(/<p>!\[([^\]]*)\]\(([^)\s][^)]*)\)<\/p>/g, (_, altFull, src) => {
+      const pi = altFull.lastIndexOf('|');
+      const safeAlt = (pi !== -1 ? altFull.slice(0, pi) : altFull).replace(/"/g, '&quot;');
+      if (pi !== -1 && /^\d+$/.test(altFull.slice(pi + 1).trim())) {
+        const w = altFull.slice(pi + 1).trim();
+        return `<img src="${src}" alt="${safeAlt}" style="width: ${w}px">`;
+      }
+      return `<img src="${src}" alt="${safeAlt}">`;
+    });
+  }
+
+  /* HTML 테이블 셀 등 HTML 컨텍스트에 잘못 저장된 마크다운 이미지 텍스트를
+   * 실제 <img> 태그로 변환 (저장 형식 마이그레이션 과도기 대응) */
+  function _fixInlineMarkdownImages(container) {
+    const re = /^!\[([^\]]*)\]\(([^)]+)\)$/;
+    container.querySelectorAll('p').forEach(p => {
+      if (p.childNodes.length !== 1 || p.childNodes[0].nodeType !== Node.TEXT_NODE) return;
+      const text = p.textContent.trim();
+      const m = re.exec(text);
+      if (!m) return;
+      const altFull = m[1], src = m[2];
+      const pi = altFull.lastIndexOf('|');
+      const img = document.createElement('img');
+      img.src = src;
+      if (pi !== -1 && /^\d+$/.test(altFull.slice(pi + 1).trim())) {
+        img.style.width = altFull.slice(pi + 1).trim() + 'px';
+        img.alt = altFull.slice(0, pi);
+      } else {
+        img.alt = altFull;
+      }
+      p.innerHTML = '';
+      p.appendChild(img);
+    });
+  }
+
   function esc(s) {
     return String(s ?? '')
       .replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -1042,9 +1082,15 @@
           // 너비 제거: ![alt|NNN](src) → ![alt](src)
           md = md.replace(new RegExp(`!\\[([^\\]]*?)\\|\\d+\\]\\(${esc2}\\)`, 'g'),
             (_, alt) => `![${alt}](${src})`);
-          // Legacy HTML → 일반 마크다운
-          md = md.replace(new RegExp(`<img[^>]*src="${esc2}"[^>]*>`, 'g'),
-            m => { const a = m.match(/alt="([^"]*)"/); return `![${a ? a[1] : ''}](${src})`; });
+          // HTML img 태그에서 width style 제거 (마크다운으로 변환 안 함)
+          md = md.replace(new RegExp(`<img([^>]*)src="${esc2}"([^>]*)>`, 'g'),
+            (_, pre, post) => {
+              const attrs = (pre + post).replace(/\s*style="([^"]*)"/, (__, s) => {
+                const noW = s.replace(/\bwidth\s*:\s*[^;]+;?\s*/g, '').trim();
+                return noW ? ` style="${noW}"` : '';
+              });
+              return `<img${attrs}src="${src}">`;
+            });
         } else {
           // 기존 Obsidian 포맷 너비 갱신: ![alt|OLD](src) → ![alt|NEW](src)
           md = md.replace(new RegExp(`!\\[([^\\]]*?)\\|\\d+\\]\\(${esc2}\\)`, 'g'),
@@ -1052,9 +1098,20 @@
           // 일반 마크다운에 너비 추가: ![alt](src) → ![alt|NNN](src)
           md = md.replace(new RegExp(`!\\[([^\\]\\|]*)\\]\\(${esc2}\\)`, 'g'),
             (_, alt) => `![${alt}|${px}](${src})`);
-          // Legacy HTML → Obsidian 포맷으로 마이그레이션
-          md = md.replace(new RegExp(`<img[^>]*src="${esc2}"[^>]*>`, 'g'),
-            m => { const a = m.match(/alt="([^"]*)"/); return `![${a ? a[1] : ''}|${px}](${src})`; });
+          // HTML img 태그 너비 추가/갱신 (HTML 컨텍스트에서 마크다운으로 변환 안 함)
+          md = md.replace(new RegExp(`<img([^>]*)src="${esc2}"([^>]*)>`, 'g'),
+            (_, pre, post) => {
+              let attrs = pre + post;
+              if (/style\s*=\s*"/.test(attrs)) {
+                attrs = attrs.replace(/style\s*=\s*"([^"]*)"/, (__, s) => {
+                  const noW = s.replace(/\bwidth\s*:\s*[^;]+;?\s*/g, '').trim();
+                  return `style="${noW ? noW + '; ' : ''}width: ${px}px"`;
+                });
+              } else {
+                attrs = attrs.trimEnd() + ` style="width: ${px}px"`;
+              }
+              return `<img${attrs}src="${src}">`;
+            });
         }
       }
       return md;
@@ -2335,7 +2392,7 @@
         _editor = new Editor({
           element: containerEl,
           extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, Extension, Plugin, PluginKey, Decoration, DecorationSet, editableMath: false }),
-          content: _preprocessViewerFootnotes(_preprocessViewerCallouts(opts.initialMarkdown || '')),
+          content: _preprocessHtmlTableImages(_preprocessViewerFootnotes(_preprocessViewerCallouts(opts.initialMarkdown || ''))),
           editable: false,
           injectCSS: false,
           onTransaction: () => { _fixFootnoteAnchors(containerEl); _fixCallouts(containerEl); },
@@ -2343,7 +2400,17 @@
         if (hooks.onReady) hooks.onReady(_editor);
         setTimeout(_applyHighlight, 150);
         setTimeout(_initCodeHeaders, 100);
-        setTimeout(() => { _fixFootnoteAnchors(containerEl); _fixCallouts(containerEl); }, 200);
+        setTimeout(() => {
+          _fixFootnoteAnchors(containerEl);
+          _fixCallouts(containerEl);
+          _fixInlineMarkdownImages(containerEl);
+        }, 200);
+        _parseInitialWidths(opts.initialMarkdown || '');
+        if (Object.keys(_imgWidthMap).length) {
+          const _viewerImgObs = new MutationObserver(_applyImgWidths);
+          _viewerImgObs.observe(containerEl, { childList: true, subtree: true });
+          setTimeout(_applyImgWidths, 300);
+        }
         return;
       }
 
@@ -2362,7 +2429,7 @@
       _editor = new Editor({
         element: edEl,
         extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, InlineMath, BlockMath, markdownItMath, InputRule, Mark, Extension, Plugin, PluginKey, Decoration, DecorationSet, editableMath: true }),
-        content: opts.initialMarkdown || '',
+        content: _preprocessHtmlTableImages(opts.initialMarkdown || ''),
         editable: true,
         injectCSS: false,
         onUpdate: ({ transaction }) => {
