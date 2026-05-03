@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-05-03",
+      "phase": "35차 13단계",
+      "phase_class": "phase-13",
+      "entries": [
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 내보내기 — MD 표 셀 서식 완전 변환",
+          "detail_html": "<ul><li><strong>목록 변환</strong>: <code>&lt;ul&gt;/&lt;li&gt;</code> → <code>- 항목</code>, <code>&lt;ol&gt;/&lt;li&gt;</code> → <code>1. 항목</code>, tiptap task list → <code>- [x]</code> / <code>- [ ]</code> (GFM 마커, 셀 내 <code>&lt;br&gt;</code> 구분)</li><li><strong>인라인 서식</strong>: <code>&lt;strong&gt;</code>→<code>**</code>, <code>&lt;em&gt;</code>→<code>*</code>, <code>&lt;s&gt;</code>→<code>~~</code>, <code>&lt;mark&gt;</code>→<code>==</code>, <code>&lt;code&gt;</code>→<code>`</code> 변환</li><li><strong>블록 요소</strong>: <code>&lt;pre&gt;</code>→코드펜스, <code>&lt;blockquote&gt;</code>→<code>&gt;</code> 인용, <code>&lt;a&gt;</code>→마크다운 링크</li><li><strong>수식·주석</strong>: <code>data-type=&quot;inline-math&quot;</code>→<code>$...$</code>, <code>data-type=&quot;block-math&quot;</code>→<code>$$...$$</code>, <code>data-type=&quot;obsidian-comment&quot;</code>→<code>%%...%%</code></li><li><strong>colspan/rowspan fallback</strong>: 표현 불가 셀은 HTML 유지 + task list <code>data-checked</code> 속성을 Obsidian 호환 <code>&lt;input type=&quot;checkbox&quot;&gt;</code>로 변환</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 내보내기 — 각주 이스케이프 복원 및 빈 단락 정리",
+          "detail_html": "<ul><li><strong>각주 복원</strong>: tiptap-markdown이 저장 시 이스케이프한 <code>\\[^1\\]</code>를 옵시디언 표준 <code>[^1]</code>으로 복원 (<code>_clean_footnotes_for_export</code> 추가)</li><li><strong>빈 단락 정리</strong>: 편집기 빈 줄 보존용 <code>&lt;p&gt;&lt;/p&gt;</code> HTML이 .md 파일에 그대로 노출되던 문제 수정 — 내보내기 시 제거, 연속 빈 줄 2개 이상도 1개로 정리 (<code>_clean_empty_paragraphs_for_export</code> 추가)</li><li><strong>통합 함수</strong>: <code>_normalize_markdown_for_export</code> 추가 — 표 변환·콜아웃·각주·빈단락 정리를 일괄 적용, 문서·체크리스트 내보내기 경로에 적용</li><li>수정 파일: <code>app.py</code>, <code>tests/test_html_table_to_gfm.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-03",
       "phase": "35차 12단계",
       "phase_class": "phase-12",
       "entries": [

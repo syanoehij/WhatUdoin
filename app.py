@@ -1688,7 +1688,7 @@ def _build_doc_md(doc: dict, exported_at: str,
         lines += [f"← [[index]]", ""]
     raw = (doc.get("content") or "").replace("\r\n", "\n").strip()
     if raw:
-        rewritten, found = _rewrite_image_paths(_clean_callouts_for_export(_convert_html_tables_to_gfm(raw)))
+        rewritten, found = _rewrite_image_paths(_normalize_markdown_for_export(raw))
         if images is not None:
             images.extend(found)
         lines.append(rewritten)
@@ -1740,7 +1740,7 @@ _HTML_TABLE_RE = re.compile(r'<table[\s\S]*?</table>', re.IGNORECASE)
 
 def _html_table_to_gfm(html: str) -> str | None:
     """단일 HTML <table>을 GFM 마크다운 테이블로 변환.
-    colspan/rowspan > 1 이거나 변환 불가 시 None 반환."""
+    colspan/rowspan > 1이면 None 반환 (HTML 유지)."""
     from html.parser import HTMLParser
 
     class _P(HTMLParser):
@@ -1749,52 +1749,191 @@ def _html_table_to_gfm(html: str) -> str | None:
             self.rows: list[list[str]] = []
             self._row: list[str] | None = None
             self._cell: list[str] | None = None
+            self._list_stack: list[dict] = []
+            self._span_stack: list[str | None] = []
+            self._link_stack: list[str | None] = []
+            self._blockquote_depth = 0
+            self._in_pre = False
             self.bad = False
 
+        def _append_cell(self, text: str):
+            if self._cell is not None and text:
+                self._ensure_blockquote_prefix()
+                self._cell.append(text)
+
+        def _cell_has_content(self) -> bool:
+            return bool(self._cell and ''.join(self._cell).strip())
+
+        def _append_break(self):
+            if self._cell_has_content() and self._cell and self._cell[-1] != '<br>':
+                self._cell.append('<br>')
+
+        def _ensure_blockquote_prefix(self):
+            if self._blockquote_depth <= 0 or self._cell is None:
+                return
+            if not self._cell_has_content() or self._cell[-1] == '<br>':
+                self._cell.append('>' * self._blockquote_depth + ' ')
+
+        @staticmethod
+        def _span_is_complex(value: str | None) -> bool:
+            if value is None:
+                return False
+            try:
+                return int(value) > 1
+            except ValueError:
+                return True
+
         def handle_starttag(self, tag, attrs):
+            tag = tag.lower()
             a = dict(attrs)
             if tag == 'tr':
                 self._row = []
             elif tag in ('td', 'th'):
-                if int(a.get('colspan', 1)) > 1 or int(a.get('rowspan', 1)) > 1:
+                if self._span_is_complex(a.get('colspan')) or self._span_is_complex(a.get('rowspan')):
                     self.bad = True
                 self._cell = []
+                self._list_stack = []
+                self._span_stack = []
+                self._link_stack = []
+                self._blockquote_depth = 0
+                self._in_pre = False
             elif tag == 'img' and self._cell is not None:
                 src = a.get('src', '')
                 alt = a.get('alt', '')
                 style = a.get('style', '')
                 w = re.search(r'width:\s*(\d+)px', style)
                 # GFM 테이블 셀 안에서는 | 를 \| 로 이스케이프
-                self._cell.append(f'![{alt}\\|{w.group(1)}]({src})' if w else f'![{alt}]({src})')
+                self._append_cell(f'![{alt}\\|{w.group(1)}]({src})' if w else f'![{alt}]({src})')
             elif tag == 'br' and self._cell is not None:
-                self._cell.append(' ')
+                self._append_break()
+            elif tag in ('ul', 'ol') and self._cell is not None:
+                data_type = (a.get('data-type') or '').lower()
+                list_type = 'task' if data_type == 'tasklist' else tag
+                start = 1
+                if tag == 'ol':
+                    try:
+                        start = int(a.get('start', 1))
+                    except ValueError:
+                        start = 1
+                self._list_stack.append({'type': list_type, 'counter': start - 1})
+            elif tag == 'li' and self._cell is not None:
+                self._append_break()
+                current = self._list_stack[-1] if self._list_stack else {'type': 'ul', 'counter': 0}
+                indent = '  ' * max(len(self._list_stack) - 1, 0)
+                if current['type'] == 'ol':
+                    current['counter'] += 1
+                    marker = f"{current['counter']}. "
+                elif current['type'] == 'task':
+                    checked = (a.get('data-checked') or '').lower() in ('true', '1', 'checked')
+                    marker = '- [x] ' if checked else '- [ ] '
+                else:
+                    marker = '- '
+                self._append_cell(f'{indent}{marker}')
+            elif tag in ('strong', 'b') and self._cell is not None:
+                self._append_cell('**')
+            elif tag in ('em', 'i') and self._cell is not None:
+                self._append_cell('*')
+            elif tag in ('s', 'strike', 'del') and self._cell is not None:
+                self._append_cell('~~')
+            elif tag == 'mark' and self._cell is not None:
+                self._append_cell('==')
+            elif tag == 'code' and self._cell is not None and not self._in_pre:
+                self._append_cell('`')
+            elif tag == 'pre' and self._cell is not None:
+                self._append_break()
+                self._append_cell('```<br>')
+                self._in_pre = True
+            elif tag == 'blockquote' and self._cell is not None:
+                self._append_break()
+                self._blockquote_depth += 1
+            elif tag == 'hr' and self._cell is not None:
+                self._append_break()
+                self._append_cell('---')
+                self._append_break()
+            elif tag == 'a' and self._cell is not None:
+                self._link_stack.append(a.get('href'))
+                self._append_cell('[')
+            elif tag == 'span' and self._cell is not None:
+                data_type = (a.get('data-type') or '').lower()
+                if data_type == 'inline-math':
+                    self._append_cell('$' + (a.get('data-latex') or '') + '$')
+                    self._span_stack.append(None)
+                elif data_type == 'obsidian-comment':
+                    self._append_cell('%%')
+                    self._span_stack.append('obsidian-comment')
+                else:
+                    self._span_stack.append(None)
+            elif tag == 'div' and self._cell is not None and (a.get('data-type') or '').lower() == 'block-math':
+                self._append_break()
+                self._append_cell('$$<br>' + (a.get('data-latex') or '') + '<br>$$')
+                self._append_break()
 
         def handle_endtag(self, tag):
+            tag = tag.lower()
             if tag in ('td', 'th') and self._cell is not None and self._row is not None:
                 raw = ''.join(self._cell).strip()
+                raw = re.sub(r'^(?:<br>\s*)+', '', raw)
+                raw = re.sub(r'(?:\s*<br>)+$', '', raw)
                 # 이미 이스케이프된 \| 는 건드리지 않고 나머지 | 만 \| 로 변환
                 escaped = re.sub(r'(?<!\\)\|', r'\\|', raw)
                 self._row.append(escaped)
                 self._cell = None
+                self._list_stack = []
+                self._span_stack = []
+                self._link_stack = []
+                self._blockquote_depth = 0
+                self._in_pre = False
             elif tag == 'tr' and self._row is not None:
                 if self._row:
                     self.rows.append(self._row)
                 self._row = None
+            elif tag in ('ul', 'ol') and self._cell is not None:
+                if self._list_stack:
+                    self._list_stack.pop()
+            elif tag in ('strong', 'b') and self._cell is not None:
+                self._append_cell('**')
+            elif tag in ('em', 'i') and self._cell is not None:
+                self._append_cell('*')
+            elif tag in ('s', 'strike', 'del') and self._cell is not None:
+                self._append_cell('~~')
+            elif tag == 'mark' and self._cell is not None:
+                self._append_cell('==')
+            elif tag == 'code' and self._cell is not None and not self._in_pre:
+                self._append_cell('`')
+            elif tag == 'pre' and self._cell is not None:
+                self._append_cell('<br>```')
+                self._in_pre = False
+                self._append_break()
+            elif tag == 'blockquote' and self._cell is not None:
+                self._blockquote_depth = max(self._blockquote_depth - 1, 0)
+                self._append_break()
+            elif tag == 'a' and self._cell is not None:
+                href = self._link_stack.pop() if self._link_stack else None
+                self._append_cell(f']({href})' if href else ']')
+            elif tag == 'span' and self._cell is not None:
+                span_type = self._span_stack.pop() if self._span_stack else None
+                if span_type == 'obsidian-comment':
+                    self._append_cell('%%')
+            elif tag in ('p', 'div') and self._cell is not None:
+                self._append_break()
 
         def handle_data(self, data):
             if self._cell is not None:
-                t = data.strip()
-                if t:
-                    self._cell.append(t)
+                if not data.strip():
+                    return
+                t = data.replace('\r\n', '\n').replace('\r', '\n')
+                t = re.sub(r'[ \t\f\v]+', ' ', t)
+                t = re.sub(r' *\n+ *', '<br>', t)
+                self._append_cell(t)
 
         def handle_entityref(self, name):
             if self._cell is not None:
-                self._cell.append({'amp': '&', 'lt': '<', 'gt': '>', 'quot': '"', 'nbsp': ' '}.get(name, ''))
+                self._append_cell({'amp': '&', 'lt': '<', 'gt': '>', 'quot': '"', 'nbsp': ' '}.get(name, ''))
 
         def handle_charref(self, name):
             if self._cell is not None:
                 try:
-                    self._cell.append(chr(int(name[1:], 16) if name.startswith('x') else int(name)))
+                    self._append_cell(chr(int(name[1:], 16) if name.startswith('x') else int(name)))
                 except (ValueError, OverflowError):
                     pass
 
@@ -1815,12 +1954,26 @@ def _html_table_to_gfm(html: str) -> str | None:
     return '\n'.join(lines)
 
 
+def _fix_tiptap_lists_for_obsidian(html: str) -> str:
+    """tiptap task list의 data-checked 속성을 Obsidian 호환 <input type="checkbox">로 변환."""
+    def _replace_task_li(m: re.Match) -> str:
+        checked = bool(re.search(r'data-checked=["\']true["\']', m.group(0), re.IGNORECASE))
+        cb = '<input type="checkbox" checked disabled>' if checked else '<input type="checkbox" disabled>'
+        return f'<li>{cb} '
+    html = re.sub(r'<li[^>]*data-type=["\']taskItem["\'][^>]*>', _replace_task_li, html, flags=re.IGNORECASE)
+    html = re.sub(r'<ul[^>]*data-type=["\']taskList["\'][^>]*>', '<ul>', html, flags=re.IGNORECASE)
+    return html
+
+
 def _convert_html_tables_to_gfm(md: str) -> str:
     """마크다운 텍스트 내 <table>…</table> 블록을 GFM 테이블로 변환.
-    변환 불가(colspan/rowspan)인 경우 원본 HTML 유지."""
+    목록 포함·colspan/rowspan 등 변환 불가 시 tiptap 속성만 정리 후 HTML 유지."""
     def _repl(m: re.Match) -> str:
-        result = _html_table_to_gfm(m.group(0))
-        return result if result is not None else m.group(0)
+        html = m.group(0)
+        result = _html_table_to_gfm(html)
+        if result is not None:
+            return result
+        return _fix_tiptap_lists_for_obsidian(html)
     return _HTML_TABLE_RE.sub(_repl, md)
 
 
@@ -1833,6 +1986,48 @@ def _clean_callouts_for_export(md: str) -> str:
     # 콜아웃 헤더 줄 바로 다음 빈 > 줄 제거
     md = re.sub(r'(^> *\[![\w]+\][^\n]*\n)((?:^> *\n)+)', r'\1', md, flags=re.MULTILINE)
     return md
+
+
+def _clean_footnotes_for_export(md: str) -> str:
+    """tiptap-markdown이 이스케이프한 Obsidian 각주 표기를 되돌린다."""
+    return re.sub(r'\\\[\^([^\]\s]+)\\\]', r'[^\1]', md)
+
+
+def _clean_empty_paragraphs_for_export(md: str) -> str:
+    """빈 단락 round-trip용 <p></p> HTML이 MD 내보내기에 노출되지 않게 제거한다."""
+    md = re.sub(
+        r'(?im)^[ \t]*<p(?:\s[^>]*)?>\s*(?:&nbsp;|\u00a0|<br\s*/?>)?\s*</p>[ \t]*$',
+        '',
+        md,
+    )
+    lines = md.split('\n')
+    out: list[str] = []
+    blank_count = 0
+    in_code_fence = False
+    in_math_fence = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('```'):
+            in_code_fence = not in_code_fence
+        elif stripped == '$$' and not in_code_fence:
+            in_math_fence = not in_math_fence
+
+        if not in_code_fence and not in_math_fence and stripped == '':
+            blank_count += 1
+            if blank_count > 1:
+                continue
+        else:
+            blank_count = 0
+        out.append(line)
+    return '\n'.join(out)
+
+
+def _normalize_markdown_for_export(md: str) -> str:
+    md = _convert_html_tables_to_gfm(md)
+    md = _clean_callouts_for_export(md)
+    md = _clean_footnotes_for_export(md)
+    md = _clean_empty_paragraphs_for_export(md)
+    return md.strip()
 
 
 def _rewrite_image_paths(content: str) -> tuple[str, list[tuple[Path, str]]]:
@@ -1871,7 +2066,7 @@ def _build_checklist_md(project_name: str | None, cl: dict, exported_at: str,
         lines += [f"← [[index]]", ""]
     raw = (cl.get("content") or "").replace("\r\n", "\n").strip()
     if raw:
-        rewritten, found = _rewrite_image_paths(_clean_callouts_for_export(_convert_html_tables_to_gfm(raw)))
+        rewritten, found = _rewrite_image_paths(_normalize_markdown_for_export(raw))
         if images is not None:
             images.extend(found)
         lines.append(rewritten)
