@@ -443,6 +443,10 @@ main { padding: 20px 24px; width: 100%; flex: 1; }
 
 /* ── 날짜 기존 일정 패널 ── */
 .date-events-panel { margin-top: 4px; }
+.date-events-panel .col-section-label,
+#subtask-panel .col-section-label {
+  margin-top: 16px;
+}
 .date-events-list {
   display: flex;
   flex-direction: column;
@@ -496,6 +500,10 @@ main { padding: 20px 24px; width: 100%; flex: 1; }
   margin-bottom: 12px;
 }
 .form-row-top { align-items: flex-start; padding-top: 2px; }
+.parent-event-row,
+#kanban-status-row {
+  margin-bottom: 10px;
+}
 
 .form-row-inline {
   display: grid;
@@ -552,6 +560,21 @@ main { padding: 20px 24px; width: 100%; flex: 1; }
 .form-row textarea:focus,
 .form-row select:focus { border-color: var(--accent); }
 .form-row textarea { resize: vertical; }
+.autofill-username {
+  display: none;
+}
+.required-mark {
+  color: #e17055;
+}
+.assignee-error {
+  color: #e17055;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.description-control {
+  flex: 1;
+  min-width: 0;
+}
 
 .form-error {
   color: #e05656;
@@ -607,6 +630,13 @@ main { padding: 20px 24px; width: 100%; flex: 1; }
 .modal-actions > div { display: flex; gap: 8px; }
 .modal-actions #btn-delete { margin-right: auto; }
 .btn-group { display: flex; gap: 6px; align-items: center; }
+.btn-linklike {
+  text-decoration: none;
+}
+.btn-danger-outline {
+  color: #d63031;
+  border-color: #d63031;
+}
 
 /* ── 상세 보기 ── */
 .detail-body { margin-bottom: 8px; }
@@ -764,9 +794,54 @@ span.flatpickr-weekday { background: var(--accent) !important; color: white !imp
 #assignee-dropdown li:hover { background: var(--accent-light); color: var(--accent); }
 
 /* ── 시간 프리셋 ── */
-.time-presets { display: flex; gap: 6px; }
+.time-presets {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0 6px;
+}
 .btn-preset.active { background: var(--accent); color: white; }
 .btn-preset.active:hover { background: var(--accent-hover); }
+
+.event-type-row {
+  margin-bottom: 10px;
+  gap: 20px;
+}
+.event-type-wrap,
+.kanban-toggle-wrap,
+.recurrence-days-wrap,
+.recurrence-end-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.event-type-wrap {
+  gap: 10px;
+}
+.recurrence-row {
+  display: flex;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+.recurrence-row .recurrence-days {
+  margin-top: 0;
+}
+.recurrence-end-input {
+  width: auto;
+}
+.bind-check-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.recurrence-cancel-btn {
+  margin-top: 8px;
+  width: 100%;
+}
 
 /* ── 로그인 모달 ── */
 .login-desc {
@@ -1237,6 +1312,7 @@ mark.search-hl {
   flex-shrink: 0;
   transition: background 0.15s;
   display: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 .editor-resizer:hover,
@@ -1292,6 +1368,7 @@ mark.search-hl {
   flex-shrink: 0;
   transition: background 0.15s;
   display: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 .toc-resizer:hover,
@@ -1712,6 +1789,7 @@ mark.search-hl {
   padding: 5px 10px;
   border-radius: 5px;
   border: 1px solid var(--border);
+  -webkit-user-select: none;
   user-select: none;
   white-space: nowrap;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
@@ -1990,8 +2068,8 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
 /* select: OS 기본 화살표 제거 후 커스텀 chevron */
 select.form-input {
-  appearance: none;
   -webkit-appearance: none;
+  appearance: none;
   padding-right: 28px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236e7681' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -2526,6 +2604,13 @@ select.form-input {
   box-sizing: border-box;
 }
 #wu-dialog-overlay .form-control:focus { border-color: var(--accent); }
+#wu-dialog-message {
+  margin: 0 0 8px;
+  white-space: pre-line;
+}
+#wu-dialog-input {
+  width: 100%;
+}
 .wu-dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -2533,6 +2618,89 @@ select.form-input {
   /* 기존 .modal padding(24px 28px 20px) 안에 위치하므로 padding은 0으로
      상하 간격만 약간 확보. modal-body와의 시각적 분리를 위한 margin-top. */
   padding: 0;
+  margin-top: 16px;
+}
+
+#bind-check-modal-overlay {
+  z-index: 2100;
+}
+.bind-check-modal {
+  max-width: 620px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+.bind-check-modal .modal-header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.bind-check-modal .modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.modal-close-plain {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+.bind-check-toolbar {
+  padding: 12px 20px;
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+#bind-check-project-filter {
+  flex: 1;
+}
+#bind-check-search {
+  flex: 2;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.bind-check-refresh {
+  flex-shrink: 0;
+}
+#bind-check-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0 20px 16px;
+}
+.kdetail-modal {
+  width: 640px;
+}
+#kdetail-bound-wrap {
+  padding: 0 20px 12px;
+}
+.kdetail-bound-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.user-settings-content {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.user-settings-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.user-settings-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.user-settings-text {
+  font-size: 0.8rem;
+  margin: 0 0 10px;
+}
+.user-settings-actions {
   margin-top: 16px;
 }
 

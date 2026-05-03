@@ -118,8 +118,8 @@ async function loadAndRenderSubtasks(parentId) {
   if (!subs.length) return;
   _hasSubtasks = true;
   // 왼쪽 패널: 해당 기간 일정 숨기고 하위 일정 표시
-  if (dateEvPanel) dateEvPanel.style.display = 'none';
-  panelEl.style.display = '';
+  if (dateEvPanel) dateEvPanel.classList.add('hidden');
+  panelEl.classList.remove('hidden');
   listEl.innerHTML = subs.map(s => `
     <li class="subtask-list-item" onmousedown="switchToSubtask(${s.id})">
       <span class="subtask-item-title">${esc(s.title)}</span>
@@ -193,7 +193,7 @@ function addAssigneeTag(name) {
   document.getElementById('assignee-dropdown').classList.add('hidden');
   // 에러 표시 해제
   const errEl = document.getElementById('assignee-error');
-  if (errEl) errEl.style.display = 'none';
+  if (errEl) errEl.classList.add('hidden');
   const wrap = document.getElementById('assignee-wrap');
   if (wrap) wrap.style.borderColor = '';
 }
@@ -331,12 +331,12 @@ function openModal(dateStr = '', eventData = null, dragOpts = null, options = nu
   const pillSubtask   = document.getElementById('pill-subtask');
   if (fParentEvent) fParentEvent.value = '';
   if (fParentId)    fParentId.value    = '';
-  if (subtaskPanel) subtaskPanel.style.display = 'none';
+  if (subtaskPanel) subtaskPanel.classList.add('hidden');
   if (subtaskList)  subtaskList.innerHTML      = '';
-  if (dateEvPanel)  dateEvPanel.style.display  = '';
+  if (dateEvPanel)  dateEvPanel.classList.remove('hidden');
   if (btnAddSub)    btnAddSub.classList.add('hidden');
   const parentGotoRowInit = document.getElementById('parent-goto-row');
-  if (parentGotoRowInit) parentGotoRowInit.style.display = 'none';
+  if (parentGotoRowInit) parentGotoRowInit.classList.add('hidden');
   // 유형 pill 전체 잠금 해제 + 개별 pill-locked 초기화
   const pillsWrap = document.getElementById('event-type-pills-wrap');
   if (pillsWrap) {
@@ -346,7 +346,7 @@ function openModal(dateStr = '', eventData = null, dragOpts = null, options = nu
   }
   // 하위 업무 pill: 기존 이벤트 수정 시 event_type에 따라 표시 여부 결정, 신규 생성 시 항상 숨김
   if (pillSubtask) {
-    pillSubtask.style.display = (eventData && eventData.event_type === 'subtask') ? '' : 'none';
+    pillSubtask.classList.toggle('hidden', !(eventData && eventData.event_type === 'subtask'));
   }
   setEventType('schedule');
   setKanbanStatus('backlog');
@@ -364,7 +364,7 @@ function openModal(dateStr = '', eventData = null, dragOpts = null, options = nu
   // 담당자 기본값: 현재 로그인 유저
   if (CURRENT_USER) setAssigneeTags(CURRENT_USER.name);
   document.getElementById('btn-delete').classList.add('hidden');
-  document.getElementById('doc-link-row').style.display = 'none';
+  document.getElementById('doc-link-row').classList.add('hidden');
   // 체크 바인딩 UI 리셋 (신규 모달 또는 수정 모달 진입 공통)
   _currentBoundChecklistId = null;
   if (_boundViewerInstance) { _boundViewerInstance.destroy(); _boundViewerInstance = null; }
@@ -475,9 +475,9 @@ function openModal(dateStr = '', eventData = null, dragOpts = null, options = nu
           if (fParentEvent) fParentEvent.value = parent.title || '';
           if (btnGotoParent) btnGotoParent.textContent = `↑ ${parent.title || '상위 업무'}으로 이동`;
         });
-      if (parentGotoRow) parentGotoRow.style.display = '';
+      if (parentGotoRow) parentGotoRow.classList.remove('hidden');
     } else {
-      if (parentGotoRow) parentGotoRow.style.display = 'none';
+      if (parentGotoRow) parentGotoRow.classList.add('hidden');
     }
 
     // 업무 유형이면 하위 일정 목록 비동기 로드
@@ -497,9 +497,9 @@ function openModal(dateStr = '', eventData = null, dragOpts = null, options = nu
     const docLinkBtn = document.getElementById('doc-link-btn');
     if (eventData.meeting_id) {
       docLinkBtn.href = `/doc/${eventData.meeting_id}`;
-      docLinkRow.style.display = '';
+      docLinkRow.classList.remove('hidden');
     } else {
-      docLinkRow.style.display = 'none';
+      docLinkRow.classList.add('hidden');
     }
 
     // ── 체크 바인딩 상태 복원 ──
@@ -520,7 +520,7 @@ function openModal(dateStr = '', eventData = null, dragOpts = null, options = nu
   if (options && options.eventType === 'subtask') {
     // 하위 일정 생성 경로는 신규지만 subtask pill 필요
     const pillSub2 = document.getElementById('pill-subtask');
-    if (pillSub2) pillSub2.style.display = '';
+    if (pillSub2) pillSub2.classList.remove('hidden');
     if (options.project)     document.getElementById('f-project').value = options.project;
     if (options.assignee)    setAssigneeTags(options.assignee);
     if (options.priority)    document.getElementById('f-priority').value = options.priority;
@@ -618,7 +618,7 @@ async function saveEvent(e) {
   if (!getAssigneeValue()) {
     const errEl = document.getElementById('assignee-error');
     if (errEl) {
-      errEl.style.display = 'block';
+      errEl.classList.remove('hidden');
       document.getElementById('assignee-wrap').style.borderColor = '#e17055';
       document.getElementById('assignee-input').focus();
     }
@@ -847,21 +847,21 @@ function setEventType(type) {
   if (type === 'meeting') {
     if (kanbanStatusRow) kanbanStatusRow.style.display = 'none';
     document.getElementById('f-kanban').checked = false;
-    if (recurrenceRow)  recurrenceRow.style.display  = 'flex';
-    if (parentEventRow) parentEventRow.style.display = 'none';
+    if (recurrenceRow)  recurrenceRow.classList.remove('hidden');
+    if (parentEventRow) parentEventRow.classList.add('hidden');
   } else if (type === 'journal') {
     if (kanbanStatusRow) kanbanStatusRow.style.display = 'none';
     document.getElementById('f-kanban').checked = false;
-    if (recurrenceRow)  recurrenceRow.style.display  = 'none';
-    if (parentEventRow) parentEventRow.style.display = 'none';
+    if (recurrenceRow)  recurrenceRow.classList.add('hidden');
+    if (parentEventRow) parentEventRow.classList.add('hidden');
     setRecurrenceRule('');
   } else if (type === 'subtask') {
     // 하위 업무: 칸반 상태·반복 섹션 숨기고 상위 업무 선택 표시
     if (kanbanStatusRow) kanbanStatusRow.style.display = 'none';
     document.getElementById('f-kanban').checked = false;
-    if (recurrenceRow)  recurrenceRow.style.display  = 'none';
+    if (recurrenceRow)  recurrenceRow.classList.add('hidden');
     if (parentEventRow) {
-      parentEventRow.style.display = '';
+      parentEventRow.classList.remove('hidden');
       _updateParentInputState();
     }
     setRecurrenceRule('');
@@ -869,8 +869,8 @@ function setEventType(type) {
     // 업무: 칸반 상태 선택 표시, 반복·상위 업무 섹션 숨기고 초기화
     if (kanbanStatusRow) kanbanStatusRow.style.display = 'flex';
     document.getElementById('f-kanban').checked = true;
-    if (recurrenceRow)  recurrenceRow.style.display  = 'none';
-    if (parentEventRow) parentEventRow.style.display = 'none';
+    if (recurrenceRow)  recurrenceRow.classList.add('hidden');
+    if (parentEventRow) parentEventRow.classList.add('hidden');
     setRecurrenceRule('');
   }
 }

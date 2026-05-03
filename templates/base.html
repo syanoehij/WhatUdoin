@@ -299,8 +299,10 @@
   .bind-check-item-proj  { font-size: 12px; color: var(--text-secondary, #888); margin-top:2px; }
   .bind-check-modal .modal-header { display:flex; justify-content:space-between; align-items:center; }
   </style>
+  {% set current_user_payload = {'role': user.role, 'team_id': user.team_id, 'name': user.name} if user else none %}
+  <script type="application/json" id="current-user-json">{{ current_user_payload | tojson }}</script>
   <script>
-    var CURRENT_USER = {{ {'role': user.role, 'team_id': user.team_id, 'name': user.name} | tojson if user else 'null' }};
+    var CURRENT_USER = JSON.parse(document.getElementById('current-user-json').textContent);
     // 다크 테마 깜빡임 방지: 렌더링 전에 적용
     (function() {
       if (localStorage.getItem('theme') === 'dark')
@@ -418,7 +420,7 @@
             <div class="profile-dropdown-item theme-row">
               <span class="theme-label-text">🌙 다크 테마</span>
               <label class="switch switch-sm" onclick="event.stopPropagation()">
-                <input type="checkbox" id="dark-toggle" onchange="applyDarkTheme(this.checked)" />
+                <input type="checkbox" id="dark-toggle" aria-label="다크 테마" title="다크 테마" onchange="applyDarkTheme(this.checked)" />
                 <span class="slider"></span>
               </label>
             </div>
@@ -455,7 +457,7 @@
       <p class="login-desc">비밀번호를 입력하세요.<br><small>비밀번호가 아이디 역할을 합니다.</small></p>
       <div id="login-error" class="form-error hidden"></div>
       <form onsubmit="doLogin(); return false;" autocomplete="on">
-      <input type="text" name="username" autocomplete="username" style="display:none" />
+      <input type="text" name="username" autocomplete="username" class="autofill-username" aria-hidden="true" tabindex="-1" />
       <div class="form-row-inline">
         <label>비밀번호</label>
         <input type="password" id="login-pw" name="password" placeholder="비밀번호 입력" autocomplete="current-password" />
@@ -482,7 +484,7 @@
       <div id="change-pw-error" class="form-error hidden"></div>
       <div id="change-pw-success" class="form-success hidden"></div>
       <form onsubmit="doChangePw(); return false;" autocomplete="on">
-      <input type="text" name="username" autocomplete="username" style="display:none" />
+      <input type="text" name="username" autocomplete="username" class="autofill-username" aria-hidden="true" tabindex="-1" />
       <div class="form-row">
         <label>현재 비밀번호</label>
         <input type="password" id="change-pw-current" name="current-password" placeholder="현재 비밀번호 입력" autocomplete="current-password" />
@@ -537,13 +539,13 @@
             <div class="left-row">
               <div class="col-section-label">종일</div>
               <label class="switch">
-                <input type="checkbox" id="f-allday" onchange="toggleAllDay()" />
+                <input type="checkbox" id="f-allday" aria-label="종일" title="종일" onchange="toggleAllDay()" />
                 <span class="slider"></span>
               </label>
             </div>
 
             <div id="time-section">
-              <div class="time-presets" style="margin:10px 0 6px;">
+              <div class="time-presets">
                 <button type="button" class="btn btn-preset" data-preset="am" onclick="setTimePreset('am')">오전</button>
                 <button type="button" class="btn btn-preset" data-preset="pm" onclick="setTimePreset('pm')">오후</button>
                 <button type="button" class="btn btn-preset" data-preset="evening" onclick="setTimePreset('evening')">저녁</button>
@@ -552,25 +554,25 @@
               <div class="date-stack">
                 <div class="date-stack-row time-row">
                   <span class="date-btn-label">시작</span>
-                  <input type="time" id="f-start-time" class="time-input" />
+                  <input type="time" id="f-start-time" class="time-input" aria-label="시작 시간" title="시작 시간" />
                 </div>
                 <div class="date-stack-row time-row">
                   <span class="date-btn-label">종료</span>
-                  <input type="time" id="f-end-time" class="time-input" />
+                  <input type="time" id="f-end-time" class="time-input" aria-label="종료 시간" title="종료 시간" />
                 </div>
               </div>
             </div>
 
             <!-- 해당 날짜 기존 일정 (캘린더 페이지에서만 채워짐) -->
             <div id="date-events-panel" class="date-events-panel">
-              <div class="col-section-label" style="margin-top:16px;">해당 기간 일정</div>
+              <div class="col-section-label">해당 기간 일정</div>
               <div id="date-events-list" class="date-events-list">
                 <span class="date-events-empty">날짜를 선택하세요</span>
               </div>
             </div>
             <!-- 하위 일정 목록 (업무 수정 시 하위가 있을 때만 표시, 해당 기간 일정 대체) -->
-            <div id="subtask-panel" style="display:none;">
-              <div class="col-section-label" style="margin-top:16px;">하위 일정</div>
+            <div id="subtask-panel" class="hidden">
+              <div class="col-section-label">하위 일정</div>
               <ul id="subtask-list" class="subtask-list"></ul>
             </div>
           </div>
@@ -578,22 +580,22 @@
           <!-- ── 오른쪽: 일정 정보 ── -->
           <div class="modal-col-right">
             <!-- 일정 유형 + 칸반 상태 / 반복 (맨 위) -->
-            <div class="left-row" style="margin-bottom:10px; gap:20px;">
-              <div style="display:flex;align-items:center;gap:10px;">
+            <div class="left-row event-type-row">
+              <div class="event-type-wrap">
                 <div class="col-section-label">일정 유형</div>
                 <div class="event-type-pills" id="event-type-pills-wrap">
                   <button type="button" class="event-type-pill active" id="pill-schedule" onclick="setEventType('schedule')">📅 업무</button>
                   <button type="button" class="event-type-pill" id="pill-meeting" onclick="setEventType('meeting')">💬 회의</button>
                   <button type="button" class="event-type-pill" id="pill-journal" onclick="setEventType('journal')">📓 일지</button>
-                  <button type="button" class="event-type-pill" id="pill-subtask" onclick="setEventType('subtask')" style="display:none;">🧩 하위 업무</button>
+                  <button type="button" class="event-type-pill hidden" id="pill-subtask" onclick="setEventType('subtask')">🧩 하위 업무</button>
                 </div>
               </div>
-              <div id="kanban-toggle-wrap" style="display:none;align-items:center;gap:8px;">
-                <input type="checkbox" id="f-kanban" checked style="display:none;" />
+              <div id="kanban-toggle-wrap" class="kanban-toggle-wrap hidden">
+                <input type="checkbox" id="f-kanban" checked class="hidden" aria-label="칸반 포함" title="칸반 포함" />
               </div>
             </div>
             <!-- 상위 업무 선택 (하위 업무 유형 선택 시만 표시) -->
-            <div id="parent-event-row" class="form-row" style="display:none; margin-bottom:10px;">
+            <div id="parent-event-row" class="form-row parent-event-row hidden">
               <label>상위 업무</label>
               <div class="autocomplete-wrap">
                 <input type="text" id="f-parent-event" placeholder="상위 업무 검색..."
@@ -606,7 +608,7 @@
               </div>
             </div>
             <!-- 칸반 상태 선택 (일정 유형 시만 표시) -->
-            <div id="kanban-status-row" class="kanban-status-row" style="margin-bottom:10px;">
+            <div id="kanban-status-row" class="kanban-status-row">
               <div class="col-section-label">칸반 상태</div>
               <div class="kanban-status-pills">
                 <button type="button" class="kanban-status-pill" data-status="backlog"     onclick="setKanbanStatus('backlog')">Backlog</button>
@@ -618,10 +620,10 @@
               </div>
             </div>
             <!-- 반복 요일 + 반복 종료 (회의 선택 시만 표시, 한 줄) -->
-            <div id="recurrence-row" style="display:none; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--border); flex-wrap:wrap; align-items:center; gap:16px;">
-              <div style="display:flex;align-items:center;gap:8px;">
+            <div id="recurrence-row" class="recurrence-row hidden">
+              <div class="recurrence-days-wrap">
                 <div class="col-section-label">반복 요일</div>
-                <div class="recurrence-days" id="recurrence-days" style="margin-top:0;">
+                <div class="recurrence-days" id="recurrence-days">
                   <button type="button" class="recday-btn" data-day="0" onclick="toggleRecurrenceDay(0)">월</button>
                   <button type="button" class="recday-btn" data-day="1" onclick="toggleRecurrenceDay(1)">화</button>
                   <button type="button" class="recday-btn" data-day="2" onclick="toggleRecurrenceDay(2)">수</button>
@@ -629,9 +631,9 @@
                   <button type="button" class="recday-btn" data-day="4" onclick="toggleRecurrenceDay(4)">금</button>
                 </div>
               </div>
-              <div id="recurrence-end-wrap" style="display:flex;align-items:center;gap:8px;">
-                <div class="col-section-label">반복 종료 <span style="color:#e17055;">*</span></div>
-                <input type="date" id="f-recurrence-end" class="recurrence-end-input" style="width:auto;" />
+              <div id="recurrence-end-wrap" class="recurrence-end-wrap">
+                <div class="col-section-label">반복 종료 <span class="required-mark">*</span></div>
+                <input type="date" id="f-recurrence-end" class="recurrence-end-input" aria-label="반복 종료일" title="반복 종료일" />
               </div>
             </div>
 
@@ -652,7 +654,7 @@
               <input type="text" id="f-location" placeholder="장소" />
             </div>
             <div class="form-row form-row-top">
-              <label>담당자 <span style="color:#e17055;">*</span></label>
+              <label>담당자 <span class="required-mark">*</span></label>
               <div>
                 <div class="tag-input-wrap" id="assignee-wrap" onclick="document.getElementById('assignee-input').focus()">
                   <div id="assignee-tags"></div>
@@ -666,40 +668,40 @@
                   </div>
                   <ul id="assignee-dropdown" class="ac-dropdown hidden"></ul>
                 </div>
-                <div id="assignee-error" style="display:none; color:#e17055; font-size:12px; margin-top:4px;">담당자를 입력해주세요.</div>
+                <div id="assignee-error" class="assignee-error hidden">담당자를 입력해주세요.</div>
               </div>
             </div>
             <div class="form-row form-row-top" id="description-row">
               <label>내용</label>
-              <div style="flex:1; min-width:0;">
+              <div class="description-control">
                 <textarea id="f-description" rows="6" placeholder="내용"></textarea>
                 <div id="bound-content-viewer" class="bound-content-viewer hidden no-check-interaction"></div>
               </div>
             </div>
             <div class="form-row" id="bind-check-row">
               <label>체크 바인딩</label>
-              <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+              <div class="bind-check-actions">
                 <button type="button" class="btn btn-sm" id="btn-bind-check" onclick="openBindCheckPicker()">🔗 체크 바인딩</button>
                 <button type="button" class="btn btn-sm hidden" id="btn-unbind-check" onclick="unbindCheck()">바인딩 해제</button>
-                <a id="bound-check-link" href="#" target="_blank" class="btn btn-sm hidden" style="text-decoration:none;">📋 체크로 이동</a>
+                <a id="bound-check-link" href="#" target="_blank" class="btn btn-sm btn-linklike hidden">📋 체크로 이동</a>
               </div>
             </div>
             <div class="form-row">
-              <label>우선순위</label>
-              <select id="f-priority" class="priority-select">
+              <label for="f-priority">우선순위</label>
+              <select id="f-priority" class="priority-select" aria-label="우선순위" title="우선순위">
                 <option value="urgent">🔴 긴급</option>
                 <option value="high">🟠 높음</option>
                 <option value="normal" selected>🔵 보통</option>
                 <option value="low">⚪ 낮음</option>
               </select>
             </div>
-            <div class="form-row" id="parent-goto-row" style="display:none;">
+            <div class="form-row hidden" id="parent-goto-row">
               <label>상위 업무</label>
               <button type="button" class="btn btn-parent-goto" id="btn-goto-parent" onclick="gotoParentEvent()">↑ 상위 업무로 이동</button>
             </div>
-            <div class="form-row" id="doc-link-row" style="display:none;">
+            <div class="form-row hidden" id="doc-link-row">
               <label>연결 문서</label>
-              <a id="doc-link-btn" href="#" target="_blank" class="btn btn-sm" style="text-decoration:none;">📄 문서 보기</a>
+              <a id="doc-link-btn" href="#" target="_blank" class="btn btn-sm btn-linklike">📄 문서 보기</a>
             </div>
           </div>
         </div>
@@ -722,34 +724,33 @@
       <div class="recurrence-dialog-title" id="recurrence-dialog-title">반복 일정 수정</div>
       <div class="recurrence-dialog-desc" id="recurrence-dialog-desc">어떤 일정을 변경할까요?</div>
       <div class="recurrence-dialog-btns" id="recurrence-dialog-btns"></div>
-      <button type="button" class="btn" style="margin-top:8px;width:100%;" onclick="closeRecurrenceDialog()">취소</button>
+      <button type="button" class="btn recurrence-cancel-btn" onclick="closeRecurrenceDialog()">취소</button>
     </div>
   </div>
 
   <!-- ── 체크 바인딩: 체크리스트 선택 sub-modal ── -->
-  <div id="bind-check-modal-overlay" class="modal-overlay hidden" onclick="closeBindCheckPicker(event)" style="z-index:2100;">
-    <div class="modal bind-check-modal" style="max-width:620px; max-height:80vh; display:flex; flex-direction:column;">
-      <div class="modal-header" style="padding:16px 20px 12px; border-bottom:1px solid var(--border);">
-        <h2 style="margin:0; font-size:16px;">체크 선택</h2>
-        <button type="button" onclick="closeBindCheckPicker()" style="background:none;border:none;cursor:pointer;font-size:18px; line-height:1;">✕</button>
+  <div id="bind-check-modal-overlay" class="modal-overlay hidden" onclick="closeBindCheckPicker(event)">
+    <div class="modal bind-check-modal">
+      <div class="modal-header">
+        <h2>체크 선택</h2>
+        <button type="button" class="modal-close-plain" onclick="closeBindCheckPicker()">✕</button>
       </div>
-      <div style="padding:12px 20px; display:flex; gap:8px; flex-shrink:0;">
-        <select id="bind-check-project-filter" class="priority-select" style="flex:1;" onchange="renderBindCheckList()">
+      <div class="bind-check-toolbar">
+        <select id="bind-check-project-filter" class="priority-select" aria-label="체크 프로젝트 필터" title="체크 프로젝트 필터" onchange="renderBindCheckList()">
           <option value="">전체 프로젝트</option>
         </select>
         <input type="text" id="bind-check-search" placeholder="제목 검색..."
-               style="flex:2; padding:6px 10px; border:1px solid var(--border); border-radius:6px;"
                oninput="renderBindCheckList()"
                onkeydown="if(event.key==='Enter') renderBindCheckList()" />
-        <button type="button" class="btn btn-sm btn-primary" onclick="renderBindCheckList()" style="flex-shrink:0;">조회</button>
+        <button type="button" class="btn btn-sm btn-primary bind-check-refresh" onclick="renderBindCheckList()">조회</button>
       </div>
-      <div id="bind-check-list" style="overflow-y:auto; flex:1; padding:0 20px 16px;"></div>
+      <div id="bind-check-list"></div>
     </div>
   </div>
 
   <!-- ── 칸반 카드 상세 모달 (공유) ── -->
   <div id="kdetail-overlay" class="modal-overlay hidden" onclick="closeKDetail(event)">
-    <div class="modal" style="width:640px;">
+    <div class="modal kdetail-modal">
       <div class="modal-header">
         <h2 id="kdetail-title"></h2>
         <button class="icon-btn" onclick="closeKDetail()">✕</button>
@@ -765,8 +766,8 @@
         </div>
       </div>
       <div id="kdetail-body" class="detail-body"></div>
-      <div id="kdetail-bound-wrap" class="hidden" style="padding:0 20px 12px;">
-        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-weight:600;">🔗 체크 바인딩</div>
+      <div id="kdetail-bound-wrap" class="hidden">
+        <div class="kdetail-bound-title">🔗 체크 바인딩</div>
         <div id="kdetail-bound-viewer" class="bound-content-viewer no-check-interaction"></div>
       </div>
       <div class="modal-actions">
@@ -785,18 +786,18 @@
         <h2>⚙️ 사용자 설정</h2>
         <button class="icon-btn" onclick="closeUserSettings()">✕</button>
       </div>
-      <div style="margin-top:14px;display:flex;flex-direction:column;gap:16px;">
+      <div class="user-settings-content">
         <!-- 로컬 저장 데이터 초기화 -->
-        <div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;">
-          <div style="font-size:0.88rem;font-weight:600;margin-bottom:4px;">로컬 저장 데이터 초기화</div>
-          <p class="text-muted" style="font-size:0.8rem;margin:0 0 10px;">
+        <div class="user-settings-card">
+          <div class="user-settings-title">로컬 저장 데이터 초기화</div>
+          <p class="text-muted user-settings-text">
             캘린더 뷰·날짜, 칸반 필터, 문서 정렬 등 브라우저에 저장된 화면 상태와 HTTPS 연결 캐시를 모두 지웁니다.
             페이지가 느리거나 화면이 이상하게 동작할 때 시도해 보세요. 초기화 후 페이지가 새로고침됩니다.
           </p>
-          <button class="btn btn-secondary" id="clear-storage-btn" onclick="clearLocalStorage()" style="color:#d63031;border-color:#d63031;">초기화</button>
+          <button class="btn btn-secondary btn-danger-outline" id="clear-storage-btn" onclick="clearLocalStorage()">초기화</button>
         </div>
       </div>
-      <div class="modal-actions" style="margin-top:16px;">
+      <div class="modal-actions user-settings-actions">
         <div></div>
         <button class="btn" onclick="closeUserSettings()">닫기</button>
       </div>
@@ -1328,7 +1329,7 @@
       filtered.forEach(link => {
         const item = document.createElement('div');
         item.className = 'links-item';
-        const isMine = (link.created_by === '{{ user.name }}');
+        const isMine = Boolean(window.CURRENT_USER && link.created_by === window.CURRENT_USER.name);
         item.innerHTML = `
           <div class="links-item-icon">
             🔗
@@ -1422,12 +1423,12 @@
         <button onclick="wuDialog._onCancel()" class="modal-close-btn">✕</button>
       </div>
       <div class="modal-body">
-        <p id="wu-dialog-message" style="margin:0 0 8px;white-space:pre-line;"></p>
-        <input type="text" id="wu-dialog-input" class="form-control" style="display:none;width:100%;">
+        <p id="wu-dialog-message"></p>
+        <input type="text" id="wu-dialog-input" class="form-control hidden" aria-label="대화상자 입력" title="대화상자 입력">
       </div>
       <div class="modal-footer wu-dialog-actions">
         <button id="wu-dialog-cancel" class="btn btn-secondary" onclick="wuDialog._onCancel()">취소</button>
-        <button id="wu-dialog-copy" class="btn btn-secondary" onclick="wuDialog._onCopy()" style="display:none;">복사</button>
+        <button id="wu-dialog-copy" class="btn btn-secondary hidden" onclick="wuDialog._onCopy()">복사</button>
         <button id="wu-dialog-ok" class="btn btn-primary" onclick="wuDialog._onOk()">확인</button>
       </div>
     </div>

@@ -93,11 +93,11 @@
 
     // 입력 필드 (prompt 전용)
     if (task.kind === 'prompt') {
-      e.input.style.display = '';
+      e.input.classList.remove('hidden');
       e.input.value = task.value || '';
       e.input.readOnly = !!task.readonly;
     } else {
-      e.input.style.display = 'none';
+      e.input.classList.add('hidden');
       e.input.value = '';
       e.input.readOnly = false;
     }
@@ -112,11 +112,11 @@
 
     // 복사 버튼: prompt + copyButton일 때만
     if (task.kind === 'prompt' && task.copyButton) {
-      e.copy.style.display = '';
+      e.copy.classList.remove('hidden');
       e.copy.textContent = '복사';
       e.copy.disabled = false;
     } else {
-      e.copy.style.display = 'none';
+      e.copy.classList.add('hidden');
     }
 
     // OK 버튼
