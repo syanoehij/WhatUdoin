@@ -1688,7 +1688,7 @@ def _build_doc_md(doc: dict, exported_at: str,
         lines += [f"← [[index]]", ""]
     raw = (doc.get("content") or "").replace("\r\n", "\n").strip()
     if raw:
-        rewritten, found = _rewrite_image_paths(_convert_html_tables_to_gfm(raw))
+        rewritten, found = _rewrite_image_paths(_clean_callouts_for_export(_convert_html_tables_to_gfm(raw)))
         if images is not None:
             images.extend(found)
         lines.append(rewritten)
@@ -1824,6 +1824,17 @@ def _convert_html_tables_to_gfm(md: str) -> str:
     return _HTML_TABLE_RE.sub(_repl, md)
 
 
+def _clean_callouts_for_export(md: str) -> str:
+    """tiptap-markdown이 이스케이프한 콜아웃 구문을 옵시디언 표준으로 정리.
+    > \\[!type\\] → > [!type]
+    콜아웃 헤더 바로 뒤의 빈 '>' 줄도 제거한다."""
+    # \[!type\] 이스케이프 제거 (> 로 시작하는 줄에서만)
+    md = re.sub(r'^(> *)\\\[(![\w]+)\\\]', r'\1[\2]', md, flags=re.MULTILINE)
+    # 콜아웃 헤더 줄 바로 다음 빈 > 줄 제거
+    md = re.sub(r'(^> *\[![\w]+\][^\n]*\n)((?:^> *\n)+)', r'\1', md, flags=re.MULTILINE)
+    return md
+
+
 def _rewrite_image_paths(content: str) -> tuple[str, list[tuple[Path, str]]]:
     """content 내 /uploads/meetings/… URL을 attachments/{basename} 로 치환.
     ZIP 내 .md 파일과 attachments/ 폴더는 같은 레벨에 위치하므로 ../ 불필요.
@@ -1860,7 +1871,7 @@ def _build_checklist_md(project_name: str | None, cl: dict, exported_at: str,
         lines += [f"← [[index]]", ""]
     raw = (cl.get("content") or "").replace("\r\n", "\n").strip()
     if raw:
-        rewritten, found = _rewrite_image_paths(_convert_html_tables_to_gfm(raw))
+        rewritten, found = _rewrite_image_paths(_clean_callouts_for_export(_convert_html_tables_to_gfm(raw)))
         if images is not None:
             images.extend(found)
         lines.append(rewritten)
