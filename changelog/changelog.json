@@ -2,6 +2,38 @@
   "groups": [
     {
       "date": "2026-05-03",
+      "phase": "35차 11단계",
+      "phase_class": "phase-11",
+      "entries": [
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag style\">style</span> 편집기 — 다크 테마 코드 블록 시인성 개선",
+          "detail_html": "<ul><li><strong>배경색 통일</strong>: 편집기 코드블록 다크 배경 <code>#1e1e2e</code>(보라색 계열) → <code>var(--code-bg, #161b22)</code>(GitHub Dark)로 통일</li><li><strong>테두리</strong>: <code>#333</code> → <code>#30363d</code>으로 교체</li><li><strong>hljs 토큰 색상 신규 추가</strong>: keyword·string·comment·number·title·variable·regexp·diff 8종을 GitHub Light/Dark 팔레트 기준으로 정의 — 라이트·다크 테마 모두 적용</li><li>수정 파일: <code>static/css/wu-editor.css</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 체크 편집기 — 연결된 일정 패널에서 일정 클릭 시 수정 모달 열기",
+          "detail_html": "<ul><li><strong>기존</strong>: 연결된 일정 패널(<code>🔗 일정 연결</code> 버튼으로 여는 사이드 패널)의 일정 항목이 읽기 전용으로만 표시됨</li><li><strong>변경</strong>: 각 항목 클릭 시 <code>openModal('', eventsMap[eid])</code> 호출 → 일정 수정 모달 즉시 열림</li><li>이미 로드된 <code>eventsMap</code> 재사용으로 추가 API 호출 없음, <code>cursor:pointer</code>·툴팁 추가</li><li>수정 파일: <code>templates/check_editor.html</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 체크 — 완료 프로젝트 체크리스트 자동 잠금",
+          "detail_html": "<ul><li><strong>기존</strong>: 완료 프로젝트의 체크리스트도 뷰어에서 체크박스 토글이 가능했음</li><li><strong>변경</strong>: 체크리스트 열기 시 <code>is_done_project</code> 또는 <code>ALL_DONE_PROJECTS</code> 대조로 완료 프로젝트 감지 → <code>_applyContentLockUi(true)</code> 자동 호출</li><li>잠금 뱃지 표시·<code>no-check-interaction</code> 클래스·폴링 중단 모두 기존 로직 재사용, 별도 UI 추가 없음</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        },
+        {
+          "icon": "🔧",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 체크 — 비로그인 유저 정렬 설정 localStorage 저장 비활성화",
+          "detail_html": "<ul><li><strong>기존</strong>: 비로그인 유저도 정렬 선택 시 <code>localStorage</code>에 저장되어 이전 세션 상태가 유지됨</li><li><strong>변경</strong>: 비로그인(<code>IS_LOGGED_IN === false</code>) 시 기존 저장 값 무시 + 기본값 이름순(<code>'name'</code>, <code>'asc'</code>) 고정, 선택해도 저장 안 함 → 페이지 재방문 시 항상 이름순으로 초기화</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag ux\">ux</span> 체크 — 정렬 버튼 순서 변경 (이름순 → 시간순)",
+          "detail_html": "<ul><li><strong>기존</strong>: 시간순 · 이름순 순서로 배치</li><li><strong>변경</strong>: 이름순 · 시간순 순서로 교체</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-03",
       "phase": "35차 10단계",
       "phase_class": "phase-10",
       "entries": [

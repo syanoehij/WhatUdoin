@@ -779,13 +779,20 @@ async function renderEvPanel() {
     const statusColor = isChecked ? 'color:#00b894;border-color:#00b894;' : '';
     const dateStr = ev.start_datetime ? ev.start_datetime.slice(0, 10) : '';
     const safeTitle = (ev.title || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return `<div class="ck-ev-item">
+    return `<div class="ck-ev-item" data-eid="${ev.id}" style="cursor:pointer" title="클릭하여 일정 수정">
       <span class="ck-ev-item-check">${isChecked ? '☑' : '☐'}</span>
       ${dateStr ? `<span class="ck-ev-item-date">${dateStr}</span>` : ''}
       <span class="ck-ev-item-title" title="${safeTitle}">${safeTitle}</span>
       ${statusLabel ? `<span class="ck-ev-item-status" style="${statusColor}">${statusLabel}</span>` : ''}
     </div>`;
   }).join('');
+
+  bodyEl.querySelectorAll('.ck-ev-item').forEach(el => {
+    const eid = +el.dataset.eid;
+    el.addEventListener('click', () => {
+      if (typeof openModal === 'function') openModal('', eventsMap[eid]);
+    });
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {

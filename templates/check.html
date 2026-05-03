@@ -830,8 +830,8 @@
   <div class="ck-mid">
     <div class="ck-mid-header">
       <div class="ck-sort-tabs" id="ck-sort-tabs">
-        <button class="ck-sort-tab active" data-sort="time" onclick="setSortMode('time')">시간순</button>
         <button class="ck-sort-tab" data-sort="name" onclick="setSortMode('name')">이름순</button>
+        <button class="ck-sort-tab active" data-sort="time" onclick="setSortMode('time')">시간순</button>
       </div>
       {% if user and user.role in ('editor', 'admin') %}
       <div class="ck-new-btn-group">
@@ -1071,8 +1071,8 @@ const TAB_TOKEN = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getI
 
 let _allChecklists      = [];
 let _curProj            = null;
-let _sortMode           = localStorage.getItem('ck_sort_mode') || 'time'; // 'time' | 'name'
-let _sortDir            = localStorage.getItem('ck_sort_dir')  || 'desc'; // 'asc' | 'desc'
+let _sortMode           = IS_LOGGED_IN ? (localStorage.getItem('ck_sort_mode') || 'time') : 'name'; // 'time' | 'name'
+let _sortDir            = IS_LOGGED_IN ? (localStorage.getItem('ck_sort_dir')  || 'desc') : 'asc'; // 'asc' | 'desc'
 let _projFilter         = localStorage.getItem('ck_proj_filter') || 'active';
 let _searchTerm         = '';
 let _curId              = null;
@@ -1390,8 +1390,10 @@ function setSortMode(mode) {
     _sortMode = mode;
     _sortDir = mode === 'time' ? 'desc' : 'asc';
   }
-  localStorage.setItem('ck_sort_mode', _sortMode);
-  localStorage.setItem('ck_sort_dir',  _sortDir);
+  if (IS_LOGGED_IN) {
+    localStorage.setItem('ck_sort_mode', _sortMode);
+    localStorage.setItem('ck_sort_dir',  _sortDir);
+  }
   _updateSortTabs();
   renderList();
 }
@@ -1435,7 +1437,8 @@ async function openChecklist(id, forceEdit = false) {
     if (claimRes.ok) lockData = { locked_by: null, lock_type: null };
   }
   _setLockState(lockData.locked_by, lockData.lock_type);
-  _applyContentLockUi(_curItem.is_locked);
+  const _isDoneProj = _curItem.is_done_project || ALL_DONE_PROJECTS.some(p => p.name === _curItem.project);
+  _applyContentLockUi(_curItem.is_locked || _isDoneProj);
 
   document.getElementById('ck-placeholder').style.display = 'none';
   document.getElementById('ck-right-header').style.display = '';
@@ -1448,7 +1451,7 @@ async function openChecklist(id, forceEdit = false) {
     _showEditorMode();
   } else {
     _showViewerMode();
-    if (CURRENT_USER && !_curItem.is_locked) _startPoll(id);
+    if (CURRENT_USER && !_curItem.is_locked && !_isDoneProj) _startPoll(id);
   }
 }
 

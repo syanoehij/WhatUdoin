@@ -1328,12 +1328,10 @@
       filtered.forEach(link => {
         const item = document.createElement('div');
         item.className = 'links-item';
-        const domain = _getDomain(link.url);
-        const faviconUrl = domain ? `https://www.google.com/s2/favicons?sz=32&domain=${domain}` : null;
         const isMine = (link.created_by === '{{ user.name }}');
         item.innerHTML = `
           <div class="links-item-icon">
-            ${faviconUrl ? `<img src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : '🔗'}
+            🔗
           </div>
           <div class="links-item-body">
             <a class="links-item-title" href="${_esc(link.url)}" target="_blank" rel="noopener"
