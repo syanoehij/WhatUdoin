@@ -2,8 +2,8 @@
   "groups": [
     {
       "date": "2026-05-04",
-      "phase": "36차 5단계",
-      "phase_class": "phase-5",
+      "phase": "36차 3단계",
+      "phase_class": "phase-3",
       "entries": [
         {
           "icon": "🔌",
@@ -14,33 +14,19 @@
     },
     {
       "date": "2026-05-04",
-      "phase": "36차 4단계",
-      "phase_class": "phase-4",
+      "phase": "36차 2단계",
+      "phase_class": "phase-2",
       "entries": [
         {
           "icon": "🔌",
           "title_html": "<span class=\"cl-tag feat\">feat</span> MCP search — 날짜 필터 + 겹침 조건",
           "detail_html": "<ul><li><code>search_all</code> 도구에 <code>start_after</code> · <code>end_before</code> 파라미터 추가</li><li><strong>기본값 오늘 ±7일</strong>: 파라미터 미지정 시 현재 날짜 기준 앞뒤 7일 범위 이벤트만 반환</li><li><strong>겹침 조건</strong>: 시작일이 범위를 벗어나도 종료일이 범위 안에 들어오면 포함 (<code>end_datetime ≥ start_after AND start_datetime ≤ end_before</code>)</li><li>날짜 필터는 이벤트에만 적용 — 문서·체크리스트는 날짜 무관 전체 매칭</li><li>전체 이력 검색 시 <code>start_after=\"2000-01-01\"</code>처럼 넓게 지정하도록 docstring 안내 추가</li><li>수정 파일: <code>mcp_server.py</code> · <code>database.py</code></li></ul>"
-        }
-      ]
-    },
-    {
-      "date": "2026-05-03",
-      "phase": "36차 3단계",
-      "phase_class": "phase-3",
-      "entries": [
+        },
         {
           "icon": "🔌",
           "title_html": "<span class=\"cl-tag feat\">feat</span> MCP — 노션 수준 2계층 구조 (경량 list + 통합 search)",
           "detail_html": "<ul><li><strong>list_* 경량화</strong>: <code>list_events</code> · <code>list_documents</code> · <code>list_checklists</code>가 메타데이터 인덱스만 반환 — 본문(content) 제거로 토큰 효율 대폭 향상</li><li><code>list_events</code>: id·title·project·start_datetime·end_datetime·assignee·kanban_status 8필드만 반환</li><li><code>list_documents</code>: id·title·author_name·team_name·updated_at·event_count 6필드만 반환 (마크다운 본문 제거)</li><li><code>list_checklists</code>: content 대신 <code>item_count</code>·<code>done_count</code> 산출값 반환 (마크다운 체크박스 패턴 파싱)</li><li><strong>search 도구 신규 추가</strong>: 키워드로 이벤트·문서·체크리스트 통합 검색, <code>type</code> 파라미터로 단일 타입 필터 가능</li><li>상세 내용은 <code>get_event()</code> · <code>get_document()</code> · <code>get_checklist()</code> 로만 접근 (기존 유지)</li><li>수정 파일: <code>mcp_server.py</code> · <code>database.py</code></li></ul>"
-        }
-      ]
-    },
-    {
-      "date": "2026-05-03",
-      "phase": "36차 2단계",
-      "phase_class": "phase-2",
-      "entries": [
+        },
         {
           "icon": "🔌",
           "title_html": "<span class=\"cl-tag feat\">feat</span> MCP — 도구 품질 강화 (list_projects · 필터 · 구조화 오류)",
