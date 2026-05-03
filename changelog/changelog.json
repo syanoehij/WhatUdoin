@@ -2,6 +2,30 @@
   "groups": [
     {
       "date": "2026-05-03",
+      "phase": "36차 3단계",
+      "phase_class": "phase-3",
+      "entries": [
+        {
+          "icon": "🔌",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> MCP — 노션 수준 2계층 구조 (경량 list + 통합 search)",
+          "detail_html": "<ul><li><strong>list_* 경량화</strong>: <code>list_events</code> · <code>list_documents</code> · <code>list_checklists</code>가 메타데이터 인덱스만 반환 — 본문(content) 제거로 토큰 효율 대폭 향상</li><li><code>list_events</code>: id·title·project·start_datetime·end_datetime·assignee·kanban_status 8필드만 반환</li><li><code>list_documents</code>: id·title·author_name·team_name·updated_at·event_count 6필드만 반환 (마크다운 본문 제거)</li><li><code>list_checklists</code>: content 대신 <code>item_count</code>·<code>done_count</code> 산출값 반환 (마크다운 체크박스 패턴 파싱)</li><li><strong>search 도구 신규 추가</strong>: 키워드로 이벤트·문서·체크리스트 통합 검색, <code>type</code> 파라미터로 단일 타입 필터 가능</li><li>상세 내용은 <code>get_event()</code> · <code>get_document()</code> · <code>get_checklist()</code> 로만 접근 (기존 유지)</li><li>수정 파일: <code>mcp_server.py</code> · <code>database.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-03",
+      "phase": "36차 2단계",
+      "phase_class": "phase-2",
+      "entries": [
+        {
+          "icon": "🔌",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> MCP — 도구 품질 강화 (list_projects · 필터 · 구조화 오류)",
+          "detail_html": "<ul><li><strong>list_projects 도구 추가</strong>: 활성·비활성 프로젝트 목록 조회 (<code>include_inactive</code> 파라미터) — AI가 프로젝트 이름을 먼저 파악한 뒤 다른 도구 호출 가능</li><li><strong>list_events 필터 파라미터 추가</strong>: <code>project</code> · <code>start_after</code> · <code>end_before</code> (ISO 8601) — 전체 조회 대신 필요한 범위만 조회</li><li><strong>구조화된 오류 반환</strong>: <code>get_event</code> · <code>get_document</code> · <code>get_checklist</code>에서 null 대신 <code>{\"error\": \"not_found\", \"id\": ..., \"reason\": \"...\"}</code> 반환 — AI가 빈 결과와 오류를 구분 가능</li><li><strong>도구 description 전면 개선</strong>: 모든 도구에 \"Use this tool when:\" 패턴 적용 — LLM이 올바른 도구를 선택하고 불필요한 호출을 줄이도록 가이드</li><li>수정 파일: <code>mcp_server.py</code> · <code>database.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-03",
       "phase": "36차 1단계",
       "phase_class": "phase-1",
       "entries": [
