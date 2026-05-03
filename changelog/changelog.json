@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-05-03",
+      "phase": "35차 12단계",
+      "phase_class": "phase-12",
+      "entries": [
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 표 안 이미지 저장 후 사라지는 버그 수정",
+          "detail_html": "<ul><li>tiptap-markdown 표 직렬화 시 이미지 노드는 <code>textContent</code>가 비어 있어 렌더링을 건너뛰고 빈 셀로 저장되는 문제 수정</li><li><code>isMarkdownSerializable</code>에 <code>hasImageChild</code> 체크 추가 — 이미지를 포함한 셀이 있는 표는 HTML 직렬화 경로로 처리</li><li>rollup 재빌드 반영 (<code>static/lib/tiptap-bundle.min.js</code>)</li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 표 설정 창 위치 계산 버그 2건 수정",
+          "detail_html": "<ul><li><strong>스크롤 위치 오류</strong>: <code>position: fixed</code> 요소인데 <code>window.scrollY</code>를 더해 아래로 스크롤할수록 메뉴가 화면 밖으로 벗어나는 버그 수정</li><li><strong>표 특정 오류</strong>: <code>querySelector('table')</code>로 첫 번째 표만 선택해 두 번째 이후 표에서 메뉴가 잘못된 위치에 표시되는 버그 수정 — 커서 위치 기반(<code>domAtPos</code>) 탐색으로 교체</li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-03",
       "phase": "35차 11단계",
       "phase_class": "phase-11",
       "entries": [

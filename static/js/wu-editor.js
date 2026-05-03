@@ -1966,13 +1966,16 @@
         return;
       }
 
-      /* 컨텍스트 메뉴 위치 — 테이블 위에 고정 */
-      const tableEl = containerEl.querySelector('table');
+      /* 컨텍스트 메뉴 위치 — 커서가 있는 테이블 위에 고정 */
+      const { from } = _editor.state.selection;
+      const domRef = _editor.view.domAtPos(from);
+      const domNode = domRef.node;
+      const tableEl = (domNode.nodeType === 1 ? domNode : domNode.parentElement)?.closest('table');
       if (!tableEl) { _tableMenuEl.style.display = 'none'; return; }
       const tr = tableEl.getBoundingClientRect();
       _tableMenuEl.style.display = 'flex';
       const mw = _tableMenuEl.offsetWidth;
-      _tableMenuEl.style.top  = (tr.top + window.scrollY - _tableMenuEl.offsetHeight - 6) + 'px';
+      _tableMenuEl.style.top  = (tr.top - _tableMenuEl.offsetHeight - 6) + 'px';
       _tableMenuEl.style.left = Math.min(tr.left, window.innerWidth - mw - 8) + 'px';
     }
 
