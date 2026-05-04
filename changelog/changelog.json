@@ -2,6 +2,28 @@
   "groups": [
     {
       "date": "2026-05-04",
+      "phase": "37차 2단계",
+      "phase_class": "phase-2",
+      "entries": [
+        {
+          "icon": "💾",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> Cache-Control 헤더 추가 — 정적 자산 1년 immutable 캐시",
+          "detail_html": "<ul><li><code>_StaticCacheMiddleware</code> ASGI 미들웨어 신규 추가 — <code>/static/</code> 경로에만 적용</li><li><code>?v=</code> 쿼리 있으면 <code>max-age=31536000, immutable</code>, 없으면 <code>max-age=3600</code></li><li>기존 <code>cache-control</code> 헤더는 replace 방식으로 처리 (중복 방지)</li><li>두 번째 방문부터 브라우저가 서버 요청 자체를 생략 → 체감 속도 가장 큰 효과</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "📦",
+          "title_html": "<span class=\"cl-tag refactor\">refactor</span> WUEditor 자산 로드 공통 include 분리",
+          "detail_html": "<ul><li><code>templates/_wu_editor_assets.html</code> 신규 — 6개 자산(highlight, katex, wu-editor.css, tiptap-bundle, wu-editor.js) 공통 include 파일</li><li><code>highlight.min.js</code>, <code>katex.min.css</code>의 <code>asset_v()</code> 누락 수정 — 모든 자산 일관 버전 적용</li><li>8개 템플릿(check, doc_editor, check_editor, notice, home, trash, project_manage, notice_history)의 wu_editor_assets 블록을 1줄 include로 축약</li><li>이후 자산 추가/변경 시 단일 파일만 수정하면 됨</li></ul>"
+        },
+        {
+          "icon": "📅",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> FullCalendar(276KB) 캘린더 페이지 전용 로드",
+          "detail_html": "<ul><li>홈·체크·칸반·문서 등 캘린더 미사용 페이지에서 <code>fullcalendar.min.js</code> 미로드</li><li><code>base.html</code> 전역 로드 제거 → <code>calendar.html</code> scripts 블록에서만 로드 (asset_v 적용)</li><li>event-modal.js는 FullCalendar 객체를 직접 참조하지 않아 영향 없음</li><li>수정 파일: <code>base.html</code> · <code>calendar.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-04",
       "phase": "37차 1단계",
       "phase_class": "phase-1",
       "entries": [

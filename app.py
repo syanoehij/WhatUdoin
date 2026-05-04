@@ -132,6 +132,38 @@ class _MCPBearerAuthMiddleware:
 app.add_middleware(_MCPBearerAuthMiddleware)
 
 
+class _StaticCacheMiddleware:
+    """/static/ 응답에 Cache-Control 헤더를 추가한다.
+    ?v= 파라미터 있으면 1년 immutable, 없으면 1시간.
+    기존 cache-control 헤더가 있으면 replace한다 (중복 방지).
+    """
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not scope.get("path", "").startswith("/static/"):
+            await self.app(scope, receive, send)
+            return
+
+        has_version = b"v=" in scope.get("query_string", b"")
+        cache_value = b"public, max-age=31536000, immutable" if has_version else b"public, max-age=3600"
+
+        async def send_with_cache(message):
+            if message["type"] == "http.response.start":
+                headers = [
+                    (k, v) for k, v in message.get("headers", [])
+                    if k.lower() != b"cache-control"
+                ]
+                headers.append((b"cache-control", cache_value))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_cache)
+
+
+app.add_middleware(_StaticCacheMiddleware)
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
     return FileResponse("static/favicon.ico")
