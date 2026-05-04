@@ -1,4 +1,12 @@
 {% extends "base.html" %}
+{% block wu_editor_assets %}
+  <link rel="stylesheet" href="/static/lib/highlight-github.min.css{{ asset_v('static/lib/highlight-github.min.css') }}" />
+  <script src="/static/lib/highlight.min.js"></script>
+  <link rel="stylesheet" href="/static/lib/katex.min.css" />
+  <link rel="stylesheet" href="/static/css/wu-editor.css{{ asset_v('static/css/wu-editor.css') }}" />
+  <script src="/static/lib/tiptap-bundle.min.js{{ asset_v('static/lib/tiptap-bundle.min.js') }}"></script>
+  <script src="/static/js/wu-editor.js{{ asset_v('static/js/wu-editor.js') }}"></script>
+{% endblock %}
 {% block title %}프로젝트 관리 – WhatUDoin{% endblock %}
 
 {% block extra_head %}

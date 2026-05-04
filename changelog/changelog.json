@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-05-04",
+      "phase": "37차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "⚡",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 정적 자산 mtime 기반 캐시 버스터 도입",
+          "detail_html": "<ul><li><code>asset_v()</code> Jinja2 전역 함수 추가 — 파일 수정시간(mtime)을 16진수로 변환한 고정 버전 쿼리 생성</li><li>기존 <code>?v={{ range(1000,9999)|random }}</code> 패턴 전면 교체 — 페이지 로드마다 재다운로드하던 문제 해결</li><li>파일 변경 + 서버 재시작 시 자동으로 새 버전 반영, 미변경 파일은 브라우저 캐시 그대로 유지</li><li>수정 파일: <code>app.py</code> · <code>base.html</code></li></ul>"
+        },
+        {
+          "icon": "⚡",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> WUEditor 조건부 로드 — 미사용 페이지 1.25MB 제거",
+          "detail_html": "<ul><li><code>tiptap-bundle.min.js</code>(1.25MB) · <code>wu-editor.js</code>(131KB) · KaTeX · highlight.js를 <strong>편집기·뷰어 사용 페이지에서만</strong> 로드하도록 분리</li><li>캘린더·칸반·간트 등 14개 미사용 페이지 초기 로딩 속도 개선</li><li><code>{% block wu_editor_assets %}</code> 블록으로 체크·문서·공지 등 8개 사용 페이지에 선택적 로드</li><li>캘린더·칸반에서 체크 바인딩 뷰어 열 때 <code>ensureWUEditorAssets()</code>로 동적 로드 (공유 Promise로 중복 방지)</li><li>수정 파일: <code>base.html</code> · <code>check.html</code> · <code>doc_editor.html</code> · <code>check_editor.html</code> · <code>notice.html</code> · <code>home.html</code> · <code>trash.html</code> · <code>project_manage.html</code> · <code>notice_history.html</code> · <code>event-modal.js</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-04",
       "phase": "36차 3단계",
       "phase_class": "phase-3",
       "entries": [

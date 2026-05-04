@@ -45,15 +45,20 @@
   <script src="/static/lib/flatpickr-ko.js"></script>
   <script src="/static/lib/flatpickr-range.js"></script>
 
-  <link rel="stylesheet" href="/static/css/style.css?v={{ range(1000,9999) | random }}" />
-  <link rel="stylesheet" href="/static/lib/highlight-github.min.css" />
-  <script src="/static/lib/highlight.min.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css{{ asset_v('static/css/style.css') }}" />
 
-  <!-- WUEditor (Tiptap 기반 공용 에디터/뷰어) -->
-  <link rel="stylesheet" href="/static/lib/katex.min.css" />
-  <link rel="stylesheet" href="/static/css/wu-editor.css?v={{ range(1000,9999) | random }}" />
-  <script src="/static/lib/tiptap-bundle.min.js?v={{ range(1000,9999) | random }}"></script>
-  <script src="/static/js/wu-editor.js?v={{ range(1000,9999) | random }}"></script>
+  <script>
+  window.__WU_ASSET_V = {
+    hlCss:   "{{ asset_v('static/lib/highlight-github.min.css') }}",
+    hlJs:    "{{ asset_v('static/lib/highlight.min.js') }}",
+    katex:   "{{ asset_v('static/lib/katex.min.css') }}",
+    wuCss:   "{{ asset_v('static/css/wu-editor.css') }}",
+    tiptap:  "{{ asset_v('static/lib/tiptap-bundle.min.js') }}",
+    wuJs:    "{{ asset_v('static/js/wu-editor.js') }}"
+  };
+  </script>
+
+  {% block wu_editor_assets %}{% endblock %}
   {% block extra_head %}{% endblock %}
   <style>
   /* ── 링크 버튼 & 드롭다운 ── */
@@ -858,9 +863,9 @@
     </div>
   </div>
 
-  <script src="/static/js/wu-dialog.js?v={{ range(1000,9999) | random }}"></script>
-  <script src="/static/js/event-modal.js?v={{ range(1000,9999) | random }}"></script>
-  <script src="/static/js/realtime.js?v={{ range(1000,9999) | random }}"></script>
+  <script src="/static/js/wu-dialog.js{{ asset_v('static/js/wu-dialog.js') }}"></script>
+  <script src="/static/js/event-modal.js{{ asset_v('static/js/event-modal.js') }}"></script>
+  <script src="/static/js/realtime.js{{ asset_v('static/js/realtime.js') }}"></script>
   {% block scripts %}{% endblock %}
 
   <script>

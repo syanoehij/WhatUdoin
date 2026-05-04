@@ -37,6 +37,51 @@ let _boundChecklistAll        = [];     // sub-modal 캐시: 활성 체크리스
 let _boundViewerInstance      = null;   // 본문 viewer WUEditor 인스턴스
 let _kdetailBoundViewerInst   = null;   // 칸반 상세 모달 바인딩 viewer 인스턴스
 
+// ── WUEditor 자산 지연 로드 ───────────────────────────────
+function ensureWUEditorAssets() {
+  if (window.WUEditor) return Promise.resolve();
+  if (window.__wuEditorAssetsPromise) return window.__wuEditorAssetsPromise;
+
+  const v = window.__WU_ASSET_V || {};
+
+  function loadLink(href) {
+    return new Promise(resolve => {
+      const base = href.split('?')[0];
+      if (document.querySelector(`link[rel="stylesheet"][href^="${base}"]`)) return resolve();
+      const el = document.createElement('link');
+      el.rel = 'stylesheet'; el.href = href;
+      el.onload = resolve; el.onerror = resolve;
+      document.head.appendChild(el);
+    });
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const base = src.split('?')[0];
+      const existing = document.querySelector(`script[src^="${base}"]`);
+      if (existing) {
+        if (window.WUEditor) return resolve();
+        existing.addEventListener('load', resolve);
+        existing.addEventListener('error', reject);
+        return;
+      }
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = resolve; el.onerror = reject;
+      document.head.appendChild(el);
+    });
+  }
+
+  window.__wuEditorAssetsPromise = loadLink(`/static/lib/highlight-github.min.css${v.hlCss || ''}`)
+    .then(() => loadScript(`/static/lib/highlight.min.js${v.hlJs || ''}`))
+    .then(() => loadLink(`/static/lib/katex.min.css${v.katex || ''}`))
+    .then(() => loadLink(`/static/css/wu-editor.css${v.wuCss || ''}`))
+    .then(() => loadScript(`/static/lib/tiptap-bundle.min.js${v.tiptap || ''}`))
+    .then(() => loadScript(`/static/js/wu-editor.js${v.wuJs || ''}`));
+
+  return window.__wuEditorAssetsPromise;
+}
+
 // ── 프로젝트 자동완성 ─────────────────────────────────────
 async function loadProjects() {
   const res = await fetch('/api/projects');
@@ -992,6 +1037,7 @@ async function openKDetail(id) {
     boundViewer.innerHTML = '';
     if (e.bound_checklist_id && e.bound_checklist_content != null) {
       boundWrap.classList.remove('hidden');
+      await ensureWUEditorAssets();
       _kdetailBoundViewerInst = WUEditor.create({
         el: boundViewer,
         canEdit: false,
@@ -1075,7 +1121,7 @@ async function completeKanbanEvent() {
 //  - "바인딩 해제" 클릭 → unbindCheck(): 원래 textarea 복원, _currentBoundChecklistId = null
 //  - 저장 시 saveEvent() payload에 bound_checklist_id 동봉 (백엔드에서 null은 해제로 처리)
 
-function applyBoundState(title, content, id) {
+async function applyBoundState(title, content, id) {
   _currentBoundChecklistId = id;
   const descEl    = document.getElementById('f-description');
   const viewerEl  = document.getElementById('bound-content-viewer');
@@ -1098,6 +1144,9 @@ function applyBoundState(title, content, id) {
   // 기존 viewer 인스턴스가 있으면 정리
   if (_boundViewerInstance) { _boundViewerInstance.destroy(); _boundViewerInstance = null; }
   viewerEl.innerHTML = '';
+
+  await ensureWUEditorAssets();
+  if (_currentBoundChecklistId !== id) return;
 
   _boundViewerInstance = WUEditor.create({
     el: viewerEl,

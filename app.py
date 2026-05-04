@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import asyncio
+import functools
 import json
 import os
 import hashlib
@@ -81,6 +82,20 @@ app = FastAPI(title="WhatUDoin", lifespan=lifespan)
 app.mount("/static",          StaticFiles(directory=str(_BASE_DIR / "static")),   name="static")
 app.mount("/uploads/meetings", StaticFiles(directory=str(MEETINGS_DIR)),           name="meetings_files")
 templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
+
+@functools.lru_cache(maxsize=None)
+def _asset_mtime(abs_path: str) -> str:
+    try:
+        return format(int(Path(abs_path).stat().st_mtime), 'x')
+    except OSError:
+        return '0'
+
+def asset_v(rel_path: str) -> str:
+    abs_path = str(_BASE_DIR / rel_path.lstrip('/'))
+    return f'?v={_asset_mtime(abs_path)}'
+
+templates.env.globals["asset_v"] = asset_v
+
 mount_mcp(app)
 
 
