@@ -176,8 +176,8 @@ def _extract_host(raw: bytes) -> str:
 
 
 class _BrowserHTTPSRedirectMiddleware:
-    """브라우저 문서 네비게이션(GET/HEAD)만 HTTPS(8443)로 307 리다이렉트.
-    MCP·API·SSE·AJAX 제외. Cache-Control: no-store로 307 캐시 문제 방지."""
+    """브라우저 GET 요청 시 JS probe로 인증서 신뢰 여부 감지 후 HTTPS/HTTP 분기.
+    MCP·API·SSE·AJAX 제외. wd-cert-skip=1 쿠키 있으면 HTTP 그대로 통과."""
 
     _SKIP = ("/mcp", "/api", "/static", "/uploads", "/favicon.ico")
 
@@ -185,34 +185,95 @@ class _BrowserHTTPSRedirectMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if (
-            scope["type"] == "http"
-            and scope.get("scheme") == "http"
-            and scope.get("method", "GET") in {"GET", "HEAD"}
-            and not scope.get("path", "").startswith(self._SKIP)
-            and _https_available()
-        ):
-            headers = {k.lower(): v for k, v in scope.get("headers", [])}
-            if self._is_browser_navigate(headers):
-                host = _extract_host(headers.get(b"host", b""))
-                if host:
-                    path = scope.get("path", "/")
-                    qs = scope.get("query_string", b"").decode()
-                    url = f"https://{host}:8443{path}"
-                    if qs:
-                        url += f"?{qs}"
-                    await send({
-                        "type": "http.response.start",
-                        "status": 307,
-                        "headers": [
-                            (b"location", url.encode()),
-                            (b"cache-control", b"no-store"),
-                            (b"content-length", b"0"),
-                        ],
-                    })
-                    await send({"type": "http.response.body", "body": b""})
-                    return
-        await self.app(scope, receive, send)
+        if scope["type"] != "http" or scope.get("scheme") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "/")
+        method = scope.get("method", "GET")
+
+        if path.startswith(self._SKIP) or method not in {"GET", "HEAD"}:
+            await self.app(scope, receive, send)
+            return
+
+        headers = {k.lower(): v for k, v in scope.get("headers", [])}
+
+        # wd-cert-skip=1 쿠키가 있으면 HTTP 그대로 통과
+        if self._has_cert_skip_cookie(headers):
+            await self.app(scope, receive, send)
+            return
+
+        if not _https_available():
+            await self.app(scope, receive, send)
+            return
+
+        # HEAD는 통과 (probe HTML 본문 불필요)
+        if method != "GET":
+            await self.app(scope, receive, send)
+            return
+
+        if not self._is_browser_navigate(headers):
+            await self.app(scope, receive, send)
+            return
+
+        host = _extract_host(headers.get(b"host", b""))
+        if not host:
+            await self.app(scope, receive, send)
+            return
+
+        qs_raw = scope.get("query_string", b"").decode()
+        html = self._probe_html(host, path, qs_raw)
+        body = html.encode("utf-8")
+        await send({
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [
+                (b"content-type", b"text/html; charset=utf-8"),
+                (b"cache-control", b"no-store"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+        })
+        await send({"type": "http.response.body", "body": body})
+
+    @staticmethod
+    def _has_cert_skip_cookie(headers: dict) -> bool:
+        raw = headers.get(b"cookie", b"").decode(errors="replace")
+        for part in raw.split(";"):
+            k, _, v = part.strip().partition("=")
+            if k.strip() == "wd-cert-skip" and v.strip() == "1":
+                return True
+        return False
+
+    @staticmethod
+    def _probe_html(host: str, path: str, qs: str) -> str:
+        def _js(s: str) -> str:
+            return json.dumps(s).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+        js_host = _js(host)
+        js_path = _js(path)
+        js_qs   = _js(("?" + qs) if qs else "")
+        return f"""<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>알람용 인증서 확인 중...</title>
+<style>
+  body {{background:#fff;color:#111;display:flex;align-items:center;
+        justify-content:center;height:100vh;margin:0;font-family:sans-serif;}}
+  p {{font-size:1.1rem;}}
+</style></head>
+<body><p>알람용 인증서 확인 중...</p>
+<script>
+(function(){{
+  var host={js_host}, path={js_path}, qs={js_qs};
+  fetch('https://'+host+':8443/api/health',{{mode:'no-cors'}})
+    .then(function(){{
+      location.replace('https://'+host+':8443'+path+qs);
+    }})
+    .catch(function(){{
+      document.cookie='wd-cert-skip=1; Max-Age=3600; Path=/';
+      location.replace('http://'+host+':8000'+path+qs);
+    }});
+}})();
+</script>
+</body></html>"""
 
     @staticmethod
     def _is_browser_navigate(headers: dict) -> bool:
@@ -232,6 +293,11 @@ app.add_middleware(_BrowserHTTPSRedirectMiddleware)
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
     return FileResponse("static/favicon.ico")
+
+
+@app.get("/api/health", include_in_schema=False)
+def health():
+    return {"status": "ok"}
 
 
 # ── 헬퍼 ────────────────────────────────────────────────

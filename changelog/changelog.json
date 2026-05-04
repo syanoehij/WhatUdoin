@@ -18,6 +18,11 @@
       "phase_class": "phase-4",
       "entries": [
         {
+          "icon": "🔐",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> HTTP→HTTPS 리다이렉트: 인증서 미설치 사용자 접속 차단 문제 해결",
+          "detail_html": "<ul><li>기존 즉시 307 리다이렉트 방식을 <strong>JS probe 인터스티셜</strong>로 교체 — 인증서 신뢰 여부를 클라이언트에서 감지 후 분기</li><li>인증서 설치됨: <code>fetch('https://...:8443/api/health', {mode:'no-cors'})</code> 성공 → HTTPS로 자동 이동</li><li>인증서 없음: fetch 실패 → 쿠키 <code>wd-cert-skip=1; Max-Age=3600</code> 설정 후 HTTP 유지 (1시간 캐시, 이후 자동 재감지)</li><li>확인 화면: 흰 배경 · 검은 글씨 · \"알람용 인증서 확인 중...\" — 첫 방문 시에만 노출</li><li><code>GET /api/health</code> 엔드포인트 신규 추가 (probe 대상, 인증 불필요)</li><li>XSS 방어: path·qs의 <code>&lt;</code>·<code>&gt;</code>·<code>&amp;</code>를 유니코드 이스케이프(<code>\\u003c</code> 등)로 치환</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
           "icon": "🔀",
           "title_html": "<span class=\"cl-tag feat\">feat</span> HTTP → HTTPS 브라우저 자동 리다이렉트",
           "detail_html": "<ul><li><code>_BrowserHTTPSRedirectMiddleware</code> ASGI 미들웨어 추가·보정 — HTTP(8000) 브라우저 접속 시 HTTPS(8443) 자동 전환</li><li><strong>307 Temporary Redirect + <code>Cache-Control: no-store</code></strong> — 301 영구 캐시 문제 방지 (인증서 제거 후에도 브라우저가 캐시된 HTTPS로 이동하던 문제 해결)</li><li><strong>현대 브라우저 감지</strong>: <code>Sec-Fetch-Mode: navigate</code> 또는 <code>Sec-Fetch-Dest: document</code> 우선 확인 → AJAX(<code>cors</code>)·iframe·리소스 요청 자동 제외</li><li>구형 브라우저 fallback: <code>Mozilla/</code> UA + <code>Accept: text/html</code> (기존 로직 유지)</li><li><strong>GET·HEAD 메서드만 리다이렉트</strong> — POST 등 비멱등 요청 제외</li><li><strong>제외 경로 확장</strong>: <code>/mcp</code>·<code>/api</code>·<code>/static</code>·<code>/uploads</code>·<code>/favicon.ico</code></li><li>IPv6 리터럴(<code>[::1]</code>) Host 파싱 개선</li><li>수정 파일: <code>app.py</code> / 신규 테스트: <code>tests/phase37_stage4_https_redirect.py</code> (16/16 통과)</li></ul>"
