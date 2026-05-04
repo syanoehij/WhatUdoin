@@ -6,6 +6,11 @@
       "phase_class": "phase-6",
       "entries": [
         {
+          "icon": "🧭",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 표·이미지 floating toolbar 화면 밖 이탈 방지",
+          "detail_html": "<ul><li>긴 표의 상단이 화면 밖에 있을 때 테이블 편집 메뉴가 보이지 않던 문제를 수정 — 표 위/아래, 선택 셀 주변, 좌우 후보 위치를 계산하고 최종 좌표를 뷰포트 안으로 보정</li><li>이미지 클릭 시 표시되는 크기 조절 툴바도 아래쪽 고정 배치에서 벗어나 이미지 위/아래/좌우 중 보이는 위치로 자동 배치</li><li><code>position: fixed</code> 좌표에 <code>window.scrollY</code>를 더해 이미지 툴바가 스크롤된 화면에서 아래로 밀리던 문제 제거</li><li>좁은 화면에서 메뉴가 가로로 넘치지 않도록 테이블 메뉴와 이미지 리사이즈 툴바에 <code>max-width</code>, <code>flex-wrap</code>, <code>box-sizing</code> 적용</li><li>검증: <code>node --check static/js/wu-editor.js</code>, <code>node --check tests/phase49_table_menu_position.spec.js</code>, <code>npx.cmd playwright test tests/phase49_table_menu_position.spec.js</code> 2 passed</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        },
+        {
           "icon": "💾",
           "title_html": "<span class=\"cl-tag fix\">fix</span> 문서 편집기 — 저장 쿨다운 중 나가기 저장 즉시 실행",
           "detail_html": "<ul><li>저장 직후 10초 쿨다운 중 다시 수정하고 다른 페이지로 이동할 때, 나가기 확인 모달의 <strong>저장하고 나가기</strong>가 쿨다운을 기다리던 문제를 수정</li><li><code>WUEditor</code> 나가기 저장 hook에 <code>ignoreCooldown</code> 플래그를 전달하고, 문서 편집기 <code>saveDoc()</code>는 <code>leaveTarget</code>이 있는 저장만 쿨다운 가드를 우회하도록 조정</li><li>일반 저장 버튼과 자동저장은 기존 쿨다운 동작 유지 — 이탈 저장만 즉시 저장 후 대상 페이지로 이동</li><li>검증: <code>node --check static/js/wu-editor.js</code>, focused Playwright 나가기 저장 시나리오 통과</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>templates/doc_editor.html</code></li></ul>"

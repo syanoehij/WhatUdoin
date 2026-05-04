@@ -498,7 +498,10 @@
   position: fixed;
   display: none;
   align-items: center;
+  flex-wrap: wrap;
   gap: 2px;
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -554,7 +557,10 @@
   position: fixed;
   display: none;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 6px;

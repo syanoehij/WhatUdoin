@@ -1086,6 +1086,51 @@
       if (Object.keys(_imgWidthMap).length) setTimeout(_applyImgWidths, 200);
     }
 
+    function _placeImgResizeToolbar(imgEl) {
+      if (!_tbEl || !imgEl) return;
+      const gap = 6;
+      const margin = 8;
+      const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+      const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      const r = imgEl.getBoundingClientRect();
+
+      _tbEl.style.display = 'flex';
+      const tw = _tbEl.offsetWidth;
+      const th = _tbEl.offsetHeight;
+      const maxLeft = vw ? Math.max(margin, vw - tw - margin) : margin;
+      const maxTop = vh ? Math.max(margin, vh - th - margin) : margin;
+      const imageLeft = _clampToRange(r.left, margin, maxLeft);
+      const sideTop = _clampToRange(r.top, margin, maxTop);
+      const placements = [
+        {
+          fits: r.bottom + th + gap <= vh - margin,
+          top: r.bottom + gap,
+          left: imageLeft,
+        },
+        {
+          fits: r.top >= th + gap + margin,
+          top: r.top - th - gap,
+          left: imageLeft,
+        },
+        {
+          fits: r.right + tw + gap <= vw - margin,
+          top: sideTop,
+          left: r.right + gap,
+        },
+        {
+          fits: r.left >= tw + gap + margin,
+          top: sideTop,
+          left: r.left - tw - gap,
+        },
+      ];
+      const chosen = placements.find(item => item.fits) || {
+        top: _clampToRange(r.bottom + gap, margin, maxTop),
+        left: imageLeft,
+      };
+      _tbEl.style.top = _clampToRange(chosen.top, margin, maxTop) + 'px';
+      _tbEl.style.left = _clampToRange(chosen.left, margin, maxLeft) + 'px';
+    }
+
     function _initImgResize() {
       if (!_tbEl) return;
       _parseInitialWidths(opts.initialMarkdown || '');
@@ -1105,17 +1150,30 @@
         }
       }, true);
 
+      let imgResizeFrame = 0;
+      const scheduleImgResizeToolbarUpdate = () => {
+        if (!_activeImg || _tbEl.style.display === 'none' || imgResizeFrame) return;
+        imgResizeFrame = requestAnimationFrame(() => {
+          imgResizeFrame = 0;
+          if (!_activeImg || !document.body.contains(_activeImg)) {
+            _tbEl.style.display = 'none';
+            _activeImg = null;
+            return;
+          }
+          _placeImgResizeToolbar(_activeImg);
+        });
+      };
+
       on(document, 'click', e => {
         const edEl = _getProseMirrorEl();
         if (e.target.tagName === 'IMG' && edEl && edEl.contains(e.target) && !e.target.closest('td, th')) {
-          const r = e.target.getBoundingClientRect();
-          _tbEl.style.top  = (r.bottom + window.scrollY + 6) + 'px';
-          _tbEl.style.left = Math.max(4, r.left) + 'px';
-          _tbEl.style.display = 'flex';
+          _placeImgResizeToolbar(e.target);
         } else if (!_tbEl.contains(e.target)) {
           _tbEl.style.display = 'none';
         }
       }, true);
+      on(window, 'scroll', scheduleImgResizeToolbarUpdate, { capture: true, passive: true });
+      on(window, 'resize', scheduleImgResizeToolbarUpdate);
 
       _tbEl.querySelectorAll('button').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -2079,6 +2137,74 @@
       return null;
     }
 
+    function _clampToRange(value, min, max) {
+      if (max < min) return min;
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function _placeTableMenu(tableEl) {
+      const gap = 6;
+      const margin = 8;
+      const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+      const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      const tr = tableEl.getBoundingClientRect();
+      const focusedCell = _getFocusedCellDom();
+      const cellRect = focusedCell && tableEl.contains(focusedCell)
+        ? focusedCell.getBoundingClientRect()
+        : null;
+
+      _tableMenuEl.style.display = 'flex';
+      const mw = _tableMenuEl.offsetWidth;
+      const mh = _tableMenuEl.offsetHeight;
+      const maxLeft = vw ? Math.max(margin, vw - mw - margin) : margin;
+      const maxTop = vh ? Math.max(margin, vh - mh - margin) : margin;
+      const tableLeft = _clampToRange(tr.left, margin, maxLeft);
+      const cellLeft = cellRect ? _clampToRange(cellRect.left, margin, maxLeft) : tableLeft;
+      const sideTopBase = cellRect ? cellRect.top : tr.top;
+      const sideTop = _clampToRange(sideTopBase, margin, maxTop);
+      const placements = [
+        {
+          fits: tr.top >= mh + gap + margin,
+          top: tr.top - mh - gap,
+          left: tableLeft,
+        },
+        {
+          fits: tr.bottom + mh + gap <= vh - margin,
+          top: tr.bottom + gap,
+          left: tableLeft,
+        },
+        {
+          fits: cellRect && cellRect.bottom + mh + gap <= vh - margin,
+          top: cellRect ? cellRect.bottom + gap : margin,
+          left: cellLeft,
+        },
+        {
+          fits: cellRect && cellRect.top >= mh + gap + margin,
+          top: cellRect ? cellRect.top - mh - gap : margin,
+          left: cellLeft,
+        },
+        {
+          fits: tr.right + mw + gap <= vw - margin,
+          top: sideTop,
+          left: tr.right + gap,
+        },
+        {
+          fits: tr.left >= mw + gap + margin,
+          top: sideTop,
+          left: tr.left - mw - gap,
+        },
+      ];
+      const fallbackTop = cellRect
+        ? _clampToRange(cellRect.bottom + gap, margin, maxTop)
+        : _clampToRange(Math.max(tr.top, margin), margin, maxTop);
+      const chosen = placements.find(item => item.fits) || {
+        top: fallbackTop,
+        left: cellLeft,
+      };
+      _tableMenuEl.style.top = _clampToRange(chosen.top, margin, maxTop) + 'px';
+      _tableMenuEl.style.left = _clampToRange(chosen.left, margin, maxLeft) + 'px';
+    }
+
     function _updateTableMenu() {
       if (!_tableMenuEl || !_editor) return;
       if (_isDragging) return;
@@ -2087,21 +2213,25 @@
         return;
       }
 
-      /* 컨텍스트 메뉴 위치 — 커서가 있는 테이블 위에 고정 */
+      /* 컨텍스트 메뉴 위치 — 화면에 보이는 후보 위치를 우선 선택 */
       const { from } = _editor.state.selection;
       const domRef = _editor.view.domAtPos(from);
       const domNode = domRef.node;
       const tableEl = (domNode.nodeType === 1 ? domNode : domNode.parentElement)?.closest('table');
       if (!tableEl) { _tableMenuEl.style.display = 'none'; return; }
-      const tr = tableEl.getBoundingClientRect();
-      _tableMenuEl.style.display = 'flex';
-      const mw = _tableMenuEl.offsetWidth;
-      _tableMenuEl.style.top  = (tr.top - _tableMenuEl.offsetHeight - 6) + 'px';
-      _tableMenuEl.style.left = Math.min(tr.left, window.innerWidth - mw - 8) + 'px';
+      _placeTableMenu(tableEl);
     }
 
     function _initTableMenu() {
       if (!_tableMenuEl) return;
+      let tableMenuFrame = 0;
+      const scheduleTableMenuUpdate = () => {
+        if (_tableMenuEl.style.display === 'none' || tableMenuFrame) return;
+        tableMenuFrame = requestAnimationFrame(() => {
+          tableMenuFrame = 0;
+          _updateTableMenu();
+        });
+      };
       _tableMenuEl.addEventListener('mousedown', e => {
         e.preventDefault();
         const btn = e.target.closest('[data-cmd]');
@@ -2145,6 +2275,8 @@
           setTimeout(_updateTableMenu, 50);
         }
       }, false);
+      on(window, 'scroll', scheduleTableMenuUpdate, { capture: true, passive: true });
+      on(window, 'resize', scheduleTableMenuUpdate);
     }
 
     /* ── syntax highlight 적용 ──────────────────────── */
