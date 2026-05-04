@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-05-04",
+      "phase": "37차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "🔀",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> HTTP → HTTPS 브라우저 자동 리다이렉트",
+          "detail_html": "<ul><li><code>_BrowserHTTPSRedirectMiddleware</code> ASGI 미들웨어 신규 추가</li><li>HTTP(8000)로 접속한 브라우저를 HTTPS(8443)로 301 리다이렉트</li><li>조건: HTTPS 인증서 존재 + User-Agent <code>mozilla/</code> + <code>Accept: text/html</code> — 페이지 요청만 리다이렉트</li><li>SSE(<code>text/event-stream</code>)·AJAX·MCP(<code>/mcp</code> 경로)는 제외 → EventSource 301 루프 방지</li><li><code>scope[\"scheme\"] == \"http\"</code> 조건으로 HTTPS 서버(8443) 요청에는 미적용 — 무한 루프 방지</li><li>수정 파일: <code>app.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-04",
       "phase": "37차 3단계",
       "phase_class": "phase-3",
       "entries": [

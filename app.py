@@ -166,6 +166,48 @@ class _StaticCacheMiddleware:
 app.add_middleware(_StaticCacheMiddleware)
 
 
+class _BrowserHTTPSRedirectMiddleware:
+    """브라우저 HTML 페이지 요청만 HTTPS(8443)로 리다이렉트.
+    SSE·AJAX·MCP 등 API 요청은 제외 (EventSource 301 루프 방지)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if (
+            scope["type"] == "http"
+            and scope.get("scheme") == "http"
+            and not scope.get("path", "").startswith("/mcp")
+            and _https_available()
+        ):
+            headers = {k.lower(): v for k, v in scope.get("headers", [])}
+            ua = headers.get(b"user-agent", b"").lower()
+            accept = headers.get(b"accept", b"").lower()
+            # mozilla/ (브라우저) + text/html (페이지 요청) 둘 다 충족해야 리다이렉트
+            # SSE(text/event-stream), AJAX(application/json, */*) 는 제외됨
+            if b"mozilla/" in ua and b"text/html" in accept:
+                host = headers.get(b"host", b"").decode().split(":")[0]
+                path = scope.get("path", "/")
+                qs = scope.get("query_string", b"").decode()
+                url = f"https://{host}:8443{path}"
+                if qs:
+                    url += f"?{qs}"
+                await send({
+                    "type": "http.response.start",
+                    "status": 301,
+                    "headers": [
+                        (b"location", url.encode()),
+                        (b"content-length", b"0"),
+                    ],
+                })
+                await send({"type": "http.response.body", "body": b""})
+                return
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(_BrowserHTTPSRedirectMiddleware)
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
     return FileResponse("static/favicon.ico")
