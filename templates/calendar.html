@@ -392,8 +392,6 @@ document.addEventListener('DOMContentLoaded', () => {
       openModal(startDate, null, { startStr: info.startStr, endStr: info.endStr, allDay: info.allDay });
     },
     eventAllow(dropInfo, draggedEvent) {
-      // 회의록 이벤트는 드래그 불가
-      if (draggedEvent.extendedProps.event_type === 'meeting') return false;
       // 진짜 all-day 이벤트는 time grid로 끌어내리는 것 방지
       if (draggedEvent.allDay && !dropInfo.allDay) return false;
       return true;

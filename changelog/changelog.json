@@ -9,6 +9,11 @@
           "icon": "🔒",
           "title_html": "<span class=\"cl-tag fix\">fix</span> 비로그인 시 체크 필터 버튼 숨김 + 진행 중 프로젝트만 표시",
           "detail_html": "<ul><li>비로그인 상태에서 <strong>\"진행중\" · \"완료\" 필터 전환 버튼</strong>을 숨김 — Jinja2 <code>{% if not user %}</code> 조건으로 <code>display:none</code> 적용</li><li>비로그인 시 <code>_projFilter</code> 초기값을 localStorage 대신 항상 <code>'active'</code>로 고정 — 완료 프로젝트가 기본 표시되지 않도록 차단</li><li>URL <code>?filter=done</code> 파라미터도 로그인 사용자에게만 적용 — 비로그인 상태에서 URL로 완료 목록 접근 방지</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        },
+        {
+          "icon": "🖱️",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 캘린더 회의 일정 드래그 이동·리사이즈 허용",
+          "detail_html": "<ul><li>기존에 <code>event_type = 'meeting'</code> 일정은 드래그 이동·리사이즈가 차단되어 있었음</li><li><code>eventAllow</code> 콜백의 meeting 차단 로직 제거 — 이제 회의 일정도 다른 일정과 동일하게 드래그 이동·리사이즈 가능</li><li><code>eventDrop</code> / <code>eventResize</code> 콜백이 이미 <code>patchEventDatetime</code>을 호출하므로 백엔드 변경 없음</li><li>📄 문서 버블(<code>doc-events</code> 소스)은 <code>editable: false</code> 유지 — 드래그 불가 그대로</li><li>수정 파일: <code>templates/calendar.html</code></li></ul>"
         }
       ]
     },
