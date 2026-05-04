@@ -166,9 +166,20 @@ class _StaticCacheMiddleware:
 app.add_middleware(_StaticCacheMiddleware)
 
 
+def _extract_host(raw: bytes) -> str:
+    """Host 헤더에서 호스트명·IP만 반환 (포트 제거). IPv6 리터럴([::1]) 처리 포함."""
+    host = raw.decode(errors="replace").strip()
+    if host.startswith("["):
+        end = host.find("]")
+        return host[:end + 1] if end != -1 else host
+    return host.split(":")[0]
+
+
 class _BrowserHTTPSRedirectMiddleware:
-    """브라우저 HTML 페이지 요청만 HTTPS(8443)로 리다이렉트.
-    SSE·AJAX·MCP 등 API 요청은 제외 (EventSource 301 루프 방지)."""
+    """브라우저 문서 네비게이션(GET/HEAD)만 HTTPS(8443)로 307 리다이렉트.
+    MCP·API·SSE·AJAX 제외. Cache-Control: no-store로 307 캐시 문제 방지."""
+
+    _SKIP = ("/mcp", "/api", "/static", "/uploads", "/favicon.ico")
 
     def __init__(self, app):
         self.app = app
@@ -177,32 +188,42 @@ class _BrowserHTTPSRedirectMiddleware:
         if (
             scope["type"] == "http"
             and scope.get("scheme") == "http"
-            and not scope.get("path", "").startswith("/mcp")
+            and scope.get("method", "GET") in {"GET", "HEAD"}
+            and not scope.get("path", "").startswith(self._SKIP)
             and _https_available()
         ):
             headers = {k.lower(): v for k, v in scope.get("headers", [])}
-            ua = headers.get(b"user-agent", b"").lower()
-            accept = headers.get(b"accept", b"").lower()
-            # mozilla/ (브라우저) + text/html (페이지 요청) 둘 다 충족해야 리다이렉트
-            # SSE(text/event-stream), AJAX(application/json, */*) 는 제외됨
-            if b"mozilla/" in ua and b"text/html" in accept:
-                host = headers.get(b"host", b"").decode().split(":")[0]
-                path = scope.get("path", "/")
-                qs = scope.get("query_string", b"").decode()
-                url = f"https://{host}:8443{path}"
-                if qs:
-                    url += f"?{qs}"
-                await send({
-                    "type": "http.response.start",
-                    "status": 301,
-                    "headers": [
-                        (b"location", url.encode()),
-                        (b"content-length", b"0"),
-                    ],
-                })
-                await send({"type": "http.response.body", "body": b""})
-                return
+            if self._is_browser_navigate(headers):
+                host = _extract_host(headers.get(b"host", b""))
+                if host:
+                    path = scope.get("path", "/")
+                    qs = scope.get("query_string", b"").decode()
+                    url = f"https://{host}:8443{path}"
+                    if qs:
+                        url += f"?{qs}"
+                    await send({
+                        "type": "http.response.start",
+                        "status": 307,
+                        "headers": [
+                            (b"location", url.encode()),
+                            (b"cache-control", b"no-store"),
+                            (b"content-length", b"0"),
+                        ],
+                    })
+                    await send({"type": "http.response.body", "body": b""})
+                    return
         await self.app(scope, receive, send)
+
+    @staticmethod
+    def _is_browser_navigate(headers: dict) -> bool:
+        """현대 브라우저(Sec-Fetch-*) 또는 구형 브라우저(Mozilla/ + text/html) 감지."""
+        mode = headers.get(b"sec-fetch-mode", b"")
+        dest = headers.get(b"sec-fetch-dest", b"")
+        if mode or dest:
+            return mode == b"navigate" or dest == b"document"
+        ua = headers.get(b"user-agent", b"").lower()
+        accept = headers.get(b"accept", b"").lower()
+        return b"mozilla/" in ua and b"text/html" in accept
 
 
 app.add_middleware(_BrowserHTTPSRedirectMiddleware)

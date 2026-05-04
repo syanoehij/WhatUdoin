@@ -8,7 +8,7 @@
         {
           "icon": "🔀",
           "title_html": "<span class=\"cl-tag feat\">feat</span> HTTP → HTTPS 브라우저 자동 리다이렉트",
-          "detail_html": "<ul><li><code>_BrowserHTTPSRedirectMiddleware</code> ASGI 미들웨어 신규 추가</li><li>HTTP(8000)로 접속한 브라우저를 HTTPS(8443)로 301 리다이렉트</li><li>조건: HTTPS 인증서 존재 + User-Agent <code>mozilla/</code> + <code>Accept: text/html</code> — 페이지 요청만 리다이렉트</li><li>SSE(<code>text/event-stream</code>)·AJAX·MCP(<code>/mcp</code> 경로)는 제외 → EventSource 301 루프 방지</li><li><code>scope[\"scheme\"] == \"http\"</code> 조건으로 HTTPS 서버(8443) 요청에는 미적용 — 무한 루프 방지</li><li>수정 파일: <code>app.py</code></li></ul>"
+          "detail_html": "<ul><li><code>_BrowserHTTPSRedirectMiddleware</code> ASGI 미들웨어 추가·보정 — HTTP(8000) 브라우저 접속 시 HTTPS(8443) 자동 전환</li><li><strong>307 Temporary Redirect + <code>Cache-Control: no-store</code></strong> — 301 영구 캐시 문제 방지 (인증서 제거 후에도 브라우저가 캐시된 HTTPS로 이동하던 문제 해결)</li><li><strong>현대 브라우저 감지</strong>: <code>Sec-Fetch-Mode: navigate</code> 또는 <code>Sec-Fetch-Dest: document</code> 우선 확인 → AJAX(<code>cors</code>)·iframe·리소스 요청 자동 제외</li><li>구형 브라우저 fallback: <code>Mozilla/</code> UA + <code>Accept: text/html</code> (기존 로직 유지)</li><li><strong>GET·HEAD 메서드만 리다이렉트</strong> — POST 등 비멱등 요청 제외</li><li><strong>제외 경로 확장</strong>: <code>/mcp</code>·<code>/api</code>·<code>/static</code>·<code>/uploads</code>·<code>/favicon.ico</code></li><li>IPv6 리터럴(<code>[::1]</code>) Host 파싱 개선</li><li>수정 파일: <code>app.py</code> / 신규 테스트: <code>tests/phase37_stage4_https_redirect.py</code> (16/16 통과)</li></ul>"
         }
       ]
     },
