@@ -36,24 +36,21 @@
   </script>
   {% endif %}
 
-  <!-- FullCalendar (로컬, 오프라인 동작) -->
-  <script src="/static/lib/fullcalendar.min.js"></script>
-
   <!-- flatpickr (로컬, 오프라인 동작) -->
   <link href="/static/lib/flatpickr.min.css" rel="stylesheet" />
   <script src="/static/lib/flatpickr.min.js"></script>
   <script src="/static/lib/flatpickr-ko.js"></script>
   <script src="/static/lib/flatpickr-range.js"></script>
 
-  <link rel="stylesheet" href="/static/css/style.css?v={{ range(1000,9999) | random }}" />
-  <link rel="stylesheet" href="/static/lib/highlight-github.min.css" />
-  <script src="/static/lib/highlight.min.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css{{ asset_v('static/css/style.css') }}" />
+  <link rel="stylesheet" href="/static/lib/highlight-github.min.css{{ asset_v('static/lib/highlight-github.min.css') }}" />
+  <script src="/static/lib/highlight.min.js{{ asset_v('static/lib/highlight.min.js') }}"></script>
 
   <!-- WUEditor (Tiptap 기반 공용 에디터/뷰어) -->
-  <link rel="stylesheet" href="/static/lib/katex.min.css" />
-  <link rel="stylesheet" href="/static/css/wu-editor.css?v={{ range(1000,9999) | random }}" />
-  <script src="/static/lib/tiptap-bundle.min.js?v={{ range(1000,9999) | random }}"></script>
-  <script src="/static/js/wu-editor.js?v={{ range(1000,9999) | random }}"></script>
+  <link rel="stylesheet" href="/static/lib/katex.min.css{{ asset_v('static/lib/katex.min.css') }}" />
+  <link rel="stylesheet" href="/static/css/wu-editor.css{{ asset_v('static/css/wu-editor.css') }}" />
+  <script src="/static/lib/tiptap-bundle.min.js{{ asset_v('static/lib/tiptap-bundle.min.js') }}"></script>
+  <script src="/static/js/wu-editor.js{{ asset_v('static/js/wu-editor.js') }}"></script>
   {% block extra_head %}{% endblock %}
   <style>
   /* ── 링크 버튼 & 드롭다운 ── */

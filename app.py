@@ -81,6 +81,17 @@ app = FastAPI(title="WhatUDoin", lifespan=lifespan)
 app.mount("/static",          StaticFiles(directory=str(_BASE_DIR / "static")),   name="static")
 app.mount("/uploads/meetings", StaticFiles(directory=str(MEETINGS_DIR)),           name="meetings_files")
 templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
+
+
+def _asset_v(path: str) -> str:
+    try:
+        mtime = (_BASE_DIR / path).stat().st_mtime
+        return "?v=" + hashlib.md5(str(mtime).encode()).hexdigest()[:8]
+    except OSError:
+        return ""
+
+
+templates.env.globals["asset_v"] = _asset_v
 mount_mcp(app)
 
 
@@ -115,6 +126,33 @@ class _MCPBearerAuthMiddleware:
             await self.app(scope, receive, send)
 
 app.add_middleware(_MCPBearerAuthMiddleware)
+
+
+class _StaticCacheMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not scope.get("path", "").startswith("/static/"):
+            await self.app(scope, receive, send)
+            return
+
+        has_version = b"v=" in scope.get("query_string", b"")
+        cache_value = b"public, max-age=31536000, immutable" if has_version else b"public, max-age=3600"
+
+        async def send_with_cache(message):
+            if message["type"] == "http.response.start":
+                headers = [
+                    (k, v) for k, v in message.get("headers", [])
+                    if k.lower() != b"cache-control"
+                ]
+                headers.append((b"cache-control", cache_value))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_cache)
+
+app.add_middleware(_StaticCacheMiddleware)
 
 
 @app.get("/favicon.ico", include_in_schema=False)
