@@ -814,7 +814,7 @@
   <!-- ── 왼쪽: 프로젝트 필터 ── -->
   <div class="ck-left">
     <div class="ck-left-header">프로젝트</div>
-    <div class="ck-filter-bar">
+    <div class="ck-filter-bar"{% if not user %} style="display:none;"{% endif %}>
       <button class="ck-filter-btn active" id="ck-filter-active" onclick="setProjFilter('active')">진행중<span class="ck-dot"></span></button>
       <button class="ck-filter-btn" id="ck-filter-done" onclick="setProjFilter('done')">완료<span class="ck-dot"></span></button>
     </div>
@@ -1073,7 +1073,7 @@ let _allChecklists      = [];
 let _curProj            = null;
 let _sortMode           = IS_LOGGED_IN ? (localStorage.getItem('ck_sort_mode') || 'time') : 'name'; // 'time' | 'name'
 let _sortDir            = IS_LOGGED_IN ? (localStorage.getItem('ck_sort_dir')  || 'desc') : 'asc'; // 'asc' | 'desc'
-let _projFilter         = localStorage.getItem('ck_proj_filter') || 'active';
+let _projFilter         = IS_LOGGED_IN ? (localStorage.getItem('ck_proj_filter') || 'active') : 'active';
 let _searchTerm         = '';
 let _curId              = null;
 let _curItem            = null;
@@ -1154,7 +1154,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   _updateSortTabs();
 
   const urlFilter = params.get('filter');
-  if (urlFilter === 'done' || urlFilter === 'active') {
+  if (IS_LOGGED_IN && (urlFilter === 'done' || urlFilter === 'active')) {
     if (urlFilter !== _projFilter) {
       _projFilter = urlFilter;
       document.getElementById('ck-filter-active').classList.toggle('active', _projFilter === 'active');
