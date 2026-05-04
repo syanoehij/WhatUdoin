@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-05-05",
+      "phase": "37차 6단계",
+      "phase_class": "phase-6",
+      "entries": [
+        {
+          "icon": "📊",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 간트 — 프로젝트 기간 한쪽 날짜만 입력해도 스팬 경계 반영",
+          "detail_html": "<ul><li>프로젝트 관리에서 시작일 없이 종료일만 저장하거나, 종료일 없이 시작일만 저장해도 간트의 프로젝트 기간 막대에 해당 경계가 반영되도록 수정</li><li>기존에는 <code>start_date && end_date</code>가 모두 있을 때만 프로젝트 메타 기간을 사용해 한쪽 날짜만 입력하면 하위 일정 범위로 되돌아갔음</li><li>변경 후에는 하위 일정의 최소 시작일/최대 종료일을 기본 범위로 잡고, 입력된 <code>start_date</code> 또는 <code>end_date</code>만 덮어씀</li><li>검증: Python 문법 검사 통과, <code>npx.cmd playwright test tests/phase46_gantt_project_date_boundary.spec.js</code> 1 passed</li><li>수정 파일: <code>templates/project.html</code></li></ul>"
+        },
+        {
+          "icon": "🧩",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 프로젝트 관리 — 상세 드로어와 수정 화면 겹침 방지",
+          "detail_html": "<ul><li>일정 상세 드로어에서 <strong>일정 수정</strong>으로 진입할 때 기존 내용 보기 드로어가 남아 수정 모달과 겹치던 문제를 수정</li><li><code>openPmEventEdit()</code>, 프로젝트 편집 패널, 새 프로젝트 패널 진입 시 <code>closeSideDrawer()</code>를 호출해 드로어를 먼저 닫도록 변경</li><li>체크리스트 뷰어 인스턴스는 드로어 종료 시 <code>destroy()</code> 후 참조를 정리해 이전 뷰어가 남지 않도록 처리</li><li>수정 파일: <code>templates/project_manage.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-05",
       "phase": "37차 5단계",
       "phase_class": "phase-5",
       "entries": [

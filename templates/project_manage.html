@@ -632,6 +632,7 @@ async function openPmEventEdit(id) {
     const res = await fetch(`/api/events/${id}`);
     if (!res.ok) return;
     const ev = await res.json();
+    closeSideDrawer();
     window.onEventSaved = loadProjectList;
     openModal('', ev);
   } catch {}
@@ -651,6 +652,7 @@ function _openDrawer(title, actionsHtml) {
 function closeSideDrawer() {
   document.getElementById('pm-side-drawer').classList.remove('open');
   document.getElementById('pm-sd-bg').style.display = 'none';
+  if (_pmCkViewer) { try { _pmCkViewer.destroy(); } catch {} _pmCkViewer = null; }
 }
 
 /* ── 일정 뷰어 드로어 ── */
@@ -1069,6 +1071,7 @@ function hideDetail() {
 /* ── 편집 패널 ── */
 function showEditPanel(idx) {
   const p = projects[idx];
+  closeSideDrawer();
   document.getElementById('pm-detail').style.display    = 'none';
   document.getElementById('pm-no-select').style.display = 'none';
   document.getElementById('pm-create-panel').classList.remove('visible');
@@ -1392,6 +1395,7 @@ const PRESET_COLORS = [
 function showCreatePanel() {
   selIdx  = null;
   selName = null;
+  closeSideDrawer();
   document.getElementById('pm-no-select').style.display    = 'none';
   document.getElementById('pm-detail').style.display       = 'none';
   document.getElementById('pm-create-panel').classList.add('visible');

@@ -908,17 +908,16 @@ function render() {
       _rowProjectMap.push({ projKey, projName: proj.name });
 
       // 프로젝트 전체 스팬 표시 (반투명 배경)
-      // 프로젝트에 지정된 날짜가 있으면 그것을, 없으면 일정의 min/max를 사용
+      // 지정된 프로젝트 기간 경계만 하위 일정의 min/max 위에 덮어쓴다.
       let spanMinDate = null, spanMaxDate = null;
-      if (proj.start_date && proj.end_date) {
-        spanMinDate = parseDate(proj.start_date);
-        spanMaxDate = parseDate(proj.end_date);
-      } else if (sortedEvs.length > 0) {
+      if (sortedEvs.length > 0) {
         const evStarts = sortedEvs.map(e => parseDate(e.start_datetime)).filter(Boolean);
         const evEnds   = sortedEvs.map(e => e.end_datetime ? parseDate(e.end_datetime) : parseDate(e.start_datetime)).filter(Boolean);
         spanMinDate = new Date(Math.min(...evStarts.map(d => d.getTime())));
         spanMaxDate = new Date(Math.max(...evEnds.map(d => d.getTime())));
       }
+      if (proj.start_date) spanMinDate = parseDate(proj.start_date);
+      if (proj.end_date)   spanMaxDate = parseDate(proj.end_date);
       if (spanMinDate && spanMaxDate) {
         const s = Math.max(0, daysBetween(viewStart, spanMinDate));
         const e = Math.min(daysShown, daysBetween(viewStart, spanMaxDate) + 1);
