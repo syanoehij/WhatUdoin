@@ -6,6 +6,11 @@
       "phase_class": "phase-6",
       "entries": [
         {
+          "icon": "📝",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 제목·이미지·표 안 체크박스 저장 라운드트립 안정화",
+          "detail_html": "<ul><li><strong>표 안 체크박스 깨짐 수정</strong>: 테이블 셀 첫 내용이 체크박스 목록(<code>taskList</code>)이면 GFM 테이블로 강제 직렬화하지 않고 HTML 테이블로 fallback해 저장하도록 변경 — 체크박스 앞에 텍스트가 없어도 새로고침/viewer 전환 후 표 구조 유지</li><li><strong>저장 제목 정규화</strong>: Tiptap serializer가 <code>_</code>, <code>2.</code> 등을 <code>\\_</code>, <code>2\\.</code>로 escape해도 저장 시 제목을 역이스케이프해 문서/체크 제목이 목록과 본문에서 일관되게 표시</li><li><strong>이미지 로딩 보정</strong>: legacy escaped 이미지 URL을 로드 시 정규화하고, 테이블 셀 안 Obsidian 폭 문법(<code>![alt|180](...)</code>)은 렌더 전 HTML 이미지로 변환해 폭과 경로를 보존</li><li><strong>정적 자산 버전 반영</strong>: <code>asset_v()</code>의 mtime 캐시를 제거해 서버 실행 중 <code>wu-editor.js</code>, <code>tiptap-bundle.min.js</code>가 바뀌어도 새 버전 쿼리가 반영되도록 조정</li><li>검증: <code>npx.cmd rollup -c</code>, <code>npx.cmd playwright test tests/phase38_doc_image_resize.spec.js</code> 5 passed, <code>node --check static/js/wu-editor.js</code> 통과</li><li>수정 파일: <code>app.py</code>, <code>static/js/wu-editor.js</code>, <code>static/lib/tiptap-bundle.min.js</code>, <code>tiptap-entry.js</code>, <code>templates/check.html</code>, <code>templates/check_editor.html</code>, <code>templates/doc_editor.html</code>, <code>templates/doc_list.html</code></li></ul>"
+        },
+        {
           "icon": "📊",
           "title_html": "<span class=\"cl-tag fix\">fix</span> 간트 — 프로젝트 기간 한쪽 날짜만 입력해도 스팬 경계 반영",
           "detail_html": "<ul><li>프로젝트 관리에서 시작일 없이 종료일만 저장하거나, 종료일 없이 시작일만 저장해도 간트의 프로젝트 기간 막대에 해당 경계가 반영되도록 수정</li><li>기존에는 <code>start_date && end_date</code>가 모두 있을 때만 프로젝트 메타 기간을 사용해 한쪽 날짜만 입력하면 하위 일정 범위로 되돌아갔음</li><li>변경 후에는 하위 일정의 최소 시작일/최대 종료일을 기본 범위로 잡고, 입력된 <code>start_date</code> 또는 <code>end_date</code>만 덮어씀</li><li>검증: Python 문법 검사 통과, <code>npx.cmd playwright test tests/phase46_gantt_project_date_boundary.spec.js</code> 1 passed</li><li>수정 파일: <code>templates/project.html</code></li></ul>"

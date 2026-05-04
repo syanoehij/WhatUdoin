@@ -544,6 +544,18 @@ function getDocContent() {
   return wuInst ? wuInst.getMarkdown().trim() : '';
 }
 
+function splitTitleContentForSave(md) {
+  if (window.WUEditor && typeof window.WUEditor.splitTitleContent === 'function') {
+    return window.WUEditor.splitTitleContent(md);
+  }
+  const lines = String(md ?? '').split('\n');
+  const rawTitle = (lines[0] || '').replace(/^#{1,6}[ \t]+/, '').trim();
+  return {
+    title: rawTitle.replace(/\\([\\`*{}\[\]()#+\-.!_>])/g, '$1').trim(),
+    content: lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd(),
+  };
+}
+
 let _docSaving = false;
 
 async function saveDoc(leaveTarget) {
@@ -553,9 +565,9 @@ async function saveDoc(leaveTarget) {
   const saveBtn = document.getElementById('btn-save-doc');
   if (saveBtn) saveBtn.disabled = true;
   const raw   = getDocContent();
-  const lines = raw.split('\n');
-  const title = lines[0].replace(/^#+\s*/, '').trim();
-  const rawContent = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd();
+  const parsed = splitTitleContentForSave(raw);
+  const title = parsed.title;
+  const rawContent = parsed.content;
   // 연속 빈줄 보존 처리:
   // 1단계: 기존 <br> 단독 줄을 정규화(이전 저장 시 삽입된 것 제거) → 라운드트립 누적 방지
   // 2단계: 3개 이상 연속 \n → 초과분만큼 <br> 블록 삽입
@@ -567,7 +579,12 @@ async function saveDoc(leaveTarget) {
     const brCount = Math.max(1, m.length - 2);
     return '\n\n' + '<br>\n\n'.repeat(brCount);
   });
-  if (!title) { wuToast.warning('첫 줄에 제목(H1)을 입력하세요.'); return; }
+  if (!title) {
+    wuToast.warning('첫 줄에 제목(H1)을 입력하세요.');
+    _docSaving = false;
+    if (saveBtn) saveBtn.disabled = false;
+    return;
+  }
 
   const method = DOC_ID ? 'PUT' : 'POST';
   const url    = DOC_ID ? `/api/doc/${DOC_ID}` : '/api/doc';

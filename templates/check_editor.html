@@ -671,14 +671,26 @@ async function toggleContentLock() {
   }
 }
 
+function splitTitleContentForSave(md) {
+  if (window.WUEditor && typeof window.WUEditor.splitTitleContent === 'function') {
+    return window.WUEditor.splitTitleContent(md);
+  }
+  const lines = String(md ?? '').split('\n');
+  const rawTitle = (lines[0] || '').replace(/^#{1,6}[ \t]+/, '').trim();
+  return {
+    title: rawTitle.replace(/\\([\\`*{}\[\]()#+\-.!_>])/g, '$1').trim(),
+    content: lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd(),
+  };
+}
+
 async function saveContent(auto = false, leaveTarget = null) {
   if (_lockLost) return;
   if (auto && _ckAiSaving) return;
   const project = document.getElementById('ck-edit-project')?.value || '';
   const md      = wuInst ? wuInst.getMarkdown() : '';
-  const lines   = md.split('\n');
-  const title   = lines[0].replace(/^#+\s*/, '').trim();
-  const content = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd();
+  const parsed  = splitTitleContentForSave(md);
+  const title   = parsed.title;
+  const content = parsed.content;
 
   if (!title) { wuToast.warning('첫 줄에 제목(H1)을 입력하세요.'); return; }
 

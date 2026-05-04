@@ -219,7 +219,7 @@ function getFiltered() {
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
     list = list.filter(m =>
-      (m.title || '').toLowerCase().includes(q) ||
+      displayTitle(m.title).toLowerCase().includes(q) ||
       (m.content || '').toLowerCase().includes(q) ||
       (m.author_name || '').toLowerCase().includes(q)
     );
@@ -420,8 +420,8 @@ function applySort(docs) {
   return [...docs].sort((a, b) => {
     let va, vb;
     if (sortField === 'title') {
-      va = a.title || '';
-      vb = b.title || '';
+      va = displayTitle(a.title);
+      vb = displayTitle(b.title);
       const cmp = va.localeCompare(vb, 'ko');
       return sortDir === 'asc' ? cmp : -cmp;
     } else {
@@ -528,9 +528,10 @@ function renderRow(m, showYear) {
     fmtDate = showYear ? `${y.slice(2)}/${parseInt(mo2)}/${parseInt(d)}` : `${parseInt(mo2)}/${parseInt(d)}`;
   }
   const isMine = m.author_id === CURRENT_UID;
+  const safeTitle = displayTitle(m.title);
   const titleHtml = searchQuery
-    ? escHtml(m.title).replace(new RegExp(escRegex(searchQuery), 'gi'), s => `<mark class="search-hl">${s}</mark>`)
-    : escHtml(m.title);
+    ? escHtml(safeTitle).replace(new RegExp(escRegex(searchQuery), 'gi'), s => `<mark class="search-hl">${s}</mark>`)
+    : escHtml(safeTitle);
   const docBadge = m.is_team_doc
     ? '<span class="doc-badge-lg doc-team">팀</span>'
     : '<span class="doc-badge-lg doc-personal">개인</span>';
@@ -621,6 +622,9 @@ function showEmpty() {
 
 function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function displayTitle(s) {
+  return String(s ?? '').replace(/\\([\\`*{}\[\]()#+\-.!_>])/g, '$1');
 }
 function escRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

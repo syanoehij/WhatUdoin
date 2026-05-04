@@ -58,6 +58,72 @@
     return CALLOUT_TYPES[rawType] ? rawType : 'note';
   }
 
+  function _unescapeMarkdownText(text) {
+    return String(text ?? '').replace(/\\([\\`*{}\[\]()#+\-.!_>])/g, '$1');
+  }
+
+  function _unescapeMarkdownLinkDestination(url) {
+    return String(url ?? '').replace(/\\([\\`*{}\[\]()#+\-.!_>])/g, '$1');
+  }
+
+  function _escapeMarkdownLinkDestination(url) {
+    const src = String(url ?? '');
+    if (/[<>\s]/.test(src)) return '<' + src.replace(/[<>]/g, encodeURIComponent) + '>';
+    return src.replace(/([()\\])/g, '\\$1');
+  }
+
+  function _normalizeMarkdownImageDest(rawDest) {
+    const raw = String(rawDest ?? '');
+    const leading = (raw.match(/^\s*/) || [''])[0];
+    const rest = raw.slice(leading.length);
+    if (rest.startsWith('<')) {
+      const end = rest.indexOf('>');
+      if (end !== -1) {
+        return leading + '<' + _unescapeMarkdownLinkDestination(rest.slice(1, end)) + '>' + rest.slice(end + 1);
+      }
+    }
+    const m = /^(\S+)([\s\S]*)$/.exec(rest);
+    if (!m) return raw;
+    return leading + _unescapeMarkdownLinkDestination(m[1]) + m[2];
+  }
+
+  function _extractMarkdownImageSrc(rawDest) {
+    const normalized = _normalizeMarkdownImageDest(rawDest);
+    const trimmed = normalized.trim();
+    if (trimmed.startsWith('<')) {
+      const end = trimmed.indexOf('>');
+      if (end !== -1) return trimmed.slice(1, end);
+    }
+    const m = /^(\S+)/.exec(trimmed);
+    return m ? m[1] : '';
+  }
+
+  function _normalizeImageMarkdownSources(md) {
+    return String(md ?? '')
+      .replace(/(!\[[^\]]*\]\()([^)\n]+)(\))/g,
+        (_, pre, dest, post) => pre + _normalizeMarkdownImageDest(dest) + post)
+      .replace(/(<img\b[^>]*\bsrc=["'])([^"']+)(["'][^>]*>)/gi,
+        (_, pre, src, post) => pre + _unescapeMarkdownLinkDestination(src) + post);
+  }
+
+  function _markdownImageToHtml(altFull, rawDest) {
+    const pi = altFull.lastIndexOf('|');
+    const alt = pi !== -1 ? altFull.slice(0, pi) : altFull;
+    const src = _extractMarkdownImageSrc(rawDest);
+    const width = pi !== -1 ? altFull.slice(pi + 1).trim() : '';
+    const widthAttr = /^\d+$/.test(width) ? ` style="width: ${width}px"` : '';
+    return `<img src="${esc(src)}" alt="${esc(alt)}"${widthAttr}>`;
+  }
+
+  function _splitTitleContent(md) {
+    const lines = String(md ?? '').split('\n');
+    const rawTitle = (lines[0] || '').replace(/^#{1,6}[ \t]+/, '').trim();
+    return {
+      title: _unescapeMarkdownText(rawTitle).trim(),
+      content: lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd(),
+    };
+  }
+
   /* Tiptap이 blockquote로 렌더링한 > [!type] 패턴을 콜아웃 div로 변환.
    * _preprocessViewerCallouts가 빈 > 줄을 삽입하면 multi-p로 파싱됨(primary path).
    * 단일 <p>인 경우 ']' 위치로 헤더/body 분리(fallback). */
@@ -209,15 +275,11 @@
    * HTML 블록 안에서는 markdown-it 인라인 파서가 동작하지 않으므로
    * 마크다운 이미지 구문이 텍스트로 남는다 — 이를 로드 전에 처리한다. */
   function _preprocessHtmlTableImages(md) {
-    return md.replace(/<p>!\[([^\]]*)\]\(([^)\s][^)]*)\)<\/p>/g, (_, altFull, src) => {
-      const pi = altFull.lastIndexOf('|');
-      const safeAlt = (pi !== -1 ? altFull.slice(0, pi) : altFull).replace(/"/g, '&quot;');
-      if (pi !== -1 && /^\d+$/.test(altFull.slice(pi + 1).trim())) {
-        const w = altFull.slice(pi + 1).trim();
-        return `<img src="${src}" alt="${safeAlt}" style="width: ${w}px">`;
-      }
-      return `<img src="${src}" alt="${safeAlt}">`;
-    });
+    return md
+      .replace(/<p>!\[([^\]]*)\]\(([^)\s][^)]*)\)<\/p>/g,
+        (_, altFull, src) => _markdownImageToHtml(altFull, src))
+      .replace(/!\[([^\]]*\|\d+)\]\(([^)\s][^)]*)\)/g,
+        (_, altFull, src) => _markdownImageToHtml(altFull, src));
   }
 
   /* HTML 테이블 셀 등 HTML 컨텍스트에 잘못 저장된 마크다운 이미지 텍스트를
@@ -229,7 +291,7 @@
       const text = p.textContent.trim();
       const m = re.exec(text);
       if (!m) return;
-      const altFull = m[1], src = m[2];
+      const altFull = m[1], src = _unescapeMarkdownLinkDestination(m[2]);
       const pi = altFull.lastIndexOf('|');
       const img = document.createElement('img');
       img.src = src;
@@ -1004,6 +1066,7 @@
     }
 
     function _parseInitialWidths(md) {
+      md = _normalizeImageMarkdownSources(md || '');
       let m;
       // Obsidian format: ![alt|NNN](src)
       const regObs = /!\[([^\]]*)\]\(([^)]+)\)/g;
@@ -1011,13 +1074,14 @@
         const pi = m[1].lastIndexOf('|');
         if (pi !== -1) {
           const w = m[1].slice(pi + 1).trim();
-          if (/^\d+$/.test(w)) _imgWidthMap[m[2]] = parseInt(w);
+          if (/^\d+$/.test(w)) _imgWidthMap[_normalizeMarkdownImageDest(m[2])] = parseInt(w);
         }
       }
       // Legacy HTML format: <img style="width:Npx">
       const regHtml = /<img[^>]*src="([^"]+)"[^>]*style="[^"]*width\s*:\s*(\d+)px[^"]*"[^>]*>/g;
       while ((m = regHtml.exec(md || '')) !== null) {
-        if (!_imgWidthMap[m[1]]) _imgWidthMap[m[1]] = parseInt(m[2]);
+        const src = _unescapeMarkdownLinkDestination(m[1]);
+        if (!_imgWidthMap[src]) _imgWidthMap[src] = parseInt(m[2]);
       }
       if (Object.keys(_imgWidthMap).length) setTimeout(_applyImgWidths, 200);
     }
@@ -2380,6 +2444,8 @@
         PluginKey,
         Decoration,
         DecorationSet,
+        getHTMLFromFragment,
+        Fragment,
         katex,
       } = TiptapBundle;
 
@@ -2391,8 +2457,8 @@
            onTransaction에서 _fixCallouts를 재실행해 callout div를 유지 */
         _editor = new Editor({
           element: containerEl,
-          extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, Extension, Plugin, PluginKey, Decoration, DecorationSet, editableMath: false }),
-          content: _preprocessHtmlTableImages(_preprocessViewerFootnotes(_preprocessViewerCallouts(opts.initialMarkdown || ''))),
+          extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, Extension, Plugin, PluginKey, Decoration, DecorationSet, getHTMLFromFragment, Fragment, editableMath: false }),
+          content: _preprocessHtmlTableImages(_preprocessViewerFootnotes(_preprocessViewerCallouts(_normalizeImageMarkdownSources(opts.initialMarkdown || '')))),
           editable: false,
           injectCSS: false,
           onTransaction: () => { _fixFootnoteAnchors(containerEl); _fixCallouts(containerEl); },
@@ -2405,7 +2471,7 @@
           _fixCallouts(containerEl);
           _fixInlineMarkdownImages(containerEl);
         }, 200);
-        _parseInitialWidths(opts.initialMarkdown || '');
+        _parseInitialWidths(_normalizeImageMarkdownSources(opts.initialMarkdown || ''));
         if (Object.keys(_imgWidthMap).length) {
           const _viewerImgObs = new MutationObserver(_applyImgWidths);
           _viewerImgObs.observe(containerEl, { childList: true, subtree: true });
@@ -2428,8 +2494,8 @@
 
       _editor = new Editor({
         element: edEl,
-        extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, InlineMath, BlockMath, markdownItMath, InputRule, Mark, Extension, Plugin, PluginKey, Decoration, DecorationSet, editableMath: true }),
-        content: _preprocessHtmlTableImages(opts.initialMarkdown || ''),
+        extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, InlineMath, BlockMath, markdownItMath, InputRule, Mark, Extension, Plugin, PluginKey, Decoration, DecorationSet, getHTMLFromFragment, Fragment, editableMath: true }),
+        content: _preprocessHtmlTableImages(_normalizeImageMarkdownSources(opts.initialMarkdown || '')),
         editable: true,
         injectCSS: false,
         onUpdate: ({ transaction }) => {
@@ -2482,7 +2548,7 @@
       setTimeout(_enforceH1Title, 0);
     }
 
-    function _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, Extension, Plugin, PluginKey, Decoration, DecorationSet, editableMath }) {
+    function _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, Extension, Plugin, PluginKey, Decoration, DecorationSet, getHTMLFromFragment, Fragment, editableMath }) {
       function markdownItObsidianComment(md) {
         md.inline.ruler.push('obsidian_comment', function(state, silent) {
           if (state.src.charCodeAt(state.pos) !== 0x25 || state.src.charCodeAt(state.pos + 1) !== 0x25) return false;
@@ -2636,8 +2702,107 @@
               serialize(state, node) {
                 const title = node.attrs.title ? ` "${node.attrs.title}"` : '';
                 state.write("![" + state.esc(node.attrs.alt || "") + "](" +
-                  state.esc(node.attrs.src) + title + ")");
+                  _escapeMarkdownLinkDestination(node.attrs.src) + title + ")");
                 state.closeBlock(node);
+              },
+              parse: {},
+            },
+          };
+        },
+      });
+
+      function _nodeChildren(node) {
+        return node?.content?.content || [];
+      }
+
+      function _hasSpan(cell) {
+        return (cell.attrs.colspan || 1) > 1 || (cell.attrs.rowspan || 1) > 1;
+      }
+
+      function _hasDescendant(node, typeName) {
+        let found = false;
+        node.descendants(child => {
+          if (child.type.name === typeName) {
+            found = true;
+            return false;
+          }
+          return undefined;
+        });
+        return found;
+      }
+
+      function _isInlineOnlyTableCell(cell) {
+        if (!cell || _hasSpan(cell) || _hasDescendant(cell, 'image')) return false;
+        return cell.childCount === 1 && cell.firstChild?.type?.name === 'paragraph';
+      }
+
+      function _isMarkdownSerializableTable(node) {
+        const rows = _nodeChildren(node);
+        const firstRow = rows[0];
+        if (!firstRow) return false;
+        if (_nodeChildren(firstRow).some(cell => cell.type.name !== 'tableHeader' || !_isInlineOnlyTableCell(cell))) {
+          return false;
+        }
+        return rows.slice(1).every(row =>
+          _nodeChildren(row).every(cell => cell.type.name === 'tableCell' && _isInlineOnlyTableCell(cell))
+        );
+      }
+
+      function _formatHtmlBlock(html) {
+        if (typeof document === 'undefined') return html;
+        const template = document.createElement('template');
+        template.innerHTML = String(html || '').trim();
+        const element = template.content.firstElementChild;
+        if (!element) return html;
+        element.innerHTML = element.innerHTML.trim() ? `\n${element.innerHTML}\n` : `\n`;
+        return element.outerHTML;
+      }
+
+      function _serializeNodeAsHtml(state, node) {
+        if (typeof getHTMLFromFragment !== 'function' || !Fragment) {
+          console.warn('[WUEditor] HTML table serialization helper is unavailable.');
+          state.write('[table]');
+          if (node.isBlock) state.closeBlock(node);
+          return;
+        }
+        const html = getHTMLFromFragment(Fragment.from(node), node.type.schema);
+        state.write(_formatHtmlBlock(html));
+        if (node.isBlock) state.closeBlock(node);
+      }
+
+      const TableMd = Table.extend({
+        addStorage() {
+          return {
+            markdown: {
+              serialize(state, node) {
+                if (!_isMarkdownSerializableTable(node)) {
+                  _serializeNodeAsHtml(state, node);
+                  return;
+                }
+
+                state.inTable = true;
+                try {
+                  node.forEach((row, p, i) => {
+                    state.write('| ');
+                    row.forEach((col, p2, j) => {
+                      if (j) state.write(' | ');
+                      const cellContent = col.firstChild;
+                      if (cellContent?.textContent?.trim()) {
+                        state.renderInline(cellContent);
+                      }
+                    });
+                    state.write(' |');
+                    state.ensureNewLine();
+                    if (!i) {
+                      const delimiterRow = Array.from({ length: row.childCount }).map(() => '---').join(' | ');
+                      state.write(`| ${delimiterRow} |`);
+                      state.ensureNewLine();
+                    }
+                  });
+                  state.closeBlock(node);
+                } finally {
+                  state.inTable = false;
+                }
               },
               parse: {},
             },
@@ -2827,7 +2992,7 @@
         ...(editableMath && EditorFootnoteDecorations ? [EditorFootnoteDecorations] : []),
         ...mathExtensions,
         Superscript,
-        Table.configure({ resizable: true }),
+        TableMd.configure({ resizable: true }),
         TableRow,
         TableHeader,
         TableCell,
@@ -2880,9 +3045,10 @@
       getMarkdown:  () => _editor ? _injectImgStyles(_getMarkdown()) : '',
       setContent:   (md) => {
         if (_editor) {
-          _editor.commands.setContent(md || '');
+          const normalizedMd = _normalizeImageMarkdownSources(md || '');
+          _editor.commands.setContent(normalizedMd);
           _imgWidthMap = {};
-          _parseInitialWidths(md || '');
+          _parseInitialWidths(normalizedMd);
           setTimeout(_applyHighlight, 150);
         }
       },
@@ -2932,5 +3098,10 @@
     };
   }
 
-  global.WUEditor = { create };
+  global.WUEditor = {
+    create,
+    splitTitleContent: _splitTitleContent,
+    unescapeMarkdownText: _unescapeMarkdownText,
+    normalizeImageMarkdownSources: _normalizeImageMarkdownSources,
+  };
 })(window);

@@ -2249,12 +2249,24 @@ function setDirty(val) {
 }
 
 // ── 저장 ──────────────────────────────────────────────────
+function splitTitleContentForSave(md) {
+  if (window.WUEditor && typeof window.WUEditor.splitTitleContent === 'function') {
+    return window.WUEditor.splitTitleContent(md);
+  }
+  const lines = String(md ?? '').split('\n');
+  const rawTitle = (lines[0] || '').replace(/^#{1,6}[ \t]+/, '').trim();
+  return {
+    title: rawTitle.replace(/\\([\\`*{}\[\]()#+\-.!_>])/g, '$1').trim(),
+    content: lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd(),
+  };
+}
+
 async function saveContent(auto = false) {
   if (!_curId || !wuInst) return;
   const md      = wuInst.getMarkdown();
-  const lines   = md.split('\n');
-  const title   = lines[0].replace(/^#+\s*/, '').trim();
-  const content = lines.slice(1).join('\n').replace(/^\n+/, '').trimEnd();
+  const parsed  = splitTitleContentForSave(md);
+  const title   = parsed.title;
+  const content = parsed.content;
 
   if (!title) {
     wuToast.warning('첫 번째 줄이 제목이 됩니다. 내용을 입력하세요.');
@@ -2262,11 +2274,16 @@ async function saveContent(auto = false) {
   }
 
   // 제목 컬럼 항상 갱신
-  await fetch(`/api/checklists/${_curId}`, {
+  const titleRes = await fetch(`/api/checklists/${_curId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, project: _curItem?.project || '' }),
   });
+  if (!titleRes.ok) {
+    const err = await titleRes.json().catch(() => ({}));
+    wuToast.error(err.detail || '제목 저장 실패');
+    return;
+  }
   _isNewItem = false;
 
   const res = await fetch(`/api/checklists/${_curId}/content`, {
@@ -2305,6 +2322,9 @@ async function saveContent(auto = false) {
     }
     renderViewer(_curItem.content);
     _startPoll(_curId); // 뷰어 복귀 후 폴링 재시작
+  } else {
+    const err = await res.json().catch(() => ({}));
+    wuToast.error(err.detail || '내용 저장 실패');
   }
 }
 
