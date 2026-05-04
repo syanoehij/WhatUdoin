@@ -47,6 +47,13 @@ MEETINGS_DIR.mkdir(exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # DB 파일 존재 시에만 백업 (첫 부팅은 빈 DB 백업 방지)
+    if Path(db.DB_PATH).exists():
+        try:
+            await run_in_threadpool(backup.run_backup, db.DB_PATH, _RUN_DIR)
+        except Exception as _e:
+            import logging
+            logging.getLogger("whatudoin").warning("서버 시작 백업 실패: %s", _e)
     db.init_db()
     # SSE broker에 현재 이벤트 루프 등록 (sync 핸들러에서 publish 시 필수)
     wu_broker.start_on_loop(asyncio.get_running_loop())
@@ -54,11 +61,6 @@ async def lifespan(app: FastAPI):
     if saved_url:
         llm_parser.set_ollama_base_url(saved_url)
     db.finalize_expired_done()  # 서버 시작 시 만료된 done 일정 즉시 처리
-    try:
-        await run_in_threadpool(backup.run_backup, db.DB_PATH, _RUN_DIR)
-    except Exception as _e:
-        import logging
-        logging.getLogger("whatudoin").warning("서버 시작 백업 실패: %s", _e)
     if not scheduler.running:
         # APScheduler: 1분마다 15분 후 일정 알람 체크
         scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)

@@ -307,7 +307,11 @@ def init_db():
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 is_public  INTEGER NOT NULL DEFAULT 0,
-                is_locked  INTEGER NOT NULL DEFAULT 0
+                is_locked  INTEGER NOT NULL DEFAULT 0,
+                deleted_at TEXT DEFAULT NULL,
+                deleted_by TEXT DEFAULT NULL,
+                team_id    INTEGER DEFAULT NULL,
+                is_active  INTEGER DEFAULT 1
             );
             CREATE TABLE IF NOT EXISTS checklist_locks (
                 checklist_id INTEGER PRIMARY KEY,
@@ -339,6 +343,30 @@ def init_db():
                 FOREIGN KEY (team_id) REFERENCES teams(id)
             )
         """)
+
+        # ── 인덱스 ──
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_events_deleted_start "
+                     "ON events(deleted_at, start_datetime)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_events_team_deleted_start "
+                     "ON events(team_id, deleted_at, start_datetime)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_events_parent_deleted "
+                     "ON events(parent_event_id, deleted_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_events_meeting_deleted_start "
+                     "ON events(meeting_id, deleted_at, start_datetime)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_events_project_deleted_start "
+                     "ON events(project, deleted_at, start_datetime)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_checklists_deleted_updated "
+                     "ON checklists(deleted_at, updated_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_checklists_project_deleted_updated "
+                     "ON checklists(project, deleted_at, updated_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_meetings_deleted_updated "
+                     "ON meetings(deleted_at, updated_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_user_unread "
+                     "ON notifications(user_name, is_read, id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_meeting_histories_meeting "
+                     "ON meeting_histories(meeting_id, id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_checklist_histories_checklist "
+                     "ON checklist_histories(checklist_id, id)")
 
         # ── 시드 데이터 ──
         if not conn.execute("SELECT 1 FROM teams LIMIT 1").fetchone():

@@ -2,6 +2,28 @@
   "groups": [
     {
       "date": "2026-05-04",
+      "phase": "37차 3단계",
+      "phase_class": "phase-3",
+      "entries": [
+        {
+          "icon": "🧹",
+          "title_html": "<span class=\"cl-tag refactor\">refactor</span> toastui 잔여 파일 삭제 (~684KB 배포물 정리)",
+          "detail_html": "<ul><li><code>static/lib/toastui-editor.min.css</code>, <code>toastui-editor-all.min.js</code> 삭제</li><li>34차 Tiptap 마이그레이션 이후 미참조 상태였던 파일 — 코드 참조 0건 확인 후 제거</li><li>페이지 로드 속도 영향 없음 (이미 미로드), 배포물 크기 축소 효과</li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 서버 시작 시 마이그레이션 전 자동 백업 보장",
+          "detail_html": "<ul><li><code>app.py</code> lifespan에서 <code>init_db()</code>보다 <code>backup.run_backup()</code>이 먼저 실행되도록 순서 변경</li><li>기존: init_db → 백업 / 변경 후: 백업 → init_db</li><li>init_db 안의 실데이터 마이그레이션(ALTER TABLE, UPDATE)이 모두 백업으로 보호됨</li><li>첫 부팅(DB 파일 미존재) 시 빈 DB 백업 방지 가드 추가</li></ul>"
+        },
+        {
+          "icon": "🗄️",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> DB 인덱스 11개 추가 + checklists 스키마 신규 DB 안전성 수정",
+          "detail_html": "<ul><li>hot path 쿼리 대상 복합 인덱스 11개 추가 (<code>CREATE INDEX IF NOT EXISTS</code> — 매 부팅 safe, 멱등)</li><li>대상: events(5개), checklists(2개), meetings(1개), notifications(1개), histories(2개)</li><li>데이터 누적 시 자동 효과 — 현재 데이터량에선 미미, notifications 폴링은 즉시 개선</li><li><code>CREATE TABLE checklists</code> 스키마에 누락 컬럼 4개 추가 (<code>deleted_at</code>, <code>deleted_by</code>, <code>team_id</code>, <code>is_active</code>) — 신규 DB 부팅 시 오류 방지</li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-04",
       "phase": "37차 2단계",
       "phase_class": "phase-2",
       "entries": [
