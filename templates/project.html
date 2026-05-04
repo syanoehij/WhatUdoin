@@ -130,6 +130,7 @@ main { padding: 0; }
 }
 .gantt-header-clip {
   flex: 1;
+  min-width: 0;
   overflow: hidden; /* scrollLeft controlled by JS, no visible scrollbar */
   position: relative;
 }
@@ -223,7 +224,7 @@ main { padding: 0; }
 }
 
 /* ── 타임라인 ──────────────────────────────────────── */
-.gantt-timeline { flex: 1; overflow: auto; position: relative; }
+.gantt-timeline { flex: 1; min-width: 0; overflow: hidden; position: relative; }
 .gantt-timeline-inner { position: relative; min-width: 100%; }
 
 /* ── 헤더 (gantt-sticky-header 안에 있으므로 sticky 불필요) ── */
@@ -717,6 +718,7 @@ function render() {
   const dayPx  = getDayPx();
   _buildDayLeftCache(dayPx);        // 주말 폭 누적 오프셋 캐시 초기화
   const totalW = dayLeft(daysShown);
+  const totalWidthPx = Math.max(0, Math.round(totalW));
   const viewEnd = addDays(viewStart, daysShown);
   const tod     = today();
 
@@ -727,7 +729,7 @@ function render() {
       ? `${viewStart.getFullYear()}년`
       : `${fmtDate(viewStart)} ~ ${fmtDate(end)}`;
 
-  const innerW = Math.ceil(totalW) + 'px';
+  const innerW = totalWidthPx + 'px';
   document.getElementById('gantt-inner').style.width       = innerW;
   document.getElementById('gantt-header-inner').style.width = innerW;
 
@@ -901,7 +903,7 @@ function render() {
         (isDivider && isFirstInTeam ? ' team-divider' : '');
       pGRow.dataset.projKey = projKey;
       pGRow.style.height = ROW_H + 'px';
-      pGRow.style.width  = Math.ceil(totalW) + 'px';
+      pGRow.style.width  = totalWidthPx + 'px';
       // rowMap에 프로젝트 헤더 행 등록
       _rowProjectMap.push({ projKey, projName: proj.name });
 
@@ -993,7 +995,7 @@ function render() {
           const evGRow = document.createElement('div');
           evGRow.className = 'gantt-row row-event';
           evGRow.style.height = ROW_H + 'px';
-          evGRow.style.width  = Math.ceil(totalW) + 'px';
+          evGRow.style.width  = totalWidthPx + 'px';
 
           // 바
           const evStart = parseDate(ev.start_datetime);
@@ -1122,11 +1124,17 @@ document.getElementById('gantt-sticky-header').addEventListener('wheel', _tlDoWh
 
 // ── 반응형 재렌더 ─────────────────────────────────────────
 let _resizePending = false;
-new ResizeObserver(() => {
-  if (_resizePending || !viewStart) return;
+const _resizeTimelineEl = document.getElementById('gantt-timeline');
+let _lastTimelineWidth = Math.round(_resizeTimelineEl.clientWidth || 0);
+new ResizeObserver((entries) => {
+  if (!viewStart) return;
+  const nextWidth = Math.round(entries[0]?.contentRect?.width || _resizeTimelineEl.clientWidth || 0);
+  if (Math.abs(nextWidth - _lastTimelineWidth) < 1) return;
+  _lastTimelineWidth = nextWidth;
+  if (_resizePending) return;
   _resizePending = true;
   requestAnimationFrame(() => { _resizePending = false; render(); });
-}).observe(document.getElementById('gantt-timeline'));
+}).observe(_resizeTimelineEl);
 
 // ── 바 클릭 → 이벤트 모달 ────────────────────────────────
 async function openBarDetail(eventId) {
@@ -1290,8 +1298,9 @@ async function _onBarDragEnd(e) {
 // ── 오늘로 스크롤 ─────────────────────────────────────────
 function scrollToToday() {
   const tl  = document.getElementById('gantt-timeline');
-  const off = dayLeft(daysBetween(viewStart, today()));
-  tl.scrollLeft = Math.max(0, off - tl.clientWidth / 3);
+  const header = document.getElementById('gantt-header-clip');
+  if (tl) tl.scrollLeft = 0;
+  if (header) header.scrollLeft = 0;
 }
 
 // ── 초기화 ───────────────────────────────────────────────

@@ -14,6 +14,11 @@
           "icon": "🖱️",
           "title_html": "<span class=\"cl-tag feat\">feat</span> 캘린더 회의 일정 드래그 이동·리사이즈 허용",
           "detail_html": "<ul><li>기존에 <code>event_type = 'meeting'</code> 일정은 드래그 이동·리사이즈가 차단되어 있었음</li><li><code>eventAllow</code> 콜백의 meeting 차단 로직 제거 — 이제 회의 일정도 다른 일정과 동일하게 드래그 이동·리사이즈 가능</li><li><code>eventDrop</code> / <code>eventResize</code> 콜백이 이미 <code>patchEventDatetime</code>을 호출하므로 백엔드 변경 없음</li><li>📄 문서 버블(<code>doc-events</code> 소스)은 <code>editable: false</code> 유지 — 드래그 불가 그대로</li><li>수정 파일: <code>templates/calendar.html</code></li></ul>"
+        },
+        {
+          "icon": "📊",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 간트 — 선택 날짜 흔들림·하단 가로 스크롤바 토글 방지",
+          "detail_html": "<ul><li><code>.gantt-timeline</code>을 <code>overflow: hidden</code>으로 변경 — 간트는 DOM 가로 스크롤이 아니라 <code>viewStart + render()</code> 방식으로 날짜를 이동하므로 하단 좌우 스크롤바 노출 제거</li><li><code>.gantt-header-clip</code>·<code>.gantt-timeline</code>에 <code>min-width: 0</code> 추가 — flex 자식이 페이지 폭을 밀어내는 상황 차단</li><li><code>Math.ceil(totalW)</code> 대신 단일 <code>totalWidthPx = Math.round(totalW)</code> 값을 사용 — 소수점 폭 계산으로 내부 행이 컨테이너보다 1px 커지는 현상 방지</li><li><code>ResizeObserver</code>를 폭 변화에만 반응하도록 제한 — 행 높이·스크롤바 토글로 인한 반복 <code>render()</code> 피드백 루프 완화</li><li>검증: <code>/gantt</code> HTTP 200, Python 문법 검사 통과, Headless Chrome에서 <code>timelineClientWidth == timelineScrollWidth == innerWidth</code> 및 <code>bodyOverflow = 0</code> 확인</li><li>수정 파일: <code>templates/project.html</code></li></ul>"
         }
       ]
     },
