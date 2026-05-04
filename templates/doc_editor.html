@@ -398,7 +398,7 @@ function initDocEditor() {
         } : false,
       },
       hooks: {
-        onSave: (md, { leaveTarget } = {}) => saveDoc(leaveTarget),
+        onSave: (md, { ignoreCooldown, leaveTarget } = {}) => saveDoc(leaveTarget, { ignoreCooldown }),
         onReady: (ed) => {
           editor = ed;
           renderLinkedEvents();
@@ -558,8 +558,9 @@ function splitTitleContentForSave(md) {
 
 let _docSaving = false;
 
-async function saveDoc(leaveTarget) {
-  if (wuInst?.cooldown) return;
+async function saveDoc(leaveTarget = null, options = {}) {
+  const ignoreCooldown = !!options.ignoreCooldown || !!leaveTarget;
+  if (wuInst?.cooldown && !ignoreCooldown) return;
   if (_docSaving) return;
   _docSaving = true;
   const saveBtn = document.getElementById('btn-save-doc');

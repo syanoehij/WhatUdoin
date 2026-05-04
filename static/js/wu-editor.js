@@ -1340,7 +1340,7 @@
       saveBtn.addEventListener('click', () => {
         _leaveOverlay.style.display = 'none';
         const md = _editor ? _injectImgStyles(_getMarkdown()) : '';
-        if (hooks.onSave) hooks.onSave(md, { auto: false, leaveTarget: _leaveTarget || '/' });
+        if (hooks.onSave) hooks.onSave(md, { auto: false, ignoreCooldown: true, leaveTarget: _leaveTarget || '/' });
       });
     }
 

@@ -6,6 +6,11 @@
       "phase_class": "phase-6",
       "entries": [
         {
+          "icon": "💾",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 문서 편집기 — 저장 쿨다운 중 나가기 저장 즉시 실행",
+          "detail_html": "<ul><li>저장 직후 10초 쿨다운 중 다시 수정하고 다른 페이지로 이동할 때, 나가기 확인 모달의 <strong>저장하고 나가기</strong>가 쿨다운을 기다리던 문제를 수정</li><li><code>WUEditor</code> 나가기 저장 hook에 <code>ignoreCooldown</code> 플래그를 전달하고, 문서 편집기 <code>saveDoc()</code>는 <code>leaveTarget</code>이 있는 저장만 쿨다운 가드를 우회하도록 조정</li><li>일반 저장 버튼과 자동저장은 기존 쿨다운 동작 유지 — 이탈 저장만 즉시 저장 후 대상 페이지로 이동</li><li>검증: <code>node --check static/js/wu-editor.js</code>, focused Playwright 나가기 저장 시나리오 통과</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>templates/doc_editor.html</code></li></ul>"
+        },
+        {
           "icon": "📝",
           "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 제목·이미지·표 안 체크박스 저장 라운드트립 안정화",
           "detail_html": "<ul><li><strong>표 안 체크박스 깨짐 수정</strong>: 테이블 셀 첫 내용이 체크박스 목록(<code>taskList</code>)이면 GFM 테이블로 강제 직렬화하지 않고 HTML 테이블로 fallback해 저장하도록 변경 — 체크박스 앞에 텍스트가 없어도 새로고침/viewer 전환 후 표 구조 유지</li><li><strong>저장 제목 정규화</strong>: Tiptap serializer가 <code>_</code>, <code>2.</code> 등을 <code>\\_</code>, <code>2\\.</code>로 escape해도 저장 시 제목을 역이스케이프해 문서/체크 제목이 목록과 본문에서 일관되게 표시</li><li><strong>이미지 로딩 보정</strong>: legacy escaped 이미지 URL을 로드 시 정규화하고, 테이블 셀 안 Obsidian 폭 문법(<code>![alt|180](...)</code>)은 렌더 전 HTML 이미지로 변환해 폭과 경로를 보존</li><li><strong>정적 자산 버전 반영</strong>: <code>asset_v()</code>의 mtime 캐시를 제거해 서버 실행 중 <code>wu-editor.js</code>, <code>tiptap-bundle.min.js</code>가 바뀌어도 새 버전 쿼리가 반영되도록 조정</li><li>검증: <code>npx.cmd rollup -c</code>, <code>npx.cmd playwright test tests/phase38_doc_image_resize.spec.js</code> 5 passed, <code>node --check static/js/wu-editor.js</code> 통과</li><li>수정 파일: <code>app.py</code>, <code>static/js/wu-editor.js</code>, <code>static/lib/tiptap-bundle.min.js</code>, <code>tiptap-entry.js</code>, <code>templates/check.html</code>, <code>templates/check_editor.html</code>, <code>templates/doc_editor.html</code>, <code>templates/doc_list.html</code></li></ul>"
