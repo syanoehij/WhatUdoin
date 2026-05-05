@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-05-06",
+      "phase": "38차 10단계",
+      "phase_class": "phase-10",
+      "entries": [
+        {
+          "icon": "⚡",
+          "title_html": "<span class=\"cl-tag perf\">perf</span> 스크립트 defer 적용 — 초기 페이지 렌더링 속도 개선",
+          "detail_html": "<ul><li>에디터 관련 번들(<code>tiptap-bundle 1.2MB</code>, <code>mermaid-bundle 2.8MB</code>, <code>wu-editor 152KB</code>, <code>highlight 119KB</code>)에 <code>defer</code> 속성 추가 — 체크리스트·문서·공지·프로젝트 관리 페이지의 HTML 파싱 블로킹 해제</li><li>FullCalendar(<code>276KB</code>)에 <code>defer</code> 속성 추가 — 캘린더 페이지 초기 렌더링 속도 개선</li><li>총 ~4.6MB 스크립트가 파싱을 블록하던 문제 해결, 페이지 레이아웃이 스크립트 로딩 전에 먼저 표시됨</li><li>수정 파일: <code>templates/_wu_editor_assets.html</code>, <code>templates/calendar.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-06",
       "phase": "38차 9단계",
       "phase_class": "phase-9",
       "entries": [
