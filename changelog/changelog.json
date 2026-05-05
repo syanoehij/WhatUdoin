@@ -6,6 +6,21 @@
       "phase_class": "phase-4",
       "entries": [
         {
+          "icon": "✏️",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 관리 — 편집 패널 UX 개선",
+          "detail_html": "<ul><li><strong>편집 버튼 라벨 변경</strong>: '편집' → '편집+일정 반영' — 편집 패널이 일정 기간·중간 일정을 함께 다룬다는 사실을 라벨에 명시</li><li><strong>일정 기간 UI 개편</strong>: 시작일·종료일을 기존 한 줄 가로 배치에서 각각 별도 행으로 분리, 행 끝에 인라인 '지우기' 버튼 추가 — 기존 통합 '날짜 지우기' 버튼 제거. 한쪽만 선택적으로 비울 수 있게 됨</li><li><strong>중간 일정 최대 개수 확대</strong>: 5개 → 10개 (프론트 가드·백엔드 검증·DB docstring 일괄 변경)</li><li><strong>중간 일정 날짜 input 너비 확대</strong>: 140px → 210px (1.5배) — 기존 날짜 표시가 타이트하게 잘리는 문제 해소</li><li>수정 파일: <code>templates/project_manage.html</code>, <code>app.py</code>, <code>database.py</code></li></ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 관리 — 색상 프리셋 확대 및 라벨 개선",
+          "detail_html": "<ul><li><strong>색상 프리셋 15개 → 25개</strong>: 파랑·빨강·초록·보라·기타(주황·노랑·하늘·갈색·핑크) 계열 각 5색으로 5×5 구성 — 기존에 없던 주황·노랑·연두·하늘·연보라·핑크 계열 추가</li><li><strong>버튼 라벨 변경</strong>: '색상 직접 설정' → '사용 색상 선택' — RGB 선택 도구 인상을 줄이고 현재 사용 색상을 직접 고른다는 의미로 명확화</li><li>수정 파일: <code>templates/project_manage.html</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 프로젝트 관리 — 탭 전환 시 편집·생성 패널 미닫힘 버그 수정",
+          "detail_html": "<ul><li><strong>버그</strong>: '진행중 ↔ 완료' 탭 전환 시 편집 패널(pm-edit-panel) 또는 새 프로젝트 생성 패널(pm-create-panel)이 열린 채 방치되어 오른쪽 영역 레이아웃이 꼬이는 문제</li><li><strong>수정</strong>: <code>setFilter()</code>에서 <code>hideDetail()</code> 호출 전에 두 패널의 <code>visible</code> 클래스를 명시적으로 제거 — 탭 전환 시 항상 빈 상태로 초기화</li><li>수정 파일: <code>templates/project_manage.html</code></li></ul>"
+        },
+        {
           "icon": "💬",
           "title_html": "<span class=\"cl-tag feat\">feat</span> 칸반 — 컬럼 헤더 용도 설명 툴팁 추가",
           "detail_html": "<ul><li>칸반 보드 컬럼 헤더(Backlog·Todo·In Progress·Peer Review·Done·Blocked)에 마우스 오버 시 용도 설명 툴팁 표시 — 칸반에 익숙하지 않은 사용자가 각 컬럼 의미를 쉽게 파악할 수 있도록 한국어 안내 문구 제공</li><li>메인 칸반(<code>/kanban</code>)과 홈 소형 칸반(내 스케줄) 동시 적용</li><li><strong>Blocked</strong> 컬럼은 외부 요인으로 막힌 상태와 의도적 홀딩(대기) 두 용도를 겸용함을 명시 — Backlog와의 혼동 방지</li><li>기존 <code>title=\"...\"</code> 패턴 사용, 라이브러리 추가 없음</li><li>수정 파일: <code>static/js/event-modal.js</code>, <code>templates/kanban.html</code>, <code>templates/home.html</code></li></ul>"

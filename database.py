@@ -1674,7 +1674,7 @@ def get_project_milestones(name: str) -> list:
 
 
 def set_project_milestones(name: str, milestones: list) -> None:
-    """전체 교체. milestones = [{title, date}, ...] 최대 5개."""
+    """전체 교체. milestones = [{title, date}, ...] 최대 10개."""
     with get_conn() as conn:
         proj = conn.execute("SELECT id FROM projects WHERE name = ?", (name,)).fetchone()
         if not proj:

@@ -558,21 +558,21 @@
         </div>
         <div class="pm-field">
           <label>일정 기간 <span style="color:var(--text-faint);font-weight:400;">(설정 시 하위 일정 범위 대신 이 날짜로 표시)</span></label>
-          <div class="pm-date-row">
-            <div class="pm-field" style="gap:4px;">
-              <label style="font-weight:400;">시작일</label>
-              <input type="date" id="ed-start" />
-            </div>
-            <div class="pm-field" style="gap:4px;">
-              <label style="font-weight:400;">종료일</label>
-              <input type="date" id="ed-end" />
-            </div>
+          <div style="display:flex;gap:6px;margin-bottom:4px;align-items:center;">
+            <label style="width:56px;flex-shrink:0;font-weight:400;">시작일</label>
+            <input type="date" id="ed-start" style="flex:1;" />
+            <button type="button" class="pm-btn pm-btn-warn" style="padding:3px 8px;flex-shrink:0;"
+                    onclick="document.getElementById('ed-start').value='';">지우기</button>
           </div>
-          <button type="button" class="pm-btn pm-btn-warn" style="margin-top:4px;font-size:0.76rem;padding:3px 10px;"
-                  onclick="document.getElementById('ed-start').value='';document.getElementById('ed-end').value='';">날짜 지우기</button>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <label style="width:56px;flex-shrink:0;font-weight:400;">종료일</label>
+            <input type="date" id="ed-end" style="flex:1;" />
+            <button type="button" class="pm-btn pm-btn-warn" style="padding:3px 8px;flex-shrink:0;"
+                    onclick="document.getElementById('ed-end').value='';">지우기</button>
+          </div>
         </div>
         <div class="pm-field" id="ed-milestones-section">
-          <label>중간 일정 <span style="color:var(--text-faint);font-weight:400;">(최대 5개, 동일 일자 불가)</span></label>
+          <label>중간 일정 <span style="color:var(--text-faint);font-weight:400;">(최대 10개, 동일 일자 불가)</span></label>
           <div id="ed-milestones-list"></div>
           <button type="button" class="pm-btn" id="ed-milestones-add"
                   style="margin-top:4px;font-size:0.76rem;padding:3px 10px;">+ 추가</button>
@@ -847,6 +847,8 @@ function setFilter(f) {
   selIdx = null;
   selName = null;
   _pmSave();
+  document.getElementById('pm-edit-panel').classList.remove('visible');
+  document.getElementById('pm-create-panel').classList.remove('visible');
   hideDetail();
   renderList();
 }
@@ -913,7 +915,7 @@ function renderDetail(idx) {
       : `<button class="pm-btn pm-btn-resume" onclick="togglePrivacy(${idx}, true)" title="비로그인 사용자에게 노출 중">🔓 외부 공개 중</button>`);
     const bulkDeleteBtn = `<button class="pm-btn pm-btn-warn" onclick="enterBulkDeleteMode()">포함 항목 선택 삭제</button>`;
     actions.innerHTML = `
-      <button class="pm-btn pm-btn-accent" onclick="showEditPanel(${idx})">편집</button>
+      <button class="pm-btn pm-btn-accent" onclick="showEditPanel(${idx})">편집+일정 반영</button>
       ${statusBtn}
       ${privacyBtn}
       <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="일정·체크 항목을 개별 마크다운 노트로 묶어 ZIP으로 저장">📦 옵시디언 ZIP으로 저장</button>
@@ -1196,7 +1198,7 @@ function addMilestoneRow(title, date) {
   title = title || '';
   date  = date  || '';
   const list = document.getElementById('ed-milestones-list');
-  if (list.children.length >= 5) return;
+  if (list.children.length >= 10) return;
 
   const row = document.createElement('div');
   row.className = 'pm-milestone-row';
@@ -1213,7 +1215,7 @@ function addMilestoneRow(title, date) {
   const dateInput = document.createElement('input');
   dateInput.type = 'date';
   dateInput.className = 'ms-date';
-  dateInput.style.cssText = 'width:140px;';
+  dateInput.style.cssText = 'width:210px;';
   dateInput.value = date;
   dateInput.addEventListener('change', validateMilestoneDate);
 
@@ -1234,7 +1236,7 @@ function addMilestoneRow(title, date) {
 function updateMilestoneAddBtn() {
   const list = document.getElementById('ed-milestones-list');
   const btn  = document.getElementById('ed-milestones-add');
-  if (btn) btn.disabled = list.children.length >= 5;
+  if (btn) btn.disabled = list.children.length >= 10;
 }
 
 async function validateMilestoneDate(e) {
@@ -1299,7 +1301,7 @@ function _updateEdColorReset() {
     swatch.style.opacity = '0.3';
     swatch.style.pointerEvents = 'none';
     label.style.display = 'block';
-    btn.textContent = '색상 직접 설정';
+    btn.textContent = '사용 색상 선택';
     btn.onclick = () => { _edColorAuto = false; _updateEdColorReset(); };
   } else {
     swatch.style.opacity = '';
@@ -1674,9 +1676,11 @@ document.addEventListener('keydown', function(e) {
 
 /* ── 새 프로젝트 생성 패널 ── */
 const PRESET_COLORS = [
-  '#4a90d9','#e17055','#00b894','#6c5ce7','#e84393',
-  '#00a8a8','#d48806','#0984e3','#c0392b','#7c4dff',
-  '#00875a','#1565c0','#c62828','#5c35a0','#d4480d',
+  '#4a90d9','#0984e3','#1565c0','#48dbfb','#546e7a',
+  '#e17055','#c0392b','#c62828','#ff6b6b','#d4480d',
+  '#00b894','#00875a','#6ab04c','#43aa8b','#00a8a8',
+  '#6c5ce7','#7c4dff','#5c35a0','#a29bfe','#e84393',
+  '#f0932b','#d48806','#f9ca24','#fd79a8','#795548',
 ];
 
 function showCreatePanel() {

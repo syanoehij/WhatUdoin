@@ -1856,8 +1856,8 @@ async def manage_project_milestones(name: str, request: Request):
     items = data.get("milestones") or []
     if not isinstance(items, list):
         raise HTTPException(status_code=400, detail="milestones는 배열이어야 합니다.")
-    if len(items) > 5:
-        raise HTTPException(status_code=400, detail="중간 일정은 최대 5개까지입니다.")
+    if len(items) > 10:
+        raise HTTPException(status_code=400, detail="중간 일정은 최대 10개까지입니다.")
     cleaned = []
     seen_dates = set()
     for m in items:
