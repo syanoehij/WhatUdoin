@@ -9,6 +9,11 @@
           "icon": "⚡",
           "title_html": "<span class=\"cl-tag perf\">perf</span> 스크립트 defer 적용 — 초기 페이지 렌더링 속도 개선",
           "detail_html": "<ul><li>에디터 관련 번들(<code>tiptap-bundle 1.2MB</code>, <code>mermaid-bundle 2.8MB</code>, <code>wu-editor 152KB</code>, <code>highlight 119KB</code>)에 <code>defer</code> 속성 추가 — 체크리스트·문서·공지·프로젝트 관리 페이지의 HTML 파싱 블로킹 해제</li><li>FullCalendar(<code>276KB</code>)에 <code>defer</code> 속성 추가 — 캘린더 페이지 초기 렌더링 속도 개선</li><li>총 ~4.6MB 스크립트가 파싱을 블록하던 문제 해결, 페이지 레이아웃이 스크립트 로딩 전에 먼저 표시됨</li><li>수정 파일: <code>templates/_wu_editor_assets.html</code>, <code>templates/calendar.html</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — AVR 페이지 CSP frame-src 차단 문제 수정",
+          "detail_html": "<ul><li>38차 5단계에서 추가된 <code>_SecurityHeadersMiddleware</code>의 CSP에 <code>frame-src</code>가 없어 <code>default-src 'self'</code>가 fallback으로 적용되면서 WUDeskop iframe 로드가 브라우저에 의해 차단됨</li><li><code>avr_page</code> 라우트에서 응답 헤더에 <code>content-security-policy</code>를 직접 설정 — <code>frame-src</code>를 WUDeskop URL 오리진으로 정밀 허용하고 나머지 지시어는 기존 정책 유지</li><li>미들웨어는 기존 헤더가 있으면 덮어쓰지 않는 구조이므로 다른 페이지 CSP 정책에 영향 없음</li><li>수정 파일: <code>app.py</code></li></ul>"
         }
       ]
     },

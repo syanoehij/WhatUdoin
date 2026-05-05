@@ -173,23 +173,57 @@ class _StaticCacheMiddleware:
 app.add_middleware(_StaticCacheMiddleware)
 
 
-_SECURITY_HEADERS = [
+_SECURITY_HEADERS_BASE = [
     (b"x-content-type-options", b"nosniff"),
     (b"x-frame-options", b"DENY"),
     (b"referrer-policy", b"same-origin"),
-    (
-        b"content-security-policy",
-        (
-            b"default-src 'self'; "
-            b"script-src 'self' 'unsafe-inline'; "
-            b"style-src 'self' 'unsafe-inline'; "
-            b"img-src 'self' data: blob:; "
-            b"connect-src 'self'; "
-            b"font-src 'self' data:; "
-            b"frame-ancestors 'none'"
-        ),
-    ),
 ]
+
+
+def _content_security_policy(frame_src: str = "") -> bytes:
+    parts = [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob:",
+        "connect-src 'self'",
+        "font-src 'self' data:",
+    ]
+    if frame_src:
+        parts.append(f"frame-src 'self' {frame_src}")
+    parts.append("frame-ancestors 'none'")
+    return "; ".join(parts).encode("utf-8")
+
+
+_SECURITY_HEADERS = _SECURITY_HEADERS_BASE + [
+    (b"content-security-policy", _content_security_policy()),
+]
+
+
+def _avr_frame_origin() -> str:
+    try:
+        avr_url_enc = db.get_setting("avr_url_enc")
+        if not avr_url_enc:
+            return ""
+        parsed = urlparse(crypto.decrypt(avr_url_enc).strip())
+    except Exception:
+        return ""
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    if ";" in origin or any(ch.isspace() for ch in origin):
+        return ""
+    return origin
+
+
+def _security_headers_for_path(path: str):
+    if path == "/avr":
+        avr_origin = _avr_frame_origin()
+        if avr_origin:
+            return _SECURITY_HEADERS_BASE + [
+                (b"content-security-policy", _content_security_policy(avr_origin)),
+            ]
+    return _SECURITY_HEADERS
 
 
 class _SecurityHeadersMiddleware:
@@ -206,7 +240,8 @@ class _SecurityHeadersMiddleware:
         async def send_with_security(message):
             if message["type"] == "http.response.start":
                 existing_names = {k.lower() for k, _ in message.get("headers", [])}
-                extra = [(k, v) for k, v in _SECURITY_HEADERS if k not in existing_names]
+                security_headers = _security_headers_for_path(scope.get("path", ""))
+                extra = [(k, v) for k, v in security_headers if k not in existing_names]
                 message = {**message, "headers": list(message.get("headers", [])) + extra}
             await send(message)
 
@@ -229,7 +264,8 @@ class _BrowserHTTPSRedirectMiddleware:
     """브라우저 GET 요청 시 JS probe로 인증서 신뢰 여부 감지 후 HTTPS/HTTP 분기.
     MCP·API·SSE·AJAX 제외. wd-cert-skip=1 쿠키 있으면 HTTP 그대로 통과."""
 
-    _SKIP = ("/mcp", "/api", "/static", "/uploads", "/favicon.ico")
+    _SKIP_PREFIXES = ("/mcp", "/api", "/static", "/uploads")
+    _SKIP_EXACT = ("/favicon.ico", "/avr", "/remote")
 
     def __init__(self, app):
         self.app = app
@@ -242,7 +278,7 @@ class _BrowserHTTPSRedirectMiddleware:
         path = scope.get("path", "/")
         method = scope.get("method", "GET")
 
-        if path.startswith(self._SKIP) or method not in {"GET", "HEAD"}:
+        if self._should_skip_path(path) or method not in {"GET", "HEAD"}:
             await self.app(scope, receive, send)
             return
 
@@ -284,6 +320,12 @@ class _BrowserHTTPSRedirectMiddleware:
             ],
         })
         await send({"type": "http.response.body", "body": body})
+
+    @staticmethod
+    def _should_skip_path(path: str) -> bool:
+        return path in _BrowserHTTPSRedirectMiddleware._SKIP_EXACT or path.startswith(
+            _BrowserHTTPSRedirectMiddleware._SKIP_PREFIXES
+        )
 
     @staticmethod
     def _has_cert_skip_cookie(headers: dict) -> bool:
@@ -3439,6 +3481,18 @@ def api_restore_trash(item_type: str, item_id: int, request: Request):
 
 # ── AVR (WUDeskop 원격 데스크톱 연동) ────────────────────────────────────────
 
+
+def _is_plain_http_url(url: str) -> bool:
+    return urlparse(url).scheme == "http"
+
+
+def _http_avr_url(request: Request) -> str:
+    host = request.url.hostname or "localhost"
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"http://{host}:8000/avr"
+
+
 @app.get("/remote")
 def remote_redirect():
     return RedirectResponse(url="/avr", status_code=307)
@@ -3457,7 +3511,9 @@ def avr_page(request: Request):
             _ctx(request, viewer_url=None, error="AVR 연동이 설정되지 않았습니다. 관리자에게 문의하세요."),
         )
     try:
-        wudeskop_url = crypto.decrypt(avr_url_enc)
+        wudeskop_url = crypto.decrypt(avr_url_enc).strip().rstrip("/")
+        if request.url.scheme == "https" and _is_plain_http_url(wudeskop_url):
+            return RedirectResponse(url=_http_avr_url(request), status_code=307)
         wudeskop_secret = crypto.decrypt(avr_secret_enc)
         resp = _requests.post(
             f"{wudeskop_url}/api/issue-token",
@@ -3466,16 +3522,30 @@ def avr_page(request: Request):
         )
         resp.raise_for_status()
         token = resp.json()["token"]
-        viewer_url = f"{wudeskop_url}/viewer?token={token}"
+        viewer_url = f"{wudeskop_url}/viewer?token={quote(str(token), safe='')}"
     except Exception as e:
         return templates.TemplateResponse(
             request, "avr.html",
             _ctx(request, viewer_url=None, error=f"WUDeskop 연결 실패: {e}"),
         )
-    return templates.TemplateResponse(
+    parsed = urlparse(wudeskop_url)
+    frame_origin = f"{parsed.scheme}://{parsed.netloc}"
+    response = templates.TemplateResponse(
         request, "avr.html",
         _ctx(request, viewer_url=viewer_url, error=None),
     )
+    # CSP의 frame-src를 WUDeskop 오리진으로 허용 (미들웨어가 기존 헤더는 덮어쓰지 않음)
+    response.headers["content-security-policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "connect-src 'self'; "
+        "font-src 'self' data:; "
+        f"frame-src {frame_origin}; "
+        "frame-ancestors 'none'"
+    )
+    return response
 
 
 @app.get("/api/admin/settings/avr")

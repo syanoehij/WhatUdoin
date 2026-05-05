@@ -6,7 +6,7 @@
   <title>{% block title %}WhatUDoin{% endblock %}</title>
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon" id="app-favicon" />
 
-  {% if https_available and request.url.scheme == 'http' %}
+  {% if https_available and request.url.scheme == 'http' and not request.url.path.startswith('/avr') %}
   <script>
   (function () {
     if (localStorage.getItem('whatudoin_force_http') === '1') return;
