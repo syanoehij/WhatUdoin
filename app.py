@@ -1010,7 +1010,10 @@ async def login(request: Request, response: Response):
         raise HTTPException(status_code=401, detail="비밀번호가 올바르지 않습니다.")
     session_id = db.create_session(user["id"], role=user["role"])
     db.record_ip(user["id"], auth.get_client_ip(request))
-    response.set_cookie(auth.SESSION_COOKIE, session_id, httponly=True, max_age=86400 * 30)
+    response.set_cookie(
+        auth.SESSION_COOKIE, session_id,
+        httponly=True, samesite="lax", secure=True, max_age=86400 * 30,
+    )
     return {"name": user["name"], "role": user["role"], "team_id": user["team_id"]}
 
 
@@ -1036,7 +1039,7 @@ def logout(request: Request, response: Response):
     session_id = request.cookies.get(auth.SESSION_COOKIE)
     if session_id:
         db.delete_session(session_id)
-    response.delete_cookie(auth.SESSION_COOKIE)
+    response.delete_cookie(auth.SESSION_COOKIE, httponly=True, samesite="lax", secure=True)
     return {"ok": True}
 
 
@@ -1069,7 +1072,10 @@ async def admin_login(request: Request, response: Response):
         raise HTTPException(status_code=401, detail="아이디 또는 비밀번호가 올바르지 않습니다.")
     session_id = db.create_session(user["id"], role=user["role"])
     db.record_ip(user["id"], auth.get_client_ip(request))
-    response.set_cookie(auth.SESSION_COOKIE, session_id, httponly=True, max_age=300)
+    response.set_cookie(
+        auth.SESSION_COOKIE, session_id,
+        httponly=True, samesite="lax", secure=True, max_age=300,
+    )
     return {"ok": True}
 
 
@@ -1803,7 +1809,10 @@ async def update_event_kanban(event_id: int, request: Request):
 
 
 @app.get("/api/conflicts")
-def check_conflicts(start: str, end: str = None, team_id: int = None, exclude_id: int = None):
+def check_conflicts(request: Request, start: str, end: str = None, team_id: int = None, exclude_id: int = None):
+    user = auth.get_current_user(request)
+    if not user:
+        return {"conflicts": []}
     conflicts = db.check_conflicts(start, end or start, team_id, exclude_id)
     return {"conflicts": conflicts}
 
@@ -1811,8 +1820,12 @@ def check_conflicts(start: str, end: str = None, team_id: int = None, exclude_id
 # ── 프로젝트 ─────────────────────────────────────────────
 
 @app.get("/api/projects")
-def list_projects():
-    return [p["name"] for p in db.get_unified_project_list()]
+def list_projects(request: Request):
+    user = auth.get_current_user(request)
+    projects = db.get_unified_project_list()
+    if not user:
+        projects = [p for p in projects if not p.get("is_private")]
+    return [p["name"] for p in projects]
 
 
 @app.get("/api/project-timeline")
@@ -1902,9 +1915,17 @@ async def manage_project_memo(name: str, request: Request):
 
 
 @app.get("/api/project-colors")
-def project_colors_api():
+def project_colors_api(request: Request):
     """프로젝트명 → 색상 딕셔너리 반환 (색상이 설정된 항목만)"""
-    return db.get_project_colors()
+    user = auth.get_current_user(request)
+    colors = db.get_project_colors()
+    if not user:
+        private_names = {
+            p["name"] for p in db.get_unified_project_list(active_only=False)
+            if p.get("is_private")
+        }
+        colors = {k: v for k, v in colors.items() if k not in private_names}
+    return colors
 
 
 @app.patch("/api/manage/projects/{name:path}/color")
@@ -2640,6 +2661,12 @@ def export_event(event_id: int, request: Request):
 @app.post("/api/manage/projects/{name:path}/events")
 async def manage_add_event(name: str, request: Request):
     user = _require_editor(request)
+    if name != "미지정":
+        project = db.get_project(name)
+        if not project:
+            raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+        if project.get("is_private") and user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="비공개 프로젝트에 접근 권한이 없습니다.")
     data = await request.json()
     title = data.get("title", "").strip()
     start = data.get("start_datetime", "").strip()

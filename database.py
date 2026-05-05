@@ -1,5 +1,7 @@
 import os
+import secrets
 import sqlite3
+import string
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -436,10 +438,12 @@ def init_db():
             conn.execute("INSERT INTO teams (name) VALUES ('관리팀')")
         if not conn.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone():
             team_id = conn.execute("SELECT id FROM teams LIMIT 1").fetchone()[0]
+            init_pw = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))
             conn.execute(
                 "INSERT INTO users (name, password, role, team_id, is_active) VALUES (?,?,'admin',?,1)",
-                ("admin", "admin1234", team_id)
+                ("admin", init_pw, team_id)
             )
+            print(f"[WhatUdoin] 초기 관리자 비밀번호: {init_pw}  (최초 1회만 표시, 즉시 변경 권장)")
 
 
 def _recurrence_dates(rule: str, start_date_str: str, end_limit_str: str | None) -> list:

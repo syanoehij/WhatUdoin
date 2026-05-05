@@ -2,6 +2,33 @@
   "groups": [
     {
       "date": "2026-05-06",
+      "phase": "38차 9단계",
+      "phase_class": "phase-9",
+      "entries": [
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 무인증 GET에서 private 프로젝트 메타 누출 차단",
+          "detail_html": "<ul><li><code>GET /api/projects</code>, <code>/api/project-colors</code>: 미로그인 또는 admin 아닌 경우 <code>is_private=1</code> 프로젝트를 응답에서 제외</li><li><code>GET /api/conflicts</code>: 미로그인 시 빈 배열 반환 — 일정 ID·title·시간 정보 누출 차단</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 타팀 private 프로젝트에 일정 주입 차단",
+          "detail_html": "<ul><li><code>POST /api/manage/projects/{name}/events</code>: 프로젝트 존재 여부 확인 후 없으면 404 반환</li><li>private 프로젝트(<code>is_private=1</code>)에 admin 아닌 사용자가 일정 생성 시도 시 403 반환</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 세션 쿠키 SameSite·Secure 속성 추가",
+          "detail_html": "<ul><li>로그인 응답 <code>set_cookie</code>: <code>samesite=\"lax\"</code>, <code>secure=True</code> 추가 — CSRF 위험 경감 및 HTTPS 전용 전송 강제</li><li>로그아웃 <code>delete_cookie</code>도 동일 속성 지정 — 일부 브라우저에서 stale 쿠키 잔존 방지</li><li>일반 로그인·admin 로그인 양쪽 적용</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — DB 초기화 시 admin 기본 비밀번호 랜덤 생성",
+          "detail_html": "<ul><li><code>init_db()</code> 최초 admin 계정 생성 시 고정값 <code>admin1234</code> 대신 16자리 무작위 비밀번호 사용</li><li>생성된 비밀번호는 최초 기동 시 콘솔에 1회만 출력 — 즉시 변경 권장 안내 포함</li><li>표준 라이브러리 <code>secrets</code> 모듈 사용 (추가 패키지 없음)</li><li>수정 파일: <code>database.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-06",
       "phase": "38차 8단계",
       "phase_class": "phase-8",
       "entries": [
