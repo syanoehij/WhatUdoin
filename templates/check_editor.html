@@ -157,7 +157,7 @@
         {% for p in projects %}
         <option value="{{ p.name }}" {% if checklist.project == p.name %}selected{% endif %}>{{ p.name }}</option>
         {% endfor %}
-        {% if checklist.project and checklist.project not in projects | map(attribute='name') | list %}
+        {% if checklist.project and checklist.project != '미지정' and checklist.project not in projects | map(attribute='name') | list %}
         <option value="{{ checklist.project }}" selected>{{ checklist.project }}</option>
         {% endif %}
       </select>

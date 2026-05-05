@@ -1,6 +1,23 @@
 {
   "groups": [
     {
+      "date": "2026-05-06",
+      "phase": "38차 7단계",
+      "phase_class": "phase-7",
+      "entries": [
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 체크 — 미지정 프로젝트에서 새 항목 생성 시 <code>project='미지정'</code> 문자열로 저장되는 버그 수정",
+          "detail_html": "<ul><li><code>openNewForm</code>: <code>_curProj === '미지정'</code>일 때 URL 파라미터로 <code>proj=미지정</code>을 전달하지 않도록 수정 — AI 드래프트 생성·사용 경로도 동일 처리</li><li><code>app.py</code> <code>check_new_page</code>: <code>proj == '미지정'</code> 입력을 빈 문자열로 변환하는 방어 코드 추가</li><li>수정 파일: <code>templates/check.html</code>, <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 체크 편집창 — 프로젝트 드롭다운에 <code>미지정</code> 항목 노출 버그 수정 + DB 정리 마이그레이션",
+          "detail_html": "<ul><li><code>check_editor.html</code> 프로젝트 선택 <code>&lt;select&gt;</code>: 삭제된 프로젝트 보존용 fallback 옵션에서 <code>project == '미지정'</code>인 경우 제외 — 드롭다운에 '미지정' 항목이 표시되지 않도록 수정</li><li><code>database.py</code>: 기존에 잘못 저장된 <code>project = '미지정'</code> 체크리스트를 빈 문자열로 일괄 정리하는 1회성 마이그레이션 추가 (<code>ck_fix_mijijeong_project_v1</code>)</li><li>수정 파일: <code>templates/check_editor.html</code>, <code>database.py</code></li></ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-05-05",
       "phase": "38차 6단계",
       "phase_class": "phase-6",

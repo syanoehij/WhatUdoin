@@ -654,6 +654,7 @@ def check_new_page(request: Request, proj: str = ""):
         return RedirectResponse("/check")
     all_projs = db.get_all_projects_with_events()
     projects = [p for p in all_projs if p.get("is_active", 1)]
+    proj = "" if proj == "미지정" else proj
     return templates.TemplateResponse(
         request, "check_editor.html",
         _ctx(request, checklist={"id": None, "title": "", "project": proj, "content": ""},

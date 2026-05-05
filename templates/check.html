@@ -2330,8 +2330,8 @@ async function saveContent(auto = false) {
 
 // ── 새 항목 ───────────────────────────────────────────────
 function openNewForm() {
-  // 현재 프로젝트 필터를 쿼리로 전달해서 편집기에서 기본값 설정
-  const proj = _curProj || '';
+  // 현재 프로젝트 필터를 쿼리로 전달 ('미지정'은 project 없음 상태이므로 빈 문자열로)
+  const proj = (_curProj && _curProj !== '미지정') ? _curProj : '';
   window.location.href = `/check/new/edit${proj ? '?proj=' + encodeURIComponent(proj) : ''}`;
 }
 
@@ -2665,10 +2665,10 @@ async function generateScheduleCheck() {
     sessionStorage.setItem('check_ai_draft', JSON.stringify({
       markdown,
       sourcePrompt: selectedTitles,
-      project: _curProj || '',
+      project: (_curProj && _curProj !== '미지정') ? _curProj : '',
     }));
     const q = new URLSearchParams({ ai_draft: '1' });
-    if (_curProj) q.set('proj', _curProj);
+    if (_curProj && _curProj !== '미지정') q.set('proj', _curProj);
     _wizardBusy = false;
     location.href = '/check/new/edit?' + q.toString();
   } catch (err) {
@@ -2754,10 +2754,10 @@ function useAiDraft() {
   sessionStorage.setItem('check_ai_draft', JSON.stringify({
     markdown: _aiLastMd,
     sourcePrompt: _aiLastInput,
-    project: _curProj || '',
+    project: (_curProj && _curProj !== '미지정') ? _curProj : '',
   }));
   const q = new URLSearchParams({ ai_draft: '1' });
-  if (_curProj) q.set('proj', _curProj);
+  if (_curProj && _curProj !== '미지정') q.set('proj', _curProj);
   _wizardBusy = false;
   location.href = '/check/new/edit?' + q.toString();
 }

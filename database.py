@@ -227,6 +227,10 @@ def init_db():
         if _table_exists(conn, "checklists") and not conn.execute("SELECT 1 FROM settings WHERE key='ck_unset_priv_reset_v1'").fetchone():
             conn.execute("UPDATE checklists SET is_public = 0 WHERE (project IS NULL OR project = '') AND deleted_at IS NULL")
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ck_unset_priv_reset_v1', '1')")
+        # '미지정' 문자열로 잘못 저장된 project 값을 빈 문자열로 정리 — 1회성
+        if not conn.execute("SELECT 1 FROM settings WHERE key='ck_fix_mijijeong_project_v1'").fetchone():
+            conn.execute("UPDATE checklists SET project = '' WHERE project = '미지정'")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ck_fix_mijijeong_project_v1', '1')")
         _migrate(conn, "meetings", [
             ("deleted_at", "TEXT DEFAULT NULL"),
             ("deleted_by", "TEXT DEFAULT NULL"),
