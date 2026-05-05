@@ -6,6 +6,16 @@
       "phase_class": "phase-3",
       "entries": [
         {
+          "icon": "🗂️",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 휴지통 — 그룹 D순 정렬·가운데 패널 UX 개선",
+          "detail_html": "<ul><li><strong>그룹 D순 정렬 버튼</strong>: 왼쪽 패널 '휴지통' 헤더 우측에 'D순 ▲/▼' 버튼 추가 — 프로젝트 그룹 카드를 잔여일수 기준으로 정렬(기본: 만료 임박 그룹이 위), localStorage 미저장</li><li><strong>가운데 패널 타이틀 개선</strong>: 그룹 선택 시 타이틀이 프로젝트명 대신 '복원 목록 (N개)'으로 표시 — 타이틀 클릭 시 개별 항목 상세 상태에서 그룹 전체 복원 화면으로 즉시 복귀</li><li>수정 파일: <code>templates/trash.html</code></li></ul>"
+        },
+        {
+          "icon": "🗑️",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 휴지통 — 항목 D-day 상시 표시 및 시간순 정렬 버튼",
+          "detail_html": "<ul><li><strong>D-day prefix 상시 표시</strong>: 가운데 패널 모든 항목 제목 앞에 <code>[D-N]</code> 상시 표시 — D≤7 주황·D≤3 빨강 색상 강조(기존 D-3 임박 뱃지에서 전체 항목 표시로 확대)</li><li><strong>시간순 정렬 버튼</strong>: 가운데 패널 헤더 우측에 '시간순 ▲/▼' 버튼 추가 — 기본 잔여일수 적은 순(오름차순), 클릭 시 내림차순 토글. 문서·미지정·프로젝트 그룹 리스트 전 범위 적용. 정렬 상태 localStorage 미저장</li><li>수정 파일: <code>templates/trash.html</code></li></ul>"
+        },
+        {
           "icon": "🗑️",
           "title_html": "<span class=\"cl-tag feat\">feat</span> 휴지통 — 프로젝트 삭제 시 자식 항목 묶음 그룹화",
           "detail_html": "<ul><li><strong>DB</strong>: <code>events</code>·<code>checklists</code>·<code>meetings</code>에 <code>trash_project_id INTEGER NULL</code> 컬럼 추가 — 프로젝트와 함께 삭제된 자식 항목이 부모 프로젝트 id를 기억해 그룹 단위로 복원 가능</li><li><strong>삭제 단일화</strong>: <code>delete_project</code>에서 <code>delete_events</code> 파라미터 제거 — 항상 자식(이벤트·체크리스트) 함께 soft-delete, 동일 타임스탬프·<code>trash_project_id</code> 박제</li><li><strong>API 응답 구조 변경</strong>: <code>GET /api/trash</code>가 <code>{ groups: [{project, items:[]}], unassigned: [] }</code> 형태로 반환 — 기존 4개 평면 배열 폐기</li><li><strong>복원 개선</strong>: <code>restore_trash_item('project', id)</code>가 <code>trash_project_id = id</code> 기반으로 자식 일괄 복원, 기존 동명 텍스트 매칭 방식 제거 — 동명 프로젝트 충돌 해소</li><li><strong>백필</strong>: 기존 휴지통 데이터는 <code>deleted_at ±5초</code> 기준으로 <code>trash_project_id</code> 자동 백필, 매칭 실패 항목은 미지정 그룹으로 표시</li><li>수정 파일: <code>database.py</code>, <code>app.py</code></li></ul>"

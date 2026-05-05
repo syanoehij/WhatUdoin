@@ -35,7 +35,24 @@
     letter-spacing: 0.06em;
     border-bottom: 1px solid var(--border-light);
     flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
+  .tr-left-sort-btn {
+    background: none;
+    border: 1px solid var(--border, #e5e7eb);
+    color: var(--text-faint);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+  }
+  .tr-left-sort-btn:hover { background: var(--hover, rgba(0,0,0,0.06)); }
   .tr-cat-list {
     flex: 1;
     overflow-y: auto;
@@ -108,6 +125,15 @@
   .tr-dn-danger{ background: #fee2e2; color: #991b1b; }
   .dark .tr-dn-warn  { background: #422006; color: #fde68a; }
   .dark .tr-dn-danger{ background: #450a0a; color: #fca5a5; }
+  /* D-day prefix (항목 제목 앞 항상 표시) */
+  .tr-dn-prefix {
+    font-weight: 700;
+    font-size: 0.82rem;
+    margin-right: 4px;
+    opacity: 0.7;
+  }
+  .tr-dn-prefix.tr-dn-warn   { color: var(--warn, #f59e0b); opacity: 1; }
+  .tr-dn-prefix.tr-dn-danger { color: var(--danger, #ef4444); opacity: 1; }
   /* 미지정 카드 비활성 스타일 */
   .tr-cat-item-disabled { opacity: 0.45; cursor: default; }
   .tr-cat-item-disabled:hover { background: transparent; }
@@ -131,7 +157,22 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    justify-content: space-between;
   }
+  .tr-sort-btn {
+    background: var(--accent-soft, rgba(99,102,241,0.12));
+    color: var(--accent, #6366f1);
+    border: none;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .tr-sort-btn:hover { background: var(--accent-soft-hover, rgba(99,102,241,0.2)); }
+  .tr-sort-btn[hidden] { display: none; }
   .tr-mid-title {
     flex: 1;
     font-size: 0.88rem;
@@ -400,7 +441,10 @@
 
   <!-- ── 왼쪽: 카테고리 ── -->
   <div class="tr-left">
-    <div class="tr-left-header">휴지통</div>
+    <div class="tr-left-header">
+      휴지통
+      <button class="tr-left-sort-btn" id="tr-left-sort-btn" onclick="toggleGroupSort()">D순 ▲</button>
+    </div>
     <div class="tr-cat-list" id="tr-cat-list"></div>
   </div>
 
@@ -408,6 +452,7 @@
   <div class="tr-mid">
     <div class="tr-mid-header">
       <span class="tr-mid-title" id="tr-mid-title">목록</span>
+      <button class="tr-sort-btn" id="tr-sort-btn" onclick="toggleTrashSort()" hidden>시간순 ▲</button>
     </div>
     <div class="tr-list" id="tr-list">
       <div class="tr-empty">카테고리를 선택하세요.</div>
@@ -512,6 +557,58 @@ let _selGroupIdx   = null;  // groups 배열 인덱스
 let _listItems     = [];    // 가운데 패널 항목 배열
 let _selectedItem  = null;  // 오른쪽 패널에 표시 중인 항목 (또는 null이면 그룹 헤더)
 
+// 정렬 상태: 'asc' = 잔여일수 적은 순(곧 만료) = deleted_at 오래된 순
+let _trashSortDir = 'asc';
+let _currentTrashView = null;  // {kind:'group'|'meetings'|'unassigned', projectId?:number}
+
+// 그룹 정렬 상태 (왼쪽 패널 프로젝트 카드 순서)
+let _groupSortDir = 'asc';  // 기본: 잔여일수 적은 순(곧 만료 그룹이 위)
+
+function _trashSortItems(items) {
+  return items.slice().sort(function(a, b) {
+    const cmp = (a.deleted_at || '').localeCompare(b.deleted_at || '');
+    return _trashSortDir === 'asc' ? cmp : -cmp;
+  });
+}
+function _updateTrashSortBtn() {
+  const btn = document.getElementById('tr-sort-btn');
+  if (btn) btn.textContent = '시간순 ' + (_trashSortDir === 'asc' ? '▲' : '▼');
+}
+function _showTrashSortBtn(visible) {
+  const btn = document.getElementById('tr-sort-btn');
+  if (btn) btn.hidden = !visible;
+}
+function toggleTrashSort() {
+  _trashSortDir = _trashSortDir === 'asc' ? 'desc' : 'asc';
+  _updateTrashSortBtn();
+  _refreshCurrentTrashView();
+}
+function _refreshCurrentTrashView() {
+  if (!_currentTrashView) return;
+  if (_currentTrashView.kind === 'meetings')        selectMeetings();
+  else if (_currentTrashView.kind === 'unassigned') selectUnassigned();
+  else if (_currentTrashView.kind === 'group')      selectGroup(_currentTrashView.projectId);
+}
+
+// ── 그룹 정렬 (왼쪽 패널) ──
+function _sortedGroups() {
+  return trashGroups.slice().sort((a, b) => {
+    const da = (a.project && a.project.deleted_at) || '';
+    const db = (b.project && b.project.deleted_at) || '';
+    const cmp = da.localeCompare(db);
+    return _groupSortDir === 'asc' ? cmp : -cmp;
+  });
+}
+function _updateGroupSortBtn() {
+  const btn = document.getElementById('tr-left-sort-btn');
+  if (btn) btn.textContent = 'D순 ' + (_groupSortDir === 'asc' ? '▲' : '▼');
+}
+function toggleGroupSort() {
+  _groupSortDir = _groupSortDir === 'asc' ? 'desc' : 'asc';
+  _updateGroupSortBtn();
+  renderCats();
+}
+
 // ── 타입 레이블/뱃지 ──
 function labelForEvent(item) {
   if (item.event_type === 'journal')  return '일지';
@@ -592,8 +689,9 @@ function renderCats() {
 
   el.insertAdjacentHTML('beforeend', '<div class="tr-cat-sep"></div>');
 
-  // 그룹 카드들
-  trashGroups.forEach((g, i) => {
+  // 그룹 카드들 (_sortedGroups() 기반, onclick 인덱스는 원본 배열 기준)
+  _sortedGroups().forEach((g) => {
+    const i = trashGroups.indexOf(g);  // 원본 배열 인덱스
     const p = g.project || {};
     const color = p.color || '#aaaaaa';
     const daysLeft = getDaysLeft(p.deleted_at);
@@ -623,10 +721,16 @@ function selectGroup(idx, resetItem = true) {
   const g = trashGroups[idx];
   if (!g) return;
   const p = g.project || {};
-  document.getElementById('tr-mid-title').textContent = p.name || '알 수 없음';
+  const itemCount = (g.items || []).length;
+  const titleEl = document.getElementById('tr-mid-title');
+  titleEl.textContent = `복원 목록 (${itemCount}개)`;
+  titleEl.style.cursor = 'pointer';
+  titleEl.onclick = () => renderGroupDetail(g);
 
-  const items = (g.items || []).slice().sort((a, b) =>
-    (b.deleted_at || '').localeCompare(a.deleted_at || ''));
+  const items = _trashSortItems(g.items || []);
+  _currentTrashView = { kind: 'group', projectId: idx };
+  _updateTrashSortBtn();
+  _showTrashSortBtn(true);
   renderList(items, p);
 
   // 그룹 헤더 자체를 상세로 표시 (항목 미선택 시)
@@ -640,9 +744,14 @@ function selectMeetings(resetItem = true) {
   if (resetItem) _selectedItem = null;
   renderCats();
 
-  const items = trashUnassigned.filter(it => it.type === 'meeting')
-    .slice().sort((a, b) => (b.deleted_at || '').localeCompare(a.deleted_at || ''));
-  document.getElementById('tr-mid-title').textContent = `문서 (${items.length}개)`;
+  const items = _trashSortItems(trashUnassigned.filter(it => it.type === 'meeting'));
+  _currentTrashView = { kind: 'meetings' };
+  _updateTrashSortBtn();
+  _showTrashSortBtn(true);
+  const titleEl = document.getElementById('tr-mid-title');
+  titleEl.style.cursor = '';
+  titleEl.onclick = null;
+  titleEl.textContent = `문서 (${items.length}개)`;
   renderList(items, null);
 
   if (resetItem) renderDetail(null, null);
@@ -655,9 +764,14 @@ function selectUnassigned(resetItem = true) {
   if (resetItem) _selectedItem = null;
   renderCats();
 
-  const items = trashUnassigned.filter(it => it.type !== 'meeting')
-    .slice().sort((a, b) => (b.deleted_at || '').localeCompare(a.deleted_at || ''));
-  document.getElementById('tr-mid-title').textContent = `미지정 항목들 (${items.length}개)`;
+  const items = _trashSortItems(trashUnassigned.filter(it => it.type !== 'meeting'));
+  _currentTrashView = { kind: 'unassigned' };
+  _updateTrashSortBtn();
+  _showTrashSortBtn(true);
+  const titleEl = document.getElementById('tr-mid-title');
+  titleEl.style.cursor = '';
+  titleEl.onclick = null;
+  titleEl.textContent = `미지정 항목들 (${items.length}개)`;
   renderList(items, null);
 
   if (resetItem) renderDetail(null, null);
@@ -668,49 +782,25 @@ function renderList(items, projCtx) {
   _listItems = items;
   const el = document.getElementById('tr-list');
 
-  // 그룹 헤더 (프로젝트 메타)
-  let headerHtml = '';
-  if (_selMode === 'group' && projCtx) {
-    const p = projCtx;
-    const color = p.color || '#aaaaaa';
-    const daysLeft = getDaysLeft(p.deleted_at);
-    const dnClass = daysLeft <= 3 ? 'tr-dn-danger' : daysLeft <= 7 ? 'tr-dn-warn' : '';
-    const deletedAt = p.deleted_at ? fmtDatetime(p.deleted_at) : '알 수 없음';
-    const deletedBy = p.deleted_by || '알 수 없음';
-    headerHtml = `
-      <div class="tr-group-header">
-        <span class="tr-group-color-strip" style="background:${escAttr(color)};height:100%;position:absolute;left:0;top:0;"></span>
-        <div style="padding-left:10px;">
-          <div style="font-weight:700;font-size:0.88rem;color:var(--text);">📁 ${escHtml(p.name || '')}</div>
-          <div style="font-size:0.72rem;color:var(--text-faint);margin-top:2px;">
-            삭제일: ${deletedAt} · 삭제자: ${deletedBy}
-            <span class="tr-dn-badge ${dnClass}">D-${daysLeft}</span>
-          </div>
-        </div>
-        <button class="tr-proj-restore-btn" onclick="doRestoreProject(${(_selGroupIdx !== null && trashGroups[_selGroupIdx]) ? trashGroups[_selGroupIdx].project.id : 0})">복원</button>
-      </div>
-    `;
-  }
-
   if (!items.length) {
-    el.innerHTML = headerHtml + '<div class="tr-empty">항목이 없습니다.</div>';
+    el.innerHTML = '<div class="tr-empty">항목이 없습니다.</div>';
     return;
   }
 
-  el.innerHTML = headerHtml;
+  el.innerHTML = '';
   items.forEach((item, idx) => {
     const active = (_selectedItem && _selectedItem.type === item.type && _selectedItem.id === item.id) ? ' active' : '';
     const daysLeft = getDaysLeft(item.deleted_at);
-    const expireStr = daysLeft <= 3 ? `<span class="tr-expire-warn">D-${daysLeft}</span>` : '';
+    const dnClass = daysLeft <= 3 ? 'tr-dn-danger' : (daysLeft <= 7 ? 'tr-dn-warn' : '');
+    const dnPrefix = `<span class="tr-dn-prefix ${dnClass}">[D-${daysLeft}]</span>`;
     const dateStr = item.start_datetime ? `<span>${fmtDate(item.start_datetime)}</span>` : '';
     const typeBadge = `<span class="tr-type-badge ${typeBadgeClass(item)}">${typeLabel(item)}</span>`;
 
     el.insertAdjacentHTML('beforeend', `
       <div class="tr-item${active}" onclick="selectItem(${idx})">
-        <div class="tr-item-title">${typeBadge} ${escHtml(item.title)}</div>
+        <div class="tr-item-title">${typeBadge} ${dnPrefix} ${escHtml(item.title)}</div>
         <div class="tr-item-meta">
           ${dateStr}
-          ${expireStr}
         </div>
       </div>
     `);
@@ -975,5 +1065,6 @@ function escHtml(s) {
 function escAttr(s) { return String(s || '').replace(/"/g,'&quot;'); }
 
 loadTrash();
+_updateGroupSortBtn();
 </script>
 {% endblock %}
