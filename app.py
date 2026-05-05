@@ -1893,6 +1893,19 @@ async def manage_project_milestones(name: str, request: Request):
     return {"ok": True, "milestones": cleaned}
 
 
+@app.delete("/api/manage/projects/{name:path}/items")
+async def manage_delete_project_items(name: str, request: Request):
+    user = _require_editor(request)
+    body = await request.json()
+    event_ids = [int(x) for x in body.get('event_ids', [])]
+    checklist_ids = [int(x) for x in body.get('checklist_ids', [])]
+    if not event_ids and not checklist_ids:
+        raise HTTPException(status_code=400, detail='선택된 항목 없음')
+    ev_n, ck_n = db.bulk_soft_delete_project_items(name, event_ids, checklist_ids, user["name"], user.get("team_id"))
+    wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": user.get("team_id")})
+    return {"deleted_events": ev_n, "deleted_checklists": ck_n}
+
+
 @app.delete("/api/manage/projects/{name:path}")
 async def manage_delete_project(name: str, request: Request):
     user = _require_editor(request)

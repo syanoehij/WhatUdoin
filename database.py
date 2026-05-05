@@ -1521,6 +1521,37 @@ def delete_project(name: str, delete_events: bool = False, deleted_by: str = Non
         )
 
 
+def bulk_soft_delete_project_items(project_name: str, event_ids: list, checklist_ids: list, deleted_by: str, team_id: int):
+    """프로젝트 포함 항목 선택 일괄 soft-delete (휴지통 이동)"""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ev_count = 0
+    ck_count = 0
+    # 미지정 프로젝트: DB에서 project IS NULL 또는 ''로 저장
+    is_unset = (project_name == '미지정')
+    with get_conn() as conn:
+        if event_ids:
+            placeholders = ','.join('?' * len(event_ids))
+            proj_cond = "(project IS NULL OR project = '')" if is_unset else "project=?"
+            params = [now, deleted_by, team_id, *event_ids] if is_unset else [now, deleted_by, team_id, *event_ids, project_name]
+            cur = conn.execute(
+                f"UPDATE events SET deleted_at=?, deleted_by=?, team_id=COALESCE(team_id,?) "
+                f"WHERE id IN ({placeholders}) AND {proj_cond} AND deleted_at IS NULL",
+                params
+            )
+            ev_count = cur.rowcount
+        if checklist_ids:
+            placeholders = ','.join('?' * len(checklist_ids))
+            proj_cond = "project=''" if is_unset else "project=?"
+            params = [now, deleted_by, team_id, *checklist_ids] if is_unset else [now, deleted_by, team_id, *checklist_ids, project_name]
+            cur = conn.execute(
+                f"UPDATE checklists SET deleted_at=?, deleted_by=?, team_id=COALESCE(team_id,?) "
+                f"WHERE id IN ({placeholders}) AND {proj_cond} AND deleted_at IS NULL",
+                params
+            )
+            ck_count = cur.rowcount
+    return ev_count, ck_count
+
+
 def update_event_active_status(event_id: int, is_active: int):
     with get_conn() as conn:
         conn.execute("UPDATE events SET is_active = ? WHERE id = ?", (is_active, event_id))

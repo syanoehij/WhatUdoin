@@ -426,6 +426,34 @@
   }
   .pm-ev-title[data-ck-id] { cursor: pointer; }
   .pm-ev-title[data-ck-id]:hover { text-decoration: underline; color: var(--accent); }
+
+  /* ── 포함 항목 선택 삭제 모드 ── */
+  .pm-bulk-banner {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 14px 0 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pm-bulk-chk {
+    margin-right: 8px;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .pm-detail.bulk-mode .pm-ev-row {
+    cursor: pointer;
+  }
+  .pm-detail.bulk-mode .pm-ev-row:hover {
+    background: var(--surface-2);
+    border-radius: 4px;
+  }
 </style>
 {% endblock %}
 
@@ -625,6 +653,8 @@ let projects  = [];
 let filter    = 'active';   // 'active' | 'closed'
 let selIdx    = null;       // 현재 선택된 프로젝트 인덱스
 let selName   = null;       // 선택 유지를 위한 이름
+let bulkDeleteMode = false;
+const bulkDeleteSelected = new Set(); // "ev:123" / "ck:45"
 
 // 자동 새로고침 차단: 생성/편집 패널이 열려있으면 스킵
 window._blockAutoRefresh = () => {
@@ -823,6 +853,7 @@ function setFilter(f) {
 
 /* ── 프로젝트 선택 ── */
 function selectProjItem(idx) {
+  if (bulkDeleteMode && idx !== selIdx) exitBulkDeleteMode(true);
   document.getElementById('pm-create-panel').classList.remove('visible');
   selIdx  = idx;
   selName = projects[idx].name;
@@ -833,6 +864,10 @@ function selectProjItem(idx) {
 
 /* ── 오른쪽 상세 렌더 ── */
 function renderDetail(idx) {
+  // 기존 배너 제거 (재렌더 시 중복 방지)
+  const existingBanner = document.getElementById('pm-bulk-banner');
+  if (existingBanner) existingBanner.remove();
+
   const p        = projects[idx];
   const isClosed = p.is_active === 0;
   const isUnset  = p.name === '미지정';
@@ -865,6 +900,7 @@ function renderDetail(idx) {
     actions.innerHTML = `
       ${bulkBtns}
       <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="미지정 일정·체크 항목을 옵시디언 ZIP으로 저장">📦 옵시디언 ZIP으로 저장</button>
+      <button class="pm-btn pm-btn-warn" onclick="enterBulkDeleteMode()">포함 항목 선택 삭제</button>
     `;
   } else {
     const statusBtn = isClosed
@@ -875,14 +911,32 @@ function renderDetail(idx) {
     const privacyBtn = isClosed ? '' : (isPrivate
       ? `<button class="pm-btn pm-btn-danger" onclick="togglePrivacy(${idx}, false)" title="비로그인 사용자에게 숨겨져 있음">🔒 외부 비공개 중</button>`
       : `<button class="pm-btn pm-btn-resume" onclick="togglePrivacy(${idx}, true)" title="비로그인 사용자에게 노출 중">🔓 외부 공개 중</button>`);
+    const bulkDeleteBtn = `<button class="pm-btn pm-btn-warn" onclick="enterBulkDeleteMode()">포함 항목 선택 삭제</button>`;
     actions.innerHTML = `
       <button class="pm-btn pm-btn-accent" onclick="showEditPanel(${idx})">편집</button>
       ${statusBtn}
       ${privacyBtn}
       <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="일정·체크 항목을 개별 마크다운 노트로 묶어 ZIP으로 저장">📦 옵시디언 ZIP으로 저장</button>
       <button class="pm-btn pm-btn-warn"   onclick="deleteProject(${idx}, false)">프로젝트만 삭제</button>
+      ${bulkDeleteBtn}
       <button class="pm-btn pm-btn-danger" onclick="deleteProject(${idx}, true)">프로젝트+하위 일정 및 체크 항목 삭제</button>
     `;
+  }
+
+  // 선택 삭제 모드 배너
+  if (bulkDeleteMode) {
+    const banner = document.createElement('div');
+    banner.id = 'pm-bulk-banner';
+    banner.className = 'pm-bulk-banner';
+    banner.innerHTML = `
+      <span>선택 삭제 모드 — <b id="bulk-count">${bulkDeleteSelected.size}</b>개 선택됨</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="pm-btn" onclick="bulkSelectAllVisible()">전체 선택</button>
+        <button class="pm-btn" onclick="bulkClearSelection()">선택 해제</button>
+        <button class="pm-btn pm-btn-danger" onclick="executeBulkDelete()">선택 삭제</button>
+        <button class="pm-btn" onclick="exitBulkDeleteMode()">취소</button>
+      </div>`;
+    document.getElementById('det-actions').insertAdjacentElement('afterend', banner);
   }
 
   // 중간 일정(milestones)
@@ -890,7 +944,7 @@ function renderDetail(idx) {
   const msEl      = document.getElementById('det-milestones');
   const milestones = p.milestones || [];
   const evsTitleEl = document.getElementById('det-events-title');
-  if (!milestones.length) {
+  if (!milestones.length || bulkDeleteMode) {
     msTitleEl.style.display = 'none';
     msEl.style.display      = 'none';
     msEl.innerHTML = '';  // 프로젝트 전환 시 이전 내용 정리
@@ -959,6 +1013,17 @@ function renderDetail(idx) {
     const titleStyle = isDone ? 'text-decoration:line-through;' : '';
     const childPrefix = isChild ? '<span style="color:var(--text-faint);margin-right:3px;">└</span>' : '';
     const childClass = isChild ? ' pm-ev-child' : '';
+    if (bulkDeleteMode) {
+      const checked = bulkDeleteSelected.has('ev:' + e.id) ? 'checked' : '';
+      const cb = `<input type="checkbox" class="pm-bulk-chk" data-key="ev:${e.id}" ${checked} onclick="event.stopPropagation();toggleBulkSelect('ev:${e.id}')">`;
+      return `
+        <div class="pm-ev-row${childClass}" style="${rowStyle}" onclick="toggleBulkSelect('ev:${e.id}')">
+          ${cb}
+          <span class="pm-ev-title" style="${titleStyle}">${childPrefix}${escHtml(e.title)}</span>
+          <span class="pm-ev-date">${date}</span>
+          ${assignee}
+        </div>`;
+    }
     return `
       <div class="pm-ev-row${childClass}" style="${rowStyle}">
         <span class="pm-ev-title" style="${titleStyle};cursor:pointer;" title="클릭하여 상세 보기" data-edit-id="${e.id}" onclick="openEvDrawer(${e.id})">${childPrefix}${escHtml(e.title)}</span>
@@ -986,7 +1051,7 @@ function renderDetail(idx) {
   const journalsToShow = isUnset
     ? unsetVisibleEvents(p).filter(e => e.event_type === 'journal')
     : p.events.filter(e => e.event_type === 'journal');
-  if (!journalsToShow.length) {
+  if (!journalsToShow.length || bulkDeleteMode) {
     jnTitleEl.style.display = 'none';
     jnEl.style.display = 'none';
   } else {
@@ -1013,6 +1078,17 @@ function renderDetail(idx) {
         ? `<span class="pm-ev-assignee" title="${escHtml(e.assignee)}">${escHtml(e.assignee)}</span>` : '';
       const exportEvBtn = `<a class="pm-btn pm-btn-accent" href="/api/events/${e.id}/export" rel="noopener" style="padding:2px 8px;font-size:0.74rem;text-decoration:none;display:inline-block;" title="마크다운으로 내보내기">📄 MD</a>`;
       const visLabel = `<button class="pm-btn" style="padding:2px 8px;font-size:0.74rem;color:var(--text-muted);cursor:default;" disabled title="회의 일정은 프로젝트 연동 고정">🔄 프로젝트 연동</button>`;
+      if (bulkDeleteMode) {
+        const checked = bulkDeleteSelected.has('ev:' + e.id) ? 'checked' : '';
+        const cb = `<input type="checkbox" class="pm-bulk-chk" data-key="ev:${e.id}" ${checked} onclick="event.stopPropagation();toggleBulkSelect('ev:${e.id}')">`;
+        return `
+          <div class="pm-ev-row" onclick="toggleBulkSelect('ev:${e.id}')">
+            ${cb}
+            <span class="pm-ev-title" style="cursor:pointer;">${escHtml(e.title)}</span>
+            <span class="pm-ev-date">${date}</span>
+            ${assignee}
+          </div>`;
+      }
       return `
         <div class="pm-ev-row">
           <span class="pm-ev-title" style="cursor:pointer;" title="클릭하여 상세 보기" data-edit-id="${e.id}" onclick="openEvDrawer(${e.id})">${escHtml(e.title)}</span>
@@ -1070,6 +1146,16 @@ async function loadChecklistsForProject(projectName, clEl, isClosed) {
       const excludeBtn = (!isClosed && projectName != null)
         ? `<button class="pm-btn pm-btn-warn" style="padding:2px 8px;font-size:0.74rem;" onclick="excludeChecklist(${c.id})">프로젝트에서 제외</button>`
         : '';
+      if (bulkDeleteMode) {
+        const checked = bulkDeleteSelected.has('ck:' + c.id) ? 'checked' : '';
+        const cb = `<input type="checkbox" class="pm-bulk-chk" data-key="ck:${c.id}" ${checked} onclick="event.stopPropagation();toggleBulkSelect('ck:${c.id}')">`;
+        return `
+          <div class="pm-ev-row" style="${rowStyle}" onclick="toggleBulkSelect('ck:${c.id}')">
+            ${cb}
+            <span class="pm-ev-title" style="${titleStyle}">${escHtml(c.title)}</span>
+            <span class="pm-ev-date">${(c.updated_at || '').slice(0, 10)}</span>
+          </div>`;
+      }
       return `
         <div class="pm-ev-row" style="${rowStyle}">
           <span class="pm-ev-title" data-ck-id="${c.id}" data-ck-title="${escHtml(c.title)}" style="${titleStyle}" title="클릭하여 내용 보기" onclick="openCkDrawer(${c.id}, this.dataset.ckTitle)">${escHtml(c.title)}</span>
@@ -1522,6 +1608,74 @@ async function deleteProject(idx, withEvents) {
   toast(withEvents ? '프로젝트 및 하위 항목 삭제됨' : '프로젝트 삭제됨');
   await loadProjectList();
 }
+
+/* ── 포함 항목 선택 삭제 모드 ── */
+function enterBulkDeleteMode() {
+  bulkDeleteMode = true;
+  bulkDeleteSelected.clear();
+  document.getElementById('pm-detail').classList.add('bulk-mode');
+  if (selIdx !== null) renderDetail(selIdx);
+}
+
+function exitBulkDeleteMode(skipRender = false) {
+  bulkDeleteMode = false;
+  bulkDeleteSelected.clear();
+  document.getElementById('pm-detail').classList.remove('bulk-mode');
+  if (!skipRender && selIdx !== null) renderDetail(selIdx);
+}
+
+function toggleBulkSelect(key) {
+  if (bulkDeleteSelected.has(key)) bulkDeleteSelected.delete(key);
+  else bulkDeleteSelected.add(key);
+  const cnt = document.getElementById('bulk-count');
+  if (cnt) cnt.textContent = bulkDeleteSelected.size;
+  const cb = document.querySelector(`.pm-bulk-chk[data-key="${CSS.escape(key)}"]`);
+  if (cb) cb.checked = bulkDeleteSelected.has(key);
+}
+
+function bulkSelectAllVisible() {
+  document.querySelectorAll('.pm-bulk-chk').forEach(cb => {
+    bulkDeleteSelected.add(cb.dataset.key);
+    cb.checked = true;
+  });
+  const cnt = document.getElementById('bulk-count');
+  if (cnt) cnt.textContent = bulkDeleteSelected.size;
+}
+
+function bulkClearSelection() {
+  bulkDeleteSelected.clear();
+  document.querySelectorAll('.pm-bulk-chk').forEach(cb => cb.checked = false);
+  const cnt = document.getElementById('bulk-count');
+  if (cnt) cnt.textContent = '0';
+}
+
+async function executeBulkDelete() {
+  const evIds = [...bulkDeleteSelected].filter(k => k.startsWith('ev:')).map(k => +k.slice(3));
+  const ckIds = [...bulkDeleteSelected].filter(k => k.startsWith('ck:')).map(k => +k.slice(3));
+  if (!evIds.length && !ckIds.length) { toast('선택된 항목이 없습니다'); return; }
+  const total = evIds.length + ckIds.length;
+  const ok = await wuDialog.confirm({
+    title: '선택 항목 삭제',
+    message: `선택한 ${total}개 항목을 휴지통으로 이동합니다.\n(휴지통에서 30일 내 복구 가능)`,
+    danger: true,
+  });
+  if (!ok) return;
+  const p = projects[selIdx];
+  const res = await fetch(`/api/manage/projects/${encodeURIComponent(p.name)}/items`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event_ids: evIds, checklist_ids: ckIds }),
+  });
+  if (!res.ok) { toast('삭제 실패'); return; }
+  const data = await res.json();
+  toast(`${data.deleted_events + data.deleted_checklists}개 항목이 휴지통으로 이동되었습니다`);
+  exitBulkDeleteMode();
+  await loadProjectList();
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && bulkDeleteMode) exitBulkDeleteMode();
+});
 
 /* ── 새 프로젝트 생성 패널 ── */
 const PRESET_COLORS = [
