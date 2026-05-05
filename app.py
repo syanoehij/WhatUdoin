@@ -1405,6 +1405,11 @@ async def update_event(event_id: int, request: Request):
             db.update_event_recurring_this(event_id, data)
     else:
         db.update_event(event_id, data)
+        if existing_type == "schedule":
+            going_inactive = data.get("is_active") == 0 and event.get("is_active") != 0
+            going_done = data.get("kanban_status") == "done" and event.get("kanban_status") != "done"
+            if going_inactive or going_done:
+                db.complete_subtasks(event_id)
 
     # 새로 추가된 담당자에게만 알림 (등록자 본인 제외, 일지 제외)
     if data.get("event_type") != "journal":
@@ -2605,7 +2610,10 @@ async def manage_event_status(event_id: int, request: Request):
     user = _require_editor(request)
     data = await request.json()
     is_active = 1 if data.get("is_active", True) else 0
+    event = db.get_event(event_id)
     db.update_event_active_status(event_id, is_active)
+    if is_active == 0 and event and event.get("is_active") != 0 and event.get("event_type") == "schedule":
+        db.complete_subtasks(event_id)
     wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 

@@ -604,6 +604,15 @@ def get_subtasks(parent_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def complete_subtasks(parent_id: int):
+    """부모 이벤트 완료 시 하위 업무 일괄 완료 처리"""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE events SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE parent_event_id = ? AND deleted_at IS NULL AND is_active != 0",
+            (parent_id,)
+        )
+
+
 def has_subtasks(event_id: int) -> bool:
     """이벤트가 하위 업무를 하나 이상 보유하고 있는지 확인"""
     with get_conn() as conn:

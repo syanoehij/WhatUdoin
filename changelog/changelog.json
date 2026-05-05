@@ -9,6 +9,11 @@
           "icon": "🔒",
           "title_html": "<span class=\"cl-tag fix\">fix</span> 프로젝트 관리 — 미지정 bulk visibility가 완료 항목까지 변경하는 버그 수정",
           "detail_html": "<ul><li><strong>버그</strong>: 진행 중 필터에서 '하위 모두 외부 공개/비공개'를 클릭하면 완료(<code>is_active=0</code>) 미지정 이벤트·체크리스트까지 <code>is_public</code>이 변경되는 cross-filter 오염 문제 — UI에서 완료 항목은 '🔒 외부 비공개 고정(disabled)'으로 표시하는데 DB 값이 바뀌어 화면과 어긋남</li><li><strong>수정</strong>: <code>bulk_update_checklist_visibility</code> / <code>bulk_update_event_visibility</code>에 <code>is_active: int | None = None</code> 파라미터 추가 — 값이 있으면 WHERE 절에 <code>AND is_active = ?</code> 적용, 없으면 기존 전체 대상 동작 유지(하위 호환)</li><li>API 두 라우트(<code>PATCH /api/checklists/bulk-visibility</code>, <code>PATCH /api/events/bulk-visibility</code>)에서 <code>is_active</code> 수신·전달 추가</li><li>프론트엔드 <code>bulkUnassignedVisibility</code>에서 <code>is_active: 1</code>을 body에 명시 전송 — 진행 중 항목만 변경, 완료 항목 보호</li><li>수정 파일: <code>database.py</code>, <code>app.py</code>, <code>templates/project_manage.html</code></li></ul>"
+        },
+        {
+          "icon": "✅",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 관리 — 부모 업무 완료 시 하위 업무 자동 일괄 완료",
+          "detail_html": "<ul><li><strong>기능</strong>: 업무 일정(<code>event_type='schedule'</code>)을 완료 처리하면 연결된 하위 업무(<code>event_type='subtask'</code>)가 자동으로 일괄 완료 처리됨 — 기존에는 부모·자식 각각 개별 완료 처리 필요</li><li><strong>적용 경로</strong>: 캘린더·칸반 완료 버튼(<code>PATCH /api/manage/events/{id}/status</code>)과 편집 폼에서 <code>is_active=0</code> 또는 <code>kanban_status='done'</code> 변경(<code>PUT /api/events/{id}</code>) 두 경로 모두 커버</li><li><strong>단방향 연쇄</strong>: 완료만 자식에게 전파, 부모 재활성화 시 자식은 그대로 유지 — 이미 완료된 하위 업무는 중복 처리 없음(<code>is_active != 0</code> 가드)</li><li><strong>격리</strong>: 반복 일정(<code>recurrence_rule</code>) 부모에는 미적용, <code>event_type='schedule'</code> 단일 이벤트에만 동작</li><li>신규 함수: <code>database.complete_subtasks(parent_id)</code> — 하위 업무 일괄 완료 SQL 처리</li><li>수정 파일: <code>database.py</code>, <code>app.py</code></li></ul>"
         }
       ]
     },
