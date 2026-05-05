@@ -1447,12 +1447,12 @@ async function bulkUnassignedVisibility(makePublic) {
       fetch('/api/checklists/bulk-visibility', {
         method: 'PATCH',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ project: null, is_public: makePublic }),
+        body: JSON.stringify({ project: null, is_public: makePublic, is_active: 1 }),
       }),
       fetch('/api/events/bulk-visibility', {
         method: 'PATCH',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ project: null, is_public: makePublic }),
+        body: JSON.stringify({ project: null, is_public: makePublic, is_active: 1 }),
       }),
     ]);
     if (!r1.ok || !r2.ok) { toast('일부 변경 실패'); return; }

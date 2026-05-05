@@ -702,7 +702,9 @@ async def bulk_checklist_visibility(request: Request):
     project  = data.get("project")   # None 또는 "" → 미지정, 문자열 → 해당 프로젝트
     raw = data.get("is_public", 1)
     is_public = None if raw is None else (1 if raw else 0)
-    count = db.bulk_update_checklist_visibility(project, is_public)
+    is_active_raw = data.get("is_active")
+    is_active = None if is_active_raw is None else (1 if is_active_raw else 0)
+    count = db.bulk_update_checklist_visibility(project, is_public, is_active)
     return {"ok": True, "updated": count}
 
 
@@ -713,7 +715,9 @@ async def bulk_event_visibility(request: Request):
     project  = data.get("project")   # None 또는 "" → 미지정, 문자열 → 해당 프로젝트
     raw = data.get("is_public", 1)
     is_public = None if raw is None else (1 if raw else 0)
-    count = db.bulk_update_event_visibility(project, is_public)
+    is_active_raw = data.get("is_active")
+    is_active = None if is_active_raw is None else (1 if is_active_raw else 0)
+    count = db.bulk_update_event_visibility(project, is_public, is_active)
     wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": None})
     return {"ok": True, "updated": count}
 
