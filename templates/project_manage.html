@@ -649,9 +649,9 @@
 </div>
 
 <script>
-let projects  = [];
-let filter    = 'active';   // 'active' | 'closed'
-let selIdx    = null;       // 현재 선택된 프로젝트 인덱스
+var projects  = [];
+var filter    = 'active';   // 'active' | 'closed'
+var selIdx    = null;       // 현재 선택된 프로젝트 인덱스
 let selName   = null;       // 선택 유지를 위한 이름
 let bulkDeleteMode = false;
 const bulkDeleteSelected = new Set(); // "ev:123" / "ck:45"
@@ -917,9 +917,8 @@ function renderDetail(idx) {
       ${statusBtn}
       ${privacyBtn}
       <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="일정·체크 항목을 개별 마크다운 노트로 묶어 ZIP으로 저장">📦 옵시디언 ZIP으로 저장</button>
-      <button class="pm-btn pm-btn-warn"   onclick="deleteProject(${idx}, false)">프로젝트만 삭제</button>
       ${bulkDeleteBtn}
-      <button class="pm-btn pm-btn-danger" onclick="deleteProject(${idx}, true)">프로젝트+하위 일정 및 체크 항목 삭제</button>
+      <button class="pm-btn pm-btn-danger" onclick="deleteProject(${idx})">프로젝트 삭제</button>
     `;
   }
 
@@ -1584,28 +1583,24 @@ function exportProjectMd(idx) {
 }
 
 /* ── 삭제 ── */
-async function deleteProject(idx, withEvents) {
+async function deleteProject(idx) {
   const p = projects[idx];
-  const evCount = p.events.length;
-  const msg = withEvents
-    ? `"${p.name}" 프로젝트와 하위 일정 및 체크 항목을 모두 삭제합니다.\n정말 삭제하시겠습니까?`
-    : `"${p.name}" 프로젝트를 삭제합니다.\n하위 일정과 체크 항목은 '미지정'으로 이동됩니다.\n계속하시겠습니까?`;
+  const msg = `"${p.name}" 프로젝트와 하위 일정 및 체크 항목을 모두 삭제합니다.\n정말 삭제하시겠습니까?`;
   if (!await wuDialog.confirm({ title: '프로젝트 삭제', message: msg, danger: true })) return;
-  if (withEvents && await wuDialog.confirm({ title: 'ZIP 백업', message: '삭제 전에 옵시디언 ZIP으로 먼저 저장할까요?\n(취소 시 바로 삭제)' })) {
+  if (await wuDialog.confirm({ title: 'ZIP 백업', message: '삭제 전에 옵시디언 ZIP으로 먼저 저장할까요?\n(취소 시 바로 삭제)' })) {
     exportProjectMd(idx);
     await new Promise(r => setTimeout(r, 600));
   }
   const res = await fetch(`/api/manage/projects/${encodeURIComponent(p.name)}`, {
     method: 'DELETE',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ delete_events: withEvents }),
   });
   if (!res.ok) { toast('삭제 실패'); return; }
   selIdx  = null;
   selName = null;
   _pmSave();
   hideDetail();
-  toast(withEvents ? '프로젝트 및 하위 항목 삭제됨' : '프로젝트 삭제됨');
+  toast('프로젝트 및 하위 항목 삭제됨');
   await loadProjectList();
 }
 

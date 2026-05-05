@@ -2,6 +2,33 @@
   "groups": [
     {
       "date": "2026-05-05",
+      "phase": "38차 3단계",
+      "phase_class": "phase-3",
+      "entries": [
+        {
+          "icon": "🗑️",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 휴지통 — 프로젝트 삭제 시 자식 항목 묶음 그룹화",
+          "detail_html": "<ul><li><strong>DB</strong>: <code>events</code>·<code>checklists</code>·<code>meetings</code>에 <code>trash_project_id INTEGER NULL</code> 컬럼 추가 — 프로젝트와 함께 삭제된 자식 항목이 부모 프로젝트 id를 기억해 그룹 단위로 복원 가능</li><li><strong>삭제 단일화</strong>: <code>delete_project</code>에서 <code>delete_events</code> 파라미터 제거 — 항상 자식(이벤트·체크리스트) 함께 soft-delete, 동일 타임스탬프·<code>trash_project_id</code> 박제</li><li><strong>API 응답 구조 변경</strong>: <code>GET /api/trash</code>가 <code>{ groups: [{project, items:[]}], unassigned: [] }</code> 형태로 반환 — 기존 4개 평면 배열 폐기</li><li><strong>복원 개선</strong>: <code>restore_trash_item('project', id)</code>가 <code>trash_project_id = id</code> 기반으로 자식 일괄 복원, 기존 동명 텍스트 매칭 방식 제거 — 동명 프로젝트 충돌 해소</li><li><strong>백필</strong>: 기존 휴지통 데이터는 <code>deleted_at ±5초</code> 기준으로 <code>trash_project_id</code> 자동 백필, 매칭 실패 항목은 미지정 그룹으로 표시</li><li>수정 파일: <code>database.py</code>, <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🗂️",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 휴지통 — 좌측 패널 개편 (문서·미지정 분리·그룹 카드)",
+          "detail_html": "<ul><li><strong>좌측 카테고리 구조 변경</strong>: 상단에 '📄 문서'(meeting 타입 미지정 항목)·'⊘ 미지정'(나머지 미지정 항목) 고정, 구분선 아래에 프로젝트 그룹 카드 나열 — 기존 '삭제된 프로젝트'·일반 카테고리 이중 노출 제거</li><li><strong>그룹 카드</strong>: 프로젝트 색상 띠, 자식 수 뱃지, D-N 남은 기간 표시 — 클릭 시 가운데 패널에 자식 목록, 우측 패널에 그룹 메타(삭제일·삭제자·포함 항목 통계·전체 복원 버튼)</li><li><strong>문서·미지정 분리</strong>: meeting 타입은 '문서' 카드로, 그 외 미지정 항목은 '⊘ 미지정' 카드로 구분 — 문서 삭제 항목이 미지정에 섞이지 않음</li><li><strong>UI 정리</strong>: 활성 프로젝트 API 연동 제거(휴지통·활성 완전 분리), 안내 문구 갱신</li><li>수정 파일: <code>templates/trash.html</code></li></ul>"
+        },
+        {
+          "icon": "📄",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 휴지통 — MD 내보내기 버튼 추가",
+          "detail_html": "<ul><li>우측 상세 패널 복원 버튼 옆에 <strong>MD 내보내기</strong> 버튼 추가 — 그룹 선택 시 '그룹 전체 복원' 옆, 개별 항목 선택 시 '복원' 옆</li><li><strong>그룹 내보내기</strong>: 프로젝트 메타(삭제일·삭제자·남은 기간) + 업무·문서·체크리스트 섹션별 목록 → <code>{프로젝트명}_휴지통.md</code> 다운로드</li><li><strong>개별 항목 내보내기</strong>: 종류·프로젝트·날짜·담당자 등 메타 + 본문 내용(마크다운) → <code>{제목}_휴지통.md</code> 다운로드</li><li>수정 파일: <code>templates/trash.html</code></li></ul>"
+        },
+        {
+          "icon": "🧹",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 프로젝트 관리 — '프로젝트만 삭제' 버튼 제거",
+          "detail_html": "<ul><li>프로젝트 상세 액션에서 '프로젝트만 삭제'(자식 미지정 분리) 버튼 제거 — 삭제는 항상 자식과 함께 묶음 처리</li><li>API <code>DELETE /api/manage/projects/{name}</code>에서 <code>delete_events</code> 파라미터 파싱 제거</li><li>수정 파일: <code>templates/project_manage.html</code>, <code>app.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-05",
       "phase": "38차 2단계",
       "phase_class": "phase-2",
       "entries": [

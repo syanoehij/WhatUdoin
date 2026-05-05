@@ -86,6 +86,33 @@
     background: var(--border-light);
     margin: 4px 10px;
   }
+  /* 그룹 카드 좌측 색 띠 */
+  .tr-group-color-strip {
+    display: inline-block;
+    width: 4px;
+    height: 16px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  /* D-N 경고 레이블 (왼쪽 패널) */
+  .tr-cat-dn {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    background: var(--surface-3);
+    color: var(--text-faint);
+  }
+  .tr-dn-warn  { background: #fef3c7; color: #92400e; }
+  .tr-dn-danger{ background: #fee2e2; color: #991b1b; }
+  .dark .tr-dn-warn  { background: #422006; color: #fde68a; }
+  .dark .tr-dn-danger{ background: #450a0a; color: #fca5a5; }
+  /* 미지정 카드 비활성 스타일 */
+  .tr-cat-item-disabled { opacity: 0.45; cursor: default; }
+  .tr-cat-item-disabled:hover { background: transparent; }
+  /* 미지정 레이블 */
+  .tr-unassigned-label .tr-cat-label { font-style: italic; }
 
   /* ── 가운데 패널 ── */
   .tr-mid {
@@ -206,6 +233,34 @@
     font-size: 0.84rem;
     color: var(--text-faint);
   }
+  /* 가운데 패널 그룹 헤더 */
+  .tr-group-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px 10px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .tr-group-header > div { flex: 1; }
+  /* 가운데 패널 D-N 뱃지 */
+  .tr-dn-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    margin-left: 4px;
+    background: var(--surface-3);
+    color: var(--text-faint);
+  }
+  /* 그룹 상세 오른쪽 패널 */
+  .tr-group-detail {
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
 
   /* ── 오른쪽 패널 ── */
   .tr-right {
@@ -249,6 +304,19 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .tr-export-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--accent);
+    border: 1.5px solid var(--accent);
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .tr-export-btn:hover { background: var(--accent-bg); }
   .tr-restore-btn {
     padding: 6px 18px;
     border-radius: 8px;
@@ -340,7 +408,6 @@
   <div class="tr-mid">
     <div class="tr-mid-header">
       <span class="tr-mid-title" id="tr-mid-title">목록</span>
-      <button class="tr-proj-restore-btn" id="tr-proj-restore-btn" style="display:none;" onclick="doRestoreProject()">프로젝트 복원</button>
     </div>
     <div class="tr-list" id="tr-list">
       <div class="tr-empty">카테고리를 선택하세요.</div>
@@ -349,13 +416,48 @@
 
   <!-- ── 오른쪽: 상세 ── -->
   <div class="tr-right">
+    <!-- 빈 상태 -->
     <div class="tr-placeholder" id="tr-placeholder">
       <div class="tr-placeholder-icon">🗑️</div>
       <div>항목을 선택하면 상세 정보를 볼 수 있습니다.</div>
     </div>
-    <div class="tr-detail" id="tr-detail">
+
+    <!-- 그룹(프로젝트) 상세 -->
+    <div class="tr-group-detail" id="tr-group-detail" style="display:none;">
+      <div class="tr-detail-header">
+        <span class="tr-detail-title" id="tr-gd-name"></span>
+        <button class="tr-export-btn" id="tr-gd-export-btn">MD 내보내기</button>
+        <button class="tr-restore-btn" id="tr-gd-restore-btn">그룹 전체 복원</button>
+      </div>
+      <div class="tr-detail-body">
+        <div class="tr-detail-row">
+          <span class="tr-detail-label">남은 기간</span>
+          <span id="tr-gd-expire"></span>
+        </div>
+        <div class="tr-detail-row">
+          <span class="tr-detail-label">삭제일시</span>
+          <span class="tr-detail-val" id="tr-gd-deleted-at"></span>
+        </div>
+        <div class="tr-detail-row">
+          <span class="tr-detail-label">삭제한 사람</span>
+          <span class="tr-detail-val" id="tr-gd-deleted-by"></span>
+        </div>
+        <div class="tr-detail-row">
+          <span class="tr-detail-label">포함 항목</span>
+          <span class="tr-detail-val" id="tr-gd-stats"></span>
+        </div>
+        <div class="tr-info-box">
+          프로젝트와 그 안의 항목은 한 묶음으로 삭제·복원되며, 30일 후 자동으로 영구 삭제됩니다.<br>
+          휴지통에서는 수동 영구 삭제를 지원하지 않습니다.
+        </div>
+      </div>
+    </div>
+
+    <!-- 개별 항목 상세 -->
+    <div class="tr-detail" id="tr-detail" style="display:none;">
       <div class="tr-detail-header">
         <span class="tr-detail-title" id="tr-detail-title"></span>
+        <button class="tr-export-btn" onclick="doExportMd()">MD 내보내기</button>
         <button class="tr-restore-btn" onclick="doRestore()">복원</button>
       </div>
       <div class="tr-detail-body">
@@ -384,8 +486,8 @@
           <span id="tr-dv-expire"></span>
         </div>
         <div class="tr-info-box">
-          휴지통 항목은 삭제 후 <strong>30일</strong>이 지나면 자동으로 영구 삭제됩니다.<br>
-          복원 버튼을 눌러 항목을 원래 위치로 되돌릴 수 있습니다.
+          프로젝트와 그 안의 항목은 한 묶음으로 삭제·복원되며, 30일 후 자동으로 영구 삭제됩니다.<br>
+          휴지통에서는 수동 영구 삭제를 지원하지 않습니다.
         </div>
         <!-- 원본 내용 미리보기 -->
         <div class="tr-content-section" id="tr-content-section" style="display:none;">
@@ -399,14 +501,18 @@
 </div>
 
 <script>
-let _trashData   = { events: [], meetings: [], checklists: [] };
-let _projColors  = {};
-let _projList    = [];   // [{ name, color }]
-let _selectedCat = null;
-let _listItems   = [];   // 현재 가운데 패널 항목 배열
-let _selectedItem = null;
+// ── 상태 ──
+var trashGroups     = [];   // API groups 배열 — window.trashGroups로 접근 가능하게 var 사용
+var trashUnassigned = [];   // API unassigned 배열
 
-const TYPE_LABEL = { meeting: '문서', checklist: '체크' };
+// 선택 상태
+// mode: null | 'group' | 'unassigned'
+let _selMode       = null;
+let _selGroupIdx   = null;  // groups 배열 인덱스
+let _listItems     = [];    // 가운데 패널 항목 배열
+let _selectedItem  = null;  // 오른쪽 패널에 표시 중인 항목 (또는 null이면 그룹 헤더)
+
+// ── 타입 레이블/뱃지 ──
 function labelForEvent(item) {
   if (item.event_type === 'journal')  return '일지';
   if (item.event_type === 'meeting')  return '회의';
@@ -414,13 +520,15 @@ function labelForEvent(item) {
   return '업무';
 }
 function typeLabel(item) {
-  if (item._type === 'event') return labelForEvent(item);
-  return TYPE_LABEL[item._type] || item._type;
+  if (item.type === 'event')     return labelForEvent(item);
+  if (item.type === 'meeting')   return '문서';
+  if (item.type === 'checklist') return '체크';
+  return item.type || '?';
 }
 function typeBadgeClass(item) {
-  if (item._type === 'meeting')   return 'tr-type-doc';
-  if (item._type === 'checklist') return 'tr-type-checklist';
-  if (item._type === 'event') {
+  if (item.type === 'meeting')   return 'tr-type-doc';
+  if (item.type === 'checklist') return 'tr-type-checklist';
+  if (item.type === 'event') {
     if (item.event_type === 'meeting') return 'tr-type-event-meeting';
     if (item.event_type === 'journal') return 'tr-type-journal';
     if (item.event_type === 'subtask') return 'tr-type-subtask';
@@ -429,40 +537,24 @@ function typeBadgeClass(item) {
   return 'tr-type-event';
 }
 
+// ── 데이터 로드 ──
 async function loadTrash() {
-  const [trashRes, projRes] = await Promise.all([
-    fetch('/api/trash'),
-    fetch('/api/manage/projects'),
-  ]);
-  _trashData = await trashRes.json();
-  const allProjects = await projRes.json();
-
-  _projColors = {};
-  for (const p of allProjects) {
-    if (p.color) _projColors[p.name] = p.color;
-  }
-
-  // 삭제된 프로젝트 엔티티 이름 — 활성 카테고리 목록에서 제외
-  const deletedProjNames = new Set((_trashData.projects || []).map(p => p.title));
-
-  const seen = new Set();
-  _projList = [];
-  for (const p of allProjects) {
-    seen.add(p.name);
-    _projList.push({ name: p.name, color: p.color || '#aaaaaa' });
-  }
-  // trash items에만 있는 프로젝트 — 삭제된 프로젝트 엔티티와 같은 이름은 제외
-  for (const x of [..._trashData.events, ..._trashData.checklists]) {
-    if (x.project && x.project.trim() && !seen.has(x.project) && !deletedProjNames.has(x.project)) {
-      seen.add(x.project);
-      _projList.push({ name: x.project, color: '#aaaaaa' });
-    }
-  }
-  _projList.sort((a, b) => a.name.localeCompare(b.name));
-
+  const data = await fetch('/api/trash').then(r => r.json());
+  trashGroups     = data.groups     || [];
+  trashUnassigned = data.unassigned || [];
   renderCats();
-  if (_selectedCat) {
-    selectCat(_selectedCat);
+  // 선택 상태 유지 시도
+  if (_selMode === 'group' && _selGroupIdx !== null) {
+    if (_selGroupIdx < trashGroups.length) {
+      selectGroup(_selGroupIdx, false);
+    } else {
+      _selMode = null; _selGroupIdx = null;
+      renderDetail(null, null);
+    }
+  } else if (_selMode === 'meetings') {
+    selectMeetings(false);
+  } else if (_selMode === 'unassigned') {
+    selectUnassigned(false);
   }
 }
 
@@ -471,150 +563,152 @@ function renderCats() {
   const el = document.getElementById('tr-cat-list');
   el.innerHTML = '';
 
-  const mtCnt = _trashData.meetings.length;
+  // 문서 카드 (미지정 중 meeting 타입)
+  const meetingItems  = trashUnassigned.filter(it => it.type === 'meeting');
+  const otherItems    = trashUnassigned.filter(it => it.type !== 'meeting');
+
+  const meetCnt      = meetingItems.length;
+  const meetActive   = (_selMode === 'meetings')    ? ' active' : '';
+  const meetDisabled = meetCnt === 0 ? ' tr-cat-item-disabled' : '';
   el.insertAdjacentHTML('beforeend', `
-    <div class="tr-cat-item${_selectedCat === 'meeting' ? ' active' : ''}" onclick="selectCat('meeting')">
-      <span class="tr-cat-icon">📄</span>
-      <span class="tr-cat-label">문서</span>
-      <span class="tr-cat-cnt">${mtCnt}</span>
+    <div class="tr-cat-item${meetActive}${meetDisabled}" onclick="${meetCnt > 0 ? 'selectMeetings()' : ''}">
+      <span class="tr-cat-dot" style="background:#6b7280;"></span>
+      <span class="tr-cat-label">📄 문서</span>
+      <span class="tr-cat-cnt">${meetCnt}</span>
     </div>
   `);
 
-  // 삭제된 프로젝트 엔티티 (있을 때만)
-  if (_trashData.projects && _trashData.projects.length > 0) {
-    _trashData.projects.forEach((p, i) => {
-      const catId = 'deleted_proj:' + i;
-      el.insertAdjacentHTML('beforeend', `
-        <div class="tr-cat-item${_selectedCat === catId ? ' active' : ''}" onclick="selectDeletedProjCat(${i})">
-          <span class="tr-cat-icon">📁</span>
-          <span class="tr-cat-label">${escHtml(p.title)}</span>
-        </div>
-      `);
-    });
-  }
+  // 미지정 카드 (meeting 제외)
+  const unsetCnt     = otherItems.length;
+  const unsetActive  = (_selMode === 'unassigned') ? ' active' : '';
+  const unsetDisabled = unsetCnt === 0 ? ' tr-cat-item-disabled' : '';
+  el.insertAdjacentHTML('beforeend', `
+    <div class="tr-cat-item tr-unassigned-label${unsetActive}${unsetDisabled}" onclick="${unsetCnt > 0 ? 'selectUnassigned()' : ''}">
+      <span class="tr-cat-dot" style="background:#aaaaaa;"></span>
+      <span class="tr-cat-label">⊘ 미지정</span>
+      <span class="tr-cat-cnt">${unsetCnt}</span>
+    </div>
+  `);
 
   el.insertAdjacentHTML('beforeend', '<div class="tr-cat-sep"></div>');
 
-  // 미지정 (삭제된 항목 있을 때만)
-  const unsetCnt = countForProj('');
-  if (unsetCnt > 0) {
+  // 그룹 카드들
+  trashGroups.forEach((g, i) => {
+    const p = g.project || {};
+    const color = p.color || '#aaaaaa';
+    const daysLeft = getDaysLeft(p.deleted_at);
+    const dnClass = daysLeft <= 3 ? 'tr-dn-danger' : daysLeft <= 7 ? 'tr-dn-warn' : '';
+    const dnStr = p.deleted_at
+      ? `<span class="tr-cat-dn ${dnClass}">D-${daysLeft}</span>`
+      : '';
+    const active = (_selMode === 'group' && _selGroupIdx === i) ? ' active' : '';
     el.insertAdjacentHTML('beforeend', `
-      <div class="tr-cat-item${_selectedCat === 'unset' ? ' active' : ''}" onclick="selectCat('unset')">
-        <span class="tr-cat-dot" style="background:#aaaaaa;"></span>
-        <span class="tr-cat-label">미지정</span>
-        <span class="tr-cat-cnt">${unsetCnt}</span>
-      </div>
-    `);
-  }
-
-  // 프로젝트 — 삭제된 항목이 1개 이상인 것만 표시
-  _projList.forEach((p, i) => {
-    const cnt = countForProj(p.name);
-    if (cnt === 0) return;  // 삭제 항목 없으면 표시 안 함
-    const catId = 'proj:' + p.name;
-    el.insertAdjacentHTML('beforeend', `
-      <div class="tr-cat-item${_selectedCat === catId ? ' active' : ''}" onclick="selectProjCat(${i})">
-        <span class="tr-cat-dot" style="background:${escAttr(p.color)};"></span>
-        <span class="tr-cat-label">${escHtml(p.name)}</span>
-        <span class="tr-cat-cnt">${cnt}</span>
+      <div class="tr-cat-item${active}" onclick="selectGroup(${i})">
+        <span class="tr-group-color-strip" style="background:${escAttr(color)};"></span>
+        <span class="tr-cat-label">📁 ${escHtml(p.name || '알 수 없음')}</span>
+        <span class="tr-cat-cnt">${g.items ? g.items.length : 0}</span>
+        ${dnStr}
       </div>
     `);
   });
 }
 
-function selectProjCat(i) {
-  if (_projList[i]) selectCat('proj:' + _projList[i].name);
-}
-
-function selectDeletedProjCat(i) {
-  if (_trashData.projects[i]) selectCat('deleted_proj:' + i);
-}
-
-function countForProj(projName) {
-  const evs = _trashData.events.filter(x => (x.project || '') === projName);
-  const cls = _trashData.checklists.filter(x => (x.project || '') === projName);
-  return evs.length + cls.length;
-}
-
-// ── 카테고리 선택 ──
-function selectCat(catId) {
-  _selectedCat = catId;
-  _selectedItem = null;
+// ── 그룹 선택 ──
+function selectGroup(idx, resetItem = true) {
+  _selMode = 'group';
+  _selGroupIdx = idx;
+  if (resetItem) _selectedItem = null;
   renderCats();
-  renderDetail(null);
 
-  const restoreBtn = document.getElementById('tr-proj-restore-btn');
-  restoreBtn.style.display = 'none';
+  const g = trashGroups[idx];
+  if (!g) return;
+  const p = g.project || {};
+  document.getElementById('tr-mid-title').textContent = p.name || '알 수 없음';
 
-  let items = [];
-  let title = '';
+  const items = (g.items || []).slice().sort((a, b) =>
+    (b.deleted_at || '').localeCompare(a.deleted_at || ''));
+  renderList(items, p);
 
-  if (catId === 'meeting') {
-    title = '문서';
-    items = _trashData.meetings.map(x => ({ ...x, _type: 'meeting' }));
+  // 그룹 헤더 자체를 상세로 표시 (항목 미선택 시)
+  if (resetItem) renderGroupDetail(g);
+}
 
-  } else if (catId === 'unset') {
-    title = '미지정';
-    const evs = _trashData.events.filter(x => !(x.project || '').trim()).map(x => ({ ...x, _type: 'event' }));
-    const cls = _trashData.checklists.filter(x => !(x.project || '').trim()).map(x => ({ ...x, _type: 'checklist' }));
-    items = [...evs, ...cls];
+// ── 문서(meeting) 선택 ──
+function selectMeetings(resetItem = true) {
+  _selMode = 'meetings';
+  _selGroupIdx = null;
+  if (resetItem) _selectedItem = null;
+  renderCats();
 
-  } else if (catId.startsWith('proj:')) {
-    const pName = catId.slice(5);
-    title = pName;
-    const evs = _trashData.events.filter(x => x.project === pName).map(x => ({ ...x, _type: 'event' }));
-    const cls = _trashData.checklists.filter(x => x.project === pName).map(x => ({ ...x, _type: 'checklist' }));
-    items = [...evs, ...cls];
+  const items = trashUnassigned.filter(it => it.type === 'meeting')
+    .slice().sort((a, b) => (b.deleted_at || '').localeCompare(a.deleted_at || ''));
+  document.getElementById('tr-mid-title').textContent = `문서 (${items.length}개)`;
+  renderList(items, null);
 
-  } else if (catId.startsWith('deleted_proj:')) {
-    const idx = parseInt(catId.slice(13));
-    const p = _trashData.projects[idx];
-    if (p) {
-      title = p.title;
-      // 복원 버튼 표시
-      restoreBtn.style.display = '';
-      restoreBtn.dataset.projId = p.id;
-      restoreBtn.dataset.projName = p.title;
-      // 연결된 삭제 항목도 표시
-      const evs = _trashData.events.filter(x => x.project === p.title).map(x => ({ ...x, _type: 'event' }));
-      const cls = _trashData.checklists.filter(x => x.project === p.title).map(x => ({ ...x, _type: 'checklist' }));
-      items = [...evs, ...cls];
-    }
-  }
+  if (resetItem) renderDetail(null, null);
+}
 
-  items.sort((a, b) => (b.deleted_at || '').localeCompare(a.deleted_at || ''));
-  document.getElementById('tr-mid-title').textContent = title;
-  renderList(items);
+// ── 미지정 선택 (meeting 제외) ──
+function selectUnassigned(resetItem = true) {
+  _selMode = 'unassigned';
+  _selGroupIdx = null;
+  if (resetItem) _selectedItem = null;
+  renderCats();
+
+  const items = trashUnassigned.filter(it => it.type !== 'meeting')
+    .slice().sort((a, b) => (b.deleted_at || '').localeCompare(a.deleted_at || ''));
+  document.getElementById('tr-mid-title').textContent = `미지정 항목들 (${items.length}개)`;
+  renderList(items, null);
+
+  if (resetItem) renderDetail(null, null);
 }
 
 // ── 가운데 목록 렌더링 ──
-function renderList(items) {
+function renderList(items, projCtx) {
   _listItems = items;
   const el = document.getElementById('tr-list');
 
+  // 그룹 헤더 (프로젝트 메타)
+  let headerHtml = '';
+  if (_selMode === 'group' && projCtx) {
+    const p = projCtx;
+    const color = p.color || '#aaaaaa';
+    const daysLeft = getDaysLeft(p.deleted_at);
+    const dnClass = daysLeft <= 3 ? 'tr-dn-danger' : daysLeft <= 7 ? 'tr-dn-warn' : '';
+    const deletedAt = p.deleted_at ? fmtDatetime(p.deleted_at) : '알 수 없음';
+    const deletedBy = p.deleted_by || '알 수 없음';
+    headerHtml = `
+      <div class="tr-group-header">
+        <span class="tr-group-color-strip" style="background:${escAttr(color)};height:100%;position:absolute;left:0;top:0;"></span>
+        <div style="padding-left:10px;">
+          <div style="font-weight:700;font-size:0.88rem;color:var(--text);">📁 ${escHtml(p.name || '')}</div>
+          <div style="font-size:0.72rem;color:var(--text-faint);margin-top:2px;">
+            삭제일: ${deletedAt} · 삭제자: ${deletedBy}
+            <span class="tr-dn-badge ${dnClass}">D-${daysLeft}</span>
+          </div>
+        </div>
+        <button class="tr-proj-restore-btn" onclick="doRestoreProject(${(_selGroupIdx !== null && trashGroups[_selGroupIdx]) ? trashGroups[_selGroupIdx].project.id : 0})">복원</button>
+      </div>
+    `;
+  }
+
   if (!items.length) {
-    el.innerHTML = '<div class="tr-empty">휴지통이 비어 있습니다.</div>';
+    el.innerHTML = headerHtml + '<div class="tr-empty">항목이 없습니다.</div>';
     return;
   }
 
-  el.innerHTML = '';
+  el.innerHTML = headerHtml;
   items.forEach((item, idx) => {
-    const active = (_selectedItem && _selectedItem._type === item._type && _selectedItem.id === item.id) ? ' active' : '';
+    const active = (_selectedItem && _selectedItem.type === item.type && _selectedItem.id === item.id) ? ' active' : '';
     const daysLeft = getDaysLeft(item.deleted_at);
     const expireStr = daysLeft <= 3 ? `<span class="tr-expire-warn">D-${daysLeft}</span>` : '';
     const dateStr = item.start_datetime ? `<span>${fmtDate(item.start_datetime)}</span>` : '';
-
-    const projColor = (item.project && _projColors[item.project]) ? _projColors[item.project] : '#aaaaaa';
-    const projBar = item._type !== 'meeting' && item.project
-      ? `<span class="tr-proj-bar" style="background:${escAttr(projColor)};"></span><span>${escHtml(item.project)}</span>`
-      : '';
-
     const typeBadge = `<span class="tr-type-badge ${typeBadgeClass(item)}">${typeLabel(item)}</span>`;
+
     el.insertAdjacentHTML('beforeend', `
       <div class="tr-item${active}" onclick="selectItem(${idx})">
         <div class="tr-item-title">${typeBadge} ${escHtml(item.title)}</div>
         <div class="tr-item-meta">
-          ${projBar}
           ${dateStr}
           ${expireStr}
         </div>
@@ -628,28 +722,67 @@ function selectItem(idx) {
   const item = _listItems[idx];
   if (!item) return;
   _selectedItem = item;
-  renderList(_listItems);
-  renderDetail(item);
+  // 목록 재렌더(active 표시 갱신)
+  const projCtx = (_selMode === 'group' && _selGroupIdx !== null)
+    ? (trashGroups[_selGroupIdx] || {}).project
+    : null;
+  renderList(_listItems, projCtx);
+  renderDetail(item, null);
 }
 
-// ── 오른쪽 상세 렌더링 ──
-function renderDetail(item) {
+// ── 오른쪽: 그룹 상세 ──
+function renderGroupDetail(g) {
+  document.getElementById('tr-placeholder').style.display   = 'none';
+  document.getElementById('tr-detail').style.display        = 'none';
+  document.getElementById('tr-group-detail').style.display  = 'flex';
+
+  const p = g.project || {};
+  const items = g.items || [];
+  const daysLeft = getDaysLeft(p.deleted_at);
+  const dnClass = daysLeft <= 3 ? 'danger' : daysLeft <= 7 ? 'warn' : 'ok';
+
+  // 타입별 통계
+  const stats = { event: 0, meeting: 0, checklist: 0 };
+  for (const it of items) {
+    if (it.type in stats) stats[it.type]++;
+    else stats.event++;
+  }
+
+  document.getElementById('tr-gd-name').textContent        = p.name || '알 수 없음';
+  document.getElementById('tr-gd-expire').innerHTML        =
+    `<span class="tr-expire-badge ${dnClass}">D-${daysLeft} (${daysLeft}일 남음)</span>`;
+  document.getElementById('tr-gd-deleted-at').textContent  = fmtDatetime(p.deleted_at);
+  document.getElementById('tr-gd-deleted-by').textContent  = p.deleted_by || '알 수 없음';
+  document.getElementById('tr-gd-stats').innerHTML         =
+    `업무·회의 ${stats.event}개 · 문서 ${stats.meeting}개 · 체크리스트 ${stats.checklist}개`;
+  document.getElementById('tr-gd-restore-btn').onclick     =
+    () => doRestoreProject(p.id);
+  document.getElementById('tr-gd-export-btn').onclick      =
+    () => doExportGroupMd();
+}
+
+// ── 오른쪽: 항목 상세 ──
+function renderDetail(item, _unused) {
   const ph  = document.getElementById('tr-placeholder');
   const det = document.getElementById('tr-detail');
+  const gd  = document.getElementById('tr-group-detail');
+
   if (!item) {
-    ph.style.display = '';
+    ph.style.display  = '';
     det.style.display = 'none';
+    gd.style.display  = 'none';
     return;
   }
-  ph.style.display = 'none';
+  ph.style.display  = 'none';
   det.style.display = 'flex';
+  gd.style.display  = 'none';
 
   document.getElementById('tr-detail-title').textContent = item.title;
   document.getElementById('tr-dv-type').innerHTML =
     `<span class="tr-type-badge ${typeBadgeClass(item)}">${typeLabel(item)}</span>`;
 
   const projRow = document.getElementById('tr-dv-proj-row');
-  if (item._type !== 'meeting') {
+  if (item.type !== 'meeting') {
     projRow.style.display = '';
     document.getElementById('tr-dv-proj').textContent = item.project || '미지정';
   } else {
@@ -657,7 +790,7 @@ function renderDetail(item) {
   }
 
   const dateRow = document.getElementById('tr-dv-date-row');
-  if (item._type === 'event' && item.start_datetime) {
+  if (item.type === 'event' && item.start_datetime) {
     dateRow.style.display = '';
     const end = item.end_datetime ? ` ~ ${fmtDate(item.end_datetime)}` : '';
     document.getElementById('tr-dv-date').textContent = fmtDate(item.start_datetime) + end;
@@ -673,44 +806,129 @@ function renderDetail(item) {
   document.getElementById('tr-dv-expire').innerHTML =
     `<span class="tr-expire-badge ${cls}">D-${daysLeft} (${daysLeft}일 남음)</span>`;
 
-  // 원본 내용 렌더링
+  // 원본 내용
   const contentSection = document.getElementById('tr-content-section');
   const contentViewer  = document.getElementById('tr-content-viewer');
   const eventDesc      = document.getElementById('tr-event-desc');
   contentViewer.style.display = 'none';
-  eventDesc.style.display = 'none';
+  eventDesc.style.display     = 'none';
   contentSection.style.display = 'none';
 
-  if ((item._type === 'meeting' || item._type === 'checklist') && item.content) {
+  if ((item.type === 'meeting' || item.type === 'checklist') && item.content) {
     contentSection.style.display = '';
-    contentViewer.style.display = '';
+    contentViewer.style.display  = '';
     contentViewer.innerHTML = '';
     WUEditor.create({ el: contentViewer, canEdit: false, initialMarkdown: item.content || '' });
-  } else if (item._type === 'event' && item.description) {
+  } else if (item.type === 'event' && item.description) {
     contentSection.style.display = '';
-    eventDesc.style.display = '';
+    eventDesc.style.display      = '';
     eventDesc.textContent = item.description;
   }
 }
 
 // ── 프로젝트 전체 복원 ──
-async function doRestoreProject() {
-  const btn = document.getElementById('tr-proj-restore-btn');
-  const projId   = btn.dataset.projId;
-  const projName = btn.dataset.projName;
+async function doRestoreProject(projId) {
   if (!projId) return;
+  const g = (_selGroupIdx !== null) ? trashGroups[_selGroupIdx] : null;
+  const projName = g ? (g.project || {}).name || '' : '';
   if (!await wuDialog.confirm({ title: '복원', message: `"${projName}" 프로젝트와 연결된 모든 항목을 복원하시겠습니까?` })) return;
   try {
     const res = await fetch(`/api/trash/project/${projId}/restore`, { method: 'POST' });
     if (!res.ok) { wuToast.error('복원 실패'); return; }
-    const prevCat = _selectedCat;
     _selectedItem = null;
     await loadTrash();
-    // 복원 후 해당 카테고리가 사라졌으면 초기화
-    renderDetail(null);
+    renderDetail(null, null);
   } catch(e) {
     wuToast.error('오류 발생: ' + e.message);
   }
+}
+
+// ── MD 내보내기 유틸 ──
+function downloadMd(filename, content) {
+  const blob = new Blob([content], { type: 'text/markdown; charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function safeName(str) {
+  return (str || 'untitled').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
+}
+
+// 그룹(프로젝트) 전체 MD 내보내기
+function doExportGroupMd() {
+  const g = _selGroupIdx !== null ? trashGroups[_selGroupIdx] : null;
+  if (!g) return;
+  const p     = g.project || {};
+  const items = g.items   || [];
+
+  const events     = items.filter(it => it.type === 'event');
+  const meetings   = items.filter(it => it.type === 'meeting');
+  const checklists = items.filter(it => it.type === 'checklist');
+
+  let md = `# 📁 ${p.name || '알 수 없음'}\n\n`;
+  md += `- **삭제일**: ${p.deleted_at ? fmtDatetime(p.deleted_at) : '-'}\n`;
+  md += `- **삭제자**: ${p.deleted_by || '알 수 없음'}\n`;
+  md += `- **남은 기간**: D-${getDaysLeft(p.deleted_at)}\n\n`;
+
+  if (events.length) {
+    md += `## 업무 (${events.length}개)\n\n`;
+    events.forEach(it => {
+      md += `### ${it.title}\n`;
+      if (it.start_datetime) {
+        const end = it.end_datetime ? ` ~ ${fmtDate(it.end_datetime)}` : '';
+        md += `- 날짜: ${fmtDate(it.start_datetime)}${end}\n`;
+      }
+      if (it.assignee) md += `- 담당자: ${it.assignee}\n`;
+      if (it.description) md += `\n${it.description}\n`;
+      md += '\n';
+    });
+  }
+
+  if (meetings.length) {
+    md += `## 문서 (${meetings.length}개)\n\n`;
+    meetings.forEach(it => {
+      md += `### ${it.title}\n\n`;
+      if (it.content) md += `${it.content}\n\n`;
+    });
+  }
+
+  if (checklists.length) {
+    md += `## 체크리스트 (${checklists.length}개)\n\n`;
+    checklists.forEach(it => {
+      md += `### ${it.title}\n\n`;
+      if (it.content) md += `${it.content}\n\n`;
+    });
+  }
+
+  downloadMd(`${safeName(p.name)}_휴지통.md`, md);
+}
+
+// 개별 항목 MD 내보내기
+function doExportMd() {
+  const item = _selectedItem;
+  if (!item) return;
+
+  const label = typeLabel(item);
+  let md = `# ${label}: ${item.title}\n\n`;
+
+  if (item.type !== 'meeting' && item.project) md += `- **프로젝트**: ${item.project}\n`;
+  if (item.type === 'event') {
+    if (item.start_datetime) {
+      const end = item.end_datetime ? ` ~ ${fmtDate(item.end_datetime)}` : '';
+      md += `- **날짜**: ${fmtDate(item.start_datetime)}${end}\n`;
+    }
+    if (item.assignee) md += `- **담당자**: ${item.assignee}\n`;
+  }
+  md += `- **삭제일**: ${item.deleted_at ? fmtDatetime(item.deleted_at) : '-'}\n`;
+  md += `- **삭제자**: ${item.deleted_by || '알 수 없음'}\n`;
+  md += `- **남은 기간**: D-${getDaysLeft(item.deleted_at)}\n`;
+
+  if (item.content)     md += `\n---\n\n${item.content}\n`;
+  else if (item.description) md += `\n---\n\n${item.description}\n`;
+
+  downloadMd(`${safeName(item.title)}_휴지통.md`, md);
 }
 
 // ── 개별 항목 복원 ──
@@ -718,13 +936,26 @@ async function doRestore() {
   if (!_selectedItem) return;
   if (!await wuDialog.confirm({ title: '복원', message: `"${_selectedItem.title}" 을(를) 복원하시겠습니까?` })) return;
   try {
-    const res = await fetch(`/api/trash/${_selectedItem._type}/${_selectedItem.id}/restore`, { method: 'POST' });
+    const res = await fetch(`/api/trash/${_selectedItem.type}/${_selectedItem.id}/restore`, { method: 'POST' });
     if (!res.ok) { wuToast.error('복원 실패'); return; }
-    const prevCat = _selectedCat;
+    const prevMode = _selMode;
+    const prevGroupIdx = _selGroupIdx;
     _selectedItem = null;
     await loadTrash();
-    if (prevCat) selectCat(prevCat);
-    renderDetail(null);
+    // 복원 후 이전 선택 복구 시도
+    if (prevMode === 'group' && prevGroupIdx !== null && prevGroupIdx < trashGroups.length) {
+      selectGroup(prevGroupIdx, false);
+      // 그룹 상세 패널 다시 표시
+      renderGroupDetail(trashGroups[prevGroupIdx]);
+    } else if (prevMode === 'meetings') {
+      selectMeetings(false);
+      renderDetail(null, null);
+    } else if (prevMode === 'unassigned') {
+      selectUnassigned(false);
+      renderDetail(null, null);
+    } else {
+      renderDetail(null, null);
+    }
   } catch(e) {
     wuToast.error('오류 발생: ' + e.message);
   }

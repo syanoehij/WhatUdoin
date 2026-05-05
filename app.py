@@ -1909,13 +1909,7 @@ async def manage_delete_project_items(name: str, request: Request):
 @app.delete("/api/manage/projects/{name:path}")
 async def manage_delete_project(name: str, request: Request):
     user = _require_editor(request)
-    data = {}
-    try:
-        data = await request.json()
-    except Exception:
-        pass
-    delete_events = data.get("delete_events", False)
-    db.delete_project(name, delete_events, deleted_by=user["name"], team_id=user.get("team_id"))
+    db.delete_project(name, deleted_by=user["name"], team_id=user.get("team_id"))
     # 프로젝트 삭제는 이벤트에도 영향 → 두 채널 모두 publish
     wu_broker.publish("projects.changed", {"name": name, "action": "delete"})
     wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": user.get("team_id")})
