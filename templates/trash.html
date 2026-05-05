@@ -492,7 +492,7 @@
           <span class="tr-detail-val" id="tr-gd-stats"></span>
         </div>
         <div class="tr-info-box">
-          프로젝트와 그 안의 항목은 한 묶음으로 삭제·복원되며, 30일 후 자동으로 영구 삭제됩니다.<br>
+          프로젝트와 그 안의 항목은 한 묶음으로 삭제·복원되며, 90일 후 자동으로 영구 삭제됩니다.<br>
           휴지통에서는 수동 영구 삭제를 지원하지 않습니다.
         </div>
       </div>
@@ -531,7 +531,7 @@
           <span id="tr-dv-expire"></span>
         </div>
         <div class="tr-info-box">
-          프로젝트와 그 안의 항목은 한 묶음으로 삭제·복원되며, 30일 후 자동으로 영구 삭제됩니다.<br>
+          프로젝트와 그 안의 항목은 한 묶음으로 삭제·복원되며, 90일 후 자동으로 영구 삭제됩니다.<br>
           휴지통에서는 수동 영구 삭제를 지원하지 않습니다.
         </div>
         <!-- 원본 내용 미리보기 -->
@@ -1053,8 +1053,8 @@ async function doRestore() {
 
 // ── 유틸 ──
 function getDaysLeft(deletedAt) {
-  if (!deletedAt) return 30;
-  const expiry = new Date(new Date(deletedAt).getTime() + 30 * 24 * 60 * 60 * 1000);
+  if (!deletedAt) return 90;
+  const expiry = new Date(new Date(deletedAt).getTime() + 90 * 24 * 60 * 60 * 1000);
   return Math.max(0, Math.ceil((expiry - new Date()) / (1000 * 60 * 60 * 24)));
 }
 function fmtDate(s)     { return s ? s.slice(0, 10) : ''; }

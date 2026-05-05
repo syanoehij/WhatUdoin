@@ -14,6 +14,16 @@
           "icon": "🔒",
           "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — AVR 페이지 CSP frame-src 차단 문제 수정",
           "detail_html": "<ul><li>38차 5단계에서 추가된 <code>_SecurityHeadersMiddleware</code>의 CSP에 <code>frame-src</code>가 없어 <code>default-src 'self'</code>가 fallback으로 적용되면서 WUDeskop iframe 로드가 브라우저에 의해 차단됨</li><li><code>avr_page</code> 라우트에서 응답 헤더에 <code>content-security-policy</code>를 직접 설정 — <code>frame-src</code>를 WUDeskop URL 오리진으로 정밀 허용하고 나머지 지시어는 기존 정책 유지</li><li>미들웨어는 기존 헤더가 있으면 덮어쓰지 않는 구조이므로 다른 페이지 CSP 정책에 영향 없음</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 패치 후 <code>team_id=NULL</code> 항목 수정·삭제 불가 버그 수정",
+          "detail_html": "<ul><li>38차 9단계 보안 패치에서 추가된 소유권 헬퍼가 <code>team_id=NULL</code> 항목에 대해 팀 소속 사용자를 잘못 차단하는 문제 수정</li><li><code>can_edit_checklist</code>: 단순 <code>==</code> 비교 → <code>team_id=NULL</code>이면 editor 전체 허용으로 변경 (<code>can_edit_event</code>·<code>can_edit_project</code>와 동일 패턴)</li><li><code>_can_write_doc</code>: <code>is_team_doc=True</code> + <code>team_id=NULL</code> 문서도 editor라면 수정·삭제 가능하도록 수정</li><li><code>can_edit_project</code>: <code>is_private=1</code> + <code>team_id=NULL</code> 프로젝트를 non-admin editor가 삭제할 수 없던 문제 수정 — 잘못 삭제해도 휴지통에서 복원 가능하므로 editor 허용</li><li>수정 파일: <code>auth.py</code>, <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🗑️",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 휴지통 자동 삭제 기간 30일 → 90일 변경",
+          "detail_html": "<ul><li><code>cleanup_old_trash()</code>: <code>timedelta(days=30)</code> → <code>timedelta(days=90)</code> — 실제 영구 삭제 기준 변경</li><li>실행 시점: 매일 새벽 3시, <code>deleted_at</code> 기준 90일 초과 항목 영구 삭제</li><li>휴지통 UI 남은 기간 표시(<code>getDaysLeft</code>): 만료 계산 기준 30일 → 90일 변경</li><li>삭제 확인 다이얼로그 안내 문구도 30일 → 90일로 통일</li><li>수정 파일: <code>database.py</code>, <code>app.py</code>, <code>templates/trash.html</code>, <code>templates/project_manage.html</code></li></ul>"
         }
       ]
     },

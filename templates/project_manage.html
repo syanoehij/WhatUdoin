@@ -1653,7 +1653,7 @@ async function executeBulkDelete() {
   const total = evIds.length + ckIds.length;
   const ok = await wuDialog.confirm({
     title: '선택 항목 삭제',
-    message: `선택한 ${total}개 항목을 휴지통으로 이동합니다.\n(휴지통에서 30일 내 복구 가능)`,
+    message: `선택한 ${total}개 항목을 휴지통으로 이동합니다.\n(휴지통에서 90일 내 복구 가능)`,
     danger: true,
   });
   if (!ok) return;

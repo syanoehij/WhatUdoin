@@ -2896,8 +2896,8 @@ def finalize_expired_done():
 
 
 def cleanup_old_trash():
-    """30일 초과 휴지통 항목 영구 삭제 (APScheduler에서 호출)"""
-    threshold = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    """90일 초과 휴지통 항목 영구 삭제 (APScheduler에서 호출)"""
+    threshold = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d %H:%M:%S")
     with get_conn() as conn:
         conn.execute("DELETE FROM events WHERE deleted_at IS NOT NULL AND deleted_at < ?", (threshold,))
         conn.execute("DELETE FROM meetings WHERE deleted_at IS NOT NULL AND deleted_at < ?", (threshold,))

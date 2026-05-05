@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI):
     if not scheduler.running:
         # APScheduler: 1분마다 15분 후 일정 알람 체크
         scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)
-        # APScheduler: 매일 새벽 3시 휴지통 30일 초과 항목 정리
+        # APScheduler: 매일 새벽 3시 휴지통 90일 초과 항목 정리
         scheduler.add_job(db.cleanup_old_trash, "cron", hour=3, minute=0)
         # APScheduler: 매일 새벽 3시 5분 done 7일 경과 일정 자동 완료 처리
         scheduler.add_job(db.finalize_expired_done, "cron", hour=3, minute=5)
@@ -448,7 +448,10 @@ def _can_write_doc(user, doc: dict) -> bool:
     if not auth.is_editor(user):
         return False
     if doc.get("is_team_doc"):
-        return doc.get("team_id") == user.get("team_id")
+        doc_team = doc.get("team_id")
+        if doc_team is None:
+            return True
+        return doc_team == user.get("team_id")
     return doc.get("created_by") == user["id"]
 
 

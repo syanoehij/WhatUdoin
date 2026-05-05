@@ -62,7 +62,10 @@ def can_edit_checklist(user, checklist: dict) -> bool:
     """해당 사용자가 이 체크리스트를 수정할 수 있는지 확인"""
     if user.get("role") == "admin":
         return True
-    return checklist.get("team_id") == user.get("team_id")
+    cl_team = checklist.get("team_id")
+    if cl_team is None:
+        return True
+    return cl_team == user.get("team_id")
 
 
 def can_edit_project(user, project: dict) -> bool:
@@ -72,7 +75,4 @@ def can_edit_project(user, project: dict) -> bool:
     proj_team = project.get("team_id")
     if proj_team is not None:
         return proj_team == user.get("team_id")
-    # team_id 없는 프로젝트: private이면 비admin 수정 불가
-    if project.get("is_private"):
-        return False
     return True
