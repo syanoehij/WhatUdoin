@@ -128,6 +128,11 @@
     opacity: 0.85;
     font-size: 0.78rem;
     cursor: pointer;
+    border-width: 2px !important;
+    border-color: #6e8fa6 !important;
+  }
+  [data-theme="dark"] .fc-event.ev-milestone {
+    border-color: #9fb8d0 !important;
   }
 
   /* ── 컨텍스트 메뉴 ── */
@@ -513,7 +518,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const p = info.event.extendedProps;
         wuDialog.alert({
           title: '📌 프로젝트 중간 일정',
-          message: `프로젝트: ${p.project}\n일정: ${info.event.title}\n날짜: ${p.date}`,
+          message: `프로젝트: ${p.project}\n일정: ${p.milestone_title}\n날짜: ${p.date}`,
         });
         return;
       }

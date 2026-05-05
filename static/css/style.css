@@ -2011,7 +2011,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 [data-theme="dark"] .fc-daygrid-day             { background: var(--surface); }
 /* 다크테마 월 뷰 오늘: accent-light(#131c2e)은 너무 어두움 → 파란 오버레이로 교체 */
 [data-theme="dark"] .fc-daygrid-day.fc-day-today { background: rgba(88,166,255,0.13) !important; }
-[data-theme="dark"] .fc-daygrid-day.fc-day-other { background: var(--bg); opacity: 0.9; }
+[data-theme="dark"] .fc-daygrid-day.fc-day-other { background: var(--bg); }
 
 [data-theme="dark"] .fc-timegrid-col             { background: var(--surface); }
 

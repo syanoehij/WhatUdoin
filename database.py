@@ -1121,13 +1121,14 @@ def get_calendar_milestones(user_name: str) -> list:
     for row in rows:
         ev = {
             "id": f"ms-{row['id']}",
-            "title": row["title"],
+            "title": f"{row['title']} - {row['project_name']}",
             "start": row["date"],
             "end": row["date"],
             "allDay": True,
             "extendedProps": {
                 "type": "milestone",
                 "project": row["project_name"],
+                "milestone_title": row["title"],
                 "date": row["date"],
             },
             "classNames": ["ev-milestone"],
@@ -1137,31 +1138,43 @@ def get_calendar_milestones(user_name: str) -> list:
         }
         if row["color"]:
             ev["backgroundColor"] = row["color"]
-            ev["borderColor"] = row["color"]
         result.append(ev)
     return result
 
 
 def get_upcoming_milestones(user_name: str, limit: int = 5) -> list:
-    """내 스케줄용. 오늘 이후 사용자 프로젝트의 milestone을 limit개 반환."""
+    """내 스케줄용. 오늘 이후 사용자 프로젝트의 milestone + 종료 예정을 합산해 limit개 반환."""
     today = datetime.now().strftime("%Y-%m-%d")
     with get_conn() as conn:
         user_projects = _get_user_projects(conn, user_name)
         if not user_projects:
             return []
         placeholders = ",".join("?" * len(user_projects))
-        rows = conn.execute(
+        ms_rows = conn.execute(
             f"""SELECT pm.title, pm.date, p.name AS project_name
                   FROM project_milestones pm
                   JOIN projects p ON p.id = pm.project_id
                  WHERE p.name IN ({placeholders})
                    AND (p.is_active IS NULL OR p.is_active = 1)
                    AND pm.date >= ?
-                 ORDER BY pm.date ASC
-                 LIMIT ?""",
-            (*tuple(user_projects), today, limit)
+                 ORDER BY pm.date ASC""",
+            (*tuple(user_projects), today)
         ).fetchall()
-    return [{"project": row["project_name"], "title": row["title"], "date": row["date"]} for row in rows]
+        end_rows = conn.execute(
+            f"""SELECT name AS project_name, end_date AS date
+                  FROM projects
+                 WHERE name IN ({placeholders})
+                   AND (is_active IS NULL OR is_active = 1)
+                   AND deleted_at IS NULL
+                   AND end_date IS NOT NULL
+                   AND end_date >= ?
+                 ORDER BY end_date ASC""",
+            (*tuple(user_projects), today)
+        ).fetchall()
+    items = [{"project": r["project_name"], "title": r["title"], "date": r["date"]} for r in ms_rows]
+    items += [{"project": r["project_name"], "title": "종료 예정", "date": r["date"]} for r in end_rows]
+    items.sort(key=lambda x: x["date"])
+    return items[:limit]
 
 
 def create_notification(user_name: str, type_: str, message: str, event_id: int = None):
