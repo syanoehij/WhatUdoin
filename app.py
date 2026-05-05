@@ -57,6 +57,7 @@ async def lifespan(app: FastAPI):
             import logging
             logging.getLogger("whatudoin").warning("서버 시작 백업 실패: %s", _e)
     db.init_db()
+    db.cleanup_expired_sessions()  # 만료/레거시 NULL 세션 정리 (P1-6)
     # SSE broker에 현재 이벤트 루프 등록 (sync 핸들러에서 publish 시 필수)
     wu_broker.start_on_loop(asyncio.get_running_loop())
     saved_url = db.get_setting("ollama_url")
@@ -730,7 +731,7 @@ async def create_checklist(request: Request):
     project = data.get("project", "").strip()
     content = data.get("content", "").strip()
     is_public = 1 if data.get("is_public") else 0
-    cid = db.create_checklist(project, title, content, user["name"], is_public=is_public)
+    cid = db.create_checklist(project, title, content, user["name"], is_public=is_public, team_id=user.get("team_id"))
     wu_broker.publish("checks.changed", {"id": cid, "action": "create"})
     return {"id": cid}
 
@@ -748,10 +749,12 @@ def get_checklist(checklist_id: int, request: Request):
 
 @app.patch("/api/checklists/{checklist_id}/status")
 async def toggle_checklist_status(checklist_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     item = db.get_checklist(checklist_id)
     if not item:
         raise HTTPException(status_code=404)
+    if not auth.can_edit_checklist(user, item):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     is_active = 1 if data.get("is_active", True) else 0
     db.set_checklist_active(checklist_id, is_active)
@@ -790,10 +793,12 @@ async def bulk_event_visibility(request: Request):
 
 @app.patch("/api/checklists/{checklist_id}/visibility")
 async def rotate_checklist_visibility(checklist_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     cl = db.get_checklist(checklist_id)
     if not cl:
         raise HTTPException(status_code=404)
+    if not auth.can_edit_checklist(user, cl):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     body = await request.body()
     data = await request.json() if body else {}
     if "is_public" in data:
@@ -809,10 +814,12 @@ async def rotate_checklist_visibility(checklist_id: int, request: Request):
 
 @app.patch("/api/checklists/{checklist_id}")
 async def update_checklist(checklist_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     item = db.get_checklist(checklist_id)
     if not item:
         raise HTTPException(status_code=404)
+    if not auth.can_edit_checklist(user, item):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     title = data.get("title", item["title"]).strip()
     if not title:
@@ -834,6 +841,8 @@ async def update_checklist_content(checklist_id: int, request: Request):
     item = db.get_checklist(checklist_id)
     if not item:
         raise HTTPException(status_code=404)
+    if not auth.can_edit_checklist(user, item):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     source = data.get("source", "editor")  # "editor" | "viewer_toggle"
     if source == "viewer_toggle":
@@ -863,6 +872,11 @@ def get_checklist_histories(checklist_id: int, request: Request):
 @app.post("/api/checklists/{checklist_id}/histories/{history_id}/restore")
 async def restore_checklist_history(checklist_id: int, history_id: int, request: Request):
     user = _require_editor(request)
+    item = db.get_checklist(checklist_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="체크리스트를 찾을 수 없습니다.")
+    if not auth.can_edit_checklist(user, item):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     ok = db.restore_checklist_from_history(checklist_id, history_id, user["name"])
     if not ok:
         raise HTTPException(status_code=404, detail="이력을 찾을 수 없습니다.")
@@ -876,6 +890,8 @@ def delete_checklist(checklist_id: int, request: Request):
     item = db.get_checklist(checklist_id)
     if not item:
         raise HTTPException(status_code=404)
+    if not auth.can_edit_checklist(user, item):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     db.release_checklist_lock(checklist_id)  # 삭제 시 강제 해제
     db.delete_checklist(checklist_id, deleted_by=user["name"], team_id=user.get("team_id"))
     wu_broker.publish("checks.changed", {"id": checklist_id, "action": "delete"})
@@ -887,6 +903,11 @@ def delete_checklist(checklist_id: int, request: Request):
 @app.post("/api/checklists/{checklist_id}/lock")
 def lock_checklist(checklist_id: int, request: Request):
     user = _require_editor(request)
+    item = db.get_checklist(checklist_id)
+    if not item:
+        raise HTTPException(status_code=404)
+    if not auth.can_edit_checklist(user, item):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     tab_token = request.query_params.get("tab_token", "")
     ok = db.acquire_checklist_lock(checklist_id, user["name"], tab_token)
     if not ok:
@@ -932,10 +953,12 @@ def get_checklist_lock_status(checklist_id: int, request: Request):
 
 @app.patch("/api/checklists/{checklist_id}/is-locked")
 async def set_checklist_is_locked(checklist_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     item = db.get_checklist(checklist_id)
     if not item:
         raise HTTPException(status_code=404)
+    if not auth.can_edit_checklist(user, item):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     locked = 1 if data.get("locked") else 0
     db.set_checklist_is_locked(checklist_id, locked)
@@ -949,7 +972,7 @@ def api_get_notice():
 
 @app.post("/api/notice")
 async def api_save_notice(request: Request):
-    user = _require_editor(request)
+    user = _require_admin(request)
     data = await request.json()
     content = data.get("content", "")
     notice_id = db.save_notice(content, user["name"])
@@ -1253,9 +1276,32 @@ def _project_color(name: str) -> str:
 
 # ── 이벤트 API ───────────────────────────────────────────
 
+def _filter_events_by_visibility(events: list, user) -> list:
+    """비공개 일정 필터링. user=None이면 is_public=1만, 있으면 같은 팀 or is_public=1."""
+    if user and user.get("role") == "admin":
+        return events
+    result = []
+    for e in events:
+        pub = e.get("is_public")
+        team = e.get("team_id")
+        if pub == 1:
+            result.append(e)
+        elif pub == 0:
+            # 명시적 비공개: 같은 팀 로그인 사용자만
+            if user and team is not None and team == user.get("team_id"):
+                result.append(e)
+        else:
+            # is_public=NULL: 프로젝트 가시성 연동 — 로그인 사용자이면 팀 일치 확인
+            if user and (team is None or team == user.get("team_id")):
+                result.append(e)
+    return result
+
+
 @app.get("/api/events")
-def list_events():
+def list_events(request: Request):
+    user = auth.get_current_user(request)
     events = db.get_all_events()
+    events = _filter_events_by_visibility(events, user)
     proj_colors = db.get_project_colors()
     # 바인딩된 체크리스트의 title 일괄 조회 (삭제된 체크는 None으로 폴백)
     bound_ids = {e.get("bound_checklist_id") for e in events if e.get("bound_checklist_id")}
@@ -1332,13 +1378,16 @@ def list_events():
 
 
 @app.get("/api/events/by-project-range")
-def events_by_project_range(project: str, start: str, end: str, include_subtasks: int = 0):
-    return db.get_events_by_project_range(project, start, end, include_subtasks=bool(include_subtasks))
+def events_by_project_range(request: Request, project: str, start: str, end: str, include_subtasks: int = 0):
+    user = auth.get_current_user(request)
+    events = db.get_events_by_project_range(project, start, end, include_subtasks=bool(include_subtasks))
+    return _filter_events_by_visibility(events, user)
 
 
 @app.get("/api/events/search-parent")
-def search_parent_events(project: str = "", q: str = "", exclude_id: str = None):
+def search_parent_events(request: Request, project: str = "", q: str = "", exclude_id: str = None):
     """하위 업무 모달의 '상위 업무' 오토컴플릿 전용 검색"""
+    user = auth.get_current_user(request)
     with db.get_conn() as conn:
         params = []
         where = ["e.event_type = 'schedule'", "e.recurrence_rule IS NULL", "e.deleted_at IS NULL", "e.parent_event_id IS NULL", "(e.kanban_status IS NULL OR e.kanban_status != 'done')"]
@@ -1353,22 +1402,33 @@ def search_parent_events(project: str = "", q: str = "", exclude_id: str = None)
             where.append("e.id != ?")
             params.append(exclude_id_int)
         rows = conn.execute(
-            f"SELECT id, title, project, start_datetime, end_datetime FROM events e WHERE {' AND '.join(where)} ORDER BY e.start_datetime LIMIT 30",
+            f"SELECT id, title, project, start_datetime, end_datetime, team_id, is_public FROM events e WHERE {' AND '.join(where)} ORDER BY e.start_datetime LIMIT 30",
             params
         ).fetchall()
-    return [dict(r) for r in rows]
+    events = [dict(r) for r in rows]
+    events = _filter_events_by_visibility(events, user)
+    # 클라이언트에 team_id/is_public 노출 불필요 — 제거
+    for e in events:
+        e.pop("team_id", None)
+        e.pop("is_public", None)
+    return events
 
 
 @app.get("/api/events/{event_id}/subtasks")
-def get_event_subtasks(event_id: int):
+def get_event_subtasks(event_id: int, request: Request):
     """특정 이벤트의 하위 업무 목록"""
-    return db.get_subtasks(event_id)
+    user = auth.get_current_user(request)
+    subtasks = db.get_subtasks(event_id)
+    return _filter_events_by_visibility(subtasks, user)
 
 
 @app.get("/api/events/{event_id}")
-def get_event(event_id: int):
+def get_event(event_id: int, request: Request):
+    user = auth.get_current_user(request)
     event = db.get_event(event_id)
     if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not _filter_events_by_visibility([event], user):
         raise HTTPException(status_code=404, detail="Event not found")
     return event
 
@@ -1872,7 +1932,12 @@ async def manage_create_project(request: Request):
 
 @app.put("/api/manage/projects/{name:path}")
 async def manage_rename_project(name: str, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
+    proj = db.get_project(name)
+    if not proj:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    if not auth.can_edit_project(user, proj):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     new_name = data.get("name", "").strip()
     force    = data.get("force", False)
@@ -1887,7 +1952,12 @@ async def manage_rename_project(name: str, request: Request):
 
 @app.patch("/api/manage/projects/{name:path}/status")
 async def manage_project_status(name: str, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
+    proj = db.get_project(name)
+    if not proj:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    if not auth.can_edit_project(user, proj):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     is_active = 1 if data.get("is_active", True) else 0
     db.update_project_status(name, is_active)
@@ -1897,7 +1967,12 @@ async def manage_project_status(name: str, request: Request):
 
 @app.patch("/api/manage/projects/{name:path}/privacy")
 async def manage_project_privacy(name: str, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
+    proj = db.get_project(name)
+    if not proj:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    if not auth.can_edit_project(user, proj):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     is_private = 1 if data.get("is_private") else 0
     db.update_project_privacy(name, is_private)
@@ -1907,7 +1982,12 @@ async def manage_project_privacy(name: str, request: Request):
 
 @app.patch("/api/manage/projects/{name:path}/memo")
 async def manage_project_memo(name: str, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
+    proj = db.get_project(name)
+    if not proj:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    if not auth.can_edit_project(user, proj):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     db.update_project_memo(name, data.get("memo"))
     wu_broker.publish("projects.changed", {"name": name, "action": "update"})
@@ -1930,7 +2010,12 @@ def project_colors_api(request: Request):
 
 @app.patch("/api/manage/projects/{name:path}/color")
 async def manage_project_color(name: str, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
+    proj = db.get_project(name)
+    if not proj:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    if not auth.can_edit_project(user, proj):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     color = data.get("color", "").strip() or None
     db.update_project_color(name, color)
@@ -1940,7 +2025,12 @@ async def manage_project_color(name: str, request: Request):
 
 @app.patch("/api/manage/projects/{name:path}/dates")
 async def manage_project_dates(name: str, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
+    proj = db.get_project(name)
+    if not proj:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    if not auth.can_edit_project(user, proj):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     db.update_project_dates(name, data.get("start_date"), data.get("end_date"))
     wu_broker.publish("projects.changed", {"name": name, "action": "update"})
@@ -1949,7 +2039,12 @@ async def manage_project_dates(name: str, request: Request):
 
 @app.patch("/api/manage/projects/{name:path}/milestones")
 async def manage_project_milestones(name: str, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
+    proj = db.get_project(name)
+    if not proj:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    if not auth.can_edit_project(user, proj):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     items = data.get("milestones") or []
     if not isinstance(items, list):
@@ -1994,6 +2089,11 @@ async def manage_project_milestones(name: str, request: Request):
 @app.delete("/api/manage/projects/{name:path}/items")
 async def manage_delete_project_items(name: str, request: Request):
     user = _require_editor(request)
+    proj = db.get_project(name)
+    if not proj:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    if not auth.can_edit_project(user, proj):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     body = await request.json()
     event_ids = [int(x) for x in body.get('event_ids', [])]
     checklist_ids = [int(x) for x in body.get('checklist_ids', [])]
@@ -2007,6 +2107,11 @@ async def manage_delete_project_items(name: str, request: Request):
 @app.delete("/api/manage/projects/{name:path}")
 async def manage_delete_project(name: str, request: Request):
     user = _require_editor(request)
+    proj = db.get_project(name)
+    if not proj:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    if not auth.can_edit_project(user, proj):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     db.delete_project(name, deleted_by=user["name"], team_id=user.get("team_id"))
     # 프로젝트 삭제는 이벤트에도 영향 → 두 채널 모두 publish
     wu_broker.publish("projects.changed", {"name": name, "action": "delete"})
@@ -2598,7 +2703,12 @@ def _build_project_zip(name: str) -> bytes:
 
 @app.get("/api/manage/projects/{name:path}/export.zip")
 async def manage_export_project_zip(name: str, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
+    proj = db.get_project(name)
+    if not proj:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    if not auth.can_edit_project(user, proj):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = _build_project_zip(name)
     safe = _safe_filename(name, "project")
     stamp = datetime.now().strftime("%Y%m%d")
@@ -2919,6 +3029,11 @@ async def rotate_doc_visibility(meeting_id: int, request: Request):
 @app.post("/api/doc/{meeting_id}/lock")
 def lock_doc(meeting_id: int, request: Request):
     user = _require_editor(request)
+    doc = db.get_meeting(meeting_id)
+    if not doc:
+        raise HTTPException(status_code=404)
+    if not _can_write_doc(user, doc):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     tab_token = request.query_params.get("tab_token", "")
     ok = db.acquire_meeting_lock(meeting_id, user["name"], tab_token)
     if not ok:
@@ -2986,7 +3101,16 @@ def docs_calendar(request: Request):
 @app.post("/api/upload/image")
 async def upload_image(request: Request, file: UploadFile = File(...)):
     """회의록 이미지 업로드 — meetings/{year}/{month}/{uuid}.ext 로 저장"""
+    from PIL import Image as _PilImage
     _require_editor(request)
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="파일 크기는 10MB 이하여야 합니다.")
+    try:
+        img = _PilImage.open(io.BytesIO(data))
+        img.verify()
+    except Exception:
+        raise HTTPException(status_code=400, detail="유효하지 않은 이미지 파일입니다.")
     ext = Path(file.filename).suffix.lower() if file.filename else ".png"
     if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
         ext = ".png"
@@ -2994,7 +3118,7 @@ async def upload_image(request: Request, file: UploadFile = File(...)):
     folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
     folder.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid.uuid4().hex}{ext}"
-    (folder / filename).write_bytes(await file.read())
+    (folder / filename).write_bytes(data)
     return {"url": f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"}
 
 
@@ -3054,6 +3178,7 @@ def doc_events_api(meeting_id: int, request: Request):
 
 @app.post("/api/ai/parse")
 async def ai_parse(request: Request):
+    _require_editor(request)
     body = await request.json()
     text = body.get("text", "").strip()
     model = body.get("model", llm_parser.DEFAULT_MODEL)
@@ -3125,6 +3250,7 @@ async def ai_confirm(request: Request):
 @app.post("/api/ai/refine")
 async def ai_refine(request: Request):
     """2차 AI: 검토자 — 1차 추출 결과를 원본 텍스트와 함께 재검토."""
+    _require_editor(request)
     body = await request.json()
     text   = body.get("text", "").strip()
     events = body.get("events", [])
@@ -3139,7 +3265,8 @@ async def ai_refine(request: Request):
 
 
 @app.get("/api/ai/models")
-def ai_models():
+def ai_models(request: Request):
+    _require_editor(request)
     models, ok = llm_parser.get_available_models_with_status()
     if not ok:
         raise HTTPException(status_code=502, detail=f"Ollama 서버({llm_parser.OLLAMA_BASE_URL})에 연결할 수 없습니다.")

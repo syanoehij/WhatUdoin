@@ -1805,9 +1805,10 @@ def reset_user_password(user_id: int, new_password: str):
 
 def create_session(user_id: int, role: str = "editor") -> str:
     session_id = str(uuid.uuid4())
-    expires_at = None
     if role == "admin":
         expires_at = (datetime.now(timezone.utc) + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)",
@@ -1838,6 +1839,14 @@ def get_session_user(session_id: str):
 def delete_session(session_id: str):
     with get_conn() as conn:
         conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+
+
+def cleanup_expired_sessions():
+    """만료된 세션 및 레거시 expires_at=NULL 세션 일괄 삭제"""
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM sessions WHERE expires_at IS NULL OR expires_at < strftime('%Y-%m-%d %H:%M:%S', 'now')"
+        )
 
 
 # ── IP Management ────────────────────────────────────────
@@ -2365,12 +2374,12 @@ def get_meeting_lock(meeting_id: int) -> dict | None:
 
 # ── Checklists ────────────────────────────────────────────
 
-def create_checklist(project: str, title: str, content: str, created_by: str, is_public: int = 0) -> int:
+def create_checklist(project: str, title: str, content: str, created_by: str, is_public: int = 0, team_id: int = None) -> int:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO checklists (project, title, content, created_by, created_at, updated_at, is_public) VALUES (?,?,?,?,?,?,?)",
-            (project, title, content, created_by, now, now, is_public)
+            "INSERT INTO checklists (project, title, content, created_by, created_at, updated_at, is_public, team_id) VALUES (?,?,?,?,?,?,?,?)",
+            (project, title, content, created_by, now, now, is_public, team_id)
         )
     return cur.lastrowid
 

@@ -24,6 +24,31 @@
           "icon": "🔒",
           "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — DB 초기화 시 admin 기본 비밀번호 랜덤 생성",
           "detail_html": "<ul><li><code>init_db()</code> 최초 admin 계정 생성 시 고정값 <code>admin1234</code> 대신 16자리 무작위 비밀번호 사용</li><li>생성된 비밀번호는 최초 기동 시 콘솔에 1회만 출력 — 즉시 변경 권장 안내 포함</li><li>표준 라이브러리 <code>secrets</code> 모듈 사용 (추가 패키지 없음)</li><li>수정 파일: <code>database.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 이벤트 GET API visibility 필터 적용",
+          "detail_html": "<ul><li><code>GET /api/events</code> 계열 5개 라우트에 <code>_filter_events_by_visibility()</code> 헬퍼 적용 — <code>is_public=0</code> 일정 및 비공개 프로젝트 일정 미인증 노출 차단</li><li>미로그인 시 <code>is_public=1</code>인 일정만 반환, 로그인 시 본인 팀 일정 + 공개 일정만 반환</li><li>단건 조회(<code>GET /api/events/{id}</code>): 권한 없는 사용자 요청 시 404 반환</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 체크리스트·문서 mutation에 팀 소유권 검사 추가",
+          "detail_html": "<ul><li><code>auth.py</code>에 <code>can_edit_checklist(user, checklist)</code> 헬퍼 추가 — admin이면 허용, 아니면 팀 일치 확인</li><li>체크리스트 PATCH·DELETE·restore·lock 8개 라우트에 소유권 체크 적용 — 타팀 editor의 수정·삭제·이력 복원 차단</li><li>문서 lock 라우트에도 동일 체크 적용</li><li>체크리스트 생성 시 <code>team_id</code> 저장 누락 버그도 함께 수정 (<code>database.py create_checklist</code>)</li><li>수정 파일: <code>app.py</code>, <code>auth.py</code>, <code>database.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 프로젝트 관리 라우트에 소유권 검사 추가",
+          "detail_html": "<ul><li><code>auth.py</code>에 <code>can_edit_project(user, project)</code> 헬퍼 추가</li><li>rename·status·privacy·memo·color·dates·milestones·삭제·export 10개 라우트에 소유권 체크 적용 — private 프로젝트를 비admin editor가 수정·export하는 경로 차단</li><li>수정 파일: <code>app.py</code>, <code>auth.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — editor 세션 서버측 만료 설정",
+          "detail_html": "<ul><li>editor 세션 생성 시 <code>expires_at=NULL</code> → 30일 절대 만료로 변경 — 서버측 무한 유효 세션 차단</li><li><code>cleanup_expired_sessions()</code> 함수 추가 + 서버 기동 시 1회 실행 — 레거시 NULL 세션 및 만료 세션 일괄 정리</li><li>수정 파일: <code>database.py</code>, <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 이미지 업로드 크기·MIME 검증, AI·공지 엔드포인트 권한 강화",
+          "detail_html": "<ul><li><strong>이미지 업로드</strong>: 10MB 초과 파일 400 거부 + Pillow <code>Image.verify()</code>로 실제 이미지 여부 확인</li><li><strong>/api/notice</strong>: 일반 editor → admin 전용으로 격상</li><li><strong>/api/ai/parse·refine·models</strong>: 무인증 접근 차단, 최소 editor 인증 요구</li><li>수정 파일: <code>app.py</code></li></ul>"
         }
       ]
     },
