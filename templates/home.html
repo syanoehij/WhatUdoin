@@ -210,6 +210,8 @@
       <div class="home-progress" id="user-progress"></div>
       <div class="home-section-title">💬 예정 회의</div>
       <div id="user-meetings" class="home-meeting-list" style="min-height:20px;"></div>
+      <div class="home-section-title" style="margin-top:16px;">📌 다가오는 프로젝트 중간 일정</div>
+      <div id="user-milestones" class="home-meeting-list" style="min-height:20px;"></div>
     </div>
 
     <!-- 오른쪽: 팀 공지 -->
@@ -404,9 +406,10 @@ async function loadGuest() {
 
 // ── 유저 대시보드 ──────────────────────────────────────
 async function loadUser() {
-  const [events, meetings, notice] = await Promise.all([
+  const [events, meetings, milestones, notice] = await Promise.all([
     fetch('/api/kanban').then(r => r.json()),
     fetch('/api/my-meetings').then(r => r.ok ? r.json() : []),
+    fetch('/api/my-milestones').then(r => r.ok ? r.json() : []),
     fetch('/api/notice').then(r => r.ok ? r.json() : {}),
   ]);
   const myName = CURRENT_USER.name.toLowerCase();
@@ -456,6 +459,19 @@ async function loadUser() {
         ${assignee ? `<span class="meeting-item-assignee">${assignee}</span>` : ''}
       </div>`;
     }).join('');
+  }
+
+  // 중간 일정 섹션
+  const msEl = document.getElementById('user-milestones');
+  if (!milestones || milestones.length === 0) {
+    msEl.innerHTML = '<p class="no-meetings">다가오는 중간 일정이 없습니다.</p>';
+  } else {
+    msEl.innerHTML = milestones.map(m =>
+      `<div class="meeting-item">
+        <span class="meeting-item-date">${esc(m.date)}</span>
+        <span class="meeting-item-title">${esc(m.project)} · ${esc(m.title)}</span>
+      </div>`
+    ).join('');
   }
 
   // 팀 공지

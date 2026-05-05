@@ -543,6 +543,12 @@
           <button type="button" class="pm-btn pm-btn-warn" style="margin-top:4px;font-size:0.76rem;padding:3px 10px;"
                   onclick="document.getElementById('ed-start').value='';document.getElementById('ed-end').value='';">날짜 지우기</button>
         </div>
+        <div class="pm-field" id="ed-milestones-section">
+          <label>중간 일정 <span style="color:var(--text-faint);font-weight:400;">(최대 5개, 동일 일자 불가)</span></label>
+          <div id="ed-milestones-list"></div>
+          <button type="button" class="pm-btn" id="ed-milestones-add"
+                  style="margin-top:4px;font-size:0.76rem;padding:3px 10px;">+ 추가</button>
+        </div>
         <div class="pm-field">
           <label>메모 <span style="color:var(--text-faint);font-weight:400;">(선택)</span></label>
           <textarea id="ed-memo" placeholder="프로젝트에 대한 간략한 설명…"></textarea>
@@ -566,7 +572,9 @@
 
       <!-- 연결된 일정 -->
       <div class="pm-events-wrap">
-        <div class="pm-events-title">연결된 일정</div>
+        <div class="pm-events-title" id="det-milestones-title" style="display:none;">중간 일정</div>
+        <div id="det-milestones" style="display:none;"></div>
+        <div class="pm-events-title" style="margin-top:0;" id="det-events-title">연결된 일정</div>
         <div id="det-events"></div>
         <div class="pm-events-title" style="margin-top:18px;" id="det-journals-title">연결된 일지</div>
         <div id="det-journals"></div>
@@ -877,6 +885,29 @@ function renderDetail(idx) {
     `;
   }
 
+  // 중간 일정(milestones)
+  const msTitleEl = document.getElementById('det-milestones-title');
+  const msEl      = document.getElementById('det-milestones');
+  const milestones = p.milestones || [];
+  const evsTitleEl = document.getElementById('det-events-title');
+  if (!milestones.length) {
+    msTitleEl.style.display = 'none';
+    msEl.style.display      = 'none';
+    msEl.innerHTML = '';  // 프로젝트 전환 시 이전 내용 정리
+    evsTitleEl.style.marginTop = '0';
+  } else {
+    msTitleEl.style.display = '';
+    msEl.style.display      = '';
+    evsTitleEl.style.marginTop = '18px';
+    msEl.innerHTML = milestones.map(function(m) {
+      return `<div class="pm-ev-row" style="font-size:0.85rem;">` +
+        `<span style="color:var(--accent,#7c6af7);margin-right:4px;">◆</span>` +
+        `<span class="pm-ev-date" style="margin-right:6px;">${escHtml(m.date)}</span>` +
+        `<span class="pm-ev-title">${escHtml(m.title)}</span>` +
+        `</div>`;
+    }).join('');
+  }
+
   // 일정 목록 (회의·일지·하위업무 제외, 하위업무는 부모 아래에 들여쓰기)
   const evEl = document.getElementById('det-events');
   const allEventsRaw = isUnset
@@ -1068,6 +1099,78 @@ function hideDetail() {
   document.getElementById('pm-detail').style.display    = 'none';
 }
 
+/* ── 중간 일정(milestone) 헬퍼 ── */
+function renderMilestoneRows(items) {
+  const list = document.getElementById('ed-milestones-list');
+  list.innerHTML = '';
+  (items || []).forEach(function(m) { addMilestoneRow(m.title, m.date); });
+  updateMilestoneAddBtn();
+}
+
+function addMilestoneRow(title, date) {
+  title = title || '';
+  date  = date  || '';
+  const list = document.getElementById('ed-milestones-list');
+  if (list.children.length >= 5) return;
+
+  const row = document.createElement('div');
+  row.className = 'pm-milestone-row';
+  row.style.cssText = 'display:flex;gap:6px;margin-bottom:4px;align-items:center;';
+
+  const titleInput = document.createElement('input');
+  titleInput.type = 'text';
+  titleInput.className = 'ms-title';
+  titleInput.placeholder = '일정 제목';
+  titleInput.maxLength = 100;
+  titleInput.style.cssText = 'flex:1;';
+  titleInput.value = title;
+
+  const dateInput = document.createElement('input');
+  dateInput.type = 'date';
+  dateInput.className = 'ms-date';
+  dateInput.style.cssText = 'width:140px;';
+  dateInput.value = date;
+  dateInput.addEventListener('change', validateMilestoneDate);
+
+  const delBtn = document.createElement('button');
+  delBtn.type = 'button';
+  delBtn.className = 'pm-btn pm-btn-warn ms-del';
+  delBtn.style.cssText = 'padding:3px 8px;flex-shrink:0;';
+  delBtn.textContent = '삭제';
+  delBtn.addEventListener('click', function() { row.remove(); updateMilestoneAddBtn(); });
+
+  row.appendChild(titleInput);
+  row.appendChild(dateInput);
+  row.appendChild(delBtn);
+  list.appendChild(row);
+  updateMilestoneAddBtn();
+}
+
+function updateMilestoneAddBtn() {
+  const list = document.getElementById('ed-milestones-list');
+  const btn  = document.getElementById('ed-milestones-add');
+  if (btn) btn.disabled = list.children.length >= 5;
+}
+
+async function validateMilestoneDate(e) {
+  const input = e.target;
+  const date  = input.value;
+  if (!date) return;
+  const s  = document.getElementById('ed-start').value;
+  const ed = document.getElementById('ed-end').value;
+  if (s && ed && (date < s || date > ed)) {
+    await wuDialog.alert({ title: '범위 초과', message: `일정 기간(${s} ~ ${ed}) 내의 일자만 선택할 수 있습니다.` });
+    input.value = '';
+    return;
+  }
+  const all = [...document.querySelectorAll('#ed-milestones-list .ms-date')];
+  const dup = all.filter(function(el) { return el !== input && el.value === date; });
+  if (dup.length > 0) {
+    await wuDialog.alert({ title: '일자 중복', message: '이미 등록된 일자입니다. 다른 일자를 선택해 주세요.' });
+    input.value = '';
+  }
+}
+
 /* ── 편집 패널 ── */
 function showEditPanel(idx) {
   const p = projects[idx];
@@ -1083,6 +1186,7 @@ function showEditPanel(idx) {
   document.getElementById('ed-start').value = p.start_date || '';
   document.getElementById('ed-end').value   = p.end_date   || '';
   document.getElementById('ed-memo').value  = p.memo || '';
+  renderMilestoneRows(p.milestones || []);
   renderEditPresets(p.color || '#4a90d9');
   _updateEdColorReset();
 
@@ -1152,7 +1256,29 @@ async function saveEdit() {
     target = newName;
   }
 
-  // 색상 · 기간 · 메모 저장 (병렬)
+  // 중간 일정 수집 + 클라이언트 검증
+  const milestones = [...document.querySelectorAll('#ed-milestones-list .pm-milestone-row')]
+    .map(function(row) {
+      return {
+        title: row.querySelector('.ms-title').value.trim(),
+        date:  row.querySelector('.ms-date').value,
+      };
+    })
+    .filter(function(m) { return m.title || m.date; });
+
+  for (const m of milestones) {
+    if (!m.title || !m.date) {
+      await wuDialog.alert({ title: '입력 누락', message: '중간 일정의 제목과 일자를 모두 입력해 주세요.' });
+      return;
+    }
+  }
+  const msDates = milestones.map(function(m) { return m.date; });
+  if (new Set(msDates).size !== msDates.length) {
+    await wuDialog.alert({ title: '일자 중복', message: '중간 일정에 동일한 일자는 등록할 수 없습니다.' });
+    return;
+  }
+
+  // 색상 · 기간 · 메모 먼저 저장 (병렬) — dates가 DB에 커밋된 후 milestone 범위 검증이 정확해짐
   await Promise.all([
     fetch(`/api/manage/projects/${encodeURIComponent(target)}/color`, {
       method: 'PATCH', headers: {'Content-Type': 'application/json'},
@@ -1167,6 +1293,18 @@ async function saveEdit() {
       body: JSON.stringify({ memo }),
     }),
   ]);
+
+  // 중간 일정 저장 (dates 커밋 후 — 확장된 기간이 DB에 반영된 상태에서 범위 검증)
+  const msResp = await fetch(`/api/manage/projects/${encodeURIComponent(target)}/milestones`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ milestones }),
+  });
+  if (!msResp.ok) {
+    const err = await msResp.json().catch(function() { return {}; });
+    toast(err.detail || '중간 일정 저장 오류');
+    return;
+  }
 
   selName = target;
   toast('저장됨');
@@ -1493,6 +1631,8 @@ document.getElementById('cr-name').addEventListener('keydown', e => {
   if (e.key === 'Enter') createProject();
   if (e.key === 'Escape') hideCreatePanel();
 });
+
+document.getElementById('ed-milestones-add').addEventListener('click', function() { addMilestoneRow(); });
 
 // 페이지 진입 시 선택 복원: sessionStorage(새로고침) 우선, 없으면 localStorage(페이지 이동)
 (async () => {

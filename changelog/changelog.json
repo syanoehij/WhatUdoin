@@ -2,6 +2,33 @@
   "groups": [
     {
       "date": "2026-05-05",
+      "phase": "38차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "📌",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 중간 일정(milestone) 기능 추가",
+          "detail_html": "<ul><li><strong>DB 신규 테이블</strong>: <code>project_milestones</code>(project_id, title, date, sort_order) 자식 테이블 신설 — <code>projects</code> 테이블 컬럼 변경 없음, UNIQUE INDEX(project_id, date)로 DB 레벨 중복 방지</li><li><strong>편집 패널 UI</strong>: '일정 기간' 아래에 중간 일정 행(제목 + 날짜) 최대 5개 등록 — 6번째 시도 시 + 추가 버튼 비활성화, 동일 날짜 입력 시 모달 알림 후 입력값 초기화, 일정 기간 범위 밖 날짜 입력 시 모달 거부</li><li><strong>간트 ◆ 마커</strong>: 프로젝트 헤더 행에 중간 일정을 ◆ + 제목으로 인라인 표시 — 셀 폭 &lt; 28px 시 라벨 생략·호버 툴팁으로 대체, pointer-events:none으로 드래그 간섭 없음</li><li><strong>API</strong>: <code>PATCH /api/manage/projects/{name}/milestones</code> 신설 — 5개 초과·중복·형식·범위 서버 검증 포함</li><li>수정 파일: <code>database.py</code>, <code>app.py</code>, <code>templates/project_manage.html</code>, <code>templates/project.html</code></li></ul>"
+        },
+        {
+          "icon": "🔍",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 상세 뷰에 중간 일정 표시",
+          "detail_html": "<ul><li>프로젝트 목록에서 클릭 시 열리는 상세 드로어에 '중간 일정' 섹션 추가 — 편집 패널 진입 없이 바로 확인 가능</li><li>중간 일정이 없으면 섹션 자체를 숨기고, 있으면 날짜·제목 목록으로 표시</li><li>수정 파일: <code>templates/project_manage.html</code></li></ul>"
+        },
+        {
+          "icon": "🗓️",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 캘린더·내 스케줄에 중간 일정 표시",
+          "detail_html": "<ul><li><strong>캘린더</strong>: 로그인 사용자가 담당(assignee)인 프로젝트의 milestone을 종일 읽기전용 이벤트로 표시 — 클릭 시 프로젝트명·일정명·날짜 팝업, 드래그·리사이즈 불가, 종일 표시 토글 연동</li><li><strong>내 스케줄(홈)</strong>: '예정된 회의' 아래에 '다가오는 프로젝트 중간 일정' 섹션 추가 — 오늘 이후 최대 5개 표시</li><li><strong>assignee 필터링</strong>: 콤마 split + Python-side 정확 비교로 부분문자열 오매칭 방지</li><li><strong>API</strong>: <code>GET /api/project-milestones/calendar</code>(비로그인 시 빈 배열), <code>GET /api/my-milestones</code>(비로그인 시 403) 신설</li><li>수정 파일: <code>database.py</code>, <code>app.py</code>, <code>templates/calendar.html</code>, <code>templates/home.html</code></li></ul>"
+        },
+        {
+          "icon": "🔄",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 체크 뷰어 — 편집·삭제 버튼 순서 변경",
+          "detail_html": "<ul><li>체크 뷰어 하단 버튼 배치를 [편집][삭제] → [삭제][편집]으로 변경해 편집 버튼이 오른쪽에 위치하도록 수정</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-05",
       "phase": "37차 6단계",
       "phase_class": "phase-6",
       "entries": [

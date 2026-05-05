@@ -930,6 +930,39 @@ function render() {
         }
       }
 
+      // milestone 마커
+      (proj.milestones || []).forEach(function(ms) {
+        const d = parseDate(ms.date);
+        if (!d) return;
+        const off = daysBetween(viewStart, d);
+        if (off < 0 || off >= daysShown) return;
+
+        const marker = document.createElement('div');
+        const w    = dayWidthAt(off);
+        const left = dayLeft(off);
+        marker.style.cssText =
+          'position:absolute;left:' + left + 'px;width:' + w + 'px;' +
+          'top:0;height:' + ROW_H + 'px;' +
+          'display:flex;align-items:center;justify-content:flex-start;' +
+          'font-size:11px;line-height:1;pointer-events:none;' +
+          'color:var(--text-strong);white-space:nowrap;overflow:visible;z-index:2;' +
+          'padding-left:2px;';
+        marker.title = ms.title + ' (' + ms.date + ')';
+
+        const icon = document.createElement('span');
+        icon.textContent = '◆';
+        marker.appendChild(icon);
+
+        if (w >= 28) {
+          const label = document.createElement('span');
+          label.textContent = ' ' + ms.title;
+          label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;margin-left:2px;';
+          marker.appendChild(label);
+        }
+
+        pGRow.appendChild(marker);
+      });
+
       ganttRowsEl.appendChild(pGRow);
       teamTotalH += ROW_H;
       totalH     += ROW_H;

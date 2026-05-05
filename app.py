@@ -1500,6 +1500,24 @@ def get_my_meetings(request: Request):
     return db.get_upcoming_meetings(assignee_name=user["name"], limit=5)
 
 
+@app.get("/api/project-milestones/calendar")
+def get_milestone_calendar_events(request: Request):
+    """캘린더용 milestone 이벤트 소스 (로그인 사용자의 프로젝트만, 비로그인 시 빈 배열)"""
+    user = auth.get_current_user(request)
+    if not user:
+        return []
+    return db.get_calendar_milestones(user["name"])
+
+
+@app.get("/api/my-milestones")
+def get_my_milestones(request: Request):
+    """내 스케줄 — 다가오는 프로젝트 중간 일정 (오늘 이후, 최대 5개)"""
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=403, detail="로그인이 필요합니다.")
+    return db.get_upcoming_milestones(user["name"], limit=5)
+
+
 @app.patch("/api/events/{event_id}/datetime")
 async def update_event_datetime(event_id: int, request: Request):
     user = _require_editor(request)
@@ -1820,6 +1838,50 @@ async def manage_project_dates(name: str, request: Request):
     db.update_project_dates(name, data.get("start_date"), data.get("end_date"))
     wu_broker.publish("projects.changed", {"name": name, "action": "update"})
     return {"ok": True}
+
+
+@app.patch("/api/manage/projects/{name:path}/milestones")
+async def manage_project_milestones(name: str, request: Request):
+    _require_editor(request)
+    data = await request.json()
+    items = data.get("milestones") or []
+    if not isinstance(items, list):
+        raise HTTPException(status_code=400, detail="milestones는 배열이어야 합니다.")
+    if len(items) > 5:
+        raise HTTPException(status_code=400, detail="중간 일정은 최대 5개까지입니다.")
+    cleaned = []
+    seen_dates = set()
+    for m in items:
+        title = (m.get("title") or "").strip()
+        date  = (m.get("date") or "").strip()
+        if not title or not date:
+            raise HTTPException(status_code=400, detail="제목과 일자를 모두 입력하세요.")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+            raise HTTPException(status_code=400, detail="일자 형식이 올바르지 않습니다.")
+        if date in seen_dates:
+            raise HTTPException(status_code=400, detail=f"동일한 일자가 중복됩니다: {date}")
+        seen_dates.add(date)
+        cleaned.append({"title": title[:100], "date": date})
+    # 일정 기간 범위 검사
+    with db.get_conn() as conn:
+        proj_row = conn.execute(
+            "SELECT start_date, end_date FROM projects WHERE name = ?", (name,)
+        ).fetchone()
+    if proj_row:
+        s, e = proj_row["start_date"], proj_row["end_date"]
+        if s and e:
+            for m in cleaned:
+                if m["date"] < s or m["date"] > e:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"일정 기간({s} ~ {e})을 벗어납니다: {m['date']}"
+                    )
+    try:
+        db.set_project_milestones(name, cleaned)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    wu_broker.publish("projects.changed", {"name": name, "action": "update"})
+    return {"ok": True, "milestones": cleaned}
 
 
 @app.delete("/api/manage/projects/{name:path}")

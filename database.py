@@ -344,6 +344,20 @@ def init_db():
             )
         """)
 
+        # ── project_milestones ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS project_milestones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                date TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pm_project_date ON project_milestones(project_id, date)")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uniq_pm_project_date ON project_milestones(project_id, date)")
+
         # ── 인덱스 ──
         conn.execute("CREATE INDEX IF NOT EXISTS idx_events_deleted_start "
                      "ON events(deleted_at, start_datetime)")
@@ -967,9 +981,17 @@ def get_project_timeline(team_id: int = None, viewer=None) -> list[dict]:
             ).fetchall()
         # projects 테이블에서 메타 조회
         proj_meta_rows = conn.execute(
-            "SELECT name, color, start_date, end_date, is_active, is_private FROM projects WHERE deleted_at IS NULL"
+            "SELECT id, name, color, start_date, end_date, is_active, is_private FROM projects WHERE deleted_at IS NULL"
         ).fetchall()
+        ms_rows = conn.execute("""
+            SELECT pm.project_id, pm.title, pm.date
+              FROM project_milestones pm
+             ORDER BY pm.project_id, pm.sort_order
+        """).fetchall()
     proj_meta = {r["name"]: dict(r) for r in proj_meta_rows}
+    ms_by_pid = {}
+    for r in ms_rows:
+        ms_by_pid.setdefault(r["project_id"], []).append({"title": r["title"], "date": r["date"]})
     # 비활성(종료) 프로젝트 이름 집합
     inactive = {name for name, m in proj_meta.items() if m.get("is_active") == 0}
     # 비공개 프로젝트 이름 집합 (비로그인 시 제외)
@@ -1026,6 +1048,7 @@ def get_project_timeline(team_id: int = None, viewer=None) -> list[dict]:
                 "color":      meta.get("color"),
                 "start_date": meta.get("start_date"),
                 "end_date":   meta.get("end_date"),
+                "milestones": ms_by_pid.get(meta.get("id"), []),
             })
         result.append({"team_name": tname, "projects": proj_list})
     return result
@@ -1057,6 +1080,88 @@ def get_upcoming_meetings(assignee_name: str = None, limit: int = 7) -> list[dic
         if len(result) >= limit:
             break
     return result
+
+
+def _get_user_projects(conn, user_name: str) -> set:
+    """events 테이블에서 user_name이 assignee에 포함된 프로젝트명 집합 반환 (Python-side 필터).
+    get_upcoming_meetings 패턴과 동일하게 콤마 split+trim 후 정확 비교."""
+    rows = conn.execute(
+        """SELECT project, assignee FROM events
+           WHERE project IS NOT NULL AND project != ''
+           AND assignee IS NOT NULL AND assignee != ''
+           AND (is_active IS NULL OR is_active = 1)
+           AND deleted_at IS NULL"""
+    ).fetchall()
+    name_lower = user_name.strip().lower()
+    matched = set()
+    for row in rows:
+        parts = [s.strip().lower() for s in (row["assignee"] or "").split(",")]
+        if name_lower in parts:
+            matched.add(row["project"])
+    return matched
+
+
+def get_calendar_milestones(user_name: str) -> list:
+    """캘린더 이벤트 소스용. 로그인 사용자가 assignee인 프로젝트의 모든 milestone 반환."""
+    with get_conn() as conn:
+        user_projects = _get_user_projects(conn, user_name)
+        if not user_projects:
+            return []
+        placeholders = ",".join("?" * len(user_projects))
+        rows = conn.execute(
+            f"""SELECT pm.id, pm.title, pm.date, p.name AS project_name, p.color
+                  FROM project_milestones pm
+                  JOIN projects p ON p.id = pm.project_id
+                 WHERE p.name IN ({placeholders})
+                   AND (p.is_active IS NULL OR p.is_active = 1)
+                 ORDER BY pm.date ASC, pm.sort_order ASC""",
+            tuple(user_projects)
+        ).fetchall()
+    result = []
+    for row in rows:
+        ev = {
+            "id": f"ms-{row['id']}",
+            "title": row["title"],
+            "start": row["date"],
+            "end": row["date"],
+            "allDay": True,
+            "extendedProps": {
+                "type": "milestone",
+                "project": row["project_name"],
+                "date": row["date"],
+            },
+            "classNames": ["ev-milestone"],
+            "editable": False,
+            "startEditable": False,
+            "durationEditable": False,
+        }
+        if row["color"]:
+            ev["backgroundColor"] = row["color"]
+            ev["borderColor"] = row["color"]
+        result.append(ev)
+    return result
+
+
+def get_upcoming_milestones(user_name: str, limit: int = 5) -> list:
+    """내 스케줄용. 오늘 이후 사용자 프로젝트의 milestone을 limit개 반환."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        user_projects = _get_user_projects(conn, user_name)
+        if not user_projects:
+            return []
+        placeholders = ",".join("?" * len(user_projects))
+        rows = conn.execute(
+            f"""SELECT pm.title, pm.date, p.name AS project_name
+                  FROM project_milestones pm
+                  JOIN projects p ON p.id = pm.project_id
+                 WHERE p.name IN ({placeholders})
+                   AND (p.is_active IS NULL OR p.is_active = 1)
+                   AND pm.date >= ?
+                 ORDER BY pm.date ASC
+                 LIMIT ?""",
+            (*tuple(user_projects), today, limit)
+        ).fetchall()
+    return [{"project": row["project_name"], "title": row["title"], "date": row["date"]} for row in rows]
 
 
 def create_notification(user_name: str, type_: str, message: str, event_id: int = None):
@@ -1268,6 +1373,14 @@ def get_all_projects_with_events() -> list[dict]:
                WHERE e.deleted_at IS NULL
                ORDER BY e.start_datetime"""
         ).fetchall()
+        # milestone 단일 SELECT (N+1 회피)
+        ms_rows = conn.execute(
+            "SELECT project_id, title, date FROM project_milestones ORDER BY project_id, sort_order"
+        ).fetchall()
+
+    ms_by_pid: dict = {}
+    for r in ms_rows:
+        ms_by_pid.setdefault(r["project_id"], []).append({"title": r["title"], "date": r["date"]})
 
     # projects 테이블 기반 dict
     proj_map: dict[str, dict] = {}
@@ -1279,6 +1392,7 @@ def get_all_projects_with_events() -> list[dict]:
             "is_private": r["is_private"] if r["is_private"] is not None else 0,
             "memo": r["memo"],
             "events": [],
+            "milestones": ms_by_pid.get(r["id"], []),
         }
 
     # events.project / checklists.project에만 있는 orphan 프로젝트도 추가
@@ -1371,6 +1485,11 @@ def delete_project(name: str, delete_events: bool = False, deleted_by: str = Non
                 "UPDATE checklists SET deleted_at = ?, deleted_by = ?, team_id = ? WHERE project = ? AND deleted_at IS NULL",
                 (now, deleted_by, team_id, name)
             )
+            # 프로젝트 중간 일정 hard delete
+            conn.execute(
+                "DELETE FROM project_milestones WHERE project_id = (SELECT id FROM projects WHERE name = ?)",
+                (name,)
+            )
         else:
             conn.execute("UPDATE events SET project = NULL WHERE project = ?", (name,))
             conn.execute("UPDATE checklists SET project = '' WHERE project = ?", (name,))
@@ -1436,6 +1555,33 @@ def update_project_dates(name: str, start_date: str = None, end_date: str = None
             conn.execute(
                 "INSERT INTO projects (name, start_date, end_date) VALUES (?, ?, ?)",
                 (name, start_date or None, end_date or None)
+            )
+
+
+def get_project_milestones(name: str) -> list:
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT m.id, m.title, m.date, m.sort_order
+              FROM project_milestones m
+              JOIN projects p ON p.id = m.project_id
+             WHERE p.name = ?
+             ORDER BY m.sort_order ASC, m.date ASC
+        """, (name,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_project_milestones(name: str, milestones: list) -> None:
+    """전체 교체. milestones = [{title, date}, ...] 최대 5개."""
+    with get_conn() as conn:
+        proj = conn.execute("SELECT id FROM projects WHERE name = ?", (name,)).fetchone()
+        if not proj:
+            raise ValueError(f"프로젝트 '{name}'을 찾을 수 없습니다.")
+        pid = proj["id"]
+        conn.execute("DELETE FROM project_milestones WHERE project_id = ?", (pid,))
+        for idx, m in enumerate(milestones):
+            conn.execute(
+                "INSERT INTO project_milestones (project_id, title, date, sort_order) VALUES (?, ?, ?, ?)",
+                (pid, m["title"].strip(), m["date"], idx)
             )
 
 

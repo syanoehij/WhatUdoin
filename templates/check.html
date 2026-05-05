@@ -886,6 +886,7 @@
             <button onclick="ckViewExportLink(); closeCkViewExportMenu()">🔗 링크 내보내기</button>
           </div>
         </div>
+        <button class="btn btn-sm btn-danger" id="ck-delete-btn" onclick="deleteChecklist()">삭제</button>
         <button class="btn btn-sm btn-primary" id="ck-edit-btn" onclick="switchToEdit()" style="display:none;">편집</button>
         <!-- 편집 모드 전용 목차 버튼 -->
         <button class="btn btn-sm" id="btn-toc-toggle-inline" onclick="toggleTocInline()" style="display:none;" title="목차">📑 목차</button>
@@ -893,7 +894,6 @@
         <button class="btn btn-sm" id="ck-rename-btn" onclick="toggleRenameForm()" style="display:none;">이름 변경</button>
         <button class="btn btn-sm btn-warn" id="ck-viewer-btn" onclick="switchToViewer()" style="display:none;">뷰어로 전환</button>
         <button class="btn btn-sm btn-primary" id="ck-save-btn" onclick="saveContent()" style="display:none;">저장</button>
-        <button class="btn btn-sm btn-danger" id="ck-delete-btn" onclick="deleteChecklist()">삭제</button>
         {% endif %}
       </div>
     </div>

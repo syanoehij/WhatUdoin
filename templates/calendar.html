@@ -123,6 +123,13 @@
   .member-chip:hover { background: var(--surface-3); color: var(--text); }
   .member-chip.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
 
+  /* ── milestone 이벤트 ── */
+  .fc-event.ev-milestone {
+    opacity: 0.85;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+
   /* ── 컨텍스트 메뉴 ── */
   #cal-ctx-menu {
     position: fixed;
@@ -281,6 +288,7 @@ function toggleShowAllDay(val) {
   calendar.setOption('allDaySlot', _showAllDay);
   calendar.getEventSourceById('main-events').refetch();
   calendar.getEventSourceById('doc-events').refetch();
+  calendar.getEventSourceById('milestone-events').refetch();
 }
 
 function applyProjFilter() {
@@ -382,6 +390,17 @@ document.addEventListener('DOMContentLoaded', () => {
         textColor: 'white',
         editable: false,
       },
+      {
+        id: 'milestone-events',
+        events: async function(fetchInfo, successCb, failureCb) {
+          if (!_showAllDay) { successCb([]); return; }
+          try {
+            const res = await fetch('/api/project-milestones/calendar');
+            successCb(await res.json());
+          } catch(err) { failureCb(err); }
+        },
+        editable: false,
+      },
     ],
     editable: !!(CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor')),
     selectable: !!(CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'editor')),
@@ -427,6 +446,7 @@ document.addEventListener('DOMContentLoaded', () => {
       info.el.dataset.eventId = String(info.event.id);
       if (info.event.allDay) info.el.classList.add('wu-allday-event');
       const p = info.event.extendedProps;
+      if (p.type === 'milestone') return;  // 백엔드가 classNames·color 결정, 추가 처리 불필요
       const titleEl = info.el.querySelector('.fc-event-title');
       if (titleEl) {
         // 업무 이벤트에 📋 뱃지 추가
@@ -489,6 +509,14 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     eventClick(info) {
       if (!CURRENT_USER) return;
+      if (info.event.extendedProps.type === 'milestone') {
+        const p = info.event.extendedProps;
+        wuDialog.alert({
+          title: '📌 프로젝트 중간 일정',
+          message: `프로젝트: ${p.project}\n일정: ${info.event.title}\n날짜: ${p.date}`,
+        });
+        return;
+      }
       // 상세 모달 없이 바로 수정 모달 열기
       fetch(`/api/events/${info.event.id}`)
         .then(r => r.json())
@@ -546,6 +574,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if(main) main.refetch();
       var doc = calendar.getEventSourceById('doc-events');
       if(doc) doc.refetch();
+      var ms = calendar.getEventSourceById('milestone-events');
+      if(ms) ms.refetch();
     }, 300) : null;
     if(_doRefetch){
       window.addEventListener('wu:events:changed', _doRefetch);
