@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-05-05",
+      "phase": "38차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "💬",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 칸반 — 컬럼 헤더 용도 설명 툴팁 추가",
+          "detail_html": "<ul><li>칸반 보드 컬럼 헤더(Backlog·Todo·In Progress·Peer Review·Done·Blocked)에 마우스 오버 시 용도 설명 툴팁 표시 — 칸반에 익숙하지 않은 사용자가 각 컬럼 의미를 쉽게 파악할 수 있도록 한국어 안내 문구 제공</li><li>메인 칸반(<code>/kanban</code>)과 홈 소형 칸반(내 스케줄) 동시 적용</li><li><strong>Blocked</strong> 컬럼은 외부 요인으로 막힌 상태와 의도적 홀딩(대기) 두 용도를 겸용함을 명시 — Backlog와의 혼동 방지</li><li>기존 <code>title=\"...\"</code> 패턴 사용, 라이브러리 추가 없음</li><li>수정 파일: <code>static/js/event-modal.js</code>, <code>templates/kanban.html</code>, <code>templates/home.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-05",
       "phase": "38차 3단계",
       "phase_class": "phase-3",
       "entries": [

@@ -343,7 +343,7 @@ function buildBoard(containerId, events, draggable) {
     if (grouped[status] !== undefined) grouped[status].push(e);
   });
 
-  COLUMNS.forEach(({ status, label }) => {
+  COLUMNS.forEach(({ status, label, desc }) => {
     const cards = grouped[status];
     const col = document.createElement('div');
     col.className = 'kanban-col' + (status === 'blocked' ? ' blocked' : '');
@@ -354,7 +354,7 @@ function buildBoard(containerId, events, draggable) {
       : `<div class="kanban-empty">${CURRENT_USER ? '없음' : '공개된 항목 없음'}</div>`;
 
     col.innerHTML = `
-      <div class="kanban-col-header">
+      <div class="kanban-col-header" title="${desc}">
         <span class="col-title">${label}</span>
         <span class="col-count">${cards.length}</span>
       </div>

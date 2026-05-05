@@ -272,19 +272,19 @@
 
 <div class="kanban-board" id="kanban-board" style="margin: 0 20px; padding-top: 16px; padding-bottom: 20px;">
   {% set cols = [
-    ('backlog',     'Backlog'),
-    ('todo',        'Todo'),
-    ('in_progress', 'In Progress'),
-    ('peer_review', 'Peer Review'),
-    ('done',        'Done'),
-    ('blocked',     'Blocked'),
+    ('backlog',     'Backlog',     '할까 말까 고민 중이거나 나중에 해도 될 일들을 모아두는 후보 목록입니다. 아직 시작 시점이 정해지지 않았어요.'),
+    ('todo',        'Todo',        '곧 시작할 일. 우선순위가 정해져서 가까운 시일에 진행할 항목입니다.'),
+    ('in_progress', 'In Progress', '지금 진행 중인 일. 누군가 작업하고 있습니다.'),
+    ('peer_review', 'Peer Review', '동료의 검토/확인을 기다리는 일. 작업자는 끝냈고 다른 사람의 피드백 단계입니다.'),
+    ('done',        'Done',        '끝난 일. 완료된 항목이 모입니다.'),
+    ('blocked',     'Blocked',     '지금은 진행할 수 없거나 잠시 멈춰둔 일. 다른 사람의 답변을 기다리거나(=대기), 의도적으로 보류(=홀딩) 중인 항목을 모아둡니다.'),
   ] %}
-  {% for status, label in cols %}
+  {% for status, label, desc in cols %}
   <div class="kanban-col {% if status == 'blocked' %}blocked{% endif %}" data-status="{{ status }}"
        ondragover="onDragOver(event)"
        ondragleave="onDragLeave(event)"
        ondrop="onDrop(event, '{{ status }}')">
-    <div class="kanban-col-header">
+    <div class="kanban-col-header" title="{{ desc }}">
       <span class="col-title">{{ label }}</span>
       <span class="col-count" id="count-{{ status }}">0</span>
     </div>

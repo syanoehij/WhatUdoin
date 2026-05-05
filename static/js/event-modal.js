@@ -8,12 +8,12 @@
 
 // ── 칸반 컬럼 정의 (공유) ─────────────────────────────────
 var COLUMNS = [
-  { status: 'backlog',     label: 'Backlog' },
-  { status: 'todo',        label: 'Todo' },
-  { status: 'in_progress', label: 'In Progress' },
-  { status: 'peer_review', label: 'Peer Review' },
-  { status: 'done',        label: 'Done' },
-  { status: 'blocked',     label: 'Blocked' },
+  { status: 'backlog',     label: 'Backlog',     desc: '할까 말까 고민 중이거나 나중에 해도 될 일들을 모아두는 후보 목록입니다. 아직 시작 시점이 정해지지 않았어요.' },
+  { status: 'todo',        label: 'Todo',        desc: '곧 시작할 일. 우선순위가 정해져서 가까운 시일에 진행할 항목입니다.' },
+  { status: 'in_progress', label: 'In Progress', desc: '지금 진행 중인 일. 누군가 작업하고 있습니다.' },
+  { status: 'peer_review', label: 'Peer Review', desc: '동료의 검토/확인을 기다리는 일. 작업자는 끝냈고 다른 사람의 피드백 단계입니다.' },
+  { status: 'done',        label: 'Done',        desc: '끝난 일. 완료된 항목이 모입니다.' },
+  { status: 'blocked',     label: 'Blocked',     desc: '지금은 진행할 수 없거나 잠시 멈춰둔 일. 다른 사람의 답변을 기다리거나(=대기), 의도적으로 보류(=홀딩) 중인 항목을 모아둡니다.' },
 ];
 
 let _allProjects = [];
