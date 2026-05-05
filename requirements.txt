@@ -10,3 +10,4 @@ pystray
 Pillow
 apscheduler
 mcp>=1.27,<2
+slowapi>=0.1.9

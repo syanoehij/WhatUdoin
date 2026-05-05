@@ -2,6 +2,28 @@
   "groups": [
     {
       "date": "2026-05-05",
+      "phase": "38차 6단계",
+      "phase_class": "phase-6",
+      "entries": [
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 보안 — 로그인 brute-force 방어 (rate limit)",
+          "detail_html": "<ul><li><code>slowapi</code> 라이브러리를 통해 IP 기준 요청 횟수 제한 적용</li><li><code>POST /api/login</code>: 분당 10회 초과 시 429 응답 — 비밀번호 단독 인증 구조에서 무제한 사전 공격 차단</li><li><code>POST /api/admin/login</code>, <code>POST /api/register</code>: 분당 5회 제한</li><li>수정 파일: <code>app.py</code>, <code>requirements.txt</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 보안 — CSRF 방어 (Origin/Referer netloc 검사)",
+          "detail_html": "<ul><li>모든 unsafe 메서드(POST/PUT/PATCH/DELETE) 요청에서 <code>Origin</code> 또는 <code>Referer</code>의 netloc이 서버 Host와 정확히 일치해야 통과</li><li><code>urlparse(src).netloc == host</code> 방식으로 서브도메인 우회·Referer query injection 차단</li><li>Origin 헤더가 없는 경우(MCP, curl 등 API 클라이언트) 그대로 통과 — 기존 자동화 흐름 유지</li><li><code>_require_editor</code>·<code>_require_admin</code> 두 헬퍼 모두 적용 — editor/admin 필요 라우트 전체 커버</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 일정 내보내기·bulk-visibility 권한 보완",
+          "detail_html": "<ul><li><strong>일정 내보내기</strong>: <code>GET /api/events/{id}/export</code>에 <code>can_edit_event</code> 체크 추가 — 타팀 일정 마크다운 유출 차단</li><li><strong>bulk-visibility</strong>: <code>project</code> 미지정 시 <code>team_id</code>로 범위 자동 한정 — editor 1명이 전체 미지정 항목 가시성을 일괄 강제하는 경로 차단. 이벤트·체크리스트 양쪽 적용</li><li>수정 파일: <code>app.py</code>, <code>database.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-05",
       "phase": "38차 5단계",
       "phase_class": "phase-5",
       "entries": [

@@ -2442,10 +2442,11 @@ def update_checklist_visibility(checklist_id: int, is_public) -> None:
         )
 
 
-def bulk_update_checklist_visibility(project: str | None, is_public: int, is_active: int | None = None) -> int:
+def bulk_update_checklist_visibility(project: str | None, is_public: int, is_active: int | None = None, team_id: int | None = None) -> int:
     """특정 프로젝트(또는 미지정) 체크리스트 전체의 is_public을 일괄 변경. 변경된 행 수 반환."""
     now = __import__('datetime').datetime.now(__import__('datetime').timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     active_clause = " AND is_active = ?" if is_active is not None else ""
+    team_clause = " AND team_id = ?" if team_id is not None else ""
     with get_conn() as conn:
         if project:
             params = (is_public, now, project) + ((is_active,) if is_active is not None else ())
@@ -2454,17 +2455,18 @@ def bulk_update_checklist_visibility(project: str | None, is_public: int, is_act
                 params,
             )
         else:
-            params = (is_public, now) + ((is_active,) if is_active is not None else ())
+            params = (is_public, now) + ((is_active,) if is_active is not None else ()) + ((team_id,) if team_id is not None else ())
             cur = conn.execute(
-                f"UPDATE checklists SET is_public = ?, updated_at = ? WHERE (project IS NULL OR project = '') AND deleted_at IS NULL{active_clause}",
+                f"UPDATE checklists SET is_public = ?, updated_at = ? WHERE (project IS NULL OR project = '') AND deleted_at IS NULL{active_clause}{team_clause}",
                 params,
             )
     return cur.rowcount
 
 
-def bulk_update_event_visibility(project: str | None, is_public: int, is_active: int | None = None) -> int:
+def bulk_update_event_visibility(project: str | None, is_public: int, is_active: int | None = None, team_id: int | None = None) -> int:
     """특정 프로젝트(또는 미지정) 일정 전체의 is_public을 일괄 변경. 변경된 행 수 반환."""
     active_clause = " AND is_active = ?" if is_active is not None else ""
+    team_clause = " AND team_id = ?" if team_id is not None else ""
     with get_conn() as conn:
         if project:
             params = (is_public, project) + ((is_active,) if is_active is not None else ())
@@ -2473,9 +2475,9 @@ def bulk_update_event_visibility(project: str | None, is_public: int, is_active:
                 params,
             )
         else:
-            params = (is_public,) + ((is_active,) if is_active is not None else ())
+            params = (is_public,) + ((is_active,) if is_active is not None else ()) + ((team_id,) if team_id is not None else ())
             cur = conn.execute(
-                f"UPDATE events SET is_public = ?, updated_at = CURRENT_TIMESTAMP WHERE (project IS NULL OR project = '') AND deleted_at IS NULL{active_clause}",
+                f"UPDATE events SET is_public = ?, updated_at = CURRENT_TIMESTAMP WHERE (project IS NULL OR project = '') AND deleted_at IS NULL{active_clause}{team_clause}",
                 params,
             )
     return cur.rowcount

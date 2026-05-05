@@ -16,6 +16,9 @@ import zipfile
 from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, Request, HTTPException, Response, UploadFile, File
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -80,6 +83,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="WhatUDoin", lifespan=lifespan)
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.mount("/static",          StaticFiles(directory=str(_BASE_DIR / "static")),   name="static")
 app.mount("/uploads/meetings", StaticFiles(directory=str(MEETINGS_DIR)),           name="meetings_files")
 templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
@@ -363,7 +371,18 @@ def _ctx(request: Request, **kwargs):
     }
 
 
+def _check_csrf(request: Request):
+    """unsafe method일 때 Origin/Referer의 netloc이 Host와 정확히 일치해야 함."""
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        from urllib.parse import urlparse
+        src = request.headers.get("Origin") or request.headers.get("Referer") or ""
+        host = request.headers.get("Host") or ""
+        if src and host and urlparse(src).netloc != host:
+            raise HTTPException(status_code=403, detail="CSRF 검증 실패")
+
+
 def _require_editor(request: Request):
+    _check_csrf(request)
     user = auth.get_current_user(request)
     if not auth.is_editor(user):
         raise HTTPException(status_code=403, detail="로그인이 필요합니다.")
@@ -371,6 +390,7 @@ def _require_editor(request: Request):
 
 
 def _require_admin(request: Request):
+    _check_csrf(request)
     user = auth.get_current_user(request)
     if not auth.is_admin(user):
         raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
@@ -740,28 +760,30 @@ async def toggle_checklist_status(checklist_id: int, request: Request):
 
 @app.patch("/api/checklists/bulk-visibility")
 async def bulk_checklist_visibility(request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     data = await request.json()
     project  = data.get("project")   # None 또는 "" → 미지정, 문자열 → 해당 프로젝트
     raw = data.get("is_public", 1)
     is_public = None if raw is None else (1 if raw else 0)
     is_active_raw = data.get("is_active")
     is_active = None if is_active_raw is None else (1 if is_active_raw else 0)
-    count = db.bulk_update_checklist_visibility(project, is_public, is_active)
+    team_id_filter = user.get("team_id") if not project else None
+    count = db.bulk_update_checklist_visibility(project, is_public, is_active, team_id=team_id_filter)
     return {"ok": True, "updated": count}
 
 
 @app.patch("/api/events/bulk-visibility")
 async def bulk_event_visibility(request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     data = await request.json()
     project  = data.get("project")   # None 또는 "" → 미지정, 문자열 → 해당 프로젝트
     raw = data.get("is_public", 1)
     is_public = None if raw is None else (1 if raw else 0)
     is_active_raw = data.get("is_active")
     is_active = None if is_active_raw is None else (1 if is_active_raw else 0)
-    count = db.bulk_update_event_visibility(project, is_public, is_active)
-    wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": None})
+    team_id_filter = user.get("team_id") if not project else None
+    count = db.bulk_update_event_visibility(project, is_public, is_active, team_id=team_id_filter)
+    wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": team_id_filter})
     return {"ok": True, "updated": count}
 
 
@@ -976,6 +998,7 @@ def mark_all_notifications_read(request: Request):
 # ── 인증 API ────────────────────────────────────────────
 
 @app.post("/api/login")
+@limiter.limit("10/minute")
 async def login(request: Request, response: Response):
     data = await request.json()
     password = data.get("password", "").strip()
@@ -1017,6 +1040,7 @@ def logout(request: Request, response: Response):
 
 
 @app.post("/api/register")
+@limiter.limit("5/minute")
 async def register(request: Request):
     data = await request.json()
     name = data.get("name", "").strip()
@@ -1034,6 +1058,7 @@ async def register(request: Request):
 # ── 관리자 인증 API ──────────────────────────────────────
 
 @app.post("/api/admin/login")
+@limiter.limit("5/minute")
 async def admin_login(request: Request, response: Response):
     data = await request.json()
     name = data.get("name", "").strip()
@@ -2596,10 +2621,12 @@ def export_checklist(checklist_id: int, request: Request):
 
 @app.get("/api/events/{event_id}/export")
 def export_event(event_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     ev = db.get_event(event_id)
     if not ev or ev.get("deleted_at"):
         raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
+    if not auth.can_edit_event(user, ev):
+        raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
     exported_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     project_name = ev.get("project") or None
     md_text = _build_event_md(project_name, ev, exported_at, include_backlink=False)
