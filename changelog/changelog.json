@@ -2,6 +2,43 @@
   "groups": [
     {
       "date": "2026-05-05",
+      "phase": "38차 5단계",
+      "phase_class": "phase-5",
+      "entries": [
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — XFF 헤더 위조로 IP 자동로그인 우회 차단",
+          "detail_html": "<ul><li><strong>문제</strong>: <code>X-Forwarded-For</code> 헤더를 검증 없이 신뢰하여 인트라넷 사용자가 화이트리스트 IP를 위조해 타인 계정으로 자동 로그인 가능</li><li><strong>수정</strong>: <code>auth.get_client_ip()</code>가 환경변수 <code>TRUSTED_PROXY</code>에 등록된 peer IP에서 온 요청일 때만 XFF 첫 토큰 사용, 그 외에는 실제 peer IP <code>request.client.host</code>만 신뢰</li><li>수정 파일: <code>auth.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 체크리스트 히스토리 무인증 열람 차단",
+          "detail_html": "<ul><li><strong>문제</strong>: <code>GET /api/checklists/{id}/histories</code>가 인증 없이 누구나 호출 가능 — 비공개·private 프로젝트 체크리스트의 과거 버전 본문이 미로그인 사용자에게 노출</li><li><strong>수정</strong>: 요청자 인증 확인 후 <code>_can_read_checklist</code> 헬퍼로 visibility 체크 — 권한 없으면 403 반환</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 일정 수정 5개 라우트 객체 단위 권한 체크 추가",
+          "detail_html": "<ul><li><strong>문제</strong>: <code>PATCH /kanban</code>, <code>PUT /api/manage/events/{id}</code>, <code>PATCH /manage/.../status</code>, <code>PATCH .../visibility</code>, <code>DELETE /manage/events/{id}</code> — editor 권한만 확인하고 타팀 일정 수정 가능</li><li><strong>수정</strong>: 5개 라우트 모두 <code>auth.can_edit_event(user, event)</code> 체크 추가 — 기존 정상 라우트(<code>PUT /api/events/{id}</code> 등)와 일관성 확보</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 마크다운 에디터 링크 XSS 차단",
+          "detail_html": "<ul><li><strong>문제</strong>: Tiptap Link extension의 <code>validate: () => true</code>가 모든 URL을 허용하여 <code>javascript:</code> 스킴 링크가 마크다운 본문에 저장·실행 가능</li><li><strong>수정</strong>: <code>validate</code>를 <code>https?:</code>·<code>/</code>·<code>#</code>·<code>mailto:</code>·<code>eid:</code> 화이트리스트로 제한</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 보안 — 사이드바 링크 URL 스킴 검증 및 XSS 차단",
+          "detail_html": "<ul><li><strong>문제</strong>: 팀·개인 링크 등록 시 URL 스킴 검증 없어 <code>javascript:</code> 저장 가능 — 동료가 사이드바 링크 클릭 시 stored XSS 실행. <code>_esc</code>가 따옴표를 이스케이프하지 않아 attribute breakout 가능</li><li><strong>백엔드 수정</strong>: <code>api_create_link</code>·<code>api_update_link</code>에서 <code>urlparse</code>로 스킴 화이트리스트 검증 (<code>http</code>·<code>https</code>·<code>mailto</code> 외 400 에러)</li><li><strong>프론트엔드 수정</strong>: <code>_safeUrl</code> 함수 추가(비허용 스킴 → <code>#</code> 반환), <code>href</code>에 <code>_esc(_safeUrl(link.url))</code> 이중 처리로 attribute breakout 차단</li><li>수정 파일: <code>app.py</code>, <code>templates/base.html</code></li></ul>"
+        },
+        {
+          "icon": "🛡️",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 보안 — HTTP 보안 응답 헤더 전역 적용",
+          "detail_html": "<ul><li>모든 응답에 보안 헤더 4종 추가 — SSE 스트리밍 응답과의 충돌을 피하기 위해 순수 ASGI 미들웨어 방식으로 구현</li><li><code>X-Content-Type-Options: nosniff</code> — 업로드 파일의 MIME sniff XSS 차단</li><li><code>X-Frame-Options: DENY</code> — 클릭재킹 방지</li><li><code>Referrer-Policy: same-origin</code> — 외부 사이트로 Referer 헤더 유출 차단</li><li><code>Content-Security-Policy</code> — <code>default-src 'self'</code> 기반, 외부 출처 리소스 로드 및 <code>frame-ancestors</code> 차단</li><li>수정 파일: <code>app.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-05",
       "phase": "38차 4단계",
       "phase_class": "phase-4",
       "entries": [

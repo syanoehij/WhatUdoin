@@ -13,7 +13,7 @@ import requests as _requests
 
 import io
 import zipfile
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, Request, HTTPException, Response, UploadFile, File
 from fastapi.concurrency import run_in_threadpool
@@ -162,6 +162,49 @@ class _StaticCacheMiddleware:
 
 
 app.add_middleware(_StaticCacheMiddleware)
+
+
+_SECURITY_HEADERS = [
+    (b"x-content-type-options", b"nosniff"),
+    (b"x-frame-options", b"DENY"),
+    (b"referrer-policy", b"same-origin"),
+    (
+        b"content-security-policy",
+        (
+            b"default-src 'self'; "
+            b"script-src 'self' 'unsafe-inline'; "
+            b"style-src 'self' 'unsafe-inline'; "
+            b"img-src 'self' data: blob:; "
+            b"connect-src 'self'; "
+            b"font-src 'self' data:; "
+            b"frame-ancestors 'none'"
+        ),
+    ),
+]
+
+
+class _SecurityHeadersMiddleware:
+    """모든 응답에 보안 헤더를 추가한다. SSE 스트리밍 보존을 위해 순수 ASGI 방식 사용."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_security(message):
+            if message["type"] == "http.response.start":
+                existing_names = {k.lower() for k, _ in message.get("headers", [])}
+                extra = [(k, v) for k, v in _SECURITY_HEADERS if k not in existing_names]
+                message = {**message, "headers": list(message.get("headers", [])) + extra}
+            await send(message)
+
+        await self.app(scope, receive, send_with_security)
+
+
+app.add_middleware(_SecurityHeadersMiddleware)
 
 
 def _extract_host(raw: bytes) -> str:
@@ -784,7 +827,13 @@ async def update_checklist_content(checklist_id: int, request: Request):
 
 
 @app.get("/api/checklists/{checklist_id}/histories")
-def get_checklist_histories(checklist_id: int):
+def get_checklist_histories(checklist_id: int, request: Request):
+    user = auth.get_current_user(request)
+    checklist = db.get_checklist(checklist_id)
+    if not checklist:
+        raise HTTPException(status_code=404, detail="체크리스트를 찾을 수 없습니다.")
+    if not _can_read_checklist(user, checklist):
+        raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
     return db.get_checklist_histories(checklist_id)
 
 
@@ -1714,6 +1763,8 @@ async def update_event_kanban(event_id: int, request: Request):
     event = db.get_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    if not auth.can_edit_event(user, event):
+        raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
     data = await request.json()
     kwargs = {}
     if "kanban_status" in data:
@@ -2593,6 +2644,8 @@ async def manage_update_event(event_id: int, request: Request):
     event = db.get_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    if not auth.can_edit_event(user, event):
+        raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
     data = await request.json()
     # 수정 가능한 필드만 반영
     updated = {**event}
@@ -2615,11 +2668,15 @@ async def manage_update_event(event_id: int, request: Request):
 @app.patch("/api/manage/events/{event_id}/status")
 async def manage_event_status(event_id: int, request: Request):
     user = _require_editor(request)
+    event = db.get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not auth.can_edit_event(user, event):
+        raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
     data = await request.json()
     is_active = 1 if data.get("is_active", True) else 0
-    event = db.get_event(event_id)
     db.update_event_active_status(event_id, is_active)
-    if is_active == 0 and event and event.get("is_active") != 0 and event.get("event_type") == "schedule":
+    if is_active == 0 and event.get("is_active") != 0 and event.get("event_type") == "schedule":
         db.complete_subtasks(event_id)
     wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
@@ -2629,6 +2686,11 @@ async def manage_event_status(event_id: int, request: Request):
 @app.patch("/api/events/{event_id}/visibility")
 async def update_event_visibility_api(event_id: int, request: Request):
     user = _require_editor(request)
+    event = db.get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not auth.can_edit_event(user, event):
+        raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
     body = await request.body()
     data = await request.json() if body else {}
     # is_public: null=프로젝트 연동, 0=비공개, 1=공개
@@ -2637,8 +2699,7 @@ async def update_event_visibility_api(event_id: int, request: Request):
         is_public = None if raw is None else (1 if raw else 0)
     else:
         # 값 없으면 서버에서 cycling: None→1→0→None
-        ev = db.get_event(event_id)
-        cur = ev.get("is_public") if ev else None
+        cur = event.get("is_public")
         is_public = 1 if cur is None else (0 if cur == 1 else None)
     db.update_event_visibility(event_id, is_public)
     wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
@@ -2651,6 +2712,8 @@ def manage_delete_event(event_id: int, request: Request):
     event = db.get_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    if not auth.can_edit_event(user, event):
+        raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
     db.delete_event(event_id, deleted_by=user["name"], team_id=user.get("team_id"))
     # sync 핸들러 → broker 내부의 call_soon_threadsafe가 루프 스레드로 안전 전달
     wu_broker.publish("events.changed", {"id": event_id, "action": "delete", "team_id": user.get("team_id")})
@@ -2683,6 +2746,9 @@ async def api_create_link(request: Request):
     scope = data.get("scope", "personal")
     if not title or not url:
         raise HTTPException(status_code=400, detail="title과 url은 필수입니다.")
+    scheme = urlparse(url).scheme
+    if scheme not in ("http", "https", "mailto", ""):
+        raise HTTPException(status_code=400, detail="허용되지 않는 URL 형식입니다.")
     if scope not in ("personal", "team"):
         scope = "personal"
     team_id = user.get("team_id") if scope == "team" else None
@@ -2699,6 +2765,9 @@ async def api_update_link(link_id: int, request: Request):
     desc  = (data.get("description") or "").strip()
     if not title or not url:
         raise HTTPException(status_code=400, detail="title과 url은 필수입니다.")
+    scheme = urlparse(url).scheme
+    if scheme not in ("http", "https", "mailto", ""):
+        raise HTTPException(status_code=400, detail="허용되지 않는 URL 형식입니다.")
     ok = db.update_link(link_id, title, url, desc, user["name"])
     if not ok:
         raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")

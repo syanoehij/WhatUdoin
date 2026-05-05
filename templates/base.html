@@ -1401,7 +1401,7 @@
             🔗
           </div>
           <div class="links-item-body">
-            <a class="links-item-title" href="${_esc(link.url)}" target="_blank" rel="noopener"
+            <a class="links-item-title" href="${_esc(_safeUrl(link.url))}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()">${_esc(link.title)}</a>
             ${link.description ? `<div class="links-item-desc">${_esc(link.description)}</div>` : ''}
           </div>
@@ -1421,6 +1421,17 @@
     }
     function _esc(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function _safeUrl(url) {
+      try {
+        const parsed = new URL(url, location.origin);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:') {
+          return url;
+        }
+        return '#';
+      } catch {
+        return url.startsWith('/') ? url : '#';
+      }
     }
 
     // ── 폼 표시/숨기기 ──

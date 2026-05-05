@@ -3131,10 +3131,10 @@
         TaskList,
         TaskItem.configure({ nested: true }),
         ObsidianCommentMd,
-        LinkMd.configure({ openOnClick: false, autolink: true, protocols: ['eid'], validate: () => true }),
+        LinkMd.configure({ openOnClick: false, autolink: true, protocols: ['eid'], validate: (url) => /^(https?:|\/|#|mailto:|eid:)/i.test(url) }),
         ImageMd,
         Markdown.configure({
-          html: true,          // <img style="width:..."> 등 raw HTML 허용
+          html: true,          // <img style="width:..."> 등 raw HTML 허용. TODO: DOMPurify 적용 필요
           tightLists: true,
           linkify: false,
           breaks: false,

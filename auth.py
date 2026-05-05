@@ -1,3 +1,5 @@
+import os
+
 from fastapi import Request
 import database as db
 
@@ -5,10 +7,14 @@ SESSION_COOKIE = "session_id"
 
 
 def get_client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "127.0.0.1"
+    peer = request.client.host if request.client else "127.0.0.1"
+    trusted_raw = os.environ.get("TRUSTED_PROXY", "")
+    trusted = {ip.strip() for ip in trusted_raw.split(",") if ip.strip()}
+    if trusted and peer in trusted:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return peer
 
 
 def get_current_user(request: Request):
