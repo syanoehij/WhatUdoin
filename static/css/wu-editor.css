@@ -207,6 +207,65 @@
   color: #e6edf3;
 }
 
+/* ── Mermaid 뷰어 ── */
+.wu-mermaid-diagram {
+  margin: 1rem 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  overflow: auto;
+  text-align: center;
+}
+.wu-mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+.wu-mermaid-error {
+  margin: -0.35rem 0 0.85rem;
+  color: #e03131;
+  font-size: 0.8rem;
+}
+[data-theme="dark"] .wu-mermaid-diagram {
+  background: var(--surface-2, #1e1e1e);
+}
+
+/* ── Mermaid 편집 미리보기 ── */
+.wu-mermaid-editor-preview {
+  margin: -0.15rem 0 1rem;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: auto;
+  user-select: none;
+}
+.wu-mermaid-editor-preview-title {
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.wu-mermaid-editor-preview-body {
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+.wu-mermaid-editor-preview-body svg {
+  max-width: 100%;
+  height: auto;
+}
+.wu-mermaid-editor-preview[data-status="error"] {
+  border-color: rgba(224, 49, 49, 0.35);
+}
+[data-theme="dark"] .wu-mermaid-editor-preview {
+  background: var(--surface-2, #1e1e1e);
+}
+
 /* ── Syntax highlight 토큰 — GitHub Light ── */
 .hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name, .hljs-tag { color: #cf222e; }
 .hljs-string, .hljs-attr, .hljs-attribute { color: #0a3069; }
@@ -349,6 +408,9 @@
   color: #4ade80;
   border-color: rgba(74,222,128,0.3);
   background: rgba(74,222,128,0.08);
+}
+.wu-code-edit-btn {
+  display: flex;
 }
 
 /* ── 인라인 코드 ── */
@@ -873,6 +935,89 @@ sup.wu-fn-ref a:hover { text-decoration: underline; }
 .wu-math-modal-preview:not([data-align])    { text-align: center; }
 .wu-math-preview-error { color: #e03131; font-size: 0.8em; text-align: left; }
 [data-theme="dark"] .wu-math-modal-preview { background: var(--surface-2, #1e1e1e); }
+
+/* ── Mermaid 입력 모달 ── */
+.wu-mermaid-modal-box {
+  width: min(1120px, 96vw);
+  max-width: 1120px;
+}
+.wu-mermaid-modal-title {
+  margin: 0 0 14px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.wu-mermaid-modal-body {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+.wu-mermaid-editor-pane,
+.wu-mermaid-preview-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.wu-mermaid-modal-input {
+  width: 100%;
+  height: min(420px, 48vh);
+  min-height: 360px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  outline: none;
+  resize: none;
+}
+.wu-mermaid-modal-input:focus {
+  border-color: var(--primary, #4c6ef5);
+}
+.wu-mermaid-modal-preview {
+  height: min(420px, 48vh);
+  min-height: 360px;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  overflow: auto;
+  color: var(--text);
+  font-size: 0.86rem;
+}
+.wu-mermaid-modal-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+.wu-mermaid-preview-error {
+  color: #e03131;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  white-space: pre-wrap;
+}
+.wu-mermaid-modal-hint {
+  margin-right: auto;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+[data-theme="dark"] .wu-mermaid-modal-preview {
+  background: var(--surface-2, #1e1e1e);
+}
+@media (max-width: 760px) {
+  .wu-mermaid-modal-body {
+    grid-template-columns: 1fr;
+  }
+  .wu-mermaid-modal-input,
+  .wu-mermaid-modal-preview {
+    height: 220px;
+    min-height: 220px;
+  }
+}
 
 /* ── 수식(KaTeX) 스타일 ── */
 .tiptap-mathematics-render { cursor: default; user-select: none; }

@@ -315,6 +315,55 @@
     return typeof s === 'string' ? document.querySelector(s) : s;
   }
 
+  const MERMAID_DEFAULT_SOURCE = 'flowchart TD\n  A["2"] --> B["1"]';
+  let _mermaidInitialized = false;
+  let _mermaidTheme = '';
+  let _mermaidSeq = 0;
+
+  function _getMermaid() {
+    return global.mermaid || global.MermaidBundle || null;
+  }
+
+  function _ensureMermaid() {
+    const mermaid = _getMermaid();
+    if (!mermaid || typeof mermaid.render !== 'function') return null;
+    const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default';
+    if (!_mermaidInitialized || _mermaidTheme !== theme) {
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme,
+      });
+      _mermaidInitialized = true;
+      _mermaidTheme = theme;
+    }
+    return mermaid;
+  }
+
+  function _mermaidErrorMessage(err) {
+    const msg = err && (err.str || err.message || String(err));
+    return msg ? String(msg).split('\n')[0] : 'Mermaid 렌더링에 실패했습니다.';
+  }
+
+  function _hashText(text) {
+    let hash = 0;
+    const src = String(text || '');
+    for (let i = 0; i < src.length; i++) {
+      hash = ((hash << 5) - hash + src.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  async function _renderMermaidSource(targetEl, source) {
+    const mermaid = _ensureMermaid();
+    if (!mermaid) throw new Error('Mermaid 라이브러리가 로드되지 않았습니다.');
+    const id = 'wu-mermaid-' + Date.now().toString(36) + '-' + (++_mermaidSeq);
+    const result = await mermaid.render(id, source || MERMAID_DEFAULT_SOURCE);
+    targetEl.innerHTML = result.svg || '';
+    if (typeof result.bindFunctions === 'function') result.bindFunctions(targetEl);
+    return result;
+  }
+
   /* ── Lucide SVG 아이콘 헬퍼 ── */
   function _ic(inner) {
     return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -337,6 +386,7 @@
   const _IC_PERCENT  = _ic('<line x1="19" x2="5" y1="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>');
   const _IC_INTEG    = _ic('<path d="M6 20a2 2 0 0 0 2 2c2 0 4-8 4-16a2 2 0 0 1 4 0"/>');  /* 수식 ∫ 모양 */
   const _IC_FOOTNOTE = _ic('<path d="M6 4H4v16h2"/><path d="M18 4h2v16h-2"/><path d="M9 16 L12 8 L15 16"/>');
+  const _IC_FLOW     = _ic('<circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="M9 6h6"/><path d="M6 9v2a7 7 0 0 0 4 6"/><path d="M18 9v2a7 7 0 0 1-4 6"/>');
   /* 콜아웃 툴바 아이콘 (megaphone) */
   const _IC_CALLOUT  = _ic('<path d="m3 11 19-9-9 19-2-8-8-2z"/>');
 
@@ -347,7 +397,7 @@
     { group: ['hr', 'quote', 'callout', 'footnote'] },
     { group: ['ul', 'ol', 'task'] },
     { group: ['table', 'link', 'image'] },
-    { group: ['codeblock', 'math', 'comment'] },
+    { group: ['codeblock', 'math', 'mermaid', 'comment'] },
   ];
 
   const TOOLBAR_LABELS = {
@@ -369,6 +419,7 @@
     image:      { icon: _ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>'), title: '이미지' },
     codeblock:  { icon: _IC_CODEBLK,  title: '코드 블록' },
     math:       { icon: _IC_SIGMA,    title: '수식 블록' },
+    mermaid:    { icon: _IC_FLOW,     title: '플로우차트 (Mermaid)' },
     comment:    { icon: _IC_PERCENT,  title: '주석 (%% ... %%)' },
     footnote:   { icon: _IC_FOOTNOTE, title: '각주 ([^N])' },
     callout:    { icon: _IC_CALLOUT,  title: '콜아웃 (> [!note])' },
@@ -376,6 +427,7 @@
 
   /* 슬래시 커맨드의 math/footnote/link 항목이 create() 스코프 내 함수를 호출하기 위한 참조 */
   let _mathSlashCmdFn     = null;
+  let _mermaidSlashCmdFn  = null;
   let _footnoteSlashCmdFn = null;
   let _promptLinkFn       = null;
 
@@ -446,6 +498,7 @@
         { id: 'link',  label: '링크',    icon: _ic('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'), hint: 'link url 링크', cmd: ed => { if (_promptLinkFn) _promptLinkFn(); } },
         { id: 'codeblock', label: '코드 블록', icon: _IC_CODEBLK, hint: 'code block codeblock', cmd: ed => ed.chain().focus().toggleCodeBlock().run() },
         { id: 'math',  label: '수식 블록', icon: _IC_SIGMA, hint: 'math latex katex 수식 블록', cmd: ed => { if (_mathSlashCmdFn) _mathSlashCmdFn(ed); } },
+        { id: 'mermaid', label: '플로우차트', icon: _IC_FLOW, hint: 'mermaid flowchart diagram chart 플로우차트 다이어그램', cmd: ed => { if (_mermaidSlashCmdFn) _mermaidSlashCmdFn(ed); } },
         { id: 'comment', label: '주석',   icon: _IC_PERCENT, hint: 'comment obsidian 주석 hidden',
           cmd: ed => {
             const pmSel = ed.state.selection;
@@ -503,6 +556,7 @@
     { value: 'json',       label: 'JSON' },
     { value: 'yaml',       label: 'YAML' },
     { value: 'markdown',   label: 'Markdown' },
+    { value: 'mermaid',    label: 'Mermaid' },
     { value: 'xml',        label: 'XML' },
     { value: 'kotlin',     label: 'Kotlin' },
     { value: 'swift',      label: 'Swift' },
@@ -846,6 +900,161 @@
       _showMathModal('', '삽입', 'center', (latex, align) => {
         ed.chain().focus().insertBlockMath({ latex, align }).run();
       });
+    };
+
+    /* Mermaid 입력 모달 */
+    let _mermaidModal = null;
+    let _mermaidModalCallback = null;
+    let _mermaidPreviewTimer = null;
+    let _mermaidPreviewSeq = 0;
+    if (opts.canEdit !== false) {
+      _mermaidModal = document.createElement('div');
+      _mermaidModal.className = 'wu-leave-overlay wu-mermaid-modal-overlay';
+      _mermaidModal.style.display = 'none';
+      _mermaidModal.innerHTML = `
+        <div class="wu-leave-box wu-mermaid-modal-box">
+          <h3 class="wu-mermaid-modal-title">플로우차트 입력</h3>
+          <div class="wu-mermaid-modal-body">
+            <div class="wu-mermaid-editor-pane">
+              <label class="wu-math-modal-label" for="wu-mermaid-input">Mermaid</label>
+              <textarea id="wu-mermaid-input" class="wu-mermaid-modal-input" spellcheck="false"></textarea>
+            </div>
+            <div class="wu-mermaid-preview-pane">
+              <label class="wu-math-modal-label">미리보기</label>
+              <div id="wu-mermaid-preview" class="wu-mermaid-modal-preview"></div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <span class="wu-mermaid-modal-hint">Ctrl+Enter로 삽입 · 방향: TD/TB 위에서 아래, LR 왼쪽에서 오른쪽, RL 오른쪽에서 왼쪽, BT 아래에서 위</span>
+            <button id="wu-mermaid-cancel" class="btn btn-sm">취소</button>
+            <button id="wu-mermaid-confirm" class="btn btn-sm btn-primary">삽입</button>
+          </div>
+        </div>`;
+      document.body.appendChild(_mermaidModal);
+
+      const _mermaidInput = _mermaidModal.querySelector('#wu-mermaid-input');
+      const _mermaidPreview = _mermaidModal.querySelector('#wu-mermaid-preview');
+      const _mermaidConfirm = _mermaidModal.querySelector('#wu-mermaid-confirm');
+      const _mermaidCancel = _mermaidModal.querySelector('#wu-mermaid-cancel');
+
+      function _renderMermaidPreview() {
+        clearTimeout(_mermaidPreviewTimer);
+        _mermaidPreviewTimer = setTimeout(async () => {
+          const val = _mermaidInput.value.trim();
+          const seq = ++_mermaidPreviewSeq;
+          _mermaidPreview.classList.remove('wu-mermaid-preview-error');
+          _mermaidPreview.innerHTML = '';
+          if (!val) return;
+          try {
+            const temp = document.createElement('div');
+            const result = await _renderMermaidSource(temp, val);
+            if (seq !== _mermaidPreviewSeq) return;
+            _mermaidPreview.innerHTML = temp.innerHTML;
+            if (result && typeof result.bindFunctions === 'function') result.bindFunctions(_mermaidPreview);
+          } catch (e) {
+            if (seq !== _mermaidPreviewSeq) return;
+            _mermaidPreview.textContent = _mermaidErrorMessage(e);
+            _mermaidPreview.classList.add('wu-mermaid-preview-error');
+          }
+        }, 180);
+      }
+
+      function _closeMermaidModal() {
+        clearTimeout(_mermaidPreviewTimer);
+        _mermaidModal.style.display = 'none';
+        _mermaidModalCallback = null;
+      }
+
+      _mermaidInput.addEventListener('input', _renderMermaidPreview);
+      _mermaidCancel.addEventListener('click', _closeMermaidModal);
+      _mermaidConfirm.addEventListener('click', () => {
+        const val = _mermaidInput.value.trim();
+        if (val && _mermaidModalCallback) _mermaidModalCallback(val);
+        _closeMermaidModal();
+      });
+      _mermaidModal.addEventListener('click', e => {
+        if (e.target === _mermaidModal) _closeMermaidModal();
+      });
+      _mermaidInput.addEventListener('keydown', e => {
+        if (e.key === 'Escape') _closeMermaidModal();
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          _mermaidConfirm.click();
+        }
+      });
+    }
+
+    function _showMermaidModal(initialSource, confirmLabel, onConfirm) {
+      const source = initialSource || MERMAID_DEFAULT_SOURCE;
+      if (!_mermaidModal) {
+        const next = window.prompt('Mermaid:', source) || '';
+        if (next.trim()) onConfirm(next.trim());
+        return;
+      }
+      const input = _mermaidModal.querySelector('#wu-mermaid-input');
+      const preview = _mermaidModal.querySelector('#wu-mermaid-preview');
+      const confirmBtn = _mermaidModal.querySelector('#wu-mermaid-confirm');
+      input.value = source;
+      confirmBtn.textContent = confirmLabel || '삽입';
+      preview.textContent = '';
+      _mermaidModalCallback = onConfirm;
+      _mermaidModal.style.display = 'flex';
+      input.dispatchEvent(new Event('input'));
+      setTimeout(() => { input.focus(); input.select(); }, 30);
+    }
+
+    function _insertMermaidBlock(ed, source) {
+      const block = {
+        type: 'codeBlock',
+        attrs: { language: 'mermaid' },
+        content: [{ type: 'text', text: source || MERMAID_DEFAULT_SOURCE }],
+      };
+      const { state } = ed;
+      const first = state.doc.firstChild;
+      const selRange = { from: state.selection.from, to: state.selection.to };
+      const insertTarget = first && first.type.name === 'heading' && first.attrs.level === 1 && state.selection.from <= first.nodeSize
+        ? first.nodeSize
+        : selRange;
+      ed.chain().focus().insertContentAt(insertTarget, block).run();
+    }
+
+    function _findCodeBlockByPre(preEl) {
+      if (!_editor || !preEl) return null;
+      const { state, view } = _editor;
+      let found = null;
+      state.doc.descendants((node, pos) => {
+        if (node.type.name !== 'codeBlock') return;
+        if (view.nodeDOM(pos) === preEl) {
+          found = { node, pos };
+          return false;
+        }
+      });
+      return found;
+    }
+
+    function _updateCodeBlockText(pos, source) {
+      if (!_editor || pos == null) return;
+      _editor.chain().focus().command(({ tr, dispatch }) => {
+        const node = tr.doc.nodeAt(pos);
+        if (!node || node.type.name !== 'codeBlock') return false;
+        if (dispatch) {
+          tr.setNodeMarkup(pos, undefined, { ...node.attrs, language: 'mermaid' });
+          tr.insertText(source || MERMAID_DEFAULT_SOURCE, pos + 1, pos + node.nodeSize - 1);
+        }
+        return true;
+      }).run();
+    }
+
+    function _promptMermaidBlock(preEl) {
+      const found = _findCodeBlockByPre(preEl);
+      if (!found) return;
+      _showMermaidModal(found.node.textContent || MERMAID_DEFAULT_SOURCE, '수정', source => {
+        _updateCodeBlockText(found.pos, source);
+      });
+    }
+
+    _mermaidSlashCmdFn = ed => {
+      _showMermaidModal(MERMAID_DEFAULT_SOURCE, '삽입', source => _insertMermaidBlock(ed, source));
     };
 
     function _showFootnoteModal(onConfirm, options = {}) {
@@ -1549,6 +1758,8 @@
       if (btnEl)  btnEl.classList.toggle('active', open);
       localStorage.setItem(tc.storageKey || 'wu_toc_open', open ? '1' : '0');
       if (open) { _buildToc(); _startTocWatch(); }
+      _scheduleCodeHeaderSync();
+      setTimeout(_scheduleCodeHeaderSync, 180);
     }
 
     function _initToc() {
@@ -1570,9 +1781,11 @@
     /* ── 코드블록 헤더 (fixed overlay — ProseMirror DOM 외부) ── */
     const ICON_COPY  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
     const ICON_CHECK = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+    const ICON_EDIT  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
 
     let _codeHeaderMap = new Map(); /* preEl → headerEl */
     let _codeHeaderObs = null;
+    let _codeHeaderResizeObs = null;
     let _codeHeaderPending = false;
 
     function _buildCodeHeader(preEl) {
@@ -1580,6 +1793,17 @@
       const header = document.createElement('div');
       header.className = 'wu-code-header';
       header.style.cssText = 'position:fixed;z-index:100;pointer-events:none;display:none;';
+      const codeEl = preEl.querySelector('code');
+
+      function _codeLanguage() {
+        const langMatch = codeEl ? codeEl.className.match(/language-([\w-]+)/) : null;
+        return langMatch ? langMatch[1] : '';
+      }
+
+      let mermaidEditBtn = null;
+      function _syncMermaidEditBtn() {
+        if (mermaidEditBtn) mermaidEditBtn.style.display = _codeLanguage() === 'mermaid' ? '' : 'none';
+      }
 
       if (canEdit) {
         const langWrap = document.createElement('div');
@@ -1592,9 +1816,7 @@
           `<option value="${o.value}">${o.label}</option>`
         ).join('');
 
-        const codeEl = preEl.querySelector('code');
-        const langMatch = codeEl ? codeEl.className.match(/language-(\w+)/) : null;
-        const curLang = langMatch ? langMatch[1] : '';
+        const curLang = _codeLanguage();
         if (curLang && !select.querySelector(`option[value="${curLang}"]`)) {
           const extra = document.createElement('option');
           extra.value = curLang; extra.textContent = curLang;
@@ -1612,12 +1834,24 @@
             const dom = view.nodeDOM(pos);
             if (dom !== preEl) return;
             view.dispatch(state.tr.setNodeMarkup(pos, null, { ...node.attrs, language: lang }));
+            setTimeout(_syncMermaidEditBtn, 0);
             return false;
           });
         });
 
         langWrap.appendChild(select);
         header.appendChild(langWrap);
+
+        mermaidEditBtn = document.createElement('button');
+        mermaidEditBtn.type = 'button';
+        mermaidEditBtn.className = 'wu-code-copy-btn wu-code-edit-btn';
+        mermaidEditBtn.innerHTML = ICON_EDIT;
+        mermaidEditBtn.title = 'Mermaid 수정';
+        mermaidEditBtn.style.pointerEvents = 'auto';
+        mermaidEditBtn.addEventListener('mousedown', e => e.preventDefault());
+        mermaidEditBtn.addEventListener('click', () => _promptMermaidBlock(preEl));
+        header.appendChild(mermaidEditBtn);
+        _syncMermaidEditBtn();
       }
 
       const copyBtn = document.createElement('button');
@@ -1693,12 +1927,19 @@
       if (!pmEl) return;
       _codeHeaderObs = new MutationObserver(_scheduleCodeHeaderSync);
       _codeHeaderObs.observe(pmEl, { childList: true, subtree: true });
+      if (typeof ResizeObserver !== 'undefined') {
+        _codeHeaderResizeObs = new ResizeObserver(_scheduleCodeHeaderSync);
+        [pmEl, containerEl, bodyEl].forEach(el => {
+          if (el) _codeHeaderResizeObs.observe(el);
+        });
+      }
       on(window, 'scroll', _scheduleCodeHeaderSync, { capture: true, passive: true });
       on(window, 'resize', _scheduleCodeHeaderSync);
     }
 
     function _destroyCodeHeaders() {
       if (_codeHeaderObs) { _codeHeaderObs.disconnect(); _codeHeaderObs = null; }
+      if (_codeHeaderResizeObs) { _codeHeaderResizeObs.disconnect(); _codeHeaderResizeObs = null; }
       for (const [, headerEl] of _codeHeaderMap) headerEl.remove();
       _codeHeaderMap.clear();
     }
@@ -2279,6 +2520,45 @@
       on(window, 'resize', scheduleTableMenuUpdate);
     }
 
+    /* ── Mermaid 코드블록 렌더링 ─────────────────────── */
+    function _renderMermaidBlocks() {
+      if (opts.canEdit !== false) return;
+      const root = _getProseMirrorEl() || containerEl;
+      if (!root) return;
+      root.querySelectorAll('pre > code.language-mermaid').forEach(codeEl => {
+        const preEl = codeEl.closest('pre');
+        if (!preEl || preEl.dataset.wuMermaidError === '1' || preEl.dataset.wuMermaidRendering === '1') return;
+        const source = (codeEl.textContent || '').trim();
+        if (!source) return;
+
+        preEl.dataset.wuMermaidRendering = '1';
+        const diagramEl = document.createElement('div');
+        diagramEl.className = 'wu-mermaid-diagram';
+        diagramEl.textContent = 'Mermaid 렌더링 중...';
+        preEl.replaceWith(diagramEl);
+
+        _renderMermaidSource(diagramEl, source)
+          .then(() => {
+            diagramEl.dataset.status = 'rendered';
+            _scheduleCodeHeaderSync();
+          })
+          .catch(err => {
+            delete preEl.dataset.wuMermaidRendering;
+            preEl.dataset.wuMermaidError = '1';
+            diagramEl.replaceWith(preEl);
+            const errorEl = document.createElement('div');
+            errorEl.className = 'wu-mermaid-error';
+            errorEl.textContent = 'Mermaid 렌더링 실패: ' + _mermaidErrorMessage(err);
+            preEl.insertAdjacentElement('afterend', errorEl);
+            _scheduleCodeHeaderSync();
+          });
+      });
+    }
+
+    function _scheduleMermaidRender() {
+      setTimeout(_renderMermaidBlocks, 80);
+    }
+
     /* ── syntax highlight 적용 ──────────────────────── */
     function _applyHighlight() {
       // lowlight (CodeBlockLowlight)가 Tiptap 레벨에서 토큰화를 담당하므로 별도 hljs 호출 불필요
@@ -2375,6 +2655,9 @@
               _editor.chain().focus().insertBlockMath({ latex, align }).run();
             });
             return;
+          case 'mermaid':
+            _showMermaidModal(MERMAID_DEFAULT_SOURCE, '삽입', source => _insertMermaidBlock(_editor, source));
+            return;
           case 'comment': {
             const pmSel = _editor.state.selection;
             if (pmSel.empty) {
@@ -2408,6 +2691,7 @@
           case 'task':      active = _editor.isActive('taskList'); break;
           case 'code':      active = _editor.isActive('code'); break;
           case 'codeblock': active = _editor.isActive('codeBlock'); break;
+          case 'mermaid':   active = _editor.isActive('codeBlock', { language: 'mermaid' }); break;
           case 'heading':
             active = _editor.isActive('heading'); break;
           case 'link':      active = _editor.isActive('link'); break;
@@ -2593,15 +2877,17 @@
           content: _preprocessHtmlTableImages(_preprocessViewerFootnotes(_preprocessViewerCallouts(_normalizeImageMarkdownSources(opts.initialMarkdown || '')))),
           editable: false,
           injectCSS: false,
-          onTransaction: () => { _fixFootnoteAnchors(containerEl); _fixCallouts(containerEl); },
+          onTransaction: () => { _fixFootnoteAnchors(containerEl); _fixCallouts(containerEl); _scheduleMermaidRender(); },
         });
         if (hooks.onReady) hooks.onReady(_editor);
         setTimeout(_applyHighlight, 150);
-        setTimeout(_initCodeHeaders, 100);
+        _scheduleMermaidRender();
+        setTimeout(_initCodeHeaders, 140);
         setTimeout(() => {
           _fixFootnoteAnchors(containerEl);
           _fixCallouts(containerEl);
           _fixInlineMarkdownImages(containerEl);
+          _renderMermaidBlocks();
         }, 200);
         _parseInitialWidths(_normalizeImageMarkdownSources(opts.initialMarkdown || ''));
         if (Object.keys(_imgWidthMap).length) {
@@ -2794,6 +3080,70 @@
                         }
                       });
 
+                      return DecorationSet.create(state.doc, decorations);
+                    },
+                  },
+                }),
+              ];
+            },
+          })
+        : null;
+
+      function _createEditorMermaidPreview(source) {
+        const wrap = document.createElement('div');
+        wrap.className = 'wu-mermaid-editor-preview';
+        wrap.setAttribute('contenteditable', 'false');
+
+        const title = document.createElement('div');
+        title.className = 'wu-mermaid-editor-preview-title';
+        title.textContent = 'Mermaid 미리보기';
+        wrap.appendChild(title);
+
+        const body = document.createElement('div');
+        body.className = 'wu-mermaid-editor-preview-body';
+        body.textContent = '렌더링 중...';
+        wrap.appendChild(body);
+
+        _renderMermaidSource(body, source)
+          .then(() => {
+            if (!wrap.isConnected) return;
+            wrap.dataset.status = 'rendered';
+          })
+          .catch(err => {
+            if (!wrap.isConnected) return;
+            body.textContent = _mermaidErrorMessage(err);
+            body.classList.add('wu-mermaid-preview-error');
+            wrap.dataset.status = 'error';
+          });
+
+        return wrap;
+      }
+
+      const EditorMermaidPreview = Extension && Plugin && PluginKey && Decoration && DecorationSet
+        ? Extension.create({
+            name: 'editorMermaidPreview',
+            addProseMirrorPlugins() {
+              return [
+                new Plugin({
+                  key: new PluginKey('editorMermaidPreview'),
+                  props: {
+                    decorations(state) {
+                      const decorations = [];
+                      state.doc.descendants((node, pos) => {
+                        if (node.type.name !== 'codeBlock' || node.attrs.language !== 'mermaid') return;
+                        const source = node.textContent || '';
+                        if (!source.trim()) return;
+                        decorations.push(Decoration.widget(
+                          pos + node.nodeSize,
+                          () => _createEditorMermaidPreview(source),
+                          {
+                            key: 'wu-mermaid-editor-preview-' + pos + '-' + _hashText(source),
+                            side: 1,
+                            ignoreSelection: true,
+                            stopEvent: () => true,
+                          },
+                        ));
+                      });
                       return DecorationSet.create(state.doc, decorations);
                     },
                   },
@@ -3122,6 +3472,7 @@
         HighlightMd,
         ...(editableMath && EditorCalloutDecorations ? [EditorCalloutDecorations] : []),
         ...(editableMath && EditorFootnoteDecorations ? [EditorFootnoteDecorations] : []),
+        ...(editableMath && EditorMermaidPreview ? [EditorMermaidPreview] : []),
         ...mathExtensions,
         Superscript,
         TableMd.configure({ resizable: true }),
@@ -3182,6 +3533,7 @@
           _imgWidthMap = {};
           _parseInitialWidths(normalizedMd);
           setTimeout(_applyHighlight, 150);
+          if (opts.canEdit === false) _scheduleMermaidRender();
         }
       },
       applyHighlight: _applyHighlight,
@@ -3219,6 +3571,7 @@
         if (_leaveOverlay && _leaveOverlay.parentNode) _leaveOverlay.parentNode.removeChild(_leaveOverlay);
         if (_linkOverlay   && _linkOverlay.parentNode)   _linkOverlay.parentNode.removeChild(_linkOverlay);
         if (_footnoteModal && _footnoteModal.parentNode) _footnoteModal.parentNode.removeChild(_footnoteModal);
+        if (_mermaidModal  && _mermaidModal.parentNode)  _mermaidModal.parentNode.removeChild(_mermaidModal);
         if (_slashMenuEl   && _slashMenuEl.parentNode)   _slashMenuEl.parentNode.removeChild(_slashMenuEl);
         if (_headingDropEl && _headingDropEl.parentNode) _headingDropEl.parentNode.removeChild(_headingDropEl);
         if (_calloutDropEl && _calloutDropEl.parentNode) _calloutDropEl.parentNode.removeChild(_calloutDropEl);
