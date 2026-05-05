@@ -1005,6 +1005,13 @@ sup.wu-fn-ref a:hover { text-decoration: underline; }
   font-size: 0.78rem;
   line-height: 1.4;
 }
+.wu-mermaid-modal-hint a {
+  color: var(--primary, #1c7ed6);
+  text-decoration: none;
+}
+.wu-mermaid-modal-hint a:hover {
+  text-decoration: underline;
+}
 [data-theme="dark"] .wu-mermaid-modal-preview {
   background: var(--surface-2, #1e1e1e);
 }

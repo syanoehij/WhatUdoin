@@ -925,7 +925,7 @@
             </div>
           </div>
           <div class="modal-actions">
-            <span class="wu-mermaid-modal-hint">Ctrl+Enter로 삽입 · 방향: TD/TB 위에서 아래, LR 왼쪽에서 오른쪽, RL 오른쪽에서 왼쪽, BT 아래에서 위</span>
+            <span class="wu-mermaid-modal-hint">Ctrl+Enter로 삽입 · Chart 방향:TD/TB/LR/RL · 예제 링크: <a href="https://mermaid.js.org/syntax/flowchart.html" target="_blank" rel="noopener noreferrer">https://mermaid.js.org/syntax/flowchart.html</a></span>
             <button id="wu-mermaid-cancel" class="btn btn-sm">취소</button>
             <button id="wu-mermaid-confirm" class="btn btn-sm btn-primary">삽입</button>
           </div>
