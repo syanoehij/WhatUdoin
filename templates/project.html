@@ -487,8 +487,9 @@ const PROJECT_COLORS = [
   '#546e7a','#8d6e63','#7b5e00','#d48806','#e67e22',
 ];
 function projectColor(name) {
+  const normalized = String(name || '').trim() || '미지정';
   let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  for (let i = 0; i < normalized.length; i++) h = (h * 31 + normalized.charCodeAt(i)) & 0xffff;
   return PROJECT_COLORS[h % PROJECT_COLORS.length];
 }
 
@@ -881,7 +882,7 @@ function render() {
       const isUnset = proj.name === '미지정';
       const colorBar = document.createElement('div');
       colorBar.className = 'proj-color-bar';
-      colorBar.style.background = isUnset ? 'var(--text-faint)' : color;
+      colorBar.style.background = color;
 
       const nameEl = document.createElement('span');
       nameEl.className = 'proj-name' + (isUnset ? ' unset' : '');

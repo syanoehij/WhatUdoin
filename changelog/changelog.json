@@ -1,6 +1,23 @@
 {
   "groups": [
     {
+      "date": "2026-05-07",
+      "phase": "39차 2단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ui\">ui</span> 캘린더 이벤트 표시 개선 — 시간 형식·우선순위 dot·프로젝트 색상 라인",
+          "detail_html": "<ul><li>월/주/일 뷰 시간 형식 통일: <code>오전 09:00</code> / <code>오후 02:30</code> 2자리 고정 형식 (<code>eventTimeFormat</code> 추가)</li><li>좌측 색상 라인 통일: 업무·회의·일지·하위업무 4종 모두 종류별 고정색 → 프로젝트 색으로 교체 (<code>ev-schedule</code> 신규 CSS 규칙 포함)</li><li>월 뷰 원형 dot: 우선순위별 색상 표시 (urgent 빨강 / high 주황 / normal 하늘 / low 회색)</li><li>주/일/2주 뷰: 시간 앞 우선순위 dot 신규 추가 (<code>.cal-priority-dot</code> 7px 원형, <code>eventDidMount</code>에서 DOM 삽입)</li><li>수정 파일: <code>templates/calendar.html</code>, <code>static/css/style.css</code></li></ul>"
+        },
+        {
+          "icon": "🔗",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 색상 결정 단일 함수 통합 — 전 페이지 일관성 확보",
+          "detail_html": "<ul><li><code>resolve_project_color()</code> 신규 함수: DB 지정색 &gt; 해시 팔레트(겹침 회피) &gt; 미지정 처리 순으로 색상 최종 결정</li><li><code>_project_color()</code>에 <code>used_colors</code> 파라미터 추가 — DB 지정 색과 충돌 시 다음 팔레트 색으로 자동 회피</li><li><code>list_events()</code>: 프로젝트 미지정 이벤트 포함 모든 이벤트에 <code>backgroundColor</code> · <code>borderColor</code> 항상 설정</li><li>마일스톤 캘린더 엔드포인트(<code>/api/project-milestones/calendar</code>): <code>resolve_project_color()</code> 후처리 추가 — DB 색상 미지정 프로젝트 마일스톤도 해시 팔레트 색상 적용</li><li>프로젝트 타임라인 엔드포인트(<code>/api/project-timeline</code>): 동일 함수 적용</li><li><code>/api/project-colors</code>: 색상 미지정 프로젝트 포함 전체 프로젝트 최종 색상 반환으로 확장</li><li>체크리스트(<code>check.html</code>): 8색 구식 팔레트·32비트 해시 → <code>/api/project-colors</code> API 우선 조회 + 15색 팔레트·16비트 해시 fallback으로 교체</li><li>홈·칸반·프로젝트 관리(<code>home.html</code>, <code>kanban.html</code>, <code>project.html</code>): <code>'미지정'</code> 정규화 로직 통일</li><li>수정 파일: <code>app.py</code>, <code>templates/check.html</code>, <code>templates/home.html</code>, <code>templates/kanban.html</code>, <code>templates/project.html</code></li></ul>"
+        }
+      ]
+    },
+    {
       "date": "2026-05-06",
       "phase": "39차 1단계",
       "phase_class": "phase-1",

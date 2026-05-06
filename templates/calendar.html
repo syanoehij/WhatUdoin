@@ -323,6 +323,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initialView: localStorage.getItem('cal_view') || 'dayGridMonth',
     initialDate: localStorage.getItem('cal_date') || undefined,
     locale: 'ko',
+    eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: true, meridiem: 'short' },
     timeZone: 'Asia/Seoul',
     firstDay: 1,
     height: '100%',
@@ -452,6 +453,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (info.event.allDay) info.el.classList.add('wu-allday-event');
       const p = info.event.extendedProps;
       if (p.type === 'milestone') return;  // 백엔드가 classNames·color 결정, 추가 처리 불필요
+      info.el.dataset.priority  = p.priority   || 'normal';
+      info.el.dataset.eventType = p.event_type || 'schedule';
+      const projColor = info.event.backgroundColor || info.event.borderColor;
+      if (projColor) info.el.style.setProperty('--ev-proj-color', projColor);
       const titleEl = info.el.querySelector('.fc-event-title');
       if (titleEl) {
         // 업무 이벤트에 📋 뱃지 추가
@@ -489,6 +494,19 @@ document.addEventListener('DOMContentLoaded', () => {
           badge.textContent = ' 🔁';
           badge.style.fontSize = '0.7em';
           titleEl.appendChild(badge);
+        }
+      }
+      // 주/일/2주 뷰: 시간 앞 우선순위 dot 삽입
+      const viewType = info.view.type;
+      if ((viewType === 'timeGridWeek' || viewType === 'timeGridDay' || viewType === 'timeGridTwoWeek')
+          && !info.event.allDay
+          && !info.el.querySelector('.cal-priority-dot')) {
+        const timeEl = info.el.querySelector('.fc-event-time')
+                    || info.el.querySelector('.fc-event-title');
+        if (timeEl) {
+          const dot = document.createElement('span');
+          dot.className = 'cal-priority-dot ' + (p.priority || 'normal');
+          timeEl.insertBefore(dot, timeEl.firstChild);
         }
       }
       // 우클릭 컨텍스트 메뉴 (editor/admin 전용, doc·회의·일지 제외)

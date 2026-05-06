@@ -1311,12 +1311,29 @@ _PROJECT_COLOR_PALETTE = [
     '#1565c0', '#00838f', '#7c4dff', '#9b59b6', '#5c35a0',
     '#546e7a', '#8d6e63', '#7b5e00', '#d48806', '#e67e22',
 ]
+_UNASSIGNED_PROJECT_NAME = '미지정'
 
-def _project_color(name: str) -> str:
+def _project_color(name: str, used_colors=None) -> str:
     h = 0
     for ch in (name or ''):
         h = (h * 31 + ord(ch)) & 0xffff
-    return _PROJECT_COLOR_PALETTE[h % len(_PROJECT_COLOR_PALETTE)]
+    n = len(_PROJECT_COLOR_PALETTE)
+    if not used_colors:
+        return _PROJECT_COLOR_PALETTE[h % n]
+    for i in range(n):
+        color = _PROJECT_COLOR_PALETTE[(h + i) % n]
+        if color not in used_colors:
+            return color
+    return _PROJECT_COLOR_PALETTE[h % n]
+
+
+def resolve_project_color(proj_name: str, proj_colors: dict) -> str:
+    """프로젝트 색상 최종 결정: DB지정 > 해시팔레트(겹침회피)."""
+    normalized = (proj_name or '').strip() or _UNASSIGNED_PROJECT_NAME
+    db_color = None if normalized == _UNASSIGNED_PROJECT_NAME else proj_colors.get(normalized)
+    if db_color:
+        return db_color
+    return _project_color(normalized, set(proj_colors.values()))
 
 
 # ── 이벤트 API ───────────────────────────────────────────
@@ -1362,7 +1379,6 @@ def list_events(request: Request):
     result = []
     for e in events:
         proj_name = e.get("project")
-        proj_color = proj_colors.get(proj_name) if proj_name else None
 
         # 24시간 초과 이벤트는 allDay로 처리
         is_all_day = bool(e["all_day"])
@@ -1414,10 +1430,9 @@ def list_events(request: Request):
                 "bound_checklist_title": bound_titles.get(e.get("bound_checklist_id")) if e.get("bound_checklist_id") else None,
             },
         }
-        color = proj_color or (proj_name and _project_color(proj_name))
-        if color:
-            ev["backgroundColor"] = color
-            ev["borderColor"]     = color
+        color = resolve_project_color(proj_name, proj_colors)
+        ev["backgroundColor"] = color
+        ev["borderColor"]     = color
         result.append(ev)
     return result
 
@@ -1701,7 +1716,14 @@ def get_milestone_calendar_events(request: Request):
     user = auth.get_current_user(request)
     if not user:
         return []
-    return db.get_calendar_milestones(user["name"])
+    proj_colors = db.get_project_colors()
+    milestones = db.get_calendar_milestones(user["name"])
+    for ev in milestones:
+        proj_name = ev.get("extendedProps", {}).get("project")
+        color = resolve_project_color(proj_name, proj_colors)
+        ev["backgroundColor"] = color
+        ev["borderColor"] = color
+    return milestones
 
 
 @app.get("/api/my-milestones")
@@ -1936,7 +1958,12 @@ def list_projects(request: Request):
 @app.get("/api/project-timeline")
 def project_timeline(request: Request, team_id: int = None):
     viewer = auth.get_current_user(request)
-    return db.get_project_timeline(team_id, viewer=viewer)
+    proj_colors = db.get_project_colors()
+    teams = db.get_project_timeline(team_id, viewer=viewer)
+    for team in teams:
+        for project in team.get("projects", []):
+            project["color"] = resolve_project_color(project.get("name"), proj_colors)
+    return teams
 
 
 # ── 통합 프로젝트 목록 API ──────────────────────────────────
@@ -2041,16 +2068,18 @@ async def manage_project_memo(name: str, request: Request):
 
 @app.get("/api/project-colors")
 def project_colors_api(request: Request):
-    """프로젝트명 → 색상 딕셔너리 반환 (색상이 설정된 항목만)"""
+    """프로젝트명 → 최종 결정 색상 딕셔너리 반환 (DB지정 > 해시팔레트, 모든 프로젝트 포함)"""
     user = auth.get_current_user(request)
-    colors = db.get_project_colors()
+    raw_colors = db.get_project_colors()
+    all_projects = db.get_unified_project_list(active_only=False)
     if not user:
-        private_names = {
-            p["name"] for p in db.get_unified_project_list(active_only=False)
-            if p.get("is_private")
-        }
-        colors = {k: v for k, v in colors.items() if k not in private_names}
-    return colors
+        private_names = {p["name"] for p in all_projects if p.get("is_private")}
+        all_projects = [p for p in all_projects if p["name"] not in private_names]
+    result = {}
+    for proj in all_projects:
+        result[proj["name"]] = resolve_project_color(proj["name"], raw_colors)
+    result[_UNASSIGNED_PROJECT_NAME] = resolve_project_color(_UNASSIGNED_PROJECT_NAME, raw_colors)
+    return result
 
 
 @app.patch("/api/manage/projects/{name:path}/color")

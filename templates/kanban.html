@@ -315,10 +315,10 @@ async function loadProjColors() {
 }
 
 function projectColor(name) {
-  if (!name) return '#b2bec3';
-  if (_storedProjColors[name]) return _storedProjColors[name];
+  const normalized = String(name || '').trim() || '미지정';
+  if (_storedProjColors[normalized]) return _storedProjColors[normalized];
   let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  for (let i = 0; i < normalized.length; i++) h = (h * 31 + normalized.charCodeAt(i)) & 0xffff;
   return PROJECT_COLORS[h % PROJECT_COLORS.length];
 }
 
