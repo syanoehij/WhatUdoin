@@ -684,14 +684,14 @@
     position: absolute; right: 0; top: calc(100% + 4px);
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 8px; box-shadow: var(--shadow); z-index: 200;
-    min-width: 180px; overflow: hidden;
+    min-width: 240px; overflow: hidden;
   }
   .export-menu.hidden { display: none; }
   .export-menu button, .export-menu a {
     display: block; width: 100%; padding: 9px 14px;
     text-align: left; background: none; border: none;
     color: var(--text); font-size: 0.85rem; font-family: inherit;
-    cursor: pointer; text-decoration: none;
+    cursor: pointer; text-decoration: none; white-space: nowrap;
     transition: background 0.1s;
   }
   .export-menu button:hover, .export-menu a:hover { background: var(--surface-2); }
@@ -882,7 +882,7 @@
         <div class="export-dropdown" id="ck-view-export-dropdown">
           <button class="btn btn-sm" onclick="toggleCkViewExportMenu(event)" title="내보내기">⬇ 내보내기 ▾</button>
           <div class="export-menu hidden" id="ck-view-export-menu">
-            <a href="#" onclick="exportChecklist(); closeCkViewExportMenu(); return false;">📄 MD파일로 저장하기</a>
+            <a href="#" onclick="exportChecklist(); closeCkViewExportMenu(); return false;">📄 MarkDown(옵시디언)으로 저장하기</a>
             <button onclick="ckViewExportLink(); closeCkViewExportMenu()">🔗 링크 내보내기</button>
           </div>
         </div>

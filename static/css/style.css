@@ -2533,6 +2533,15 @@ select.form-input {
 #notice-content-wrap .toastui-editor-contents h3:first-child {
   margin-top: 0 !important;
 }
+#notice-content-wrap .ProseMirror {
+  padding: 0 !important;
+}
+#notice-content-wrap .ProseMirror > *:first-child {
+  margin-top: 0 !important;
+}
+#notice-content-wrap .ProseMirror > *:last-child {
+  margin-bottom: 0 !important;
+}
 
 /* ── wu-toast ────────────────────────────────────── */
 #wu-toast-container {

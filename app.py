@@ -1017,7 +1017,7 @@ def api_get_notice():
 
 @app.post("/api/notice")
 async def api_save_notice(request: Request):
-    user = _require_admin(request)
+    user = _require_editor(request)
     data = await request.json()
     content = data.get("content", "")
     notice_id = db.save_notice(content, user["name"])

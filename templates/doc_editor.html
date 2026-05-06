@@ -11,13 +11,14 @@
   position: absolute; right: 0; top: calc(100% + 4px);
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 8px; box-shadow: var(--shadow-md);
-  min-width: 180px; z-index: 100; padding: 4px 0;
+  min-width: 240px; z-index: 100; padding: 4px 0;
 }
 .export-menu.hidden { display: none; }
 .export-menu button {
   display: block; width: 100%; text-align: left;
   padding: 8px 14px; background: none; border: none;
   font-size: 0.86rem; color: var(--text); cursor: pointer; font-family: inherit;
+  white-space: nowrap;
 }
 .export-menu button:hover { background: var(--surface-2); }
 
@@ -86,7 +87,7 @@
       <div class="export-dropdown" id="export-dropdown">
         <button class="btn btn-sm" onclick="toggleExportMenu(event)" title="내보내기">⬇ 내보내기 ▾</button>
         <div class="export-menu hidden" id="export-menu">
-          <button onclick="exportMd(); closeExportMenu()">📄 MD파일로 저장하기</button>
+          <button onclick="exportMd(); closeExportMenu()">📄 MarkDown(옵시디언)으로 저장하기</button>
           <button onclick="exportLink(); closeExportMenu()">🔗 링크 내보내기</button>
         </div>
       </div>

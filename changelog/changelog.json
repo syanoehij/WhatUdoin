@@ -2,6 +2,28 @@
   "groups": [
     {
       "date": "2026-05-06",
+      "phase": "39차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "🔓",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 공지 편집 권한 — admin 전용 → 팀원(editor) 모두 허용",
+          "detail_html": "<ul><li><code>POST /api/notice</code>: <code>_require_admin</code> → <code>_require_editor</code> 변경 — 같은 팀이면 editor 권한 사용자도 팀 공지 저장 가능</li><li>프론트엔드는 이미 <code>editor</code>·<code>admin</code> 모두에게 편집 UI를 표시하고 있었으므로 추가 변경 없음</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 내 스케줄 — 공지 영역 위아래 불필요한 공백 제거",
+          "detail_html": "<ul><li>뷰어 모드에서 ProseMirror가 <code>notice-content-wrap</code>에 직접 마운트될 때 <code>.ProseMirror</code>의 기본 <code>padding: 16px 20px</code>이 적용되어 위아래 공백 과다 발생</li><li><code>#notice-content-wrap .ProseMirror</code>에 <code>padding: 0</code> 오버라이드 추가, 첫·마지막 자식 요소 margin-top/bottom도 0으로 처리</li><li>수정 파일: <code>static/css/style.css</code></li></ul>"
+        },
+        {
+          "icon": "✏️",
+          "title_html": "<span class=\"cl-tag ui\">ui</span> 내보내기 메뉴 — 표현 변경 및 드롭다운 폭 개선",
+          "detail_html": "<ul><li><code>MD파일로 저장하기</code> → <code>MarkDown(옵시디언)으로 저장하기</code> 텍스트 통일 (문서 편집기·뷰어, 체크리스트 편집기·뷰어, 프로젝트 ZIP 버튼)</li><li>내보내기 드롭다운 <code>min-width: 180px → 240px</code> + <code>white-space: nowrap</code> 추가로 긴 텍스트 줄바꿈 방지</li><li>수정 파일: <code>templates/doc_editor.html</code>, <code>templates/check_editor.html</code>, <code>templates/check.html</code>, <code>templates/project_manage.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-06",
       "phase": "38차 10단계",
       "phase_class": "phase-10",
       "entries": [
@@ -1499,7 +1521,7 @@
         {
           "icon": "✨",
           "title_html": "<span class=\"cl-tag feat\">feat</span>체크리스트 뷰어 — 내보내기 드롭다운 (MD·링크)",
-          "detail_html": "<ul>\n              <li>체크리스트 조회 페이지(<code>check.html</code>) 우측 상단에 '⬇ 내보내기 ▾' 드롭다운 추가</li>\n              <li><b>📄 MD파일로 저장하기</b> — 기존 <code>exportChecklist()</code> 호출, 마크다운 파일 다운로드</li>\n              <li><b>🔗 링크 내보내기</b> — 현재 페이지 URL을 <code>http://localhost:8000</code> 기반으로 정규화 후 클립보드 복사 + 알림 표시</li>\n            </ul>"
+          "detail_html": "<ul>\n              <li>체크리스트 조회 페이지(<code>check.html</code>) 우측 상단에 '⬇ 내보내기 ▾' 드롭다운 추가</li>\n              <li><b>📄 MarkDown(옵시디언)으로 저장하기</b> — 기존 <code>exportChecklist()</code> 호출, 마크다운 파일 다운로드</li>\n              <li><b>🔗 링크 내보내기</b> — 현재 페이지 URL을 <code>http://localhost:8000</code> 기반으로 정규화 후 클립보드 복사 + 알림 표시</li>\n            </ul>"
         }
       ]
     },

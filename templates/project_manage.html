@@ -901,7 +901,7 @@ function renderDetail(idx) {
       <button class="pm-btn pm-btn-danger" onclick="bulkUnassignedVisibility(false)" title="미지정 일정·체크리스트 전체를 외부 비공개">🔒 하위 모두 외부 비공개</button>`;
     actions.innerHTML = `
       ${bulkBtns}
-      <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="미지정 일정·체크 항목을 옵시디언 ZIP으로 저장">📦 옵시디언 ZIP으로 저장</button>
+      <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="미지정 일정·체크 항목을 Markdown(옵시디언) ZIP으로 저장">📦 Markdown(옵시디언) ZIP으로 저장</button>
       <button class="pm-btn pm-btn-warn" onclick="enterBulkDeleteMode()">포함 항목 선택 삭제</button>
     `;
   } else {
@@ -918,7 +918,7 @@ function renderDetail(idx) {
       <button class="pm-btn pm-btn-accent" onclick="showEditPanel(${idx})">편집+일정 반영</button>
       ${statusBtn}
       ${privacyBtn}
-      <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="일정·체크 항목을 개별 마크다운 노트로 묶어 ZIP으로 저장">📦 옵시디언 ZIP으로 저장</button>
+      <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="일정·체크 항목을 개별 마크다운 노트로 묶어 ZIP으로 저장">📦 Markdown(옵시디언) ZIP으로 저장</button>
       ${bulkDeleteBtn}
       <button class="pm-btn pm-btn-danger" onclick="deleteProject(${idx})">프로젝트 삭제</button>
     `;
