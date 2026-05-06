@@ -2,6 +2,28 @@
   "groups": [
     {
       "date": "2026-05-07",
+      "phase": "39차 3단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "⚡",
+          "title_html": "<span class=\"cl-tag perf\">perf</span> 체크 목록 API — <code>content</code> 필드 제거로 응답 크기 약 13배 감소",
+          "detail_html": "<ul><li><code>GET /api/checklists</code> 응답에서 <code>content</code> 컬럼 제거 — 목록 화면은 제목·프로젝트·날짜만 표시하므로 본문 데이터 불필요</li><li>실측: 항목 6개 기준 11,751자 → 871자 (약 13배 감소)</li><li>개별 조회 <code>GET /api/checklists/{id}</code>는 기존대로 <code>content</code> 포함 유지</li><li>로컬 검색 범위를 제목·프로젝트·작성자 3개 필드로 명시적으로 좁힘 (기존에 <code>content</code>도 검색하던 코드 제거)</li><li>수정 파일: <code>database.py</code>, <code>templates/check.html</code></li></ul>"
+        },
+        {
+          "icon": "⚡",
+          "title_html": "<span class=\"cl-tag perf\">perf</span> 체크 페이지 — 에디터 번들 4.4MB lazy load 전환으로 초기 로딩 지연 해소",
+          "detail_html": "<ul><li>tiptap(1.25MB) + mermaid(2.94MB) + wu-editor(155KB) 번들을 페이지 진입 시 무조건 로드하던 방식 제거</li><li>체크리스트 항목을 처음 열 때 동적으로 로드하는 <code>_loadEditorAssets()</code> 헬퍼 추가 — 싱글-플라이트 Promise 패턴으로 중복 로드 방지</li><li>의존성 순서 보장: highlight·tiptap·mermaid 병렬 로드 후 wu-editor.js 순차 로드</li><li>모든 <code>asset_v()</code> 버전 쿼리 포함으로 캐시 무효화 정상 동작</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        },
+        {
+          "icon": "⚡",
+          "title_html": "<span class=\"cl-tag perf\">perf</span> 체크 페이지 HTML — 전체 이벤트 직렬화 제거로 초기 HTML 경량화",
+          "detail_html": "<ul><li>기존 <code>get_all_projects_with_events()</code>: 모든 미삭제 이벤트를 <code>ALL_PROJECTS</code> JSON에 포함해 HTML에 직렬화 — 이벤트 누적 시 초기 HTML이 무거워지는 구조</li><li>신규 <code>get_all_projects_meta()</code> 경량 함수 추가: 프로젝트 이름·색상·상태만 반환, events 배열 제외</li><li><code>/check</code> 라우트만 경량 함수로 교체, 캘린더 등 events가 필요한 다른 라우트는 기존 함수 유지</li><li>orphan 프로젝트(events·checklists에만 존재하는 프로젝트명) 합산 로직 동일하게 유지해 사이드바 드롭다운 정상 동작 보장</li><li>수정 파일: <code>database.py</code>, <code>app.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-07",
       "phase": "39차 2단계",
       "phase_class": "phase-1",
       "entries": [

@@ -1502,6 +1502,37 @@ def get_all_projects_with_events() -> list[dict]:
     return result
 
 
+def get_all_projects_meta() -> list[dict]:
+    """프로젝트 메타 정보만 반환 (events 제외). check 페이지 등 이벤트 불필요 시 사용."""
+    with get_conn() as conn:
+        proj_rows = conn.execute(
+            "SELECT id, name, color, is_active, is_private FROM projects WHERE deleted_at IS NULL ORDER BY is_active DESC, name"
+        ).fetchall()
+        ev_proj_rows = conn.execute(
+            "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
+        ).fetchall()
+        ck_proj_rows = conn.execute(
+            "SELECT DISTINCT project FROM checklists WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
+        ).fetchall()
+
+    proj_map: dict[str, dict] = {}
+    for r in proj_rows:
+        proj_map[r["name"]] = {
+            "id": r["id"], "name": r["name"], "color": r["color"],
+            "is_active": r["is_active"] if r["is_active"] is not None else 1,
+            "is_private": r["is_private"] if r["is_private"] is not None else 0,
+        }
+
+    for r in (*ev_proj_rows, *ck_proj_rows):
+        name = r[0]
+        if name and name not in proj_map:
+            proj_map[name] = {"id": None, "name": name, "color": None, "is_active": 1, "is_private": 0}
+
+    active   = sorted((p for p in proj_map.values() if p.get("is_active", 1)), key=lambda x: x["name"])
+    inactive = sorted((p for p in proj_map.values() if not p.get("is_active", 1)), key=lambda x: x["name"])
+    return active + inactive
+
+
 def create_project(name: str, color: str = None, memo: str = None) -> int:
     with get_conn() as conn:
         cur = conn.execute(
@@ -2416,16 +2447,16 @@ def get_checklists(project: str = None, viewer=None, active_only: bool | None = 
     with get_conn() as conn:
         if project is None:
             rows = conn.execute(
-                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
+                f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
             ).fetchall()
         elif project == "":
             # 미지정 (project가 NULL 또는 빈 문자열인 항목)
             rows = conn.execute(
-                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
+                f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
             ).fetchall()
         else:
             rows = conn.execute(
-                f"SELECT id, project, title, content, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC",
+                f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC",
                 (project,)
             ).fetchall()
     return [dict(r) for r in rows]

@@ -685,7 +685,7 @@ def notice_history_page(request: Request):
 @app.get("/check", response_class=HTMLResponse)
 def check_page(request: Request):
     user = auth.get_current_user(request)
-    all_projs = db.get_all_projects_with_events()
+    all_projs = db.get_all_projects_meta()
     visible = [p for p in all_projs if user or not p.get("is_private", 0)]
     active_projs = [p for p in visible if p.get("is_active", 1)]
     done_projs   = [p for p in visible if not p.get("is_active", 1)]

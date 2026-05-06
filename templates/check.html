@@ -1,7 +1,4 @@
 {% extends "base.html" %}
-{% block wu_editor_assets %}
-  {% include "_wu_editor_assets.html" %}
-{% endblock %}
 {% block title %}체크리스트 – WhatUDoin{% endblock %}
 
 {% block extra_head %}
@@ -1069,6 +1066,58 @@ const ALL_PROJECTS = {{ projects | tojson | safe }};
 const ALL_DONE_PROJECTS = {{ done_projects | tojson }};
 const TAB_TOKEN = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getItem(k); if (!t) { t = (crypto?.randomUUID?.() ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); })); sessionStorage.setItem(k, t); } return t; })();
 
+// ── 에디터 번들 lazy load ──────────────────────────────────
+const _EDITOR_ASSETS = {
+  hljs:     '/static/lib/highlight.min.js{{ asset_v("static/lib/highlight.min.js") }}',
+  tiptap:   '/static/lib/tiptap-bundle.min.js{{ asset_v("static/lib/tiptap-bundle.min.js") }}',
+  mermaid:  '/static/lib/mermaid-bundle.min.js{{ asset_v("static/lib/mermaid-bundle.min.js") }}',
+  wuEditor: '/static/js/wu-editor.js{{ asset_v("static/js/wu-editor.js") }}',
+  cssHljs:  '/static/lib/highlight-github.min.css{{ asset_v("static/lib/highlight-github.min.css") }}',
+  cssKatex: '/static/lib/katex.min.css{{ asset_v("static/lib/katex.min.css") }}',
+  cssWu:    '/static/css/wu-editor.css{{ asset_v("static/css/wu-editor.css") }}',
+};
+
+let _editorAssetsPromise = null;
+function _loadEditorAssets() {
+  if (!_editorAssetsPromise) _editorAssetsPromise = (async () => {
+    function _loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const base = src.split('?')[0];
+        if (document.querySelector(`script[src^="${base}"]`)) { resolve(); return; }
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+    function _loadCss(href) {
+      const base = href.split('?')[0];
+      if (!document.querySelector(`link[href^="${base}"]`)) {
+        const l = document.createElement('link');
+        l.rel = 'stylesheet';
+        l.href = href;
+        document.head.appendChild(l);
+      }
+    }
+    try {
+      _loadCss(_EDITOR_ASSETS.cssHljs);
+      _loadCss(_EDITOR_ASSETS.cssKatex);
+      _loadCss(_EDITOR_ASSETS.cssWu);
+      await Promise.all([
+        _loadScript(_EDITOR_ASSETS.hljs),
+        _loadScript(_EDITOR_ASSETS.tiptap),
+        _loadScript(_EDITOR_ASSETS.mermaid),
+      ]);
+      await _loadScript(_EDITOR_ASSETS.wuEditor);
+    } catch (err) {
+      _editorAssetsPromise = null; // 실패 시 다음 호출에서 재시도 가능
+      throw err;
+    }
+  })();
+  return _editorAssetsPromise;
+}
+
 let _allChecklists      = [];
 let _curProj            = null;
 let _sortMode           = IS_LOGGED_IN ? (localStorage.getItem('ck_sort_mode') || 'time') : 'name'; // 'time' | 'name'
@@ -1304,7 +1353,6 @@ function _applyProjSearchDots() {
     if (
       c.title.toLowerCase().includes(_searchTerm) ||
       (c.project || '').toLowerCase().includes(_searchTerm) ||
-      (c.content || '').toLowerCase().includes(_searchTerm) ||
       (c.created_by || '').toLowerCase().includes(_searchTerm)
     ) matchedProjs.add(c.project && c.project.trim() ? c.project : '미지정');
   });
@@ -1357,7 +1405,6 @@ function renderList() {
     filtered = filtered.filter(c =>
       c.title.toLowerCase().includes(_searchTerm) ||
       (c.project || '').toLowerCase().includes(_searchTerm) ||
-      (c.content || '').toLowerCase().includes(_searchTerm) ||
       (c.created_by || '').toLowerCase().includes(_searchTerm)
     );
   }
@@ -1628,7 +1675,7 @@ async function _showEditorMode() {
     : ((_curItem.title ? '# ' + _curItem.title + '\n\n' : '') + _initContent);
   // 연결 체크박스 상태를 칸반 API 기준으로 맞춰 편집화면에도 올바르게 반영
   _editorMd = await _syncLinkedMd(_editorMd);
-  initEditor(_editorMd);
+  await initEditor(_editorMd);
 }
 
 function _stopHeartbeat() {
@@ -1819,7 +1866,8 @@ function _updateMeta() {
 }
 
 // ── 편집기 초기화 ─────────────────────────────────────────
-function initEditor(content) {
+async function initEditor(content) {
+  await _loadEditorAssets();
   const container = document.getElementById('ck-editor-container');
   if (wuInst) { wuInst.destroy(); wuInst = null; }
   container.innerHTML = '';
@@ -1852,7 +1900,8 @@ function initEditor(content) {
 function toggleTocInline() { wuInst?.toggleToc(); }
 
 // ── 뷰어 렌더링 ───────────────────────────────────────────
-function renderViewer(content) {
+async function renderViewer(content) {
+  await _loadEditorAssets();
   // ck-right-title이 제목을 표시하므로 content 첫 줄 H1은 제거 (기존 데이터 호환)
   const displayContent = /^\s*#\s/.test(content || '')
     ? (content || '').replace(/^\s*#[^\n]*\n*/, '')
@@ -2479,7 +2528,6 @@ window.__pageSearch = {
     const isMatch = c =>
       c.title.toLowerCase().includes(_searchTerm) ||
       (c.project || '').toLowerCase().includes(_searchTerm) ||
-      (c.content || '').toLowerCase().includes(_searchTerm) ||
       (c.created_by || '').toLowerCase().includes(_searchTerm);
     let hasActiveMatch = false, hasDoneMatch = false;
     _allChecklists.forEach(c => {
