@@ -1171,11 +1171,7 @@ async function _loadProjColors() {
 
 function projColor(name) {
   const normalized = String(name || '').trim() || '미지정';
-  if (_projColorMap[normalized]) return _projColorMap[normalized];
-  const palette = ['#0984e3','#00b894','#00a8a8','#6c5ce7','#00875a','#1565c0','#00838f','#7c4dff','#9b59b6','#5c35a0','#546e7a','#8d6e63','#7b5e00','#d48806','#e67e22'];
-  let h = 0;
-  for (let i = 0; i < normalized.length; i++) h = (h * 31 + normalized.charCodeAt(i)) & 0xffff;
-  return palette[h % palette.length];
+  return _projColorMap[normalized] || '#6e7681';
 }
 
 // ── 풀스크린 패널 토글 ─────────────────────────────────────

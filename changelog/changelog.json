@@ -36,6 +36,16 @@
           "icon": "🔗",
           "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 색상 결정 단일 함수 통합 — 전 페이지 일관성 확보",
           "detail_html": "<ul><li><code>resolve_project_color()</code> 신규 함수: DB 지정색 &gt; 해시 팔레트(겹침 회피) &gt; 미지정 처리 순으로 색상 최종 결정</li><li><code>_project_color()</code>에 <code>used_colors</code> 파라미터 추가 — DB 지정 색과 충돌 시 다음 팔레트 색으로 자동 회피</li><li><code>list_events()</code>: 프로젝트 미지정 이벤트 포함 모든 이벤트에 <code>backgroundColor</code> · <code>borderColor</code> 항상 설정</li><li>마일스톤 캘린더 엔드포인트(<code>/api/project-milestones/calendar</code>): <code>resolve_project_color()</code> 후처리 추가 — DB 색상 미지정 프로젝트 마일스톤도 해시 팔레트 색상 적용</li><li>프로젝트 타임라인 엔드포인트(<code>/api/project-timeline</code>): 동일 함수 적용</li><li><code>/api/project-colors</code>: 색상 미지정 프로젝트 포함 전체 프로젝트 최종 색상 반환으로 확장</li><li>체크리스트(<code>check.html</code>): 8색 구식 팔레트·32비트 해시 → <code>/api/project-colors</code> API 우선 조회 + 15색 팔레트·16비트 해시 fallback으로 교체</li><li>홈·칸반·프로젝트 관리(<code>home.html</code>, <code>kanban.html</code>, <code>project.html</code>): <code>'미지정'</code> 정규화 로직 통일</li><li>수정 파일: <code>app.py</code>, <code>templates/check.html</code>, <code>templates/home.html</code>, <code>templates/kanban.html</code>, <code>templates/project.html</code></li></ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 자동 색상 팔레트 — 단일 서버 소스 + 30색 확장",
+          "detail_html": "<ul><li><code>app.py</code>의 <code>_PROJECT_COLOR_PALETTE</code>를 15색에서 30색으로 확장 — 색상 미지정 프로젝트 간 중복 가능성 완화</li><li>홈·칸반·체크·간트의 프론트엔드 중복 팔레트·해시 fallback 제거 — 자동 색상은 서버 API 결과만 사용</li><li><code>/api/project-colors</code> 누락 시에만 중립색 <code>#6e7681</code> fallback 사용, 클라이언트 자체 해시는 재생성하지 않도록 정리</li><li>체크리스트·홈·칸반·간트가 프로젝트 색상을 같은 서버 결정값으로 표시하도록 통일</li><li>수정 파일: <code>app.py</code>, <code>templates/check.html</code>, <code>templates/home.html</code>, <code>templates/kanban.html</code>, <code>templates/project.html</code></li></ul>"
+        },
+        {
+          "icon": "🔤",
+          "title_html": "<span class=\"cl-tag ui\">ui</span> 칸반 프로젝트 배지 — 배경색 대비에 맞춘 글자색 자동 보정",
+          "detail_html": "<ul><li>칸반 카드 프로젝트 배지의 <code>badgeTextColor()</code> 밝기 기준을 조정해 진한 주황·중간톤 배경에서는 흰색 글씨가 나오도록 개선</li><li>홈의 내 담당 일정 카드도 같은 기준으로 맞춰 칸반 화면과 축약 카드의 표시 일관성 유지</li><li>잘못된 색상값이 들어오면 흰색 글씨로 안전하게 fallback 처리</li><li>수정 파일: <code>templates/kanban.html</code>, <code>templates/home.html</code></li></ul>"
         }
       ]
     },

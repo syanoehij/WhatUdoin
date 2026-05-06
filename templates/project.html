@@ -481,18 +481,6 @@ const ROW_H  = 38; // 고정 행 높이
 const BAR_H  = 26;
 const HEADER_H = 40; // gantt-header 높이 (20+20)
 
-const PROJECT_COLORS = [
-  '#0984e3','#00b894','#00a8a8','#6c5ce7','#00875a',
-  '#1565c0','#00838f','#7c4dff','#9b59b6','#5c35a0',
-  '#546e7a','#8d6e63','#7b5e00','#d48806','#e67e22',
-];
-function projectColor(name) {
-  const normalized = String(name || '').trim() || '미지정';
-  let h = 0;
-  for (let i = 0; i < normalized.length; i++) h = (h * 31 + normalized.charCodeAt(i)) & 0xffff;
-  return PROJECT_COLORS[h % PROJECT_COLORS.length];
-}
-
 // ── 날짜 유틸 ─────────────────────────────────────────────
 function parseDate(s) {
   if (!s) return null;
@@ -851,7 +839,7 @@ function render() {
     team.projects.forEach((proj, pidx) => {
       const projKey = `${team.team_name}::${proj.name}`;
       const isCollapsed = collapsedProjects.has(projKey);
-      const color = proj.color || projectColor(proj.name);
+      const color = proj.color || '#6e7681';
       const isFirstInTeam = pidx === 0;
 
       // 내 일정만 필터
