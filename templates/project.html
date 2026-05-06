@@ -343,11 +343,6 @@ main { padding: 0; }
     <option value="{{ team.id }}">{{ team.name }}</option>
     {% endfor %}
   </select>
-  <div class="view-btns">
-    <button class="view-btn" data-view="month" onclick="setViewPreset('month')">월</button>
-    <button class="view-btn active" data-view="week" onclick="setViewPreset('week')">주</button>
-    <button class="view-btn" data-view="day" onclick="setViewPreset('day')">일</button>
-  </div>
   <div class="nav-btns">
     <button class="nav-btn" onclick="navPrev()">&#9664;</button>
     <span class="nav-label" id="nav-label">-</span>
@@ -360,6 +355,11 @@ main { padding: 0; }
   <button class="nav-btn" id="gantt-my-only-btn" onclick="toggleGanttMyOnly()" title="내 담당 일정만 보기">👤 내 일정만</button>
   {% endif %}
   <div class="spacer"></div>
+  <div class="view-btns">
+    <button class="view-btn" data-view="month" onclick="setViewPreset('month')">월</button>
+    <button class="view-btn active" data-view="week" onclick="setViewPreset('week')">주</button>
+    <button class="view-btn" data-view="day" onclick="setViewPreset('day')">일</button>
+  </div>
   <div class="zoom-control">
     <span class="zoom-icon">축소</span>
     <input type="range" id="zoom-slider" class="zoom-slider"
@@ -568,6 +568,7 @@ function calcTodayLineLeft(todayOff) {
 // ── 줌 ────────────────────────────────────────────────────
 function onZoomSlider(idx) {
   daysShown = ZOOM_STEPS[idx];
+  document.getElementById('zoom-slider').value = idx;
   saveProjectState();
   updateZoomLabel(); syncViewBtns(); render();
 }
@@ -1130,8 +1131,32 @@ document.getElementById('gantt-timeline').addEventListener('scroll', function ()
 const _tlEl = document.getElementById('gantt-timeline');
 let _tlWheelAccum = 0; // 누적 픽셀
 
+// ── Ctrl+휠: 줌 슬라이더 단계 전환 ───────────────────────
+let _ctrlWheelLastTime = 0;
+function _tlDoCtrlWheelZoom(e) {
+  const now = Date.now();
+  if (now - _ctrlWheelLastTime < 150) return; // 트랙패드 연속 발화 방지
+  _ctrlWheelLastTime = now;
+
+  // 현재 daysShown → 가장 가까운 ZOOM_STEPS 인덱스 찾기
+  let curIdx = 0, minDiff = Infinity;
+  ZOOM_STEPS.forEach((s, i) => {
+    const diff = Math.abs(s - daysShown);
+    if (diff < minDiff) { minDiff = diff; curIdx = i; }
+  });
+
+  // 슬라이더 방향: 인덱스 0=축소(광역), 인덱스 max=확대(세밀)
+  // 휠 위(deltaY < 0) = 축소 = 인덱스 감소, 휠 아래(deltaY > 0) = 확대 = 인덱스 증가
+  const nextIdx = e.deltaY < 0
+    ? Math.max(0, curIdx - 1)
+    : Math.min(ZOOM_STEPS.length - 1, curIdx + 1);
+
+  if (nextIdx !== curIdx) { onZoomSlider(nextIdx); requestAnimationFrame(scrollToToday); }
+}
+
 function _tlDoWheelScroll(e) {
   e.preventDefault();
+  if (e.ctrlKey) { _tlWheelAccum = 0; _tlDoCtrlWheelZoom(e); return; }
   _tlWheelAccum += e.deltaY;
   // 평균 일당 폭 (= 전체 폭 / 표시 일수) 사용 — 휠은 거친 조작이므로 평균으로도 충분
   const tl = document.getElementById('gantt-timeline');

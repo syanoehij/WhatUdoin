@@ -19,6 +19,16 @@
           "icon": "✏️",
           "title_html": "<span class=\"cl-tag ui\">ui</span> 내보내기 메뉴 — 표현 변경 및 드롭다운 폭 개선",
           "detail_html": "<ul><li><code>MD파일로 저장하기</code> → <code>MarkDown(옵시디언)으로 저장하기</code> 텍스트 통일 (문서 편집기·뷰어, 체크리스트 편집기·뷰어, 프로젝트 ZIP 버튼)</li><li>내보내기 드롭다운 <code>min-width: 180px → 240px</code> + <code>white-space: nowrap</code> 추가로 긴 텍스트 줄바꿈 방지</li><li>수정 파일: <code>templates/doc_editor.html</code>, <code>templates/check_editor.html</code>, <code>templates/check.html</code>, <code>templates/project_manage.html</code></li></ul>"
+        },
+        {
+          "icon": "🔍",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 간트 차트 — Ctrl+휠로 줌 단위 조절 기능 추가",
+          "detail_html": "<ul><li>간트 타임라인·날짜 헤더 영역에서 <code>Ctrl+휠</code>로 표시 단위를 <code>ZOOM_STEPS</code> 11단계로 연속 조절 가능</li><li>휠 아래 = 확대(세밀한 단위), 휠 위 = 축소(넓은 단위) — 일반 휠 날짜 이동과 동일한 방향성</li><li>슬라이더 UI·우측 라벨·월/주/일 버튼 하이라이트 모두 자동 동기화, 변경 후 <code>scrollToToday()</code>로 뷰포트 리셋</li><li>150ms 쿨다운으로 트랙패드 연속 발화 방지, <code>event.preventDefault()</code>로 브라우저 핀치줌 차단</li><li>수정 파일: <code>templates/project.html</code></li></ul>"
+        },
+        {
+          "icon": "🎨",
+          "title_html": "<span class=\"cl-tag ui\">ui</span> 간트 차트 — 월/주/일 버튼 위치를 슬라이더 왼쪽으로 이동",
+          "detail_html": "<ul><li>툴바 상단 월/주/일 버튼 그룹(<code>.view-btns</code>)을 <code>.spacer</code> 앞 → 슬라이더(<code>.zoom-control</code>) 바로 왼쪽으로 이동</li><li>줌 관련 컨트롤(단계 버튼 + 슬라이더)이 우측에 묶여 시각적 일관성 향상</li><li>버튼 기능·스타일 무변경, JS 셀렉터(<code>.view-btn</code>) 위치 비의존적이므로 동작에 영향 없음</li><li>수정 파일: <code>templates/project.html</code></li></ul>"
         }
       ]
     },
