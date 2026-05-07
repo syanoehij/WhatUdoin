@@ -1574,13 +1574,53 @@ def get_unassigned_events() -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def rename_project(old_name: str, new_name: str):
+def rename_project(old_name: str, new_name: str, merge: bool = False):
+    if old_name == new_name:
+        return
     with get_conn() as conn:
+        old_proj = conn.execute(
+            "SELECT id FROM projects WHERE name = ? AND deleted_at IS NULL",
+            (old_name,)
+        ).fetchone()
+        target_proj = conn.execute(
+            "SELECT id FROM projects WHERE name = ? AND deleted_at IS NULL",
+            (new_name,)
+        ).fetchone()
+
+        if target_proj and old_proj and target_proj["id"] != old_proj["id"]:
+            if not merge:
+                raise sqlite3.IntegrityError(f"project '{new_name}' already exists")
+            conn.execute(
+                "UPDATE events SET project = ? WHERE project = ?", (new_name, old_name)
+            )
+            conn.execute(
+                "UPDATE checklists SET project = ? WHERE project = ?", (new_name, old_name)
+            )
+            conn.execute("""
+                DELETE FROM project_milestones
+                 WHERE project_id = ?
+                   AND date IN (
+                       SELECT date FROM project_milestones WHERE project_id = ?
+                   )
+            """, (old_proj["id"], target_proj["id"]))
+            conn.execute(
+                "UPDATE project_milestones SET project_id = ? WHERE project_id = ?",
+                (target_proj["id"], old_proj["id"])
+            )
+            conn.execute(
+                "UPDATE projects SET deleted_at = COALESCE(deleted_at, ?) WHERE id = ?",
+                (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), old_proj["id"])
+            )
+            return
+
         conn.execute(
             "UPDATE projects SET name = ? WHERE name = ?", (new_name, old_name)
         )
         conn.execute(
             "UPDATE events SET project = ? WHERE project = ?", (new_name, old_name)
+        )
+        conn.execute(
+            "UPDATE checklists SET project = ? WHERE project = ?", (new_name, old_name)
         )
 
 
@@ -1740,9 +1780,14 @@ def project_name_exists(name: str) -> bool:
         if row:
             return True
         row2 = conn.execute(
-            "SELECT 1 FROM events WHERE project = ? LIMIT 1", (name,)
+            "SELECT 1 FROM events WHERE project = ? AND deleted_at IS NULL LIMIT 1", (name,)
         ).fetchone()
-        return bool(row2)
+        if row2:
+            return True
+        row3 = conn.execute(
+            "SELECT 1 FROM checklists WHERE project = ? AND deleted_at IS NULL LIMIT 1", (name,)
+        ).fetchone()
+        return bool(row3)
 
 
 def check_conflicts(start_dt: str, end_dt: str, team_id: int = None, exclude_id: int = None) -> list[dict]:

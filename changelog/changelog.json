@@ -29,6 +29,11 @@
           "icon": "✨",
           "title_html": "<span class=\"cl-tag feat\">feat</span> 관리자 — AI 응답 대기 시간·컨텍스트 크기(num_ctx) 설정 추가",
           "detail_html": "<ul><li>Ollama AI 응답 대기 시간(초)과 컨텍스트 크기(<code>num_ctx</code>)를 관리자 페이지 → 시스템 설정 탭에서 조절 가능</li><li>기본값: 대기 시간 300초, <code>num_ctx</code> 4096 — 느린 모델이나 긴 문서 분석 시 관리자 페이지에서 즉시 조정 가능, 서버 재시작 불필요</li><li><code>llm_parser.py</code>에 <code>_TIMEOUT</code>·<code>_NUM_CTX</code> 전역 변수 및 <code>set_ollama_timeout()</code>·<code>set_ollama_num_ctx()</code> 추가 — <code>parse_schedule</code>·<code>refine_schedule</code> 요청에 적용</li><li><code>GET/PUT /api/admin/settings/llm</code>에 <code>ollama_timeout</code>·<code>ollama_num_ctx</code> 필드 추가</li><li>수정 파일: <code>llm_parser.py</code>, <code>app.py</code>, <code>templates/admin.html</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 프로젝트 관리 — 프로젝트 이름 변경 시 체크리스트·병합 데이터 전파 누락 수정",
+          "detail_html": "<ul><li>프로젝트 관리에서 프로젝트 이름을 바꿀 때 <code>events.project</code>는 갱신되지만 <code>checklists.project</code>가 예전 이름으로 남아 체크리스트가 이전 프로젝트 아래에 보이던 문제 수정</li><li><code>rename_project()</code>가 일반 이름 변경 시 일정과 체크리스트를 함께 새 프로젝트명으로 이동하도록 보강</li><li>기존 프로젝트명으로 병합할 때 source 프로젝트의 일정·체크리스트·중간 일정을 target 프로젝트로 이동하고, 중복 날짜의 중간 일정은 target 값을 유지</li><li>체크리스트만 가진 프로젝트명도 이름 충돌 감지 대상에 포함</li><li>수정 파일: <code>database.py</code></li></ul>"
         }
       ]
     },
