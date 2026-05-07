@@ -2,6 +2,28 @@
   "groups": [
     {
       "date": "2026-05-07",
+      "phase": "40차 2단계",
+      "phase_class": "phase-2",
+      "entries": [
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 체크 에디터 — 일정 연결 시 마크다운 원문 표시 및 커서 위치 무시 버그 수정",
+          "detail_html": "<ul><li><code>insertEventLink()</code>에서 <code>wuInst.setContent(전체 마크다운 교체)</code> 방식 사용으로 Tiptap이 첫 번째 렌더링 전 저장 → 원문 텍스트가 그대로 노출되던 버그</li><li>항상 문서 하단에만 추가되던 버그도 동일 원인</li><li>Tiptap <code>chain().focus().insertContent(HTML)</code>로 변경 — TaskItem HTML 노드를 현재 커서 위치에 직접 삽입, 즉시 체크박스로 렌더링</li><li>수정 파일: <code>templates/check_editor.html</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 체크 에디터 — AI 일정 생성 시 AI 생성 입력 섹션이 컨텍스트에 포함되어 타임아웃 발생하는 버그 수정",
+          "detail_html": "<ul><li>AI 초안으로 생성된 체크리스트에는 본문 끝에 <code>--- \\n&gt; **AI 생성 입력:**</code> 인용 섹션이 붙는데, <code>runCkAiParse()</code>가 이를 포함한 전체 내용을 Ollama에 전달해 컨텍스트 폭발 → 120초 타임아웃 발생</li><li><code>getMarkdown()</code> 결과에서 <code>\\n---\\n</code> 이하를 제거한 순수 본문만 AI에 전달하도록 수정</li><li>수정 파일: <code>templates/check_editor.html</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 관리자 — AI 응답 대기 시간·컨텍스트 크기(num_ctx) 설정 추가",
+          "detail_html": "<ul><li>Ollama AI 응답 대기 시간(초)과 컨텍스트 크기(<code>num_ctx</code>)를 관리자 페이지 → 시스템 설정 탭에서 조절 가능</li><li>기본값: 대기 시간 300초, <code>num_ctx</code> 4096 — 느린 모델이나 긴 문서 분석 시 관리자 페이지에서 즉시 조정 가능, 서버 재시작 불필요</li><li><code>llm_parser.py</code>에 <code>_TIMEOUT</code>·<code>_NUM_CTX</code> 전역 변수 및 <code>set_ollama_timeout()</code>·<code>set_ollama_num_ctx()</code> 추가 — <code>parse_schedule</code>·<code>refine_schedule</code> 요청에 적용</li><li><code>GET/PUT /api/admin/settings/llm</code>에 <code>ollama_timeout</code>·<code>ollama_num_ctx</code> 필드 추가</li><li>수정 파일: <code>llm_parser.py</code>, <code>app.py</code>, <code>templates/admin.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-07",
       "phase": "40차 1단계",
       "phase_class": "phase-1",
       "entries": [

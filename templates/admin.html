@@ -90,8 +90,22 @@
       <label>Ollama 서버 주소</label>
       <div style="display:flex;gap:8px;align-items:center;">
         <input type="text" id="llm-url-input" placeholder="http://localhost:11434" style="flex:1;" />
-        <button class="btn btn-primary" onclick="saveLlmUrl()">저장</button>
+        <button class="btn btn-primary" onclick="saveLlmSettings()">저장</button>
         <button class="btn btn-outline" onclick="testLlmConnection()">연결 테스트</button>
+      </div>
+    </div>
+    <div class="form-row" style="margin-top:12px;">
+      <label>AI 응답 대기 시간(초)</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="number" id="llm-timeout-input" min="30" max="600" style="width:120px;" />
+        <span style="font-size:0.85rem;color:var(--text-muted);">기본값: 300초. 느린 모델 사용 시 늘리세요.</span>
+      </div>
+    </div>
+    <div class="form-row" style="margin-top:8px;">
+      <label>컨텍스트 크기 (num_ctx)</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="number" id="llm-num-ctx-input" min="512" max="32768" step="512" style="width:120px;" />
+        <span style="font-size:0.85rem;color:var(--text-muted);">기본값: 4096. 긴 문서 분석 시 늘리세요.</span>
       </div>
     </div>
     <div id="llm-status" style="margin-top:8px;font-size:0.85rem;display:none;"></div>
@@ -338,15 +352,19 @@ async function loadLlmSettings() {
   if (res.ok) {
     const data = await res.json();
     document.getElementById('llm-url-input').value = data.ollama_url || '';
+    document.getElementById('llm-timeout-input').value = data.ollama_timeout || 300;
+    document.getElementById('llm-num-ctx-input').value = data.ollama_num_ctx || 4096;
   }
 }
-async function saveLlmUrl() {
+async function saveLlmSettings() {
   const url = document.getElementById('llm-url-input').value.trim();
   if (!url) { wuToast.warning('URL을 입력하세요.'); return; }
+  const timeout = parseInt(document.getElementById('llm-timeout-input').value) || 300;
+  const numCtx = parseInt(document.getElementById('llm-num-ctx-input').value) || 4096;
   const res = await fetch('/api/admin/settings/llm', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ollama_url: url }),
+    body: JSON.stringify({ ollama_url: url, ollama_timeout: timeout, ollama_num_ctx: numCtx }),
   });
   if (res.ok) {
     showLlmStatus('저장되었습니다. 연결 테스트를 눌러 확인하세요.', 'info');

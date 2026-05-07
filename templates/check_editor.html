@@ -887,15 +887,15 @@ async function queryEventLinkList() {
   });
 }
 
-function insertEventLink(eventId, title, isChecked = false) {
-  if (!wuInst) return;
-  const md = wuInst.getMarkdown();
-  const check = isChecked ? 'x' : ' ';
-  const newLine = `- [${check}] ${title} [🔗](eid:${eventId})`;
-  const newMd = md.trimEnd() + '\n' + newLine + '\n';
-  wuInst.setContent(newMd);
+async function insertEventLink(eventId, title, isChecked = false) {
+  if (!wuInst || !wuInst.editor) return;
+  const checked = isChecked ? 'true' : 'false';
+  // setContent(전체 교체) 대신 현재 커서 위치에 TaskItem HTML 노드로 직접 삽입
+  const html = `<ul data-type="taskList"><li data-type="taskItem" data-checked="${checked}"><p>${esc(title)} <a href="eid:${eventId}">🔗</a></p></li></ul>`;
+  wuInst.editor.chain().focus().insertContent(html).run();
   closeEventLinkModal();
   if (_evPanelOpen) renderEvPanel();
+  await saveContent(false);
 }
 
 document.addEventListener('keydown', e => {
@@ -1206,7 +1206,8 @@ async function _aiReviewConflictsForCk(model) {
 
 async function runCkAiParse() {
   if (CKE_IS_NEW) { wuToast.warning('체크리스트를 먼저 저장하세요.'); return; }
-  const content = wuInst ? wuInst.getMarkdown().trim() : '';
+  const rawContent = wuInst ? wuInst.getMarkdown().trim() : '';
+  const content = rawContent.split('\n---\n')[0].trim();
   if (!content) { wuToast.warning('체크리스트 내용을 먼저 입력하세요.'); return; }
 
   const model = document.getElementById('cke-ai-model-select').value;

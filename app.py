@@ -63,6 +63,12 @@ async def lifespan(app: FastAPI):
     saved_url = db.get_setting("ollama_url")
     if saved_url:
         llm_parser.set_ollama_base_url(saved_url)
+    saved_timeout = db.get_setting("ollama_timeout")
+    if saved_timeout:
+        llm_parser.set_ollama_timeout(int(saved_timeout))
+    saved_num_ctx = db.get_setting("ollama_num_ctx")
+    if saved_num_ctx:
+        llm_parser.set_ollama_num_ctx(int(saved_num_ctx))
     db.finalize_expired_done()  # 서버 시작 시 만료된 done 일정 즉시 처리
     if not scheduler.running:
         # APScheduler: 1분마다 15분 후 일정 알람 체크
@@ -1217,7 +1223,11 @@ def admin_pending_count(request: Request):
 @app.get("/api/admin/settings/llm")
 def admin_get_llm_settings(request: Request):
     _require_admin(request)
-    return {"ollama_url": db.get_setting("ollama_url") or llm_parser.OLLAMA_BASE_URL}
+    return {
+        "ollama_url": db.get_setting("ollama_url") or llm_parser.OLLAMA_BASE_URL,
+        "ollama_timeout": int(db.get_setting("ollama_timeout") or 300),
+        "ollama_num_ctx": int(db.get_setting("ollama_num_ctx") or 4096),
+    }
 
 
 @app.put("/api/admin/settings/llm")
@@ -1229,6 +1239,19 @@ async def admin_set_llm_settings(request: Request):
         raise HTTPException(status_code=400, detail="URL을 입력하세요.")
     db.set_setting("ollama_url", url)
     llm_parser.set_ollama_base_url(url)
+
+    timeout_raw = data.get("ollama_timeout")
+    if timeout_raw is not None:
+        t = max(30, int(timeout_raw))
+        db.set_setting("ollama_timeout", str(t))
+        llm_parser.set_ollama_timeout(t)
+
+    num_ctx_raw = data.get("ollama_num_ctx")
+    if num_ctx_raw is not None:
+        n = max(512, int(num_ctx_raw))
+        db.set_setting("ollama_num_ctx", str(n))
+        llm_parser.set_ollama_num_ctx(n)
+
     return {"ok": True}
 
 
@@ -2020,7 +2043,7 @@ async def manage_rename_project(name: str, request: Request):
         raise HTTPException(status_code=400, detail="새 이름을 입력하세요.")
     if new_name != name and not force and db.project_name_exists(new_name):
         raise HTTPException(status_code=409, detail=f'"{new_name}" 프로젝트가 이미 존재합니다. 병합하시겠습니까?')
-    db.rename_project(name, new_name)
+    db.rename_project(name, new_name, merge=bool(force))
     wu_broker.publish("projects.changed", {"name": new_name, "action": "update"})
     return {"ok": True}
 

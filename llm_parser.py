@@ -14,6 +14,9 @@ OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_URL = OLLAMA_BASE_URL + "/api/generate"
 DEFAULT_MODEL = "gemma4:e4b"
 
+_TIMEOUT = 300
+_NUM_CTX = 4096
+
 # 회사 프록시 환경에서 localhost(Ollama) 요청이 프록시를 경유하지 않도록
 # trust_env=False 로 시스템/환경변수 프록시 설정을 무시하는 전용 세션 사용
 _session = requests.Session()
@@ -25,6 +28,16 @@ def set_ollama_base_url(base_url: str):
     global OLLAMA_BASE_URL, OLLAMA_URL
     OLLAMA_BASE_URL = base_url.rstrip("/")
     OLLAMA_URL = OLLAMA_BASE_URL + "/api/generate"
+
+
+def set_ollama_timeout(seconds: int):
+    global _TIMEOUT
+    _TIMEOUT = max(30, int(seconds))
+
+
+def set_ollama_num_ctx(n: int):
+    global _NUM_CTX
+    _NUM_CTX = max(512, int(n))
 
 
 def get_available_models() -> list[str]:
@@ -98,15 +111,15 @@ JSON:"""
         resp = _session.post(
             OLLAMA_URL,
             json={"model": model, "prompt": prompt, "stream": False, **opts},
-            timeout=120,
+            timeout=_TIMEOUT,
         )
         resp.raise_for_status()
         return validate_and_normalize(_extract_json(resp.json().get("response", "")))
 
-    result = _call({"options": {"temperature": 0.1}})
+    result = _call({"options": {"temperature": 0.1, "num_ctx": _NUM_CTX}})
     if not result and len(text) >= 30:
         retry_prompt = "이전 출력이 JSON 배열이 아니었습니다. 반드시 [ 로 시작해 ] 로 끝나는 JSON 배열만 출력하세요.\n\n" + prompt
-        result = _call({"options": {"temperature": 0.0}, "prompt": retry_prompt})
+        result = _call({"options": {"temperature": 0.0, "num_ctx": _NUM_CTX}, "prompt": retry_prompt})
     return result
 
 
@@ -145,8 +158,8 @@ def refine_schedule(text: str, first_pass: list[dict], model: str = DEFAULT_MODE
 
     response = _session.post(
         OLLAMA_URL,
-        json={"model": model, "prompt": prompt, "stream": False},
-        timeout=180,
+        json={"model": model, "prompt": prompt, "stream": False, "options": {"num_ctx": _NUM_CTX}},
+        timeout=_TIMEOUT,
     )
     response.raise_for_status()
     raw = response.json().get("response", "")
