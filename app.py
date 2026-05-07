@@ -73,15 +73,27 @@ async def lifespan(app: FastAPI):
     if not scheduler.running:
         # APScheduler: 1분마다 15분 후 일정 알람 체크
         scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)
-        # APScheduler: 매일 새벽 3시 휴지통 90일 초과 항목 정리
-        scheduler.add_job(db.cleanup_old_trash, "cron", hour=3, minute=0)
-        # APScheduler: 매일 새벽 3시 5분 done 7일 경과 일정 자동 완료 처리
-        scheduler.add_job(db.finalize_expired_done, "cron", hour=3, minute=5)
-        # APScheduler: 매일 새벽 2시 DB 백업 (90일 보관)
+        # APScheduler: 매일 새벽 3시 DB 백업
         scheduler.add_job(
             lambda: backup.run_backup(db.DB_PATH, _RUN_DIR),
-            "cron", hour=2, minute=0,
+            "cron", hour=3, minute=0,
             id="daily-db-backup", replace_existing=True,
+        )
+        # APScheduler: 매일 새벽 3시 5분 done 7일 경과 일정 자동 완료 처리
+        scheduler.add_job(db.finalize_expired_done, "cron", hour=3, minute=5)
+        # APScheduler: 매일 새벽 3시 10분 오래된 백업 파일 정리 (90일 보관)
+        scheduler.add_job(
+            lambda: backup.cleanup_old_backups(_RUN_DIR),
+            "cron", hour=3, minute=10,
+            id="daily-backup-cleanup", replace_existing=True,
+        )
+        # APScheduler: 매일 새벽 3시 20분 휴지통 90일 초과 항목 정리
+        scheduler.add_job(db.cleanup_old_trash, "cron", hour=3, minute=20)
+        # APScheduler: 매일 새벽 3시 30분 고아 이미지 파일 정리 (05:00 이후 중단, 다음날 이어서)
+        scheduler.add_job(
+            lambda: backup.cleanup_orphan_images(_RUN_DIR, db),
+            "cron", hour=3, minute=30,
+            id="daily-orphan-image-cleanup", replace_existing=True,
         )
         scheduler.start()
     yield
@@ -2020,9 +2032,12 @@ async def manage_create_project(request: Request):
     memo  = (data.get("memo") or "").strip() or None
     if not name:
         raise HTTPException(status_code=400, detail="프로젝트 이름을 입력하세요.")
+    if db.project_name_exists(name, case_insensitive=True):
+        raise HTTPException(status_code=409, detail="같은 이름의 프로젝트가 이미 있습니다.")
+    import sqlite3
     try:
         proj_id = db.create_project(name, color, memo)
-    except Exception:
+    except sqlite3.IntegrityError:
         raise HTTPException(status_code=409, detail="같은 이름의 프로젝트가 이미 있습니다.")
     wu_broker.publish("projects.changed", {"name": name, "action": "create"})
     return {"id": proj_id, "name": name}

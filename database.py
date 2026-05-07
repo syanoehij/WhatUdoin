@@ -1774,20 +1774,19 @@ def set_project_milestones(name: str, milestones: list) -> None:
             )
 
 
-def project_name_exists(name: str) -> bool:
+def project_name_exists(name: str, case_insensitive: bool = False) -> bool:
     with get_conn() as conn:
-        row = conn.execute("SELECT 1 FROM projects WHERE name = ?", (name,)).fetchone()
-        if row:
-            return True
-        row2 = conn.execute(
-            "SELECT 1 FROM events WHERE project = ? AND deleted_at IS NULL LIMIT 1", (name,)
-        ).fetchone()
-        if row2:
-            return True
-        row3 = conn.execute(
-            "SELECT 1 FROM checklists WHERE project = ? AND deleted_at IS NULL LIMIT 1", (name,)
-        ).fetchone()
-        return bool(row3)
+        if case_insensitive:
+            proj_sql = "SELECT 1 FROM projects WHERE LOWER(name) = LOWER(?)"
+            ev_sql   = "SELECT 1 FROM events WHERE LOWER(project) = LOWER(?) AND deleted_at IS NULL LIMIT 1"
+            chk_sql  = "SELECT 1 FROM checklists WHERE LOWER(project) = LOWER(?) AND deleted_at IS NULL LIMIT 1"
+        else:
+            proj_sql = "SELECT 1 FROM projects WHERE name = ?"
+            ev_sql   = "SELECT 1 FROM events WHERE project = ? AND deleted_at IS NULL LIMIT 1"
+            chk_sql  = "SELECT 1 FROM checklists WHERE project = ? AND deleted_at IS NULL LIMIT 1"
+        if conn.execute(proj_sql, (name,)).fetchone(): return True
+        if conn.execute(ev_sql,   (name,)).fetchone(): return True
+        return bool(conn.execute(chk_sql, (name,)).fetchone())
 
 
 def check_conflicts(start_dt: str, end_dt: str, team_id: int = None, exclude_id: int = None) -> list[dict]:
@@ -2370,6 +2369,16 @@ def set_setting(key: str, value: str):
 def delete_setting(key: str):
     with get_conn() as conn:
         conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+
+
+def is_image_url_referenced(url: str) -> bool:
+    """살아있는 문서에서 해당 이미지 URL을 참조하는지 확인"""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM meetings WHERE content LIKE ? AND deleted_at IS NULL LIMIT 1",
+            (f"%{url}%",)
+        ).fetchone()
+    return row is not None
 
 
 # ── AVR ──────────────────────────────────────────────────

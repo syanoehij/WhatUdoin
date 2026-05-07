@@ -2,6 +2,18 @@
   "groups": [
     {
       "date": "2026-05-08",
+      "phase": "40차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 관리 — 이름 중복 생성 차단 (대소문자 무시)",
+          "detail_html": "<ul><li>프로젝트 생성 시 기존 프로젝트와 이름이 같으면(대소문자·앞뒤 공백 무시) 409 응답과 함께 토스트 '같은 이름의 프로젝트가 이미 있습니다.' 표시</li><li>소프트삭제된 프로젝트 이름도 슬롯 점유 — 재사용 차단</li><li><code>project_name_exists()</code>에 <code>case_insensitive</code> 파라미터 추가, SQL <code>LOWER()</code> 비교로 대소문자 무시 검사 구현</li><li>기존 <code>except Exception</code> → <code>except sqlite3.IntegrityError</code>로 좁혀 DB 연결 오류가 이름 중복 메시지로 가려지던 문제 수정</li><li>수정 파일: <code>database.py</code>, <code>app.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-08",
       "phase": "40차 2단계",
       "phase_class": "phase-2",
       "entries": [
