@@ -2086,9 +2086,8 @@ async def manage_rename_project(name: str, request: Request):
 @app.patch("/api/manage/projects/{name:path}/status")
 async def manage_project_status(name: str, request: Request):
     user = _require_editor(request)
-    proj = db.get_project(name)
-    if not proj:
-        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    # projects 테이블에 없어도 events.project에만 존재하는 경우를 허용
+    proj = db.get_project(name) or {}
     if not auth.can_edit_project(user, proj):
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()

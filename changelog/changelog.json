@@ -2,6 +2,23 @@
   "groups": [
     {
       "date": "2026-05-08",
+      "phase": "40차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 프로젝트 관리 — 프로젝트 종료 실패 버그 수정",
+          "detail_html": "<ul><li>프로젝트 관리에서 일정 등록 시 이름만 입력해 생성된 프로젝트(projects 테이블 미등록, events.project에만 존재)를 종료하려 하면 항상 '변경 실패' 토스트가 뜨던 버그</li><li><code>PATCH /api/manage/projects/{name}/status</code>에서 <code>get_project()</code>가 None이면 404를 던지던 로직 제거 — <code>proj = db.get_project(name) or {}</code>로 변경, 팀 미지정 프로젝트로 간주하여 처리</li><li><code>update_project_status()</code>는 기존에도 테이블 미등록 시 INSERT하는 로직을 갖고 있어 추가 변경 불필요</li><li>수정 파일: <code>app.py</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 관리 — 이름 중복 생성 차단 (대소문자 무시)",
+          "detail_html": "<ul><li>프로젝트 생성 시 기존 프로젝트와 이름이 같으면(대소문자·앞뒤 공백 무시) 409 응답과 함께 토스트 '같은 이름의 프로젝트가 이미 있습니다.' 표시</li><li>소프트삭제된 프로젝트 이름도 슬롯 점유 — 재사용 차단</li><li><code>project_name_exists()</code>에 <code>case_insensitive</code> 파라미터 추가, SQL <code>LOWER()</code> 비교로 대소문자 무시 검사 구현</li><li>기존 <code>except Exception</code> → <code>except sqlite3.IntegrityError</code>로 좁혀 DB 연결 오류가 이름 중복 메시지로 가려지던 문제 수정</li><li>수정 파일: <code>database.py</code>, <code>app.py</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-08",
       "phase": "40차 3단계",
       "phase_class": "phase-3",
       "entries": [
@@ -14,11 +31,6 @@
           "icon": "✨",
           "title_html": "<span class=\"cl-tag feat\">feat</span> 백업·정리 — 스케줄 분리 및 고아 파일 자동 정리 추가",
           "detail_html": "<ul><li>백업 생성과 오래된 백업 삭제를 분리 — <code>run_backup()</code>에서 <code>_cleanup()</code> 호출 제거, <code>cleanup_old_backups()</code> 독립 함수로 분리</li><li>새벽 스케줄 재정비: 03:00 DB백업 · 03:05 만료 done 완료 · 03:10 오래된 백업 정리 · 03:20 휴지통 90일 초과 항목 삭제 · 03:30 고아 파일 정리 시작</li><li>고아 파일 정리(<code>cleanup_orphan_images()</code>): 03:30 시작 → 05:00 도달 시 cursor 저장 후 중단, 다음날 이어서 처리 — meetings·meeting_histories·checklists·team_notices 4개 테이블 참조 확인 후 미참조 파일만 삭제</li><li><code>_IMAGE_EXTS</code> → <code>_UPLOAD_EXTS</code> 변수명 변경, 첨부파일 확장자(txt, xls, xlsx, ppt, pptx, pdf, zip, 7z) 스캔 대상 추가</li><li>수정 파일: <code>backup.py</code>, <code>app.py</code>, <code>database.py</code></li></ul>"
-        },
-        {
-          "icon": "✨",
-          "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 관리 — 이름 중복 생성 차단 (대소문자 무시)",
-          "detail_html": "<ul><li>프로젝트 생성 시 기존 프로젝트와 이름이 같으면(대소문자·앞뒤 공백 무시) 409 응답과 함께 토스트 '같은 이름의 프로젝트가 이미 있습니다.' 표시</li><li>소프트삭제된 프로젝트 이름도 슬롯 점유 — 재사용 차단</li><li><code>project_name_exists()</code>에 <code>case_insensitive</code> 파라미터 추가, SQL <code>LOWER()</code> 비교로 대소문자 무시 검사 구현</li><li>기존 <code>except Exception</code> → <code>except sqlite3.IntegrityError</code>로 좁혀 DB 연결 오류가 이름 중복 메시지로 가려지던 문제 수정</li><li>수정 파일: <code>database.py</code>, <code>app.py</code></li></ul>"
         }
       ]
     },
