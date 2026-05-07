@@ -129,6 +129,80 @@
     font-family: inherit; text-decoration: none; white-space: nowrap;
   }
   .export-menu a:hover, .export-menu button:hover { background: var(--surface-2); }
+
+  /* 첨부파일 뷰어 (잠금/읽기 모드) */
+  .doc-attachments-viewer {
+    padding: 6px 16px;
+    font-size: 0.85rem;
+    color: var(--text-muted, #888);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    border-bottom: 1px solid var(--border, #eee);
+  }
+  .attachments-viewer-label {
+    font-weight: 600;
+    color: var(--text, #333);
+  }
+  .attachment-download-link {
+    color: var(--primary, #4e73df);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .attachment-download-link:hover { opacity: 0.8; }
+
+  /* 첨부파일 목록 드롭다운 (편집 모드) */
+  .attachment-list-dropdown {
+    position: fixed;
+    z-index: 9999;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+    min-width: 260px;
+    max-width: 360px;
+    padding: 4px 0;
+  }
+  .attachment-list-dropdown.hidden { display: none; }
+  .attachment-list-header {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted, #888);
+    padding: 6px 12px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .attachment-list-body { padding: 4px 0; }
+  .attachment-list-empty {
+    font-size: 0.83rem;
+    color: var(--text-muted, #aaa);
+    padding: 8px 12px;
+  }
+  .attachment-item {
+    display: flex;
+    align-items: center;
+    padding: 5px 12px;
+    gap: 8px;
+  }
+  .attachment-item:hover { background: var(--surface-2); }
+  .attachment-name {
+    flex: 1;
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .attachment-remove-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted, #aaa);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0 2px;
+    flex-shrink: 0;
+  }
+  .attachment-remove-btn:hover { color: var(--danger, #e53e3e); }
 </style>
 {% endblock %}
 
@@ -209,6 +283,8 @@
       <div id="cke-editor-container"></div>
       {% else %}
       <!-- 잠금 상태: 뷰어만 표시 -->
+      <!-- 첨부파일 다운로드 목록 (잠금/읽기 모드) -->
+      <div id="doc-attachments-viewer" style="display:none;" class="doc-attachments-viewer"></div>
       <div id="cke-viewer-wrap" style="padding:24px; overflow-y:auto; flex:1;"></div>
       {% endif %}
     </div>
@@ -275,6 +351,15 @@
     {% endif %}
   </div>
 
+</div>
+
+<!-- 첨부파일 업로드용 숨겨진 파일 입력 -->
+<input type="file" id="attachment-file-input" accept=".txt,.xls,.xlsx,.ppt,.pptx,.pdf,.zip,.7z" style="display:none;">
+<!-- 첨부파일 목록 드롭다운 -->
+<div id="attachment-list-dropdown" class="attachment-list-dropdown hidden">
+  <div class="attachment-list-header">첨부파일</div>
+  <div id="attachment-list-body" class="attachment-list-body"></div>
+  <div id="attachment-list-empty" class="attachment-list-empty" style="display:none;">첨부파일이 없습니다.</div>
 </div>
 
 <div id="cke-save-toast">저장되었습니다.</div>
@@ -349,6 +434,7 @@ const CKE_LOCKED   = {{ 'true' if locked_by else 'false' }};
 const LOCK_TYPE    = {{ lock_type | tojson if lock_type else 'null' }};
 const CKE_IS_NEW   = (CKE_ID === null);
 const DONE_PROJECTS = new Set({{ (done_projects if done_projects else []) | tojson | safe }});
+const INITIAL_ATTACHMENTS = {{ (checklist.attachments or []) | tojson | safe }};
 const KANBAN_STATUSES = [
   ['backlog','Backlog'],['todo','Todo'],['in_progress','In Progress'],
   ['peer_review','Peer Review'],['done','Done'],['blocked','Blocked'],
@@ -376,6 +462,7 @@ const TAB_TOKEN    = (() => { const k = 'wu_tab_token'; let t = sessionStorage.g
 let wuInst = null;
 let _newIsPublic = 0;
 let _lockLost = false;
+let currentAttachments = INITIAL_ATTACHMENTS.map(a => ({...a}));
 
 function _handleLockLost() {
   _lockLost = true;
@@ -526,6 +613,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       initialMarkdown: initialMd,
       features: { sanitizerOff: true },
     });
+    _renderAttachmentsViewer();
     return;
   }
 
@@ -559,6 +647,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           setTimeout(() => { location.href = `/check?id=${CKE_ID}`; }, 800);
         },
       } : false,
+      attachments: {
+        onUpload: _openAttachmentFilePicker,
+        onList: _showAttachmentListDropdown,
+      },
     },
     hooks: {
       onSave: (md, { leaveTarget } = {}) => saveContent(false, leaveTarget),
@@ -699,7 +791,7 @@ async function saveContent(auto = false, leaveTarget = null) {
     const res = await fetch('/api/checklists', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, project, content, is_public: _newIsPublic }),
+      body: JSON.stringify({ title, project, content, is_public: _newIsPublic, attachments: currentAttachments }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -715,7 +807,7 @@ async function saveContent(auto = false, leaveTarget = null) {
   await fetch(`/api/checklists/${CKE_ID}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, project }),
+    body: JSON.stringify({ title, project, attachments: currentAttachments }),
   });
 
   const res = await fetch(`/api/checklists/${CKE_ID}/content`, {
@@ -916,6 +1008,129 @@ async function deleteChecklist() {
     wuToast.error('삭제 실패');
   }
 }
+
+/* ── 첨부파일 기능 ─────────────────────────────────── */
+const ALLOWED_ATTACH_EXTS = ['.txt', '.xls', '.xlsx', '.ppt', '.pptx', '.pdf', '.zip', '.7z'];
+
+function _openAttachmentFilePicker() {
+  const input = document.getElementById('attachment-file-input');
+  if (input) input.click();
+}
+
+async function _onAttachmentFileSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  // 최대 2개 제한
+  if (currentAttachments.length >= 2) {
+    wuToast.error('첨부파일은 최대 2개까지 가능합니다.');
+    e.target.value = '';
+    return;
+  }
+  // 확장자 검증
+  const ext = ('.' + file.name.split('.').pop()).toLowerCase();
+  if (!ALLOWED_ATTACH_EXTS.includes(ext)) {
+    wuToast.error('허용되지 않는 파일 형식입니다. (' + ALLOWED_ATTACH_EXTS.join(', ') + ')');
+    e.target.value = '';
+    return;
+  }
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch('/api/upload/attachment', { method: 'POST', body: formData });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    wuToast.error(err.detail || '업로드 실패');
+    e.target.value = '';
+    return;
+  }
+  const data = await res.json();
+  currentAttachments.push({ name: data.name, url: data.url, size: data.size, uploaded_at: data.uploaded_at || '' });
+  wuInst?.setDirty(true);
+  wuToast.success(`"${data.name}" 첨부 완료`);
+  e.target.value = '';
+}
+
+function _showAttachmentListDropdown(anchorBtn) {
+  const dropdown = document.getElementById('attachment-list-dropdown');
+  if (!dropdown) return;
+  // 토글: 이미 열려있으면 닫기
+  if (!dropdown.classList.contains('hidden')) {
+    dropdown.classList.add('hidden');
+    return;
+  }
+  _renderAttachmentListDropdown();
+  dropdown.classList.remove('hidden');
+  // 위치: anchorBtn 기준 아래, viewport 넘침 방지
+  if (anchorBtn) {
+    const rect = anchorBtn.getBoundingClientRect();
+    dropdown.style.left = rect.left + 'px';
+    dropdown.style.top  = (rect.bottom + 4) + 'px';
+    // 오른쪽 viewport 초과 시 버튼 오른쪽 끝에 맞춤
+    const dropW = dropdown.offsetWidth;
+    if (rect.left + dropW > window.innerWidth - 8) {
+      dropdown.style.left = Math.max(8, rect.right - dropW) + 'px';
+    }
+  }
+}
+
+function _renderAttachmentListDropdown() {
+  const body  = document.getElementById('attachment-list-body');
+  const empty = document.getElementById('attachment-list-empty');
+  if (!body || !empty) return;
+  if (!currentAttachments.length) {
+    body.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  body.innerHTML = currentAttachments.map((a, i) => {
+    const label = a.uploaded_at ? `${esc(a.uploaded_at)}: ${esc(a.name)}` : esc(a.name);
+    return `
+    <div class="attachment-item">
+      <span class="attachment-name" title="${label}">${label}</span>
+      <button class="attachment-remove-btn" data-idx="${i}" title="제외">×</button>
+    </div>`;
+  }).join('');
+  body.querySelectorAll('.attachment-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx, 10);
+      currentAttachments.splice(idx, 1);
+      wuInst?.setDirty(true);
+      _renderAttachmentListDropdown();
+    });
+  });
+}
+
+function _renderAttachmentsViewer() {
+  const el = document.getElementById('doc-attachments-viewer');
+  if (!el) return;
+  if (!currentAttachments.length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = '<span class="attachments-viewer-label">첨부파일:</span> ' +
+    currentAttachments.map(a => {
+      const label = a.uploaded_at ? `${esc(a.uploaded_at)}: ${esc(a.name)}` : esc(a.name);
+      return `<a class="attachment-download-link" href="${esc(a.url)}" download="${esc(a.name)}">${label}</a>`;
+    }).join('');
+  // H1 바로 아래에 배치 (뷰어 렌더링 완료 후)
+  setTimeout(() => {
+    const h1 = document.querySelector('#cke-viewer-wrap .ProseMirror h1');
+    if (h1 && el.parentNode) h1.insertAdjacentElement('afterend', el);
+  }, 250);
+}
+
+// 드롭다운 외부 클릭 시 닫기
+document.addEventListener('click', (e) => {
+  const dropdown = document.getElementById('attachment-list-dropdown');
+  if (!dropdown || dropdown.classList.contains('hidden')) return;
+  if (!dropdown.contains(e.target) && !e.target.closest('[data-cmd="attach-list"]')) {
+    dropdown.classList.add('hidden');
+  }
+});
+
+// file input 이벤트 바인딩
+(function() {
+  const input = document.getElementById('attachment-file-input');
+  if (input) input.addEventListener('change', _onAttachmentFileSelected);
+})();
 
 /* ── AI 일정 생성 패널 ─────────────────────────────────── */
 

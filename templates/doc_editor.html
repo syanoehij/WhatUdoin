@@ -43,6 +43,83 @@
     flex: 1 !important;
     min-height: 0;
   }
+
+  /* 첨부파일 뷰어 (읽기 모드) */
+  .doc-attachments-viewer {
+    padding: 6px 16px;
+    font-size: 0.85rem;
+    color: var(--text-muted, #888);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    border-bottom: 1px solid var(--border, #eee);
+  }
+  .attachments-viewer-label {
+    font-weight: 600;
+    color: var(--text, #333);
+  }
+  .attachment-download-link {
+    color: var(--primary, #3b82f6);
+    text-decoration: none;
+    background: var(--surface-2, #f3f4f6);
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+  }
+  .attachment-download-link:hover { opacity: 0.8; }
+
+  /* 첨부파일 목록 드롭다운 (편집 모드) */
+  .attachment-list-dropdown {
+    position: fixed;
+    z-index: 9999;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+    min-width: 260px;
+    max-width: 360px;
+    padding: 4px 0;
+  }
+  .attachment-list-dropdown.hidden { display: none; }
+  .attachment-list-header {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted, #888);
+    padding: 6px 12px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .attachment-list-body { padding: 4px 0; }
+  .attachment-list-empty {
+    font-size: 0.83rem;
+    color: var(--text-muted, #aaa);
+    padding: 8px 12px;
+  }
+  .attachment-item {
+    display: flex;
+    align-items: center;
+    padding: 5px 12px;
+    gap: 8px;
+  }
+  .attachment-item:hover { background: var(--surface-2); }
+  .attachment-name {
+    flex: 1;
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .attachment-remove-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted, #aaa);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0 2px;
+    flex-shrink: 0;
+  }
+  .attachment-remove-btn:hover { color: var(--danger, #e53e3e); }
 </style>
 {% endblock %}
 
@@ -115,6 +192,8 @@
       {% if can_edit %}
       <div id="editor-container" style="display:none;"></div>
       {% endif %}
+      <!-- 첨부파일 다운로드 목록 (뷰어 모드) -->
+      <div id="doc-attachments-viewer" style="display:none;" class="doc-attachments-viewer"></div>
       <div id="doc-content-view" class="doc-content-view markdown-body"></div>
     </div>
 
@@ -174,6 +253,14 @@
 
   </div><!-- /editor-body -->
 
+<!-- 첨부파일 업로드용 숨겨진 파일 입력 -->
+<input type="file" id="attachment-file-input" accept=".txt,.xls,.xlsx,.ppt,.pptx,.pdf,.zip,.7z" style="display:none;">
+<!-- 첨부파일 목록 드롭다운 -->
+<div id="attachment-list-dropdown" class="attachment-list-dropdown hidden">
+  <div class="attachment-list-header">첨부파일</div>
+  <div id="attachment-list-body" class="attachment-list-body"></div>
+  <div id="attachment-list-empty" class="attachment-list-empty" style="display:none;">첨부파일이 없습니다.</div>
+</div>
 </div><!-- /editor-page -->
 {% endblock %}
 
@@ -188,6 +275,7 @@ const TAB_TOKEN      = (() => { const k = 'wu_tab_token'; let t = sessionStorage
 const INITIAL_MD     = {{ (('# ' + doc.title + '\n\n' + (doc.content or '')) if doc else '') | tojson | safe }};
 const DOC_EVENTS      = {{ (doc_events if doc_events else []) | tojson | safe }};
 const DONE_PROJECTS   = new Set({{ (done_projects if done_projects else []) | tojson | safe }});
+const INITIAL_ATTACHMENTS = {{ (doc.attachments if doc else []) | tojson | safe }};
 const KANBAN_STATUSES = [
   ['backlog',     'Backlog'],
   ['todo',        'Todo'],
@@ -203,11 +291,12 @@ const PRIORITIES = [
   ['low',    '⚪ 낮음'],
 ];
 
-let parsedEvents  = [];
-let linkedEvents  = DOC_EVENTS.map(e => ({...e}));
-let wuInst        = null;
-let editor        = null;   // WUEditor onReady에서 채워짐
-let aiPanelOpen   = false;
+let parsedEvents       = [];
+let linkedEvents       = DOC_EVENTS.map(e => ({...e}));
+let wuInst             = null;
+let editor             = null;   // WUEditor onReady에서 채워짐
+let aiPanelOpen        = false;
+let currentAttachments = INITIAL_ATTACHMENTS.map(a => ({...a}));
 // AI 패널 열림 또는 파싱 결과 검토 중이면 자동 새로고침 차단
 window._blockAutoRefresh = () => aiPanelOpen || parsedEvents.some(Boolean);
 
@@ -296,6 +385,7 @@ function initDocEditor() {
       },
       hooks: {},
     });
+    _renderAttachmentsViewer();
     return;
   }
 
@@ -397,6 +487,10 @@ function initDocEditor() {
             setTimeout(() => location.reload(), 800);
           },
         } : false,
+        attachments: {
+          onUpload: _openAttachmentFilePicker,
+          onList: _showAttachmentListDropdown,
+        },
       },
       hooks: {
         onSave: (md, { ignoreCooldown, leaveTarget } = {}) => saveDoc(leaveTarget, { ignoreCooldown }),
@@ -477,6 +571,7 @@ function initDocEditor() {
       },
       hooks: {},
     });
+    _renderAttachmentsViewer();
     return;
   }
 
@@ -598,7 +693,7 @@ async function saveDoc(leaveTarget = null, options = {}) {
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, content, is_team_doc: isTeamDoc, is_public: isPublic, team_share: teamShare, tab_token: TAB_TOKEN }),
+    body: JSON.stringify({ title, content, is_team_doc: isTeamDoc, is_public: isPublic, team_share: teamShare, tab_token: TAB_TOKEN, attachments: currentAttachments }),
   });
 
   try {
@@ -989,6 +1084,124 @@ function showAiError(msg) {
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 }
+
+/* ── 첨부파일 기능 ─────────────────────────────────── */
+const ALLOWED_ATTACH_EXTS = ['.txt', '.xls', '.xlsx', '.ppt', '.pptx', '.pdf', '.zip', '.7z'];
+
+function _openAttachmentFilePicker() {
+  const input = document.getElementById('attachment-file-input');
+  if (input) input.click();
+}
+
+async function _onAttachmentFileSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  // 최대 2개 제한
+  if (currentAttachments.length >= 2) {
+    wuToast.error('첨부파일은 최대 2개까지 가능합니다.');
+    e.target.value = '';
+    return;
+  }
+  // 확장자 검증
+  const ext = ('.' + file.name.split('.').pop()).toLowerCase();
+  if (!ALLOWED_ATTACH_EXTS.includes(ext)) {
+    wuToast.error('허용되지 않는 파일 형식입니다. (' + ALLOWED_ATTACH_EXTS.join(', ') + ')');
+    e.target.value = '';
+    return;
+  }
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch('/api/upload/attachment', { method: 'POST', body: formData });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    wuToast.error(err.detail || '업로드 실패');
+    e.target.value = '';
+    return;
+  }
+  const data = await res.json();
+  currentAttachments.push({ name: data.name, url: data.url, size: data.size, uploaded_at: data.uploaded_at || '' });
+  wuInst?.setDirty(true);
+  wuToast.success(`"${data.name}" 첨부 완료`);
+  e.target.value = '';
+}
+
+function _showAttachmentListDropdown(anchorBtn) {
+  const dropdown = document.getElementById('attachment-list-dropdown');
+  if (!dropdown) return;
+  // 토글: 이미 열려있으면 닫기
+  if (!dropdown.classList.contains('hidden')) {
+    dropdown.classList.add('hidden');
+    return;
+  }
+  _renderAttachmentListDropdown();
+  dropdown.classList.remove('hidden');
+  // 위치: anchorBtn 기준 아래, viewport 넘침 방지
+  if (anchorBtn) {
+    const rect = anchorBtn.getBoundingClientRect();
+    dropdown.style.left = rect.left + 'px';
+    dropdown.style.top  = (rect.bottom + 4) + 'px';
+    // 오른쪽 viewport 초과 시 버튼 오른쪽 끝에 맞춤
+    const dropW = dropdown.offsetWidth;
+    if (rect.left + dropW > window.innerWidth - 8) {
+      dropdown.style.left = Math.max(8, rect.right - dropW) + 'px';
+    }
+  }
+}
+
+function _renderAttachmentListDropdown() {
+  const body  = document.getElementById('attachment-list-body');
+  const empty = document.getElementById('attachment-list-empty');
+  if (!body || !empty) return;
+  if (!currentAttachments.length) {
+    body.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  body.innerHTML = currentAttachments.map((a, i) => {
+    const label = a.uploaded_at ? `${esc(a.uploaded_at)}: ${esc(a.name)}` : esc(a.name);
+    return `
+    <div class="attachment-item">
+      <span class="attachment-name" title="${label}">${label}</span>
+      <button class="attachment-remove-btn" data-idx="${i}" title="제외">×</button>
+    </div>`;
+  }).join('');
+  body.querySelectorAll('.attachment-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx, 10);
+      currentAttachments.splice(idx, 1);
+      wuInst?.setDirty(true);
+      _renderAttachmentListDropdown();
+    });
+  });
+}
+
+function _renderAttachmentsViewer() {
+  const el = document.getElementById('doc-attachments-viewer');
+  if (!el) return;
+  if (!currentAttachments.length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = '<span class="attachments-viewer-label">첨부파일:</span> ' +
+    currentAttachments.map(a => {
+      const label = a.uploaded_at ? `${esc(a.uploaded_at)}: ${esc(a.name)}` : esc(a.name);
+      return `<a class="attachment-download-link" href="${esc(a.url)}" download="${esc(a.name)}">${label}</a>`;
+    }).join('');
+}
+
+// 드롭다운 외부 클릭 시 닫기
+document.addEventListener('click', (e) => {
+  const dropdown = document.getElementById('attachment-list-dropdown');
+  if (!dropdown || dropdown.classList.contains('hidden')) return;
+  if (!dropdown.contains(e.target) && !e.target.closest('[data-cmd="attach-list"]')) {
+    dropdown.classList.add('hidden');
+  }
+});
+
+// file input 이벤트 바인딩
+(function() {
+  const input = document.getElementById('attachment-file-input');
+  if (input) input.addEventListener('change', _onAttachmentFileSelected);
+})();
 
 /* ── AI 버튼 레이블 업데이트 ─────────────────────────── */
 function updateAiBtnLabel() {

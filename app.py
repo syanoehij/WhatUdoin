@@ -794,7 +794,17 @@ async def create_checklist(request: Request):
     project = data.get("project", "").strip()
     content = data.get("content", "").strip()
     is_public = 1 if data.get("is_public") else 0
-    cid = db.create_checklist(project, title, content, user["name"], is_public=is_public, team_id=user.get("team_id"))
+    raw_att = data.get("attachments")
+    if isinstance(raw_att, str):
+        try:
+            attachments = json.loads(raw_att)
+        except Exception:
+            attachments = None
+    elif isinstance(raw_att, list):
+        attachments = raw_att
+    else:
+        attachments = None
+    cid = db.create_checklist(project, title, content, user["name"], is_public=is_public, team_id=user.get("team_id"), attachments=attachments)
     wu_broker.publish("checks.changed", {"id": cid, "action": "create"})
     return {"id": cid}
 
@@ -890,7 +900,17 @@ async def update_checklist(checklist_id: int, request: Request):
     old_proj = (item.get("project") or "").strip()
     project  = data.get("project", item["project"])
     project  = "" if project is None else str(project).strip()
-    db.update_checklist(checklist_id, title, project)
+    raw_att = data.get("attachments")
+    if isinstance(raw_att, str):
+        try:
+            attachments = json.loads(raw_att)
+        except Exception:
+            attachments = None
+    elif isinstance(raw_att, list):
+        attachments = raw_att
+    else:
+        attachments = None
+    db.update_checklist(checklist_id, title, project, attachments=attachments)
     # 프로젝트에서 미지정으로 이동 → 항상 외부 비공개
     if old_proj and not project:
         db.update_checklist_visibility(checklist_id, 0)
@@ -2328,6 +2348,25 @@ def _build_doc_md(doc: dict, exported_at: str,
         lines.append(rewritten)
     else:
         lines.append("_(내용 없음)_")
+    # 첨부파일 목록 추가
+    attachments = doc.get("attachments") or []
+    if isinstance(attachments, str):
+        import json as _json
+        try:
+            attachments = _json.loads(attachments)
+        except Exception:
+            attachments = []
+    if attachments:
+        lines += ["", "## 첨부파일", ""]
+        for att in attachments:
+            url  = att.get("url", "")
+            name = att.get("name", url.rsplit("/", 1)[-1])
+            basename = url.rsplit("/", 1)[-1]
+            lines.append(f"- [{name}](attachments/{basename})")
+            if images is not None and url:
+                rel = url.replace("/uploads/meetings/", "", 1)
+                disk = MEETINGS_DIR / rel
+                images.append((disk, f"attachments/{basename}"))
     lines.append("")
     return "\n".join(lines)
 
@@ -2706,6 +2745,25 @@ def _build_checklist_md(project_name: str | None, cl: dict, exported_at: str,
         lines.append(rewritten)
     else:
         lines.append("_(내용 없음)_")
+    # 첨부파일 목록 추가
+    attachments = cl.get("attachments") or []
+    if isinstance(attachments, str):
+        import json as _json
+        try:
+            attachments = _json.loads(attachments)
+        except Exception:
+            attachments = []
+    if attachments:
+        lines += ["", "## 첨부파일", ""]
+        for att in attachments:
+            url  = att.get("url", "")
+            name = att.get("name", url.rsplit("/", 1)[-1])
+            basename = url.rsplit("/", 1)[-1]
+            lines.append(f"- [{name}](attachments/{basename})")
+            if images is not None and url:
+                rel = url.replace("/uploads/meetings/", "", 1)
+                disk = MEETINGS_DIR / rel
+                images.append((disk, f"attachments/{basename}"))
     lines.append("")
     return "\n".join(lines)
 
@@ -3081,11 +3139,21 @@ async def create_doc(request: Request):
     is_team_doc  = 1 if data.get("is_team_doc", True) else 0
     is_public    = 1 if data.get("is_public", False) else 0
     team_share   = 1 if data.get("team_share", False) else 0
+    raw_att = data.get("attachments")
+    if isinstance(raw_att, str):
+        try:
+            attachments = json.loads(raw_att)
+        except Exception:
+            attachments = None
+    elif isinstance(raw_att, list):
+        attachments = raw_att
+    else:
+        attachments = None
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
     meeting_id = db.create_meeting(
         title, content, user.get("team_id"), user["id"],
-        meeting_date, is_team_doc, is_public, team_share
+        meeting_date, is_team_doc, is_public, team_share, attachments
     )
     wu_broker.publish("docs.changed", {"action": "create", "id": meeting_id})
     return {"id": meeting_id}
@@ -3106,10 +3174,20 @@ async def update_doc(meeting_id: int, request: Request):
     is_team_doc  = 1 if data.get("is_team_doc", True) else 0
     is_public    = 1 if data.get("is_public", False) else 0
     team_share   = 1 if data.get("team_share", False) else 0
+    raw_att = data.get("attachments")
+    if isinstance(raw_att, str):
+        try:
+            attachments = json.loads(raw_att)
+        except Exception:
+            attachments = None
+    elif isinstance(raw_att, list):
+        attachments = raw_att
+    else:
+        attachments = None
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
     old_title = (doc.get("title") or "").strip()
-    db.update_meeting(meeting_id, title, content, user["id"], meeting_date, is_team_doc, is_public, team_share)
+    db.update_meeting(meeting_id, title, content, user["id"], meeting_date, is_team_doc, is_public, team_share, attachments)
     if title != old_title:
         wu_broker.publish("docs.changed", {"action": "update", "id": meeting_id})
     # 저장 완료 시 잠금 해제 (tab_token 없으면 강제 해제)
@@ -3235,6 +3313,28 @@ async def upload_image(request: Request, file: UploadFile = File(...)):
     filename = f"{uuid.uuid4().hex}{ext}"
     (folder / filename).write_bytes(data)
     return {"url": f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"}
+
+
+@app.post("/api/upload/attachment")
+async def upload_attachment(request: Request, file: UploadFile = File(...)):
+    """문서 첨부파일 업로드 — meetings/{year}/{month}/{uuid}.ext 로 저장"""
+    _require_editor(request)
+    _ALLOWED_EXTS = {".txt", ".xls", ".xlsx", ".ppt", ".pptx", ".pdf", ".zip", ".7z"}
+    ext = Path(file.filename).suffix.lower() if file.filename else ""
+    if ext not in _ALLOWED_EXTS:
+        raise HTTPException(status_code=400, detail="허용되지 않는 파일 형식입니다.")
+    data = await file.read()
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="파일 크기는 20MB 이하여야 합니다.")
+    now = datetime.now()
+    folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
+    folder.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}{ext}"
+    (folder / filename).write_bytes(data)
+    original_name = file.filename or filename
+    url = f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"
+    uploaded_at = now.strftime("%y%m%d_%H%M")
+    return {"name": original_name, "url": url, "size": len(data), "uploaded_at": uploaded_at}
 
 
 def _delete_meeting_images(content: str):

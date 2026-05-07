@@ -1,3 +1,4 @@
+import json
 import os
 import secrets
 import sqlite3
@@ -283,6 +284,12 @@ def init_db():
         ])
         _migrate(conn, "meetings", [
             ("trash_project_id", "INTEGER NULL"),
+        ])
+        _migrate(conn, "meetings", [
+            ("attachments", "TEXT DEFAULT '[]'"),
+        ])
+        _migrate(conn, "checklists", [
+            ("attachments", "TEXT DEFAULT '[]'"),
         ])
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_trash_project "
@@ -2083,7 +2090,11 @@ def get_meeting(meeting_id: int):
                WHERE m.id = ? AND m.deleted_at IS NULL""",
             (meeting_id,)
         ).fetchone()
-    return dict(row) if row else None
+    if not row:
+        return None
+    d = dict(row)
+    d["attachments"] = json.loads(d.get("attachments") or "[]")
+    return d
 
 
 def update_meeting_visibility(meeting_id: int, is_team_doc: int, is_public: int, team_share: int) -> None:
@@ -2097,21 +2108,23 @@ def update_meeting_visibility(meeting_id: int, is_team_doc: int, is_public: int,
 
 def create_meeting(title: str, content: str, team_id, created_by: int,
                    meeting_date: str = None, is_team_doc: int = 1,
-                   is_public: int = 0, team_share: int = 0) -> int:
+                   is_public: int = 0, team_share: int = 0, attachments=None) -> int:
     _team_share = 0 if is_team_doc else team_share
+    _attachments = json.dumps(attachments if isinstance(attachments, list) else [])
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO meetings (title, content, team_id, created_by, meeting_date, is_team_doc, is_public, team_share) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (title, content, team_id, created_by, meeting_date, is_team_doc, is_public, _team_share)
+            "INSERT INTO meetings (title, content, team_id, created_by, meeting_date, is_team_doc, is_public, team_share, attachments) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (title, content, team_id, created_by, meeting_date, is_team_doc, is_public, _team_share, _attachments)
         )
     return cur.lastrowid
 
 
 def update_meeting(meeting_id: int, title: str, content: str, edited_by: int,
                    meeting_date: str = None, is_team_doc: int = 1,
-                   is_public: int = 0, team_share: int = 0):
+                   is_public: int = 0, team_share: int = 0, attachments=None):
     _team_share = 0 if is_team_doc else team_share
+    _attachments = json.dumps(attachments if isinstance(attachments, list) else [])
     with get_conn() as conn:
         current = conn.execute(
             "SELECT content FROM meetings WHERE id = ?", (meeting_id,)
@@ -2129,8 +2142,8 @@ def update_meeting(meeting_id: int, title: str, content: str, edited_by: int,
             )
         conn.execute(
             "UPDATE meetings SET title = ?, content = ?, meeting_date = ?, is_team_doc = ?, "
-            "is_public = ?, team_share = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (title, content, meeting_date, is_team_doc, is_public, _team_share, meeting_id)
+            "is_public = ?, team_share = ?, attachments = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (title, content, meeting_date, is_team_doc, is_public, _team_share, _attachments, meeting_id)
         )
 
 
@@ -2372,13 +2385,22 @@ def delete_setting(key: str):
 
 
 def is_image_url_referenced(url: str) -> bool:
-    """살아있는 문서에서 해당 이미지 URL을 참조하는지 확인"""
+    """이미지/첨부파일 URL이 어느 한 곳에서라도 참조되는지 확인 (휴지통·히스토리 포함)"""
+    like = f"%{url}%"
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT 1 FROM meetings WHERE content LIKE ? AND deleted_at IS NULL LIMIT 1",
-            (f"%{url}%",)
-        ).fetchone()
-    return row is not None
+        for table, col in (
+            ("meetings",         "content"),
+            ("meetings",         "attachments"),
+            ("meeting_histories","content"),
+            ("checklists",       "content"),
+            ("checklists",       "attachments"),
+            ("team_notices",     "content"),
+        ):
+            if conn.execute(
+                f"SELECT 1 FROM {table} WHERE {col} LIKE ? LIMIT 1", (like,)
+            ).fetchone():
+                return True
+    return False
 
 
 # ── AVR ──────────────────────────────────────────────────
@@ -2466,12 +2488,13 @@ def get_meeting_lock(meeting_id: int) -> dict | None:
 
 # ── Checklists ────────────────────────────────────────────
 
-def create_checklist(project: str, title: str, content: str, created_by: str, is_public: int = 0, team_id: int = None) -> int:
+def create_checklist(project: str, title: str, content: str, created_by: str, is_public: int = 0, team_id: int = None, attachments=None) -> int:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    _attachments = json.dumps(attachments if isinstance(attachments, list) else [])
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO checklists (project, title, content, created_by, created_at, updated_at, is_public, team_id) VALUES (?,?,?,?,?,?,?,?)",
-            (project, title, content, created_by, now, now, is_public, team_id)
+            "INSERT INTO checklists (project, title, content, created_by, created_at, updated_at, is_public, team_id, attachments) VALUES (?,?,?,?,?,?,?,?,?)",
+            (project, title, content, created_by, now, now, is_public, team_id, _attachments)
         )
     return cur.lastrowid
 
@@ -2612,16 +2635,27 @@ def get_checklist(checklist_id: int) -> dict | None:
         row = conn.execute(
             "SELECT * FROM checklists WHERE id = ? AND deleted_at IS NULL", (checklist_id,)
         ).fetchone()
-    return dict(row) if row else None
+    if not row:
+        return None
+    d = dict(row)
+    d["attachments"] = json.loads(d.get("attachments") or "[]")
+    return d
 
 
-def update_checklist(checklist_id: int, title: str, project: str):
+def update_checklist(checklist_id: int, title: str, project: str, attachments=None):
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     with get_conn() as conn:
-        conn.execute(
-            "UPDATE checklists SET title = ?, project = ?, updated_at = ? WHERE id = ?",
-            (title, project, now, checklist_id)
-        )
+        if attachments is not None:
+            _attachments = json.dumps(attachments if isinstance(attachments, list) else [])
+            conn.execute(
+                "UPDATE checklists SET title = ?, project = ?, attachments = ?, updated_at = ? WHERE id = ?",
+                (title, project, _attachments, now, checklist_id)
+            )
+        else:
+            conn.execute(
+                "UPDATE checklists SET title = ?, project = ?, updated_at = ? WHERE id = ?",
+                (title, project, now, checklist_id)
+            )
 
 
 def update_checklist_content(checklist_id: int, content: str, edited_by: str = '', save_history: bool = True):

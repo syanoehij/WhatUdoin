@@ -2600,6 +2600,29 @@
         });
       });
 
+      // 첨부파일 버튼 (feat.attachments 피처 플래그가 있을 때만)
+      if (feat.attachments) {
+        const sep = document.createElement('span');
+        sep.className = 'wu-toolbar-sep';
+        tbEl.appendChild(sep);
+
+        const btnUpload = document.createElement('button');
+        btnUpload.type = 'button';
+        btnUpload.className = 'wu-toolbar-btn';
+        btnUpload.title = '첨부파일 업로드';
+        btnUpload.innerHTML = '📎';
+        btnUpload.dataset.cmd = 'attach-upload';
+        tbEl.appendChild(btnUpload);
+
+        const btnList = document.createElement('button');
+        btnList.type = 'button';
+        btnList.className = 'wu-toolbar-btn';
+        btnList.title = '첨부파일 목록';
+        btnList.innerHTML = '📋';
+        btnList.dataset.cmd = 'attach-list';
+        tbEl.appendChild(btnList);
+      }
+
       wrapEl.appendChild(tbEl);
       return tbEl;
     }
@@ -2668,6 +2691,12 @@
           }
           case 'footnote':
             _showFootnoteModal(content => _insertFootnoteWithContent(_editor, content));
+            return;
+          case 'attach-upload':
+            if (feat.attachments && feat.attachments.onUpload) { feat.attachments.onUpload(); }
+            return;
+          case 'attach-list':
+            if (feat.attachments && feat.attachments.onList) { feat.attachments.onList(btn); }
             return;
         }
         _updateToolbarState(tbEl);

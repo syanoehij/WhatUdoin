@@ -2,9 +2,19 @@
   "groups": [
     {
       "date": "2026-05-08",
-      "phase": "40차 4단계",
-      "phase_class": "phase-4",
+      "phase": "40차 3단계",
+      "phase_class": "phase-3",
       "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 문서·체크 편집기 — 첨부파일 기능 추가",
+          "detail_html": "<ul><li>문서·체크 편집기 툴바에 📎 (업로드) · 📋 (목록) 버튼 추가 — 허용 확장자: txt, xls, xlsx, ppt, pptx, pdf, zip, 7z / 최대 20MB / 문서당 최대 2개</li><li>첨부파일 목록 드롭다운: 파일명 앞에 업로드 날짜·시각(<code>YYMMDD_HHMM:</code>) 표시, 제외(×) 버튼으로 첨부 해제</li><li>뷰어 모드(문서·체크 모두): 콘텐츠 영역 상단에 첨부파일 다운로드 목록 표시</li><li>MD 내보내기 시 첨부파일을 <code>attachments/</code> 폴더에 포함한 ZIP으로 패키징, MD 본문에 <code>## 첨부파일</code> 섹션 자동 추가</li><li><code>meetings</code>·<code>checklists</code> 테이블에 <code>attachments TEXT DEFAULT '[]'</code> 컬럼 추가 (_migrate 패턴)</li><li>수정 파일: <code>database.py</code>, <code>app.py</code>, <code>templates/doc_editor.html</code>, <code>templates/check_editor.html</code>, <code>templates/check.html</code>, <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 백업·정리 — 스케줄 분리 및 고아 파일 자동 정리 추가",
+          "detail_html": "<ul><li>백업 생성과 오래된 백업 삭제를 분리 — <code>run_backup()</code>에서 <code>_cleanup()</code> 호출 제거, <code>cleanup_old_backups()</code> 독립 함수로 분리</li><li>새벽 스케줄 재정비: 03:00 DB백업 · 03:05 만료 done 완료 · 03:10 오래된 백업 정리 · 03:20 휴지통 90일 초과 항목 삭제 · 03:30 고아 파일 정리 시작</li><li>고아 파일 정리(<code>cleanup_orphan_images()</code>): 03:30 시작 → 05:00 도달 시 cursor 저장 후 중단, 다음날 이어서 처리 — meetings·meeting_histories·checklists·team_notices 4개 테이블 참조 확인 후 미참조 파일만 삭제</li><li><code>_IMAGE_EXTS</code> → <code>_UPLOAD_EXTS</code> 변수명 변경, 첨부파일 확장자(txt, xls, xlsx, ppt, pptx, pdf, zip, 7z) 스캔 대상 추가</li><li>수정 파일: <code>backup.py</code>, <code>app.py</code>, <code>database.py</code></li></ul>"
+        },
         {
           "icon": "✨",
           "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 관리 — 이름 중복 생성 차단 (대소문자 무시)",

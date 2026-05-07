@@ -802,6 +802,16 @@
 .ck-proj-item.has-match .ck-dot {
   display: inline-block;
 }
+.doc-attachments-viewer {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 6px 16px 4px; font-size: 0.82rem; border-bottom: 1px solid var(--border);
+}
+.attachments-viewer-label { color: var(--text-muted, #888); font-weight: 600; }
+.attachment-download-link {
+  color: var(--primary, #3b82f6); text-decoration: none;
+  background: var(--surface-2, #f3f4f6); border-radius: 4px; padding: 2px 8px;
+}
+.attachment-download-link:hover { opacity: 0.8; }
 </style>
 {% endblock %}
 
@@ -922,7 +932,10 @@
 
     <!-- 뷰어 (비편집자용 / 편집자도 뷰 모드) -->
     <div class="ck-viewer-wrap" id="ck-viewer-wrap" style="display:none;">
-      <div id="ck-viewer"></div>
+      <div style="flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden;">
+        <div id="ck-attachments-viewer" class="doc-attachments-viewer" style="display:none;"></div>
+        <div id="ck-viewer"></div>
+      </div>
       <aside class="toc-panel hidden" id="ck-viewer-toc">
         <div class="toc-panel-header">
           <span class="toc-panel-title">목차</span>
@@ -1896,6 +1909,20 @@ async function initEditor(content) {
 function toggleTocInline() { wuInst?.toggleToc(); }
 
 // ── 뷰어 렌더링 ───────────────────────────────────────────
+function _renderCkAttachmentsViewer() {
+  const el = document.getElementById('ck-attachments-viewer');
+  if (!el) return;
+  const attachments = _curItem?.attachments || [];
+  if (!attachments.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const _e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  el.style.display = '';
+  el.innerHTML = '<span class="attachments-viewer-label">첨부파일:</span> ' +
+    attachments.map(a => {
+      const label = a.uploaded_at ? `${_e(a.uploaded_at)}: ${_e(a.name)}` : _e(a.name);
+      return `<a class="attachment-download-link" href="${_e(a.url)}" download="${_e(a.name)}">${label}</a>`;
+    }).join('');
+}
+
 async function renderViewer(content) {
   await _loadEditorAssets();
   // ck-right-title이 제목을 표시하므로 content 첫 줄 H1은 제거 (기존 데이터 호환)
@@ -1914,6 +1941,7 @@ async function renderViewer(content) {
 
   // 잠금/비로그인 시 체크박스 클릭 차단 (시각적 반응 포함)
   container.classList.toggle('no-check-interaction', !CURRENT_USER || _contentLocked || _lockedByOther);
+  _renderCkAttachmentsViewer();
 
   // 이미지 너비 폴백: Obsidian/legacy 포맷에서 너비를 읽어 DOM에 적용
   setTimeout(() => {
