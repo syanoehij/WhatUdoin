@@ -2,6 +2,48 @@
   "groups": [
     {
       "date": "2026-05-07",
+      "phase": "40차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 문서 편집기 — 개인 문서 신규 작성 시 공개범위 기본값 '팀에게만 공개' → '비공개'",
+          "detail_html": "<ul><li>새 개인 문서(<code>?personal=1</code>) 작성 시 공개범위가 '팀에게만 공개(team)'로 기본 설정되던 버그 수정</li><li><code>renderSegment(visSeg, ..., isPersonal ? 'team' : 'private')</code> → <code>'private'</code> 고정으로 변경</li><li>수정 파일: <code>templates/doc_editor.html</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 뷰어 — 콜아웃 블록 텍스트 드래그 선택(복사) 불가 버그 수정",
+          "detail_html": "<ul><li>뷰어 모드에서 ProseMirror가 <code>mousedown</code>·<code>selectionchange</code> 이벤트 처리 시 트랜잭션 발생 → <code>_fixCallouts</code>가 DOM을 교체해 드래그 선택이 중단되는 문제</li><li><code>containerEl</code>에 캡처 단계 <code>mousedown</code> 리스너 추가 — <code>.wu-callout-body</code> 내 클릭은 <code>stopImmediatePropagation()</code>으로 ProseMirror 전달 차단</li><li><code>document</code>에 <code>selectionchange</code> 리스너 추가 — 선택 범위가 콜아웃 body 안이면 ProseMirror 리스너 실행 전 차단</li><li>CSS: <code>.wu-callout-body</code>에 <code>user-select: text</code> 추가</li><li>수정 파일: <code>static/js/wu-editor.js</code>, <code>static/css/wu-editor.css</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 뷰어 — 커스텀 너비 이미지가 컨테이너를 벗어나는 버그 수정",
+          "detail_html": "<ul><li><code>_applyImgWidths()</code>에서 커스텀 너비 이미지에 <code>max-width: none !important</code>를 설정해 컨테이너 너비를 초과하던 문제</li><li>해당 라인 제거 — CSS <code>.ProseMirror img { max-width: 100%; }</code>가 자동 적용되어 컨테이너 너비 내 비율 유지</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 캘린더 — 일정 붙여넣기 시 원본 칸반 상태가 그대로 복사되는 버그 수정",
+          "detail_html": "<ul><li>Ctrl+C → Ctrl+V로 일정 복사 시 원본의 <code>kanban_status</code>가 그대로 새 일정에 적용되던 문제</li><li><code>setKanbanStatus(ev.kanban_status)</code> → <code>setKanbanStatus('backlog')</code>로 변경 — 붙여넣기 시 항상 백로그로 초기화</li><li>수정 파일: <code>templates/calendar.html</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 이벤트 저장 — 프로젝트명 '미지정' 선택 시 빈 프로젝트로 처리",
+          "detail_html": "<ul><li>이벤트 모달에서 프로젝트 필드에 '미지정'을 입력·선택하면 <code>null</code>로 변환해 저장 — 실제 프로젝트 지정 없음으로 처리</li><li>수정 파일: <code>static/js/event-modal.js</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 체크 목록 — 외부 비공개 프로젝트의 체크리스트가 비로그인에게 노출되는 버그 수정",
+          "detail_html": "<ul><li><code>is_public = 1</code>로 명시된 체크리스트가 소속 프로젝트의 <code>is_private = 1</code>에 관계없이 노출되던 문제</li><li><code>public_filter</code>에 프로젝트 비공개 조건 AND 추가 — <code>is_public=1</code>이어도 비공개 프로젝트면 비로그인 사용자에게 미노출</li><li><code>get_checklists()</code>, <code>get_checklists_summary()</code>, <code>search_all()</code>, <code>search_checklists()</code> 4개 함수 동일 적용</li><li>수정 파일: <code>database.py</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 체크 에디터 — 프로젝트 드롭다운에서 '미지정' 항목 제거 및 DB 데이터 정리",
+          "detail_html": "<ul><li>체크 에디터 프로젝트 선택 드롭다운에 '미지정'이 표시되던 문제 — <code>app.py</code> 두 라우트에서 <code>p.name != '미지정'</code> 필터 추가</li><li><code>get_all_projects_with_events()</code>의 orphan 프로젝트 추가 시 '미지정' 제외</li><li>서버 시작 마이그레이션: <code>events.project = '미지정'</code> → <code>NULL</code>, <code>checklists.project = '미지정'</code> → <code>''</code>, 프로젝트 테이블의 '미지정' 항목 소프트 삭제</li><li>체크 에디터 저장 시 <code>project = '미지정'</code>이면 빈 문자열로 처리</li><li>체크 페이지 사이드바의 '미지정'(프로젝트 없는 항목 그룹 필터)은 그대로 유지</li><li>수정 파일: <code>app.py</code>, <code>database.py</code>, <code>templates/check_editor.html</code>, <code>templates/check.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-07",
       "phase": "39차 3단계",
       "phase_class": "phase-1",
       "entries": [

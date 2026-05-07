@@ -358,7 +358,7 @@ function initDocEditor() {
         const isPersonal = new URLSearchParams(location.search).get('personal') === '1';
         renderSegment(docTypeSeg, DOC_OPTS, isPersonal ? 'personal' : 'team');
         renderSegment(visSeg, VIS_OPTS.filter(o => !isPersonal ? o.v !== 'team' : true),
-          isPersonal ? 'team' : 'private');
+          'private');
       } else {
         renderSegment(docTypeSeg, DOC_OPTS, initDocType);
         const initVis = deriveInitialVisibility();

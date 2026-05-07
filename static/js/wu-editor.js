@@ -1266,7 +1266,6 @@
         const px = _imgWidthMap[src];
         if (px != null) {
           img.style.setProperty('width', px + 'px', 'important');
-          img.style.setProperty('max-width', 'none', 'important');
         } else {
           img.style.removeProperty('width');
           img.style.removeProperty('max-width');
@@ -2871,6 +2870,23 @@
         /* 뷰어 모드 — 에디터 영역에 바로 렌더 */
         /* ProseMirror가 selection 등 트랜잭션마다 DOM을 재조정하므로
            onTransaction에서 _fixCallouts를 재실행해 callout div를 유지 */
+        /* 콜아웃 body 드래그 선택 허용:
+           ProseMirror는 mousedown·selectionchange 이벤트로 트랜잭션을 생성하고
+           DOM을 재조정(_fixCallouts 전)하므로, 두 이벤트 모두 callout body 안에서는
+           ProseMirror에 전달되지 않도록 차단한다. */
+        containerEl.addEventListener('mousedown', e => {
+          if (e.target.closest('.wu-callout-body')) e.stopImmediatePropagation();
+        }, true);
+        document.addEventListener('selectionchange', e => {
+          const sel = window.getSelection();
+          if (!sel || sel.rangeCount === 0) return;
+          const node = sel.getRangeAt(0).commonAncestorContainer;
+          const el = node.nodeType === 1 ? node : node.parentElement;
+          if (el && containerEl.contains(el) && el.closest('.wu-callout-body')) {
+            e.stopImmediatePropagation();
+          }
+        });
+
         _editor = new Editor({
           element: containerEl,
           extensions: _buildExtensions({ StarterKit, CodeBlockLowlight, lowlight, Table, TableRow, TableHeader, TableCell, TaskList, TaskItem, Link, Image, Markdown, Paragraph, Highlight, markdownItMark, Superscript, InlineMath, BlockMath, markdownItMath, InputRule, Mark, Extension, Plugin, PluginKey, Decoration, DecorationSet, getHTMLFromFragment, Fragment, editableMath: false }),

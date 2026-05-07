@@ -693,7 +693,7 @@ async function saveEvent(e) {
   const parentEventIdEl = document.getElementById('f-parent-event-id');
   const payload = {
     title:            document.getElementById('f-title').value,
-    project:          document.getElementById('f-project').value || null,
+    project:          (() => { const v = document.getElementById('f-project').value.trim(); return (v && v !== '미지정') ? v : null; })(),
     start_datetime:   `${startDate}T${allDay ? '00:00' : startTime}`,
     end_datetime:     endDate ? `${endDate}T${allDay ? '00:00' : endTime}` : null,
     all_day:          allDay ? 1 : 0,

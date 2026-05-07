@@ -686,7 +686,8 @@ function splitTitleContentForSave(md) {
 async function saveContent(auto = false, leaveTarget = null) {
   if (_lockLost) return;
   if (auto && _ckAiSaving) return;
-  const project = document.getElementById('ck-edit-project')?.value || '';
+  const _projRaw = document.getElementById('ck-edit-project')?.value || '';
+  const project  = (_projRaw && _projRaw !== '미지정') ? _projRaw : '';
   const md      = wuInst ? wuInst.getMarkdown() : '';
   const parsed  = splitTitleContentForSave(md);
   const title   = parsed.title;

@@ -699,7 +699,7 @@ def check_new_page(request: Request, proj: str = ""):
     if not user or user.get("role") not in ("editor", "admin"):
         return RedirectResponse("/check")
     all_projs = db.get_all_projects_with_events()
-    projects = [p for p in all_projs if p.get("is_active", 1)]
+    projects = [p for p in all_projs if p.get("is_active", 1) and p.get("name") != "미지정"]
     proj = "" if proj == "미지정" else proj
     return templates.TemplateResponse(
         request, "check_editor.html",
@@ -717,7 +717,7 @@ def check_editor_page(request: Request, checklist_id: int):
     if not item:
         return RedirectResponse("/check")
     all_projs = db.get_all_projects_with_events()
-    projects = [p for p in all_projs if p.get("is_active", 1)]
+    projects = [p for p in all_projs if p.get("is_active", 1) and p.get("name") != "미지정"]
     lock = db.get_checklist_lock(checklist_id)
     locked_by = None
     lock_type = None

@@ -233,6 +233,13 @@ def init_db():
         if not conn.execute("SELECT 1 FROM settings WHERE key='ck_fix_mijijeong_project_v1'").fetchone():
             conn.execute("UPDATE checklists SET project = '' WHERE project = '미지정'")
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ck_fix_mijijeong_project_v1', '1')")
+        # events의 '미지정' project 값 NULL로 정리, 프로젝트 테이블에서 '미지정' 삭제
+        if not conn.execute("SELECT 1 FROM settings WHERE key='fix_mijijeong_all_v1'").fetchone():
+            conn.execute("UPDATE events SET project = NULL WHERE project = '미지정' AND deleted_at IS NULL")
+            conn.execute("UPDATE checklists SET project = '' WHERE project = '미지정' AND deleted_at IS NULL")
+            if _table_exists(conn, "projects"):
+                conn.execute("UPDATE projects SET deleted_at = datetime('now') WHERE name = '미지정' AND deleted_at IS NULL")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('fix_mijijeong_all_v1', '1')")
         _migrate(conn, "meetings", [
             ("deleted_at", "TEXT DEFAULT NULL"),
             ("deleted_by", "TEXT DEFAULT NULL"),
@@ -1470,10 +1477,10 @@ def get_all_projects_with_events() -> list[dict]:
             "milestones": ms_by_pid.get(r["id"], []),
         }
 
-    # events.project / checklists.project에만 있는 orphan 프로젝트도 추가
+    # events.project / checklists.project에만 있는 orphan 프로젝트도 추가 ('미지정' 제외)
     for r in (*ev_proj_rows, *ck_proj_rows):
         name = r[0]
-        if name and name not in proj_map:
+        if name and name != '미지정' and name not in proj_map:
             proj_map[name] = {"id": None, "name": name, "color": None,
                               "start_date": None, "end_date": None, "is_active": 1,
                               "is_private": 0, "memo": None, "events": []}
@@ -2424,6 +2431,7 @@ def get_checklists(project: str = None, viewer=None, active_only: bool | None = 
              OR project NOT IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))
     """
     # 3상태: is_public=1 항상 공개, is_public=NULL 프로젝트 연동, is_public=0 항상 비공개
+    # is_public=1이어도 프로젝트가 외부 비공개(is_private=1)면 비로그인 사용자에게 미노출
     public_filter = """
         AND (
           is_public = 1
@@ -2432,6 +2440,10 @@ def get_checklists(project: str = None, viewer=None, active_only: bool | None = 
             AND project IS NOT NULL AND project != ''
             AND project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
           )
+        )
+        AND (
+          project IS NULL OR project = ''
+          OR project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
         )
     """ if viewer is None else ""
     active_filter = ""
@@ -3101,6 +3113,10 @@ def get_checklists_summary(project: str = None, viewer=None) -> list:
             AND project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
           )
         )
+        AND (
+          project IS NULL OR project = ''
+          OR project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+        )
     """ if viewer is None else ""
     with get_conn() as conn:
         if project is None:
@@ -3220,6 +3236,10 @@ def search_all(query: str, type: str = None, viewer=None,
                     AND project IS NOT NULL AND project != ''
                     AND project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
                   )
+                )
+                AND (
+                  project IS NULL OR project = ''
+                  OR project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
                 )
             """ if viewer is None else ""
             rows = conn.execute(
@@ -3444,6 +3464,10 @@ def search_checklists_mcp(query: str, project: str | None = None, viewer=None) -
             AND project IS NOT NULL AND project != ''
             AND project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
           )
+        )
+        AND (
+          project IS NULL OR project = ''
+          OR project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
         )
     """ if viewer is None else ""
     with get_conn() as conn:

@@ -1078,7 +1078,7 @@ sup.wu-fn-ref a:hover { text-decoration: underline; }
   align-items: center;
   min-height: 16px;
 }
-.wu-callout-body { font-size: 0.9rem; line-height: 1.6; }
+.wu-callout-body { font-size: 0.9rem; line-height: 1.6; user-select: text; -webkit-user-select: text; }
 .wu-callout-body > *:first-child { margin-top: 0; }
 .wu-callout-body > *:last-child { margin-bottom: 0; }
 

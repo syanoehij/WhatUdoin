@@ -889,7 +889,7 @@ function _ctxPasteEvent(dateStr, timeStr = null) {
     setEventType(ev.event_type || 'schedule');
     if (ev.kanban_status) {
       document.getElementById('f-kanban').checked = true;
-      setKanbanStatus(ev.kanban_status);
+      setKanbanStatus('backlog');
     }
   }
   // 날짜: 타겟 날짜로 시작, 원본 기간(일수) 유지
