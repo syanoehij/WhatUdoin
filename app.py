@@ -20,7 +20,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -703,7 +703,7 @@ def notice_history_page(request: Request):
 @app.get("/check", response_class=HTMLResponse)
 def check_page(request: Request):
     user = auth.get_current_user(request)
-    all_projs = db.get_all_projects_meta()
+    all_projs = db.get_all_projects_meta(viewer=user)
     visible = [p for p in all_projs if user or not p.get("is_private", 0)]
     active_projs = [p for p in visible if p.get("is_active", 1)]
     done_projs   = [p for p in visible if not p.get("is_active", 1)]
@@ -716,7 +716,7 @@ def check_new_page(request: Request, proj: str = ""):
     user = auth.get_current_user(request)
     if not user or user.get("role") not in ("editor", "admin"):
         return RedirectResponse("/check")
-    all_projs = db.get_all_projects_with_events()
+    all_projs = db.get_all_projects_with_events(viewer=user)
     projects = [p for p in all_projs if p.get("is_active", 1) and p.get("name") != "미지정"]
     proj = "" if proj == "미지정" else proj
     return templates.TemplateResponse(
@@ -734,7 +734,7 @@ def check_editor_page(request: Request, checklist_id: int):
     item = db.get_checklist(checklist_id)
     if not item:
         return RedirectResponse("/check")
-    all_projs = db.get_all_projects_with_events()
+    all_projs = db.get_all_projects_with_events(viewer=user)
     projects = [p for p in all_projs if p.get("is_active", 1) and p.get("name") != "미지정"]
     lock = db.get_checklist_lock(checklist_id)
     locked_by = None
@@ -844,6 +844,10 @@ async def bulk_checklist_visibility(request: Request):
     is_public = None if raw is None else (1 if raw else 0)
     is_active_raw = data.get("is_active")
     is_active = None if is_active_raw is None else (1 if is_active_raw else 0)
+    if is_public and project:
+        _proj = db.get_project_by_name(project)
+        if _proj and _proj.get("is_hidden"):
+            raise HTTPException(status_code=403, detail="히든 프로젝트 항목은 외부 공개할 수 없습니다.")
     team_id_filter = user.get("team_id") if not project else None
     count = db.bulk_update_checklist_visibility(project, is_public, is_active, team_id=team_id_filter)
     return {"ok": True, "updated": count}
@@ -858,6 +862,10 @@ async def bulk_event_visibility(request: Request):
     is_public = None if raw is None else (1 if raw else 0)
     is_active_raw = data.get("is_active")
     is_active = None if is_active_raw is None else (1 if is_active_raw else 0)
+    if is_public and project:
+        _proj = db.get_project_by_name(project)
+        if _proj and _proj.get("is_hidden"):
+            raise HTTPException(status_code=403, detail="히든 프로젝트 항목은 외부 공개할 수 없습니다.")
     team_id_filter = user.get("team_id") if not project else None
     count = db.bulk_update_event_visibility(project, is_public, is_active, team_id=team_id_filter)
     wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": team_id_filter})
@@ -881,6 +889,13 @@ async def rotate_checklist_visibility(checklist_id: int, request: Request):
         # legacy toggle (check.html 2-state vis-seg 호환): None→1, 1→0, 0→None
         cur = cl.get("is_public")
         new_pub = 1 if cur is None else (0 if cur == 1 else None)
+    # 히든 프로젝트 항목은 외부 공개 불가
+    if new_pub:
+        cl_proj = cl.get("project")
+        if cl_proj:
+            _proj = db.get_project_by_name(cl_proj)
+            if _proj and _proj.get("is_hidden"):
+                raise HTTPException(status_code=403, detail="히든 프로젝트 항목은 외부 공개할 수 없습니다.")
     db.update_checklist_visibility(checklist_id, new_pub)
     return {"ok": True, "is_public": new_pub}
 
@@ -900,6 +915,19 @@ async def update_checklist(checklist_id: int, request: Request):
     old_proj = (item.get("project") or "").strip()
     project  = data.get("project", item["project"])
     project  = "" if project is None else str(project).strip()
+    # 히든→일반(또는 무소속) 이동 시 confirm 요구 (project 필드가 실제로 변경되는 경우만)
+    if "project" in data and old_proj and project != old_proj:
+        _old_proj = db.get_project_by_name(old_proj)
+        if _old_proj and _old_proj.get("is_hidden"):
+            _new_is_hidden = False
+            if project:
+                _new_proj = db.get_project_by_name(project)
+                _new_is_hidden = bool(_new_proj and _new_proj.get("is_hidden"))
+            if not _new_is_hidden and not data.get("confirm"):
+                return JSONResponse(
+                    status_code=400,
+                    content={"requires_confirm": True, "message": "히든 프로젝트 밖으로 이동합니다. 계속하시겠습니까?"},
+                )
     raw_att = data.get("attachments")
     if isinstance(raw_att, str):
         try:
@@ -914,6 +942,11 @@ async def update_checklist(checklist_id: int, request: Request):
     # 프로젝트에서 미지정으로 이동 → 항상 외부 비공개
     if old_proj and not project:
         db.update_checklist_visibility(checklist_id, 0)
+    # 히든 프로젝트로 이동 시 is_public 강제 0
+    elif project and project != old_proj:
+        _proj = db.get_project_by_name(project)
+        if _proj and _proj.get("is_hidden"):
+            db.update_checklist_visibility(checklist_id, 0)
     wu_broker.publish("checks.changed", {"id": checklist_id, "action": "update"})
     return {"ok": True}
 
@@ -1223,11 +1256,29 @@ def admin_users(request: Request):
 async def admin_update_user(user_id: int, request: Request):
     _require_admin(request)
     data = await request.json()
+    target_user = db.get_user(user_id)
     # 관리자 계정 비활성화 보호
     if not data.get("is_active"):
-        user = db.get_user(user_id)
-        if user and user.get("role") == "admin":
+        if target_user and target_user.get("role") == "admin":
             raise HTTPException(status_code=400, detail="관리자 계정은 비활성화할 수 없습니다.")
+    # 팀 제외 여부 판단: team_id가 없어지거나 is_active=0이 되는 경우
+    old_team_id = target_user.get("team_id") if target_user else None
+    new_team_id = data.get("team_id")
+    new_is_active = data.get("is_active", 1)
+    is_removing = old_team_id is not None and (
+        new_team_id != old_team_id or not new_is_active
+    )
+    if is_removing:
+        force = data.get("force", False)
+        hidden_owned = db.get_user_owned_hidden_projects(user_id)
+        if hidden_owned and not force:
+            return {
+                "warning": True,
+                "hidden_projects": [r["name"] for r in hidden_owned],
+                "message": "해당 사용자는 히든 프로젝트 관리자입니다. 계속 진행하면 관리 권한이 이양됩니다.",
+            }
+        if force and hidden_owned:
+            db.transfer_hidden_projects_on_removal(user_id, hidden_owned)
     db.update_user(user_id, data)
     return {"ok": True}
 
@@ -1821,9 +1872,31 @@ async def update_event_project(event_id: int, request: Request):
     if not auth.can_edit_event(user, event):
         raise HTTPException(status_code=403, detail="다른 팀의 일정은 수정할 수 없습니다.")
     data = await request.json()
-    db.update_event_project(event_id, data.get("project"))
+    new_proj_name = data.get("project")
+    # 히든→일반(또는 무소속) 이동 시 confirm 요구
+    old_proj_name = (event.get("project") or "").strip()
+    if old_proj_name:
+        _old_proj = db.get_project_by_name(old_proj_name)
+        if _old_proj and _old_proj.get("is_hidden"):
+            _new_is_hidden = False
+            if new_proj_name:
+                _new_proj = db.get_project_by_name(new_proj_name)
+                _new_is_hidden = bool(_new_proj and _new_proj.get("is_hidden"))
+            if not _new_is_hidden and not data.get("confirm"):
+                return JSONResponse(
+                    status_code=400,
+                    content={"requires_confirm": True, "message": "히든 프로젝트 밖으로 이동합니다. 계속하시겠습니까?"},
+                )
+    db.update_event_project(event_id, new_proj_name)
+    # 히든 프로젝트로 이동 시 is_public 강제 0
+    hidden_forced = False
+    if new_proj_name:
+        _proj = db.get_project_by_name(new_proj_name)
+        if _proj and _proj.get("is_hidden"):
+            db.update_event_visibility(event_id, 0)
+            hidden_forced = True
     wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
-    return {"ok": True}
+    return {"ok": True, "hidden_forced": hidden_forced}
 
 
 _CONFLICT_EXACT = 70
@@ -2007,7 +2080,7 @@ def check_conflicts(request: Request, start: str, end: str = None, team_id: int 
 @app.get("/api/projects")
 def list_projects(request: Request):
     user = auth.get_current_user(request)
-    projects = db.get_unified_project_list()
+    projects = db.get_unified_project_list(viewer=user)
     if not user:
         projects = [p for p in projects if not p.get("is_private")]
     return [p["name"] for p in projects]
@@ -2031,16 +2104,16 @@ def api_project_list(request: Request):
     """모든 페이지에서 공통으로 사용하는 통합 프로젝트 목록.
     projects 테이블 + events.project + checklists.project 합산, [{name, color, is_active, id}]
     """
-    _require_editor(request)
-    return db.get_unified_project_list()
+    user = _require_editor(request)
+    return db.get_unified_project_list(viewer=user)
 
 
 # ── 프로젝트 관리 API ────────────────────────────────────
 
 @app.get("/api/manage/projects")
 def manage_list_projects(request: Request):
-    _require_editor(request)
-    return db.get_all_projects_with_events()
+    user = _require_editor(request)
+    return db.get_all_projects_with_events(viewer=user)
 
 
 @app.post("/api/manage/projects")
@@ -2131,7 +2204,7 @@ def project_colors_api(request: Request):
     """프로젝트명 → 최종 결정 색상 딕셔너리 반환 (DB지정 > 해시팔레트, 모든 프로젝트 포함)"""
     user = auth.get_current_user(request)
     raw_colors = db.get_project_colors()
-    all_projects = db.get_unified_project_list(active_only=False)
+    all_projects = db.get_unified_project_list(active_only=False, viewer=user)
     if not user:
         private_names = {p["name"] for p in all_projects if p.get("is_private")}
         all_projects = [p for p in all_projects if p["name"] not in private_names]
@@ -2218,6 +2291,146 @@ async def manage_project_milestones(name: str, request: Request):
         raise HTTPException(status_code=404, detail=str(exc))
     wu_broker.publish("projects.changed", {"name": name, "action": "update"})
     return {"ok": True, "milestones": cleaned}
+
+
+# ── 히든 프로젝트 API ──────────────────────────────────────
+
+@app.post("/api/manage/hidden-projects")
+async def create_hidden_project_route(request: Request):
+    user = _require_editor(request)
+    if not user.get("team_id"):
+        raise HTTPException(status_code=403, detail="팀 소속 사용자만 히든 프로젝트를 생성할 수 있습니다.")
+    data = await request.json()
+    name = data.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="프로젝트 이름을 입력하세요.")
+    result = db.create_hidden_project(
+        name=name,
+        color=data.get("color", ""),
+        memo=data.get("memo", ""),
+        owner_id=user["id"],
+    )
+    if result is None:
+        raise HTTPException(status_code=422, detail="생성할 수 없습니다. 다른 이름을 넣어주세요.")
+    wu_broker.publish("projects.changed", {"name": None, "action": "create"})
+    return result
+
+
+@app.get("/api/manage/hidden-projects/{name}/can-manage")
+async def can_manage_hidden_project(name: str, request: Request):
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401)
+    proj = db.get_project_by_name(name)
+    if not proj or not proj.get("is_hidden"):
+        raise HTTPException(status_code=404)
+    if not db.is_hidden_project_visible(proj["id"], user):
+        raise HTTPException(status_code=404)
+    is_admin = user.get("role") == "admin"
+    is_owner = proj.get("owner_id") == user.get("id")
+    return {"can_manage": is_admin or is_owner, "is_owner": is_owner, "is_admin": is_admin}
+
+
+def _get_hidden_proj_or_404(name: str, user: dict = None):
+    """히든 프로젝트를 이름으로 조회. 없거나 히든 아니면 404.
+    user가 주어지면 visibility 체크 추가 — 비멤버에게 프로젝트 존재 누설 방지.
+    """
+    proj = db.get_project_by_name(name)
+    if not proj or not proj.get("is_hidden"):
+        raise HTTPException(status_code=404)
+    if user and not db.is_hidden_project_visible(proj["id"], user):
+        raise HTTPException(status_code=404)
+    return proj
+
+
+def _require_hidden_can_manage(user: dict, proj: dict):
+    """can_manage 권한(owner 또는 admin) 검증. 없으면 403."""
+    is_admin = user.get("role") == "admin"
+    is_owner = proj.get("owner_id") == user.get("id")
+    if not is_admin and not is_owner:
+        raise HTTPException(status_code=403, detail="관리 권한이 없습니다.")
+    return is_admin, is_owner
+
+
+@app.get("/api/manage/hidden-projects/{name}/members")
+async def get_hidden_project_members_route(name: str, request: Request):
+    user = _require_editor(request)
+    proj = _get_hidden_proj_or_404(name, user)
+    _require_hidden_can_manage(user, proj)
+    members = db.get_hidden_project_members(proj["id"])
+    return {"members": members}
+
+
+@app.get("/api/manage/hidden-projects/{name}/addable-members")
+async def get_hidden_project_addable_members_route(name: str, request: Request):
+    user = _require_editor(request)
+    proj = _get_hidden_proj_or_404(name, user)
+    _require_hidden_can_manage(user, proj)
+    addable = db.get_hidden_project_addable_members(proj["id"])
+    return {"addable_members": addable}
+
+
+@app.post("/api/manage/hidden-projects/{name}/members")
+async def add_hidden_project_member_route(name: str, request: Request):
+    user = _require_editor(request)
+    proj = _get_hidden_proj_or_404(name, user)
+    _require_hidden_can_manage(user, proj)
+    data = await request.json()
+    target_user_id = data.get("user_id")
+    if not target_user_id:
+        raise HTTPException(status_code=400, detail="user_id를 입력하세요.")
+    result = db.add_hidden_project_member(proj["id"], target_user_id, proj["owner_id"])
+    if result is False:
+        raise HTTPException(status_code=403, detail="같은 팀 사용자만 멤버로 추가할 수 있습니다.")
+    if result is None:
+        raise HTTPException(status_code=409, detail="이미 멤버입니다.")
+    wu_broker.publish("projects.changed", {"name": None, "action": "member_add"})
+    return {"ok": True}
+
+
+@app.delete("/api/manage/hidden-projects/{name}/members/{user_id}")
+async def remove_hidden_project_member_route(name: str, user_id: int, request: Request):
+    user = _require_editor(request)
+    proj = _get_hidden_proj_or_404(name, user)
+    _require_hidden_can_manage(user, proj)
+    result = db.remove_hidden_project_member(proj["id"], user_id)
+    if result is False:
+        raise HTTPException(status_code=403, detail="관리 권한을 먼저 이양하세요.")
+    wu_broker.publish("projects.changed", {"name": None, "action": "member_remove"})
+    return {"ok": True}
+
+
+@app.post("/api/manage/hidden-projects/{name}/transfer-owner")
+async def transfer_hidden_project_owner_route(name: str, request: Request):
+    user = _require_editor(request)
+    proj = _get_hidden_proj_or_404(name, user)
+    # owner만 가능 (admin 불가)
+    if proj.get("owner_id") != user.get("id"):
+        raise HTTPException(status_code=403, detail="관리 권한이 없습니다.")
+    data = await request.json()
+    new_owner_id = data.get("user_id")
+    if not new_owner_id:
+        raise HTTPException(status_code=400, detail="user_id를 입력하세요.")
+    result = db.transfer_hidden_project_owner(proj["id"], new_owner_id, user["id"])
+    if not result:
+        raise HTTPException(status_code=400, detail="해당 사용자는 현재 프로젝트 멤버가 아닙니다.")
+    wu_broker.publish("projects.changed", {"name": None, "action": "owner_transfer"})
+    return {"ok": True}
+
+
+@app.post("/api/manage/hidden-projects/{name}/change-owner")
+async def admin_change_hidden_project_owner_route(name: str, request: Request):
+    user = _require_admin(request)
+    proj = _get_hidden_proj_or_404(name, user)
+    data = await request.json()
+    new_owner_id = data.get("user_id")
+    if not new_owner_id:
+        raise HTTPException(status_code=400, detail="user_id를 입력하세요.")
+    result = db.admin_change_hidden_project_owner(proj["id"], new_owner_id)
+    if not result:
+        raise HTTPException(status_code=400, detail="해당 사용자는 현재 프로젝트 멤버가 아닙니다.")
+    wu_broker.publish("projects.changed", {"name": None, "action": "owner_change"})
+    return {"ok": True}
 
 
 @app.delete("/api/manage/projects/{name:path}/items")
@@ -3038,6 +3251,13 @@ async def update_event_visibility_api(event_id: int, request: Request):
         # 값 없으면 서버에서 cycling: None→1→0→None
         cur = event.get("is_public")
         is_public = 1 if cur is None else (0 if cur == 1 else None)
+    # 히든 프로젝트 항목은 외부 공개 불가
+    if is_public:
+        ev_proj = event.get("project")
+        if ev_proj:
+            _proj = db.get_project_by_name(ev_proj)
+            if _proj and _proj.get("is_hidden"):
+                raise HTTPException(status_code=403, detail="히든 프로젝트 항목은 외부 공개할 수 없습니다.")
     db.update_event_visibility(event_id, is_public)
     wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True, "is_public": is_public}
@@ -3626,7 +3846,7 @@ def trash_page(request: Request):
 def api_get_trash(request: Request):
     user = _require_editor(request)
     team_id = user.get("team_id")
-    return db.get_trash_items(team_id)
+    return db.get_trash_items(team_id, viewer=user)
 
 
 @app.post("/api/trash/{item_type}/{item_id}/restore")
@@ -3638,6 +3858,12 @@ def api_restore_trash(item_type: str, item_id: int, request: Request):
         item_team = db.get_trash_item_team(item_type, item_id)
         if item_team is None or item_team != user.get("team_id"):
             raise HTTPException(status_code=403, detail="권한이 없습니다.")
+    # 히든 프로젝트 복원 권한 검사 (admin 또는 owner만 가능)
+    if item_type == "project":
+        proj_row = db.get_trash_hidden_project(item_id)
+        if proj_row and proj_row.get("is_hidden"):
+            if user.get("role") != "admin" and proj_row.get("owner_id") != user.get("id"):
+                raise HTTPException(status_code=403, detail="히든 프로젝트 복원 권한이 없습니다.")
     ok = db.restore_trash_item(item_type, item_id)
     if not ok:
         raise HTTPException(status_code=404, detail="항목을 찾을 수 없습니다.")

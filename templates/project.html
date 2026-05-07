@@ -1299,6 +1299,42 @@ function _onBarDragMove(e) {
   }
 }
 
+// ── 히든 프로젝트 이동 가드 ─────────────────────────────
+// 반환: {ok:true, data} | {cancelled:true} | {error:msg}
+async function _patchEventProject(eventId, newProj) {
+  const body = { project: newProj };
+  let res = await fetch(`/api/events/${eventId}/project`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    if (err.requires_confirm) {
+      const ok = await wuDialog.confirm({ title: '이동 확인', message: err.message || '히든 프로젝트 밖으로 이동합니다. 계속하시겠습니까?' });
+      if (!ok) { render(); return { cancelled: true }; }
+      res = await fetch(`/api/events/${eventId}/project`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, confirm: true }),
+      });
+      if (!res.ok) {
+        wuToast.error((await res.json().catch(() => ({}))).detail || '이동 실패');
+        render();
+        return { error: '이동 실패' };
+      }
+    } else {
+      wuToast.error(err.detail || '이동 실패');
+      render();
+      return { error: err.detail || '이동 실패' };
+    }
+  }
+  const data = await res.json().catch(() => ({}));
+  if (data.hidden_forced) wuToast.info('외부 공개가 비공개로 전환되었습니다.');
+  loadData();
+  return { ok: true, data };
+}
+
 async function _onBarDragEnd(e) {
   document.removeEventListener('mousemove', _onBarDragMove);
   document.removeEventListener('mouseup',   _onBarDragEnd);
@@ -1331,12 +1367,7 @@ async function _onBarDragEnd(e) {
     const newProj = targetProjName === '미지정' ? '' : targetProjName;
     if (newProj === (ev.project || '')) return;
     try {
-      const res = await fetch(`/api/events/${ev.id}/project`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project: newProj || null }),
-      });
-      if (res.ok) loadData(); else render();
+      await _patchEventProject(ev.id, newProj || null);
     } catch (_) { render(); }
   }
 }

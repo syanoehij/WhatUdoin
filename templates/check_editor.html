@@ -804,11 +804,30 @@ async function saveContent(auto = false, leaveTarget = null) {
     return;
   }
 
-  await fetch(`/api/checklists/${CKE_ID}`, {
+  const metaBody = { title, project, attachments: currentAttachments };
+  let metaRes = await fetch(`/api/checklists/${CKE_ID}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, project, attachments: currentAttachments }),
+    body: JSON.stringify(metaBody),
   });
+  if (!metaRes.ok) {
+    const metaErr = await metaRes.json().catch(() => ({}));
+    if (metaErr.requires_confirm) {
+      const ok = await wuDialog.confirm({ title: '이동 확인', message: metaErr.message || '히든 프로젝트 밖으로 이동합니다. 계속하시겠습니까?' });
+      if (!ok) return;
+      metaRes = await fetch(`/api/checklists/${CKE_ID}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...metaBody, confirm: true }),
+      });
+      if (!metaRes.ok) { wuToast.error('저장 실패'); return; }
+    } else {
+      wuToast.error(metaErr.detail || '저장 실패');
+      return;
+    }
+  }
+  const metaData = await metaRes.json().catch(() => ({}));
+  if (metaData.hidden_forced) wuToast.info('외부 공개가 비공개로 전환되었습니다.');
 
   const res = await fetch(`/api/checklists/${CKE_ID}/content`, {
     method: 'PATCH',

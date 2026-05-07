@@ -249,7 +249,18 @@ def init_db():
             ("deleted_at", "TEXT DEFAULT NULL"),
             ("deleted_by", "TEXT DEFAULT NULL"),
             ("team_id",    "INTEGER DEFAULT NULL"),
+            ("is_hidden",  "INTEGER DEFAULT 0"),
+            ("owner_id",   "INTEGER"),
         ])
+        # ── project_members (히든 프로젝트 멤버) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS project_members (
+                project_id INTEGER NOT NULL,
+                user_id    INTEGER NOT NULL,
+                added_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (project_id, user_id)
+            )
+        """)
         # 삭제된 프로젝트를 참조하는 활성 체크리스트/이벤트의 project 필드 정리
         # (프로젝트 삭제 시 체크리스트 이동 로직 추가 이전 데이터 호환)
         if _table_exists(conn, "checklists"):
@@ -1057,13 +1068,22 @@ def get_project_timeline(team_id: int = None, viewer=None) -> list[dict]:
             ).fetchall()
         # projects 테이블에서 메타 조회
         proj_meta_rows = conn.execute(
-            "SELECT id, name, color, start_date, end_date, is_active, is_private FROM projects WHERE deleted_at IS NULL"
+            "SELECT id, name, color, start_date, end_date, is_active, is_private, is_hidden FROM projects WHERE deleted_at IS NULL"
         ).fetchall()
         ms_rows = conn.execute("""
             SELECT pm.project_id, pm.title, pm.date
               FROM project_milestones pm
              ORDER BY pm.project_id, pm.sort_order
         """).fetchall()
+        # 히든 프로젝트 멤버 pre-fetch
+        visible_hidden_ids: set[int] = set()
+        if viewer and viewer.get("role") == "admin":
+            visible_hidden_ids = {r["id"] for r in proj_meta_rows if r["is_hidden"]}
+        elif viewer:
+            member_rows = conn.execute(
+                "SELECT project_id FROM project_members WHERE user_id = ?", (viewer["id"],)
+            ).fetchall()
+            visible_hidden_ids = {r[0] for r in member_rows}
     proj_meta = {r["name"]: dict(r) for r in proj_meta_rows}
     ms_by_pid = {}
     for r in ms_rows:
@@ -1072,6 +1092,9 @@ def get_project_timeline(team_id: int = None, viewer=None) -> list[dict]:
     inactive = {name for name, m in proj_meta.items() if m.get("is_active") == 0}
     # 비공개 프로젝트 이름 집합 (비로그인 시 제외)
     private_projs = {name for name, m in proj_meta.items() if m.get("is_private") == 1} if viewer is None else set()
+    # 히든 프로젝트 이름 집합 (접근 불가한 것)
+    hidden_projs = {name for name, m in proj_meta.items()
+                    if m.get("is_hidden") and m.get("id") not in visible_hidden_ids}
 
     # team_name → project → events (비활성 프로젝트 제외)
     teams: dict[str, dict[str, list]] = {}
@@ -1081,6 +1104,8 @@ def get_project_timeline(team_id: int = None, viewer=None) -> list[dict]:
         p = d["project"] if d.get("project") and d["project"].strip() else "미지정"
         if p in inactive:
             continue  # 종료된 프로젝트 건너뜀
+        if p in hidden_projs:
+            continue  # 접근 불가 히든 프로젝트 건너뜀
         if viewer is None:
             ep_public = d.get("is_public")
             if ep_public == 0:
@@ -1394,17 +1419,19 @@ def get_projects() -> list[str]:
     return [row[0] for row in rows]
 
 
-def get_unified_project_list(active_only: bool = True) -> list[dict]:
+def get_unified_project_list(active_only: bool = True, viewer=None) -> list[dict]:
     """모든 페이지에서 일관되게 사용할 통합 프로젝트 목록.
 
     projects 테이블(삭제 안 된 것) + events.project + checklists.project 를 합산하여
     [{name, color, is_active, id}] 형태로 반환. 이름 기준 중복 제거 후 이름순 정렬.
     active_only=True(기본값)이면 is_active=1인 항목만 반환.
+    viewer=None: 비로그인 — is_hidden=1 제외
+    viewer=user_dict: 로그인 사용자 — admin이거나 project_members에 포함된 히든만 포함
     """
     with get_conn() as conn:
         # 1. projects 테이블 (삭제 안 된 것)
         proj_rows = conn.execute(
-            "SELECT id, name, color, is_active, is_private FROM projects WHERE deleted_at IS NULL"
+            "SELECT id, name, color, is_active, is_private, is_hidden, owner_id FROM projects WHERE deleted_at IS NULL"
         ).fetchall()
         # 2. events.project 에서 프로젝트 이름 수집 (삭제 안 된 것)
         ev_proj_rows = conn.execute(
@@ -1414,23 +1441,40 @@ def get_unified_project_list(active_only: bool = True) -> list[dict]:
         ck_proj_rows = conn.execute(
             "SELECT DISTINCT project FROM checklists WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
         ).fetchall()
+        # 4. 히든 프로젝트 멤버 pre-fetch (N+1 방지)
+        visible_hidden_ids: set[int] = set()
+        if viewer and viewer.get("role") == "admin":
+            # admin은 모든 히든 프로젝트 가시
+            visible_hidden_ids = {r["id"] for r in proj_rows if r["is_hidden"]}
+        elif viewer:
+            member_rows = conn.execute(
+                "SELECT project_id FROM project_members WHERE user_id = ?", (viewer["id"],)
+            ).fetchall()
+            visible_hidden_ids = {r[0] for r in member_rows}
 
     proj_map: dict[str, dict] = {}
+    hidden_blocked: set[str] = set()  # 접근 불가 히든 프로젝트 이름 — orphan 재추가 방지
     for r in proj_rows:
+        is_hidden = r["is_hidden"] if r["is_hidden"] is not None else 0
+        if is_hidden:
+            if r["id"] not in visible_hidden_ids:
+                hidden_blocked.add(r["name"])
+                continue
         proj_map[r["name"]] = {
             "id": r["id"],
             "name": r["name"],
             "color": r["color"],
             "is_active": r["is_active"] if r["is_active"] is not None else 1,
             "is_private": r["is_private"] if r["is_private"] is not None else 0,
+            "is_hidden": is_hidden,
         }
 
     # events/checklists 에만 있는 프로젝트 이름도 포함 (orphan — is_active 기본 1)
     for rows in (ev_proj_rows, ck_proj_rows):
         for r in rows:
             name = r[0]
-            if name and name not in proj_map:
-                proj_map[name] = {"id": None, "name": name, "color": None, "is_active": 1, "is_private": 0}
+            if name and name not in proj_map and name not in hidden_blocked:
+                proj_map[name] = {"id": None, "name": name, "color": None, "is_active": 1, "is_private": 0, "is_hidden": 0}
 
     result = sorted(proj_map.values(), key=lambda x: x["name"])
     if active_only:
@@ -1440,8 +1484,11 @@ def get_unified_project_list(active_only: bool = True) -> list[dict]:
 
 # ── Project Management ───────────────────────────────────
 
-def get_all_projects_with_events() -> list[dict]:
-    """프로젝트 목록 + 각 프로젝트의 일정 반환 (projects 테이블 + events.project + checklists.project 합산)"""
+def get_all_projects_with_events(viewer=None) -> list[dict]:
+    """프로젝트 목록 + 각 프로젝트의 일정 반환 (projects 테이블 + events.project + checklists.project 합산)
+    viewer=None: 비로그인 — is_hidden=1 제외
+    viewer=user_dict: 로그인 사용자 — admin이거나 project_members에 포함된 히든만 포함
+    """
     with get_conn() as conn:
         # projects 테이블의 프로젝트 (삭제되지 않은 것만)
         proj_rows = conn.execute(
@@ -1466,19 +1513,35 @@ def get_all_projects_with_events() -> list[dict]:
         ms_rows = conn.execute(
             "SELECT project_id, title, date FROM project_milestones ORDER BY project_id, sort_order"
         ).fetchall()
+        # 히든 프로젝트 멤버 pre-fetch (N+1 방지)
+        visible_hidden_ids: set[int] = set()
+        if viewer and viewer.get("role") == "admin":
+            visible_hidden_ids = {r["id"] for r in proj_rows if r["is_hidden"]}
+        elif viewer:
+            member_rows = conn.execute(
+                "SELECT project_id FROM project_members WHERE user_id = ?", (viewer["id"],)
+            ).fetchall()
+            visible_hidden_ids = {r[0] for r in member_rows}
 
     ms_by_pid: dict = {}
     for r in ms_rows:
         ms_by_pid.setdefault(r["project_id"], []).append({"title": r["title"], "date": r["date"]})
 
-    # projects 테이블 기반 dict
+    # projects 테이블 기반 dict (히든 필터 적용)
     proj_map: dict[str, dict] = {}
+    hidden_blocked: set[str] = set()  # 접근 불가 히든 프로젝트 이름 — orphan/이벤트 재추가 방지
     for r in proj_rows:
+        is_hidden = r["is_hidden"] if r["is_hidden"] is not None else 0
+        if is_hidden and r["id"] not in visible_hidden_ids:
+            hidden_blocked.add(r["name"])
+            continue
         proj_map[r["name"]] = {
             "id": r["id"], "name": r["name"], "color": r["color"],
             "start_date": r["start_date"], "end_date": r["end_date"],
             "is_active": r["is_active"] if r["is_active"] is not None else 1,
             "is_private": r["is_private"] if r["is_private"] is not None else 0,
+            "is_hidden": is_hidden,
+            "owner_id": r["owner_id"],
             "memo": r["memo"],
             "events": [],
             "milestones": ms_by_pid.get(r["id"], []),
@@ -1487,10 +1550,10 @@ def get_all_projects_with_events() -> list[dict]:
     # events.project / checklists.project에만 있는 orphan 프로젝트도 추가 ('미지정' 제외)
     for r in (*ev_proj_rows, *ck_proj_rows):
         name = r[0]
-        if name and name != '미지정' and name not in proj_map:
+        if name and name != '미지정' and name not in proj_map and name not in hidden_blocked:
             proj_map[name] = {"id": None, "name": name, "color": None,
                               "start_date": None, "end_date": None, "is_active": 1,
-                              "is_private": 0, "memo": None, "events": []}
+                              "is_private": 0, "is_hidden": 0, "owner_id": None, "memo": None, "events": []}
 
     # 이벤트 분류
     unset_events = []
@@ -1498,10 +1561,12 @@ def get_all_projects_with_events() -> list[dict]:
         d = dict(r)
         p = d.get("project") or ""
         if p.strip():
+            if p in hidden_blocked:
+                continue  # 접근 불가 히든 프로젝트 이벤트 누출 방지
             if p not in proj_map:
                 proj_map[p] = {"id": None, "name": p, "color": None,
                                "start_date": None, "end_date": None, "is_active": 1,
-                               "is_private": 0, "memo": None, "events": []}
+                               "is_private": 0, "is_hidden": 0, "owner_id": None, "memo": None, "events": []}
             proj_map[p]["events"].append(d)
         else:
             unset_events.append(d)
@@ -1512,15 +1577,18 @@ def get_all_projects_with_events() -> list[dict]:
     if unset_events:
         result.append({"id": None, "name": "미지정", "color": None,
                        "start_date": None, "end_date": None, "is_active": 1,
-                       "memo": None, "events": unset_events})
+                       "is_hidden": 0, "owner_id": None, "memo": None, "events": unset_events})
     return result
 
 
-def get_all_projects_meta() -> list[dict]:
-    """프로젝트 메타 정보만 반환 (events 제외). check 페이지 등 이벤트 불필요 시 사용."""
+def get_all_projects_meta(viewer=None) -> list[dict]:
+    """프로젝트 메타 정보만 반환 (events 제외). check 페이지 등 이벤트 불필요 시 사용.
+    viewer=None: 비로그인 — is_hidden=1 제외
+    viewer=user_dict: 로그인 사용자 — admin이거나 project_members에 포함된 히든만 포함
+    """
     with get_conn() as conn:
         proj_rows = conn.execute(
-            "SELECT id, name, color, is_active, is_private FROM projects WHERE deleted_at IS NULL ORDER BY is_active DESC, name"
+            "SELECT id, name, color, is_active, is_private, is_hidden FROM projects WHERE deleted_at IS NULL ORDER BY is_active DESC, name"
         ).fetchall()
         ev_proj_rows = conn.execute(
             "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
@@ -1528,19 +1596,34 @@ def get_all_projects_meta() -> list[dict]:
         ck_proj_rows = conn.execute(
             "SELECT DISTINCT project FROM checklists WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
         ).fetchall()
+        # 히든 프로젝트 멤버 pre-fetch
+        visible_hidden_ids: set[int] = set()
+        if viewer and viewer.get("role") == "admin":
+            visible_hidden_ids = {r["id"] for r in proj_rows if r["is_hidden"]}
+        elif viewer:
+            member_rows = conn.execute(
+                "SELECT project_id FROM project_members WHERE user_id = ?", (viewer["id"],)
+            ).fetchall()
+            visible_hidden_ids = {r[0] for r in member_rows}
 
     proj_map: dict[str, dict] = {}
+    hidden_blocked: set[str] = set()  # 접근 불가 히든 프로젝트 이름 — orphan 재추가 방지
     for r in proj_rows:
+        is_hidden = r["is_hidden"] if r["is_hidden"] is not None else 0
+        if is_hidden and r["id"] not in visible_hidden_ids:
+            hidden_blocked.add(r["name"])
+            continue
         proj_map[r["name"]] = {
             "id": r["id"], "name": r["name"], "color": r["color"],
             "is_active": r["is_active"] if r["is_active"] is not None else 1,
             "is_private": r["is_private"] if r["is_private"] is not None else 0,
+            "is_hidden": is_hidden,
         }
 
     for r in (*ev_proj_rows, *ck_proj_rows):
         name = r[0]
-        if name and name not in proj_map:
-            proj_map[name] = {"id": None, "name": name, "color": None, "is_active": 1, "is_private": 0}
+        if name and name not in proj_map and name not in hidden_blocked:
+            proj_map[name] = {"id": None, "name": name, "color": None, "is_active": 1, "is_private": 0, "is_hidden": 0}
 
     active   = sorted((p for p in proj_map.values() if p.get("is_active", 1)), key=lambda x: x["name"])
     inactive = sorted((p for p in proj_map.values() if not p.get("is_active", 1)), key=lambda x: x["name"])
@@ -1553,6 +1636,187 @@ def create_project(name: str, color: str = None, memo: str = None) -> int:
             "INSERT INTO projects (name, color, memo) VALUES (?, ?, ?)", (name, color, memo)
         )
     return cur.lastrowid
+
+
+def create_hidden_project(name: str, color: str, memo: str, owner_id: int) -> dict | None:
+    """히든 프로젝트 생성. 이름 중복(휴지통 포함 전체) 시 None 반환."""
+    with get_conn() as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM projects WHERE LOWER(name) = LOWER(?)", (name,)
+        ).fetchone()
+        if exists:
+            return None
+        cur = conn.execute(
+            "INSERT INTO projects (name, color, memo, is_hidden, owner_id) VALUES (?, ?, ?, 1, ?)",
+            (name, color or None, (memo or "").strip() or None, owner_id)
+        )
+        project_id = cur.lastrowid
+        conn.execute(
+            "INSERT INTO project_members (project_id, user_id) VALUES (?, ?)",
+            (project_id, owner_id)
+        )
+    return {"id": project_id, "name": name, "color": color, "memo": memo,
+            "is_hidden": 1, "owner_id": owner_id}
+
+
+def get_hidden_project_member_ids(project_id: int) -> list[int]:
+    """히든 프로젝트의 멤버 user_id 목록 반환 (owner 포함)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT user_id FROM project_members WHERE project_id = ?", (project_id,)
+        ).fetchall()
+    return [r[0] for r in rows]
+
+
+def is_hidden_project_visible(project_id: int, user: dict) -> bool:
+    """사용자가 해당 히든 프로젝트를 볼 수 있는지 확인."""
+    if not user:
+        return False
+    if user.get("role") == "admin":
+        return True
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?",
+            (project_id, user["id"])
+        ).fetchone()
+    return row is not None
+
+
+def get_project_by_name(name: str) -> dict | None:
+    """이름으로 프로젝트 조회 (삭제 여부 무관)."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM projects WHERE name = ?", (name,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_hidden_project_members(project_id: int) -> list[dict]:
+    """히든 프로젝트 멤버 목록 (owner 포함). user 정보 JOIN."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT u.id, u.name, u.team_id,
+                      CASE WHEN p.owner_id = u.id THEN 1 ELSE 0 END AS is_owner
+               FROM project_members pm
+               JOIN users u ON u.id = pm.user_id
+               JOIN projects p ON p.id = pm.project_id
+               WHERE pm.project_id = ?
+               ORDER BY is_owner DESC, u.name""",
+            (project_id,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_hidden_project_addable_members(project_id: int) -> list[dict]:
+    """추가 가능한 사용자 목록.
+    owner와 같은 팀 소속 + 현재 멤버 아닌 사람 + is_active=1 + team_id IS NOT NULL.
+    """
+    with get_conn() as conn:
+        owner_row = conn.execute(
+            "SELECT u.team_id FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = ?",
+            (project_id,)
+        ).fetchone()
+        if not owner_row or owner_row["team_id"] is None:
+            return []
+        owner_team_id = owner_row["team_id"]
+        rows = conn.execute(
+            """SELECT u.id, u.name FROM users u
+               WHERE u.team_id = ?
+               AND u.is_active = 1
+               AND u.team_id IS NOT NULL
+               AND u.id NOT IN (SELECT user_id FROM project_members WHERE project_id = ?)
+               ORDER BY u.name""",
+            (owner_team_id, project_id)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_hidden_project_member(project_id: int, user_id: int, owner_id: int) -> bool | None:
+    """멤버 추가. 팀 검증 후 INSERT.
+    반환: True(성공), False(팀 불일치), None(이미 멤버)
+    """
+    with get_conn() as conn:
+        owner_row = conn.execute(
+            "SELECT team_id FROM users WHERE id = ?", (owner_id,)
+        ).fetchone()
+        target_row = conn.execute(
+            "SELECT team_id FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if not owner_row or not target_row:
+            return False
+        if owner_row["team_id"] is None or owner_row["team_id"] != target_row["team_id"]:
+            return False
+        existing = conn.execute(
+            "SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?",
+            (project_id, user_id)
+        ).fetchone()
+        if existing:
+            return None
+        conn.execute(
+            "INSERT INTO project_members (project_id, user_id) VALUES (?, ?)",
+            (project_id, user_id)
+        )
+    return True
+
+
+def remove_hidden_project_member(project_id: int, user_id: int) -> bool:
+    """멤버 삭제. owner 자신은 삭제 불가(False 반환)."""
+    with get_conn() as conn:
+        proj = conn.execute(
+            "SELECT owner_id FROM projects WHERE id = ?", (project_id,)
+        ).fetchone()
+        if not proj:
+            return False
+        if proj["owner_id"] == user_id:
+            return False
+        conn.execute(
+            "DELETE FROM project_members WHERE project_id = ? AND user_id = ?",
+            (project_id, user_id)
+        )
+    return True
+
+
+def transfer_hidden_project_owner(project_id: int, new_owner_id: int, requester_id: int) -> bool:
+    """owner가 다른 멤버에게 권한 이양.
+    검증: requester_id == current owner_id, new_owner_id in project_members
+    처리: projects.owner_id = new_owner_id (기존 owner는 members에 유지)
+    """
+    with get_conn() as conn:
+        proj = conn.execute(
+            "SELECT owner_id FROM projects WHERE id = ?", (project_id,)
+        ).fetchone()
+        if not proj or proj["owner_id"] != requester_id:
+            return False
+        member = conn.execute(
+            "SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?",
+            (project_id, new_owner_id)
+        ).fetchone()
+        if not member:
+            return False
+        conn.execute(
+            "UPDATE projects SET owner_id = ? WHERE id = ?",
+            (new_owner_id, project_id)
+        )
+    return True
+
+
+def admin_change_hidden_project_owner(project_id: int, new_owner_id: int) -> bool:
+    """admin 강제 관리자 변경.
+    검증: new_owner_id in project_members
+    처리: projects.owner_id = new_owner_id (기존 owner는 members에 유지)
+    """
+    with get_conn() as conn:
+        member = conn.execute(
+            "SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?",
+            (project_id, new_owner_id)
+        ).fetchone()
+        if not member:
+            return False
+        conn.execute(
+            "UPDATE projects SET owner_id = ? WHERE id = ?",
+            (new_owner_id, project_id)
+        )
+    return True
 
 
 def get_project(name: str) -> dict | None:
@@ -2845,18 +3109,27 @@ def delete_link(link_id: int, user_name: str, role: str) -> bool:
 
 # ── Trash ────────────────────────────────────────────────
 
-def get_trash_items(team_id: int = None) -> dict:
-    """휴지통 아이템 반환 — groups(프로젝트별 묶음) + unassigned(미지정)"""
+def get_trash_items(team_id: int = None, viewer=None) -> dict:
+    """휴지통 아이템 반환 — groups(프로젝트별 묶음) + unassigned(미지정)
+    viewer: 현재 로그인 사용자 dict. 히든 프로젝트는 admin 또는 owner만 조회 가능.
+    """
     team_filter = "AND team_id = ?" if team_id else ""
     team_args = (team_id,) if team_id else ()
+    is_admin = viewer and viewer.get("role") == "admin"
+    viewer_id = viewer.get("id") if viewer else None
 
     with get_conn() as conn:
         # 삭제된 프로젝트 목록
         pj_rows = conn.execute(
-            f"SELECT id, name, color, deleted_at, deleted_by, team_id "
+            f"SELECT id, name, color, deleted_at, deleted_by, team_id, is_hidden, owner_id "
             f"FROM projects WHERE deleted_at IS NOT NULL {team_filter} ORDER BY deleted_at DESC",
             team_args
         ).fetchall()
+        # 히든 프로젝트 필터: admin 또는 owner만 볼 수 있음
+        pj_rows = [
+            pj for pj in pj_rows
+            if not pj["is_hidden"] or is_admin or (viewer_id is not None and pj["owner_id"] == viewer_id)
+        ]
 
         groups = []
         for pj in pj_rows:
@@ -2954,6 +3227,51 @@ def get_trash_item_team(item_type: str, item_id: int):
             (item_id,)
         ).fetchone()
     return row["team_id"] if row else None
+
+
+def get_trash_hidden_project(project_id: int):
+    """휴지통에 있는 프로젝트의 is_hidden, owner_id 반환 (복원 권한 검사용)."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, is_hidden, owner_id FROM projects WHERE id = ? AND deleted_at IS NOT NULL",
+            (project_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_user_owned_hidden_projects(user_id: int) -> list:
+    """해당 user가 owner인 활성 히든 프로젝트 목록 반환 (C-3 팀원 제외 경고용)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, name FROM projects WHERE owner_id = ? AND is_hidden = 1 AND deleted_at IS NULL",
+            (user_id,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def transfer_hidden_projects_on_removal(user_id: int, hidden_projects: list):
+    """팀원 강제 제외 시 히든 프로젝트 owner 자동 이양.
+    hidden_projects: get_user_owned_hidden_projects() 반환값.
+    이양 대상: 해당 프로젝트 멤버 중 user 제외 added_at 오름차순 첫 번째.
+    이양 불가 시 owner_id = NULL (admin만 관리 가능 상태).
+    """
+    with get_conn() as conn:
+        for proj in hidden_projects:
+            proj_id = proj["id"]
+            next_owner = conn.execute(
+                "SELECT user_id FROM project_members WHERE project_id = ? AND user_id != ? ORDER BY added_at ASC LIMIT 1",
+                (proj_id, user_id)
+            ).fetchone()
+            if next_owner:
+                conn.execute(
+                    "UPDATE projects SET owner_id = ? WHERE id = ?",
+                    (next_owner["user_id"], proj_id)
+                )
+            else:
+                conn.execute(
+                    "UPDATE projects SET owner_id = NULL WHERE id = ?",
+                    (proj_id,)
+                )
 
 
 def restore_trash_item(item_type: str, item_id: int) -> bool:

@@ -427,6 +427,40 @@
   .pm-ev-title[data-ck-id] { cursor: pointer; }
   .pm-ev-title[data-ck-id]:hover { text-decoration: underline; color: var(--accent); }
 
+  /* ── 히든 프로젝트 뱃지 ── */
+  .pm-hidden-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    background: rgba(108,92,231,0.15);
+    color: #6c5ce7;
+    border: 1px solid rgba(108,92,231,0.35);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 4px;
+    flex-shrink: 0;
+    vertical-align: middle;
+  }
+
+  /* ── 히든 프로젝트 생성 버튼 / 액션 버튼 ── */
+  .pm-btn-hidden { border-color: #6c5ce7; color: #6c5ce7; background: transparent; }
+  .pm-btn-hidden:hover { background: rgba(108,92,231,0.08); }
+  .pm-new-hidden-btn {
+    margin: 2px 12px 8px;
+    display: block;
+    padding: 6px 0;
+    border-radius: 7px;
+    border: 1px dashed rgba(108,92,231,0.5);
+    background: transparent;
+    color: #6c5ce7;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    width: calc(100% - 24px);
+    transition: background 0.12s;
+  }
+  .pm-new-hidden-btn:hover { background: rgba(108,92,231,0.08); }
+
   /* ── 포함 항목 선택 삭제 모드 ── */
   .pm-bulk-banner {
     position: sticky;
@@ -474,6 +508,7 @@
 
     <!-- + 추가 버튼 -->
     <button class="pm-new-btn" onclick="showCreatePanel()">+ 새 프로젝트</button>
+    <button class="pm-new-hidden-btn" onclick="showHiddenCreatePanel()">🔒 히든 프로젝트 생성</button>
 
     <!-- 목록 -->
     <div class="month-nav-body" id="pm-list">
@@ -533,6 +568,39 @@
         <button class="pm-btn" onclick="hideCreatePanel()">취소</button>
       </div>
     </div>
+    <!-- 히든 프로젝트 생성 패널 -->
+    <div class="pm-create-panel" id="pm-hidden-create-panel">
+      <div class="pm-create-header">
+        <div class="pm-create-title">🔒 히든 프로젝트 생성</div>
+        <div class="pm-create-subtitle">멤버/owner/admin에게만 노출되는 비공개 프로젝트입니다.</div>
+      </div>
+      <div class="pm-create-body">
+        <!-- 이름 -->
+        <div class="pm-field">
+          <label>프로젝트 이름 <span style="color:var(--accent)">*</span></label>
+          <input type="text" id="hcr-name" placeholder="예) 비공개 로드맵" maxlength="60" />
+        </div>
+        <!-- 색상 -->
+        <div class="pm-field">
+          <label>색상</label>
+          <div class="pm-color-row">
+            <input type="color" class="pm-color-swatch" id="hcr-color" value="#6c5ce7"
+                   oninput="syncHiddenColorPresets(this.value)" />
+            <div class="pm-color-presets" id="hcr-presets"></div>
+          </div>
+        </div>
+        <!-- 메모 -->
+        <div class="pm-field">
+          <label>메모 <span style="color:var(--text-faint);font-weight:400;">(선택)</span></label>
+          <textarea id="hcr-memo" placeholder="프로젝트에 대한 간략한 설명…"></textarea>
+        </div>
+      </div>
+      <div class="pm-create-footer">
+        <button class="pm-btn pm-btn-hidden" style="padding:8px 22px;font-size:0.9rem;" onclick="createHiddenProject()">생성</button>
+        <button class="pm-btn" onclick="hideHiddenCreatePanel()">취소</button>
+      </div>
+    </div>
+
     <!-- 프로젝트 편집 패널 -->
     <div class="pm-edit-panel" id="pm-edit-panel">
       <div class="pm-create-header">
@@ -617,6 +685,72 @@
 
 <div class="pm-toast" id="pm-toast"></div>
 
+<!-- ── 멤버 관리 모달 ── -->
+<div id="pm-member-overlay" style="
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,0.45);z-index:3000;
+  align-items:center;justify-content:center;
+" onclick="if(event.target===this)closeMemberModal()">
+  <div style="
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:24px 24px 20px;max-width:480px;width:94%;
+    box-shadow:0 8px 28px rgba(0,0,0,0.22);
+  " onclick="event.stopPropagation()">
+    <div style="font-size:1rem;font-weight:700;margin-bottom:14px;">멤버 관리</div>
+    <div id="pm-member-list" style="margin-bottom:16px;min-height:40px;">불러오는 중…</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+      <select id="pm-member-add-sel" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:0.88rem;min-width:120px;">
+        <option value="">추가할 사용자 선택…</option>
+      </select>
+      <button class="pm-btn pm-btn-accent" onclick="addMember()" style="white-space:nowrap;">추가</button>
+    </div>
+    <div style="display:flex;justify-content:flex-end;">
+      <button class="pm-btn" onclick="closeMemberModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 관리 권한 이양 모달 (owner 전용) ── -->
+<div id="pm-transfer-overlay" style="
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,0.45);z-index:3000;
+  align-items:center;justify-content:center;
+" onclick="if(event.target===this)closeTransferModal()">
+  <div style="
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:24px 24px 20px;max-width:440px;width:94%;
+    box-shadow:0 8px 28px rgba(0,0,0,0.22);
+  " onclick="event.stopPropagation()">
+    <div style="font-size:1rem;font-weight:700;margin-bottom:6px;">관리 권한 이양</div>
+    <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px;">이양 후 귀하는 일반 멤버가 됩니다.</div>
+    <div id="pm-transfer-list" style="margin-bottom:16px;min-height:40px;">불러오는 중…</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="pm-btn" onclick="closeTransferModal()">취소</button>
+      <button class="pm-btn pm-btn-hidden" onclick="doTransferOwner()">이양</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 관리자 변경 모달 (admin 전용) ── -->
+<div id="pm-changeowner-overlay" style="
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,0.45);z-index:3000;
+  align-items:center;justify-content:center;
+" onclick="if(event.target===this)closeChangeOwnerModal()">
+  <div style="
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:24px 24px 20px;max-width:440px;width:94%;
+    box-shadow:0 8px 28px rgba(0,0,0,0.22);
+  " onclick="event.stopPropagation()">
+    <div style="font-size:1rem;font-weight:700;margin-bottom:14px;">관리자 변경</div>
+    <div id="pm-changeowner-list" style="margin-bottom:16px;min-height:40px;">불러오는 중…</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="pm-btn" onclick="closeChangeOwnerModal()">취소</button>
+      <button class="pm-btn pm-btn-hidden" onclick="doChangeOwner()">변경</button>
+    </div>
+  </div>
+</div>
+
 <!-- 사이드 드로어 (일정·체크리스트 공용) -->
 <div id="pm-sd-bg" onclick="closeSideDrawer()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.18);z-index:1999;"></div>
 <div id="pm-side-drawer" class="pm-side-drawer">
@@ -655,13 +789,17 @@ var selIdx    = null;       // 현재 선택된 프로젝트 인덱스
 let selName   = null;       // 선택 유지를 위한 이름
 let bulkDeleteMode = false;
 const bulkDeleteSelected = new Set(); // "ev:123" / "ck:45"
+// 히든 프로젝트 can_manage 캐시: project name → { can_manage, is_owner, is_admin }
+const _hiddenCanManage = {};
 
 // 자동 새로고침 차단: 생성/편집 패널이 열려있으면 스킵
 window._blockAutoRefresh = () => {
-  const create = document.getElementById('pm-create-panel');
-  const edit   = document.getElementById('pm-edit-panel');
-  return (create && create.classList.contains('visible')) ||
-         (edit   && edit.classList.contains('visible'));
+  const create       = document.getElementById('pm-create-panel');
+  const hiddenCreate = document.getElementById('pm-hidden-create-panel');
+  const edit         = document.getElementById('pm-edit-panel');
+  return (create       && create.classList.contains('visible')) ||
+         (hiddenCreate && hiddenCreate.classList.contains('visible')) ||
+         (edit         && edit.classList.contains('visible'));
 };
 
 /* ── 일정 클릭 → 수정 모달 ── */
@@ -770,6 +908,19 @@ async function openCkDrawer(id, title) {
   }
 }
 
+/* ── 히든 프로젝트 can-manage 배치 조회 ── */
+async function _fetchHiddenCanManage(hiddenProjects) {
+  if (!hiddenProjects.length) return;
+  const results = await Promise.all(
+    hiddenProjects.map(p =>
+      fetch(`/api/manage/hidden-projects/${encodeURIComponent(p.name)}/can-manage`)
+        .then(r => r.ok ? r.json() : { can_manage: false, is_owner: false, is_admin: false })
+        .catch(() => ({ can_manage: false, is_owner: false, is_admin: false }))
+    )
+  );
+  hiddenProjects.forEach((p, i) => { _hiddenCanManage[p.name] = results[i]; });
+}
+
 /* ── 데이터 로드 ── */
 async function loadProjectList() {
   const res = await fetch('/api/manage/projects', { cache: 'no-store' });
@@ -780,6 +931,8 @@ async function loadProjectList() {
     selIdx = cur >= 0 ? cur : null;
     if (selIdx === null) selName = null;
   }
+  // 히든 프로젝트에 대해서만 can-manage 배치 조회
+  await _fetchHiddenCanManage(projects.filter(p => p.is_hidden));
   renderList();
   if (selIdx !== null) renderDetail(selIdx);
   else hideDetail();
@@ -822,10 +975,12 @@ function renderList() {
     const closed = (p.is_active === 0 && p.name !== '미지정') ? ' closed' : '';
     const cnt    = p.name === '미지정' ? unsetVisibleEvents(p).length : p.events.length;
     const lockIcon = p.is_private ? '<span style="font-size:0.7rem;color:var(--text-muted);margin-left:4px;">🔒</span>' : '';
+    const hiddenBadge = p.is_hidden ? '<span class="pm-hidden-badge">히든</span>' : '';
     return `
       <div class="pm-proj-item${active ? ' active' : ''}${closed}" onclick="selectProjItem(${idx})">
         <span class="pm-proj-dot" ${dot}></span>
         <span class="pm-proj-label">${escHtml(p.name)}${lockIcon}</span>
+        ${hiddenBadge}
         <span class="pm-proj-cnt">${cnt}</span>
       </div>`;
   }).join('');
@@ -849,6 +1004,7 @@ function setFilter(f) {
   _pmSave();
   document.getElementById('pm-edit-panel').classList.remove('visible');
   document.getElementById('pm-create-panel').classList.remove('visible');
+  document.getElementById('pm-hidden-create-panel').classList.remove('visible');
   hideDetail();
   renderList();
 }
@@ -857,6 +1013,7 @@ function setFilter(f) {
 function selectProjItem(idx) {
   if (bulkDeleteMode && idx !== selIdx) exitBulkDeleteMode(true);
   document.getElementById('pm-create-panel').classList.remove('visible');
+  document.getElementById('pm-hidden-create-panel').classList.remove('visible');
   selIdx  = idx;
   selName = projects[idx].name;
   _pmSave();
@@ -882,6 +1039,17 @@ function renderDetail(idx) {
   document.getElementById('det-name').textContent = p.name;
   const badge = document.getElementById('det-closed-badge');
   badge.style.display = isClosed ? '' : 'none';
+
+  // 히든 뱃지 표시/숨김
+  let hiddenBadgeEl = document.getElementById('det-hidden-badge');
+  if (!hiddenBadgeEl) {
+    hiddenBadgeEl = document.createElement('span');
+    hiddenBadgeEl.id = 'det-hidden-badge';
+    hiddenBadgeEl.className = 'pm-hidden-badge';
+    hiddenBadgeEl.textContent = '히든';
+    document.getElementById('det-name').insertAdjacentElement('afterend', hiddenBadgeEl);
+  }
+  hiddenBadgeEl.style.display = p.is_hidden ? '' : 'none';
 
   // 메모
   const memoEl = document.getElementById('det-memo');
@@ -914,14 +1082,34 @@ function renderDetail(idx) {
       ? `<button class="pm-btn pm-btn-danger" onclick="togglePrivacy(${idx}, false)" title="비로그인 사용자에게 숨겨져 있음">🔒 외부 비공개 중</button>`
       : `<button class="pm-btn pm-btn-resume" onclick="togglePrivacy(${idx}, true)" title="비로그인 사용자에게 노출 중">🔓 외부 공개 중</button>`);
     const bulkDeleteBtn = `<button class="pm-btn pm-btn-warn" onclick="enterBulkDeleteMode()">포함 항목 선택 삭제</button>`;
-    actions.innerHTML = `
-      <button class="pm-btn pm-btn-accent" onclick="showEditPanel(${idx})">편집+일정 반영</button>
-      ${statusBtn}
-      ${privacyBtn}
-      <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="일정·체크 항목을 개별 마크다운 노트로 묶어 ZIP으로 저장">📦 Markdown(옵시디언) ZIP으로 저장</button>
-      ${bulkDeleteBtn}
-      <button class="pm-btn pm-btn-danger" onclick="deleteProject(${idx})">프로젝트 삭제</button>
-    `;
+
+    // 히든 프로젝트는 can_manage 여부에 따라 관리 버튼 표시
+    const canManage = !p.is_hidden || (_hiddenCanManage[p.name] && _hiddenCanManage[p.name].can_manage);
+    if (canManage) {
+      const cm = _hiddenCanManage[p.name] || {};
+      const hiddenMemberBtn = (p.is_hidden && cm.can_manage)
+        ? `<button class="pm-btn pm-btn-hidden" onclick="openMemberModal(${idx})">멤버 관리</button>` : '';
+      const hiddenTransferBtn = (p.is_hidden && cm.is_owner)
+        ? `<button class="pm-btn pm-btn-hidden" onclick="openTransferModal(${idx})">관리 권한 이양</button>` : '';
+      const hiddenChangeBtn = (p.is_hidden && cm.is_admin)
+        ? `<button class="pm-btn pm-btn-hidden" onclick="openChangeOwnerModal(${idx})">관리자 변경</button>` : '';
+      actions.innerHTML = `
+        <button class="pm-btn pm-btn-accent" onclick="showEditPanel(${idx})">편집+일정 반영</button>
+        ${statusBtn}
+        ${privacyBtn}
+        ${hiddenMemberBtn}
+        ${hiddenTransferBtn}
+        ${hiddenChangeBtn}
+        <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="일정·체크 항목을 개별 마크다운 노트로 묶어 ZIP으로 저장">📦 Markdown(옵시디언) ZIP으로 저장</button>
+        ${bulkDeleteBtn}
+        <button class="pm-btn pm-btn-danger" onclick="deleteProject(${idx})">프로젝트 삭제</button>
+      `;
+    } else {
+      // 일반 멤버: 읽기 전용 (내보내기만 허용)
+      actions.innerHTML = `
+        <button class="pm-btn pm-btn-accent" onclick="exportProjectMd(${idx})" title="일정·체크 항목을 개별 마크다운 노트로 묶어 ZIP으로 저장">📦 Markdown(옵시디언) ZIP으로 저장</button>
+      `;
+    }
   }
 
   // 선택 삭제 모드 배너
@@ -1471,12 +1659,29 @@ async function excludeEvent(id) {
 async function excludeChecklist(id) {
   if (!await wuDialog.confirm({ title: '제외', message: '이 체크리스트를 프로젝트에서 제외합니다.\n체크리스트 자체는 삭제되지 않고 미지정으로 이동됩니다.' })) return;
   const item = await (await fetch(`/api/checklists/${id}`)).json();
-  const res = await fetch(`/api/checklists/${id}`, {
+  const body = { title: item.title, project: '' };
+  let res = await fetch(`/api/checklists/${id}`, {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ title: item.title, project: '' }),
+    body: JSON.stringify(body),
   });
-  if (!res.ok) { toast('실패'); return; }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    if (err.requires_confirm) {
+      const ok = await wuDialog.confirm({ title: '이동 확인', message: err.message || '히든 프로젝트 밖으로 이동합니다. 계속하시겠습니까?' });
+      if (!ok) return;
+      res = await fetch(`/api/checklists/${id}`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ ...body, confirm: true }),
+      });
+      if (!res.ok) { toast('이동 실패'); return; }
+    } else {
+      toast('실패'); return;
+    }
+  }
+  const data = await res.json().catch(() => ({}));
+  if (data.hidden_forced) wuToast.info('외부 공개가 비공개로 전환되었습니다.');
   toast('미지정으로 이동됨');
   if (selIdx !== null) renderDetail(selIdx);
 }
@@ -1520,7 +1725,14 @@ function _pmConfirmCancel() {
   document.getElementById('pm-confirm-overlay').style.display = 'none';
   _pmConfirmCallback = null;
 }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') _pmConfirmCancel(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    _pmConfirmCancel();
+    closeMemberModal();
+    closeTransferModal();
+    closeChangeOwnerModal();
+  }
+});
 
 async function bulkUnassignedVisibility(makePublic) {
   const icon  = makePublic ? '🔓' : '🔒';
@@ -1689,6 +1901,7 @@ function showCreatePanel() {
   closeSideDrawer();
   document.getElementById('pm-no-select').style.display    = 'none';
   document.getElementById('pm-detail').style.display       = 'none';
+  document.getElementById('pm-hidden-create-panel').classList.remove('visible');
   document.getElementById('pm-create-panel').classList.add('visible');
   renderList();
   // 프리셋 색상 렌더
@@ -1703,6 +1916,64 @@ function showCreatePanel() {
 function hideCreatePanel() {
   document.getElementById('pm-create-panel').classList.remove('visible');
   document.getElementById('pm-no-select').style.display = '';
+}
+
+/* ── 히든 프로젝트 생성 패널 ── */
+function showHiddenCreatePanel() {
+  selIdx  = null;
+  selName = null;
+  closeSideDrawer();
+  document.getElementById('pm-no-select').style.display    = 'none';
+  document.getElementById('pm-detail').style.display       = 'none';
+  document.getElementById('pm-create-panel').classList.remove('visible');
+  document.getElementById('pm-hidden-create-panel').classList.add('visible');
+  renderList();
+  renderHiddenPresets('#6c5ce7');
+  document.getElementById('hcr-name').value  = '';
+  document.getElementById('hcr-color').value = '#6c5ce7';
+  document.getElementById('hcr-memo').value  = '';
+  setTimeout(() => document.getElementById('hcr-name').focus(), 50);
+}
+function hideHiddenCreatePanel() {
+  document.getElementById('pm-hidden-create-panel').classList.remove('visible');
+  document.getElementById('pm-no-select').style.display = '';
+}
+function renderHiddenPresets(selected) {
+  document.getElementById('hcr-presets').innerHTML = PRESET_COLORS.map(c => `
+    <div class="pm-color-preset${c === selected ? ' selected' : ''}"
+         style="background:${c}" title="${c}"
+         onclick="pickHiddenPreset('${c}')"></div>
+  `).join('');
+}
+function pickHiddenPreset(color) {
+  document.getElementById('hcr-color').value = color;
+  renderHiddenPresets(color);
+}
+function syncHiddenColorPresets(color) {
+  renderHiddenPresets(PRESET_COLORS.includes(color) ? color : '');
+}
+
+async function createHiddenProject() {
+  const name  = document.getElementById('hcr-name').value.trim();
+  const color = document.getElementById('hcr-color').value;
+  const memo  = document.getElementById('hcr-memo').value.trim() || null;
+  if (!name) { document.getElementById('hcr-name').focus(); return; }
+  const res = await fetch('/api/manage/hidden-projects', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name, color, memo }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    toast(data.detail || '생성할 수 없습니다. 다른 이름을 넣어주세요.');
+    return;
+  }
+  hideHiddenCreatePanel();
+  toast('히든 프로젝트 추가됨');
+  await loadProjectList();
+  // 방금 만든 프로젝트 자동 선택
+  const idx = projects.findIndex(p => p.name === name);
+  if (idx >= 0) selectProjItem(idx);
 }
 function renderPresets(selected) {
   document.getElementById('cr-presets').innerHTML = PRESET_COLORS.map(c => `
@@ -1785,6 +2056,11 @@ document.getElementById('cr-name').addEventListener('keydown', e => {
   if (e.key === 'Escape') hideCreatePanel();
 });
 
+document.getElementById('hcr-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') createHiddenProject();
+  if (e.key === 'Escape') hideHiddenCreatePanel();
+});
+
 document.getElementById('ed-milestones-add').addEventListener('click', function() { addMilestoneRow(); });
 
 // 페이지 진입 시 선택 복원: sessionStorage(새로고침) 우선, 없으면 localStorage(페이지 이동)
@@ -1824,5 +2100,243 @@ window.__pageSearch = {
     renderList();
   },
 };
+
+/* ── 멤버 관리 모달 ── */
+let _memberModalProject = null;
+
+async function openMemberModal(idx) {
+  _memberModalProject = projects[idx].name;
+  document.getElementById('pm-member-overlay').style.display = 'flex';
+  await _refreshMemberModal();
+}
+
+function closeMemberModal() {
+  document.getElementById('pm-member-overlay').style.display = 'none';
+  _memberModalProject = null;
+}
+
+async function _refreshMemberModal() {
+  const name = _memberModalProject;
+  if (!name) return;
+
+  const listEl = document.getElementById('pm-member-list');
+  const selEl  = document.getElementById('pm-member-add-sel');
+  listEl.innerHTML = '불러오는 중…';
+  selEl.innerHTML  = '<option value="">추가할 사용자 선택…</option>';
+
+  const [membersRes, addableRes] = await Promise.all([
+    fetch(`/api/manage/hidden-projects/${encodeURIComponent(name)}/members`),
+    fetch(`/api/manage/hidden-projects/${encodeURIComponent(name)}/addable-members`),
+  ]);
+
+  const canManageInfo = _hiddenCanManage[name] || {};
+
+  if (!membersRes.ok) {
+    listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">불러오기 실패</div>';
+    return;
+  }
+  const { members } = await membersRes.json();
+  if (!members.length) {
+    listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;font-style:italic;">멤버 없음</div>';
+  } else {
+    listEl.innerHTML = members.map(m => {
+      const ownerTag = m.is_owner ? '<span style="font-size:0.7rem;background:rgba(108,92,231,0.15);color:#6c5ce7;border:1px solid rgba(108,92,231,0.3);border-radius:4px;padding:1px 5px;margin-left:6px;">owner</span>' : '';
+      const delBtn = (!m.is_owner && canManageInfo.can_manage)
+        ? `<button class="pm-btn pm-btn-danger" style="padding:2px 8px;font-size:0.74rem;margin-left:auto;" onclick="removeMember(${m.id})">제거</button>`
+        : '';
+      return `<div style="display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid var(--border-faint);">
+        <span style="font-size:0.88rem;color:var(--text);">${escHtml(m.name)}${ownerTag}</span>
+        ${delBtn}
+      </div>`;
+    }).join('');
+  }
+
+  if (addableRes.ok) {
+    const { addable_members } = await addableRes.json();
+    addable_members.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = u.name;
+      selEl.appendChild(opt);
+    });
+  }
+}
+
+async function addMember() {
+  const name = _memberModalProject;
+  const userId = document.getElementById('pm-member-add-sel').value;
+  if (!userId) { toast('추가할 사용자를 선택하세요.'); return; }
+  const res = await fetch(`/api/manage/hidden-projects/${encodeURIComponent(name)}/members`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: +userId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 403) { toast('같은 팀 사용자만 추가할 수 있습니다.'); return; }
+    if (res.status === 409) { toast('이미 멤버입니다.'); return; }
+    toast(data.detail || '추가 실패');
+    return;
+  }
+  toast('멤버가 추가되었습니다.');
+  await _refreshMemberModal();
+}
+
+async function removeMember(userId) {
+  const name = _memberModalProject;
+  const ok = await wuDialog.confirm({ title: '멤버 제거', message: '이 멤버를 히든 프로젝트에서 제거하시겠습니까?' });
+  if (!ok) return;
+  const res = await fetch(`/api/manage/hidden-projects/${encodeURIComponent(name)}/members/${userId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    toast(data.detail || '제거 실패');
+    return;
+  }
+  toast('멤버가 제거되었습니다.');
+  await _refreshMemberModal();
+}
+
+/* ── 관리 권한 이양 모달 (owner 전용) ── */
+let _transferModalProject = null;
+let _transferSelectedId   = null;
+let _transferSelectedName = null;
+
+async function openTransferModal(idx) {
+  _transferModalProject = projects[idx].name;
+  _transferSelectedId   = null;
+  _transferSelectedName = null;
+  document.getElementById('pm-transfer-overlay').style.display = 'flex';
+  await _refreshTransferModal();
+}
+
+function closeTransferModal() {
+  document.getElementById('pm-transfer-overlay').style.display = 'none';
+  _transferModalProject = null;
+  _transferSelectedId   = null;
+  _transferSelectedName = null;
+}
+
+async function _refreshTransferModal() {
+  const name  = _transferModalProject;
+  const listEl = document.getElementById('pm-transfer-list');
+  listEl.innerHTML = '불러오는 중…';
+
+  const res = await fetch(`/api/manage/hidden-projects/${encodeURIComponent(name)}/members`);
+  if (!res.ok) { listEl.innerHTML = '<div style="color:var(--text-muted);">불러오기 실패</div>'; return; }
+  const { members } = await res.json();
+  const nonOwners = members.filter(m => !m.is_owner);
+  if (!nonOwners.length) {
+    listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;font-style:italic;">이양 가능한 멤버가 없습니다.</div>';
+    return;
+  }
+  listEl.innerHTML = nonOwners.map(m => `
+    <label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border-faint);cursor:pointer;">
+      <input type="radio" name="transfer-target" value="${m.id}" data-name="${escHtml(m.name)}">
+      <span style="font-size:0.88rem;color:var(--text);">${escHtml(m.name)}</span>
+    </label>`).join('');
+  listEl.querySelectorAll('input[type=radio]').forEach(inp => {
+    inp.addEventListener('change', () => {
+      _transferSelectedId   = +inp.value;
+      _transferSelectedName = inp.dataset.name;
+    });
+  });
+}
+
+async function doTransferOwner() {
+  const name = _transferModalProject;
+  if (!_transferSelectedId) { toast('이양할 멤버를 선택하세요.'); return; }
+  const targetName = _transferSelectedName;
+  const ok = await wuDialog.confirm({
+    title: '관리 권한 이양',
+    message: `관리 권한을 ${targetName}에게 이양하시겠습니까?\n이양 후 귀하는 일반 멤버가 됩니다.`,
+  });
+  if (!ok) return;
+  const res = await fetch(`/api/manage/hidden-projects/${encodeURIComponent(name)}/transfer-owner`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: +_transferSelectedId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    toast(data.detail || '이양 실패');
+    return;
+  }
+  toast('관리 권한이 이양되었습니다.');
+  closeTransferModal();
+  await loadProjectList();
+}
+
+/* ── 관리자 변경 모달 (admin 전용) ── */
+let _changeOwnerModalProject = null;
+let _changeOwnerSelectedId   = null;
+let _changeOwnerSelectedName = null;
+
+async function openChangeOwnerModal(idx) {
+  _changeOwnerModalProject = projects[idx].name;
+  _changeOwnerSelectedId   = null;
+  _changeOwnerSelectedName = null;
+  document.getElementById('pm-changeowner-overlay').style.display = 'flex';
+  await _refreshChangeOwnerModal();
+}
+
+function closeChangeOwnerModal() {
+  document.getElementById('pm-changeowner-overlay').style.display = 'none';
+  _changeOwnerModalProject = null;
+  _changeOwnerSelectedId   = null;
+  _changeOwnerSelectedName = null;
+}
+
+async function _refreshChangeOwnerModal() {
+  const name   = _changeOwnerModalProject;
+  const listEl = document.getElementById('pm-changeowner-list');
+  listEl.innerHTML = '불러오는 중…';
+
+  const res = await fetch(`/api/manage/hidden-projects/${encodeURIComponent(name)}/members`);
+  if (!res.ok) { listEl.innerHTML = '<div style="color:var(--text-muted);">불러오기 실패</div>'; return; }
+  const { members } = await res.json();
+  const nonOwners = members.filter(m => !m.is_owner);
+  if (!nonOwners.length) {
+    listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;font-style:italic;">변경 가능한 멤버가 없습니다.</div>';
+    return;
+  }
+  listEl.innerHTML = nonOwners.map(m => `
+    <label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border-faint);cursor:pointer;">
+      <input type="radio" name="changeowner-target" value="${m.id}" data-name="${escHtml(m.name)}">
+      <span style="font-size:0.88rem;color:var(--text);">${escHtml(m.name)}</span>
+    </label>`).join('');
+  listEl.querySelectorAll('input[type=radio]').forEach(inp => {
+    inp.addEventListener('change', () => {
+      _changeOwnerSelectedId   = +inp.value;
+      _changeOwnerSelectedName = inp.dataset.name;
+    });
+  });
+}
+
+async function doChangeOwner() {
+  const name = _changeOwnerModalProject;
+  if (!_changeOwnerSelectedId) { toast('변경할 멤버를 선택하세요.'); return; }
+  const targetName = _changeOwnerSelectedName;
+  const ok = await wuDialog.confirm({
+    title: '관리자 변경',
+    message: `관리자를 ${targetName}으로 변경하시겠습니까?`,
+  });
+  if (!ok) return;
+  const res = await fetch(`/api/manage/hidden-projects/${encodeURIComponent(name)}/change-owner`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: +_changeOwnerSelectedId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    toast(data.detail || '변경 실패');
+    return;
+  }
+  toast('관리자가 변경되었습니다.');
+  closeChangeOwnerModal();
+  await loadProjectList();
+}
 </script>
 {% endblock %}

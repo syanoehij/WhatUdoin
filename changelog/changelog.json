@@ -2,6 +2,28 @@
   "groups": [
     {
       "date": "2026-05-08",
+      "phase": "40차 4단계",
+      "phase_class": "phase-4",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 프로젝트 관리 — 히든 프로젝트 생성 및 가시성 제어",
+          "detail_html": "<ul><li>프로젝트 관리 페이지에 '🔒 히든 프로젝트 생성' 버튼 추가 — 팀 소속 사용자만 생성 가능</li><li>히든 프로젝트는 생성자(owner)·등록 멤버·admin에게만 노출, 비멤버에게 존재 자체를 숨김</li><li>프로젝트 목록에서 히든 프로젝트에 '히든' 뱃지 표시, 일반 멤버에게는 편집·삭제 버튼 숨김</li><li>이름 중복 검사를 휴지통 포함 전체 범위로 확장 — 히든 프로젝트 생성 시 중복 여부를 직접 알리지 않고 '생성할 수 없습니다. 다른 이름을 넣어주세요.'로 안내</li><li><code>projects</code> 테이블에 <code>is_hidden</code>·<code>owner_id</code> 컬럼 추가, <code>project_members</code> 테이블 신규 생성 (_migrate 패턴)</li><li>수정 파일: <code>database.py</code>, <code>app.py</code>, <code>templates/project_manage.html</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 히든 프로젝트 — 멤버 관리 및 관리 권한 이양",
+          "detail_html": "<ul><li>히든 프로젝트 상세 패널에 '멤버 관리' 버튼 추가 — owner·admin에게만 노출</li><li>멤버 추가 대상을 owner와 같은 소속팀 사용자로 제한 — admin도 동일 필터 적용(우회 불가)</li><li>owner에게 '관리 권한 이양' 버튼 제공 — 현재 멤버에게 권한 이양 후 기존 owner는 일반 멤버로 전환</li><li>admin에게 '관리자 변경' 버튼 제공 — 강제 변경으로 owner 이양과 별도 처리</li><li>히든 프로젝트 산하 일정·체크리스트의 외부 공개 상태 변경 차단(UI·API·bulk 모두)</li><li>일반→히든 이동 시 외부 공개 상태 강제 비공개 전환</li><li>수정 파일: <code>database.py</code>, <code>app.py</code>, <code>templates/project_manage.html</code></li></ul>"
+        },
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 히든 프로젝트 — 이동 확인 모달·휴지통 분리·팀원 제외 경고",
+          "detail_html": "<ul><li>히든 프로젝트 항목을 일반 프로젝트로 이동할 때 확인 모달 표시 — 취소 시 이동 중단, 확인 시 이동 완료</li><li>일반→히든 이동 시 즉시 외부 비공개로 전환하고 토스트 안내</li><li>히든 프로젝트 삭제 시 휴지통으로 이동, 휴지통에서도 owner·admin에게만 노출</li><li>팀원 제외 시 해당 사용자가 히든 프로젝트 관리자이면 1단계 경고 표시 → 확인 후 2단계 강제 제외 실행</li><li>강제 제외 시 가능하면 다른 멤버에게 자동 이양, 이양 불가 시 admin만 관리 가능 상태로 유지</li><li>수정 파일: <code>database.py</code>, <code>app.py</code>, <code>templates/project.html</code>, <code>templates/check.html</code>, <code>templates/check_editor.html</code>, <code>templates/admin.html</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-08",
       "phase": "40차 3단계",
       "phase_class": "phase-3",
       "entries": [

@@ -303,15 +303,37 @@ async function toggleActive(userId, teamId, isActive, role) {
     document.querySelector(`#member-${userId} input[type="checkbox"]`).checked = true;
     return;
   }
+  const body = { team_id: teamId, is_active: isActive ? 1 : 0 };
   const res = await fetch(`/api/admin/users/${userId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ team_id: teamId, is_active: isActive ? 1 : 0 }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     wuToast.error(err.detail || '오류가 발생했습니다.');
     document.querySelector(`#member-${userId} input[type="checkbox"]`).checked = !isActive;
+    return;
+  }
+  const data = await res.json().catch(() => ({}));
+  if (data.warning) {
+    const projNames = (data.hidden_projects || []).join(', ');
+    const msg = `이 사용자는 히든 프로젝트 [${projNames}]의 관리자입니다. 제외하면 관리 권한이 이양됩니다. 계속하시겠습니까?`;
+    const ok = await wuDialog.confirm({ title: '히든 프로젝트 경고', message: msg, danger: true });
+    if (!ok) {
+      document.querySelector(`#member-${userId} input[type="checkbox"]`).checked = !isActive;
+      return;
+    }
+    const res2 = await fetch(`/api/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, force: true }),
+    });
+    if (!res2.ok) {
+      const err2 = await res2.json().catch(() => ({}));
+      wuToast.error(err2.detail || '오류가 발생했습니다.');
+      document.querySelector(`#member-${userId} input[type="checkbox"]`).checked = !isActive;
+    }
   }
 }
 
