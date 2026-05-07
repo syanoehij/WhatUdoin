@@ -1,10 +1,20 @@
 {
   "groups": [
     {
-      "date": "2026-05-07",
+      "date": "2026-05-08",
       "phase": "40차 2단계",
       "phase_class": "phase-2",
       "entries": [
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 편집기 — 엑셀·파워포인트 표 붙여넣기 시 그림 대신 표로 삽입",
+          "detail_html": "<ul><li>엑셀 셀 범위·파워포인트 표를 복사해 편집기에 붙여넣기 하면 <code>image/*</code> 타입이 우선 처리되어 그림으로 삽입되던 문제</li><li>paste 핸들러 진입 시 클립보드의 <code>text/html</code>에 <code>&lt;table&gt;</code> 태그가 있으면 이미지 업로드 분기를 건너뛰고 Tiptap 기본 HTML paste 경로로 위임</li><li>일반 스크린샷·이미지 붙여넣기는 기존과 동일하게 동작</li><li>수정 파일: <code>static/js/wu-editor.js</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 뷰어 — 체크박스 히트 범위 과도하게 넓던 버그 수정",
+          "detail_html": "<ul><li>뷰어 모드에서 체크박스·텍스트와 거리가 먼 행 우측 빈 공간을 클릭해도 체크 상태가 변경되던 문제</li><li>클릭 가드를 2단계로 개선 — <code>input[type=&quot;checkbox&quot;]</code>·<code>label</code>·<code>.ck-linked-badge</code>만 1차 통과, <code>&lt;p&gt;</code> 클릭은 <code>Range.getClientRects()</code>로 실제 텍스트 우측 끝을 측정해 텍스트 영역(+8px) 밖이면 차단</li><li>텍스트 위 클릭·체크박스 직접 클릭은 기존대로 동작</li><li>수정 파일: <code>templates/check.html</code></li></ul>"
+        },
         {
           "icon": "🐛",
           "title_html": "<span class=\"cl-tag fix\">fix</span> 체크 에디터 — 일정 연결 시 마크다운 원문 표시 및 커서 위치 무시 버그 수정",

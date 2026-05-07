@@ -2797,6 +2797,10 @@
       }
 
       pmEl.addEventListener('paste', async (e) => {
+        // 엑셀/PPT는 클립보드에 text/html(<table>)과 image/png을 함께 제공.
+        // table HTML이 있으면 이미지 우선 처리를 건너뛰고 기본 HTML 붙여넣기 흐름으로 위임.
+        const html = e.clipboardData && e.clipboardData.getData('text/html');
+        if (html && /<table[\s>]/i.test(html)) return;
         const items = e.clipboardData && e.clipboardData.items;
         if (!items) return;
         for (const item of items) {

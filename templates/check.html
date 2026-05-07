@@ -2097,6 +2097,20 @@ function attachCheckboxHandlers(mdContent) {
         e.preventDefault();
         e.stopPropagation();
         if (_lockedByOther || _contentLocked) return;
+        // 빈 여백 클릭 무시 — 체크박스/라벨/텍스트 영역에서만 동작
+        const _ckGuard = e.target.closest('input[type="checkbox"], label, .ck-linked-badge');
+        if (!_ckGuard) {
+          const _ckP = e.target.closest('p');
+          if (!_ckP) return;
+          // p 내 텍스트 렌더링 우측 끝을 구하고, 클릭 X 좌표가 그 밖이면 차단
+          const _ckRange = document.createRange();
+          _ckRange.selectNodeContents(_ckP);
+          const _ckRects = _ckRange.getClientRects();
+          if (!_ckRects.length) return; // 빈 <p>는 차단
+          let _ckTextRight = 0;
+          for (const r of _ckRects) { if (r.right > _ckTextRight) _ckTextRight = r.right; }
+          if (e.clientX > _ckTextRight + 8) return;
+        }
         if (e.target.closest('.ck-linked-badge')) return; // 뱃지 클릭은 별도 처리
 
         if (li.dataset.htmlidx != null) {
