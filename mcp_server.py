@@ -333,9 +333,10 @@ async def get_kanban_item(ctx: Context, event_id: int) -> dict:
     내부적으로 get_event와 동일한 DB 함수를 사용합니다.
     삭제된 항목이나 존재하지 않는 id는 error 객체를 반환합니다.
     """
-    if _user_from_ctx(ctx) is None:
+    user = _user_from_ctx(ctx)
+    if user is None:
         raise PermissionError("인증이 필요합니다.")
-    result = db.get_event_for_mcp(event_id)
+    result = db.get_event_for_mcp(event_id, viewer=user)
     if result is None:
         return {"error": "not_found", "id": event_id, "reason": "칸반 항목이 존재하지 않거나 접근 권한이 없습니다."}
     return result

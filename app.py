@@ -841,6 +841,7 @@ async def bulk_checklist_visibility(request: Request):
     user = _require_editor(request)
     data = await request.json()
     project  = data.get("project")   # None 또는 "" → 미지정, 문자열 → 해당 프로젝트
+    _assert_can_assign_to_project(user, project or None)
     raw = data.get("is_public", 1)
     is_public = None if raw is None else (1 if raw else 0)
     is_active_raw = data.get("is_active")
@@ -859,6 +860,7 @@ async def bulk_event_visibility(request: Request):
     user = _require_editor(request)
     data = await request.json()
     project  = data.get("project")   # None 또는 "" → 미지정, 문자열 → 해당 프로젝트
+    _assert_can_assign_to_project(user, project or None)
     raw = data.get("is_public", 1)
     is_public = None if raw is None else (1 if raw else 0)
     is_active_raw = data.get("is_active")
@@ -2153,6 +2155,16 @@ def api_project_list(request: Request):
     return db.get_unified_project_list(viewer=user)
 
 
+def _publish_project_changed(name: str | None, action: str, project: dict | None = None):
+    """Public SSE payload must not disclose hidden project names."""
+    publish_name = name
+    if name:
+        proj = project if project is not None else db.get_project_by_name(name)
+        if proj and proj.get("is_hidden"):
+            publish_name = None
+    wu_broker.publish("projects.changed", {"name": publish_name, "action": action})
+
+
 # ── 프로젝트 관리 API ────────────────────────────────────
 
 @app.get("/api/manage/projects")
@@ -2177,7 +2189,7 @@ async def manage_create_project(request: Request):
         proj_id = db.create_project(name, color, memo)
     except sqlite3.IntegrityError:
         raise HTTPException(status_code=409, detail="같은 이름의 프로젝트가 이미 있습니다.")
-    wu_broker.publish("projects.changed", {"name": name, "action": "create"})
+    _publish_project_changed(name, "create")
     return {"id": proj_id, "name": name}
 
 
@@ -2194,10 +2206,13 @@ async def manage_rename_project(name: str, request: Request):
     force    = data.get("force", False)
     if not new_name:
         raise HTTPException(status_code=400, detail="새 이름을 입력하세요.")
+    target_proj = db.get_project(new_name) if new_name != name else None
+    if target_proj and target_proj.get("is_hidden") and not auth.can_edit_project(user, target_proj):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
     if new_name != name and not force and db.project_name_exists(new_name):
         raise HTTPException(status_code=409, detail=f'"{new_name}" 프로젝트가 이미 존재합니다. 병합하시겠습니까?')
     db.rename_project(name, new_name, merge=bool(force))
-    wu_broker.publish("projects.changed", {"name": new_name, "action": "update"})
+    _publish_project_changed(new_name, "update")
     return {"ok": True}
 
 
@@ -2211,7 +2226,7 @@ async def manage_project_status(name: str, request: Request):
     data = await request.json()
     is_active = 1 if data.get("is_active", True) else 0
     db.update_project_status(name, is_active)
-    wu_broker.publish("projects.changed", {"name": name, "action": "update"})
+    _publish_project_changed(name, "update", project=proj)
     return {"ok": True}
 
 
@@ -2226,7 +2241,7 @@ async def manage_project_privacy(name: str, request: Request):
     data = await request.json()
     is_private = 1 if data.get("is_private") else 0
     db.update_project_privacy(name, is_private)
-    wu_broker.publish("projects.changed", {"name": name, "action": "update"})
+    _publish_project_changed(name, "update", project=proj)
     return {"ok": True}
 
 
@@ -2240,7 +2255,7 @@ async def manage_project_memo(name: str, request: Request):
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     db.update_project_memo(name, data.get("memo"))
-    wu_broker.publish("projects.changed", {"name": name, "action": "update"})
+    _publish_project_changed(name, "update", project=proj)
     return {"ok": True}
 
 
@@ -2271,7 +2286,7 @@ async def manage_project_color(name: str, request: Request):
     data = await request.json()
     color = data.get("color", "").strip() or None
     db.update_project_color(name, color)
-    wu_broker.publish("projects.changed", {"name": name, "action": "update"})
+    _publish_project_changed(name, "update", project=proj)
     return {"ok": True}
 
 
@@ -2285,7 +2300,7 @@ async def manage_project_dates(name: str, request: Request):
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
     data = await request.json()
     db.update_project_dates(name, data.get("start_date"), data.get("end_date"))
-    wu_broker.publish("projects.changed", {"name": name, "action": "update"})
+    _publish_project_changed(name, "update", project=proj)
     return {"ok": True}
 
 
@@ -2334,7 +2349,7 @@ async def manage_project_milestones(name: str, request: Request):
         db.set_project_milestones(name, cleaned)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    wu_broker.publish("projects.changed", {"name": name, "action": "update"})
+    _publish_project_changed(name, "update", project=proj)
     return {"ok": True, "milestones": cleaned}
 
 
@@ -2555,7 +2570,7 @@ async def manage_delete_project(name: str, request: Request):
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
     db.delete_project(name, deleted_by=user["name"], team_id=user.get("team_id"))
     # 프로젝트 삭제는 이벤트에도 영향 → 두 채널 모두 publish
-    wu_broker.publish("projects.changed", {"name": name, "action": "delete"})
+    _publish_project_changed(name, "delete", project=proj)
     wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": user.get("team_id")})
     return {"ok": True}
 

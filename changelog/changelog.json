@@ -29,6 +29,11 @@
           "icon": "🔐",
           "title_html": "<span class=\"cl-tag fix\">fix</span> 히든 프로젝트 — 쓰기 우회·정보 누출 전면 차단 (BLOCKER 5건 + HIGH 3건)",
           "detail_html": "<ul><li>공통 헬퍼 3개 추가: <code>_assert_can_assign_to_project</code>(쓰기 경로 멤버십 강제), <code>_assert_assignees_in_hidden_project</code>(담당자 화이트리스트), <code>_filter_visible_events</code>(읽기 경로 히든 필터)</li><li>쓰기 우회 차단 7곳: <code>POST /api/manage/projects/{name}/events</code> · <code>PUT /api/events/{id}</code> · <code>PUT /api/manage/events/{id}</code> · <code>POST /api/checklists</code> · <code>PATCH /api/checklists/{id}</code> · <code>POST /api/ai/confirm</code>(저장 루프) · <code>POST /api/events</code>(담당자 검증) — 비멤버 403, AI confirm은 skipped 분류</li><li>읽기 누출 차단 6곳: <code>GET /api/conflicts</code> · <code>POST /api/events/check-conflicts</code> · <code>POST /api/events/ai-conflict-review</code> · <code>POST /api/ai/confirm</code>(force=false 충돌 검사) · <code>GET /api/doc/{id}/events</code> · <code>GET /doc/{id}</code> — 비멤버에게 히든 일정 제목·ID 미노출</li><li><code>database.py check_conflicts</code> 쿼리에 <code>project</code> 컬럼 누락 수정 — 필터 무력화 버그 수정</li><li>수정 파일: <code>app.py</code>, <code>database.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 히든 프로젝트 — 관리 권한·SSE·팀 소속 경계 추가 강화",
+          "detail_html": "<ul><li>히든 프로젝트 관리 권한을 일반 멤버가 아닌 owner/admin으로 제한해 프로젝트 메모·색상·기간·마일스톤·삭제·export API 권한 상승을 차단</li><li><code>/api/events/bulk-visibility</code>와 <code>/api/checklists/bulk-visibility</code>에 히든 프로젝트 멤버십 검사를 추가해 비멤버의 일괄 공개상태·활성상태 변경을 403으로 차단</li><li>전역 SSE <code>projects.changed</code>에서 히든 프로젝트 이름을 <code>null</code>로 마스킹해 비로그인 구독자에게 프로젝트명이 노출되지 않도록 보정</li><li>일반 프로젝트 rename/merge가 히든 프로젝트명을 대상으로 강제 병합되는 우회를 차단</li><li>히든 프로젝트 생성 및 기존 데이터 보정 시 <code>team_id</code>를 owner 소속팀으로 채우고, 팀 제외 시 기존 owner 멤버십 제거 및 active·same-team·non-admin 멤버에게만 자동 이양되도록 강화</li><li>MCP <code>get_kanban_item</code>이 viewer 권한을 전달하도록 수정해 owner/member만 히든 칸반 상세를 조회하고 비멤버는 <code>not_found</code>가 반환되게 수정</li><li>실제 재시작된 <code>https://localhost:8443</code> 서버에서 비로그인·비멤버·일반 멤버·owner 기준으로 칸반, 일정/체크리스트 직접 조회, bulk visibility, export, SSE 마스킹을 재검증</li><li>수정 파일: <code>app.py</code>, <code>auth.py</code>, <code>database.py</code>, <code>mcp_server.py</code></li></ul>"
         }
       ]
     },

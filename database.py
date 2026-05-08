@@ -252,6 +252,19 @@ def init_db():
             ("is_hidden",  "INTEGER DEFAULT 0"),
             ("owner_id",   "INTEGER"),
         ])
+        if _table_exists(conn, "projects") and _table_exists(conn, "users"):
+            conn.execute("""
+                UPDATE projects
+                   SET team_id = (SELECT u.team_id FROM users u WHERE u.id = projects.owner_id)
+                 WHERE is_hidden = 1
+                   AND team_id IS NULL
+                   AND owner_id IS NOT NULL
+                   AND EXISTS (
+                       SELECT 1 FROM users u
+                        WHERE u.id = projects.owner_id
+                          AND u.team_id IS NOT NULL
+                   )
+            """)
         # ── project_members (히든 프로젝트 멤버) ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS project_members (
@@ -1701,8 +1714,9 @@ def create_hidden_project(name: str, color: str, memo: str, owner_id: int) -> di
         if exists:
             return None
         cur = conn.execute(
-            "INSERT INTO projects (name, color, memo, is_hidden, owner_id) VALUES (?, ?, ?, 1, ?)",
-            (name, color or None, (memo or "").strip() or None, owner_id)
+            """INSERT INTO projects (name, color, memo, is_hidden, owner_id, team_id)
+               VALUES (?, ?, ?, 1, ?, (SELECT team_id FROM users WHERE id = ?))""",
+            (name, color or None, (memo or "").strip() or None, owner_id, owner_id)
         )
         project_id = cur.lastrowid
         conn.execute(
@@ -1730,7 +1744,16 @@ def is_hidden_project_visible(project_id: int, user: dict) -> bool:
         return True
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?",
+            """SELECT 1
+               FROM project_members pm
+               JOIN users u ON u.id = pm.user_id
+               JOIN projects p ON p.id = pm.project_id
+               WHERE pm.project_id = ?
+                 AND pm.user_id = ?
+                 AND u.is_active = 1
+                 AND u.team_id IS NOT NULL
+                 AND p.team_id IS NOT NULL
+                 AND u.team_id = p.team_id""",
             (project_id, user["id"])
         ).fetchone()
     return row is not None
@@ -1795,9 +1818,11 @@ def add_hidden_project_member(project_id: int, user_id: int, owner_id: int) -> b
             "SELECT team_id FROM users WHERE id = ?", (owner_id,)
         ).fetchone()
         target_row = conn.execute(
-            "SELECT team_id, role FROM users WHERE id = ?", (user_id,)
+            "SELECT team_id, role, is_active FROM users WHERE id = ?", (user_id,)
         ).fetchone()
         if not owner_row or not target_row:
+            return False
+        if not target_row["is_active"]:
             return False
         if target_row["role"] == "admin":
             return False
@@ -1845,7 +1870,17 @@ def transfer_hidden_project_owner(project_id: int, new_owner_id: int, requester_
         if not proj or proj["owner_id"] != requester_id:
             return False
         member = conn.execute(
-            "SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?",
+            """SELECT 1
+               FROM project_members pm
+               JOIN users u ON u.id = pm.user_id
+               JOIN projects p ON p.id = pm.project_id
+               WHERE pm.project_id = ?
+                 AND pm.user_id = ?
+                 AND u.is_active = 1
+                 AND u.team_id IS NOT NULL
+                 AND p.team_id IS NOT NULL
+                 AND u.team_id = p.team_id
+                 AND u.role != 'admin'""",
             (project_id, new_owner_id)
         ).fetchone()
         if not member:
@@ -1864,7 +1899,17 @@ def admin_change_hidden_project_owner(project_id: int, new_owner_id: int) -> boo
     """
     with get_conn() as conn:
         member = conn.execute(
-            "SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?",
+            """SELECT 1
+               FROM project_members pm
+               JOIN users u ON u.id = pm.user_id
+               JOIN projects p ON p.id = pm.project_id
+               WHERE pm.project_id = ?
+                 AND pm.user_id = ?
+                 AND u.is_active = 1
+                 AND u.team_id IS NOT NULL
+                 AND p.team_id IS NOT NULL
+                 AND u.team_id = p.team_id
+                 AND u.role != 'admin'""",
             (project_id, new_owner_id)
         ).fetchone()
         if not member:
@@ -3320,9 +3365,25 @@ def transfer_hidden_projects_on_removal(user_id: int, hidden_projects: list):
         for proj in hidden_projects:
             proj_id = proj["id"]
             next_owner = conn.execute(
-                "SELECT user_id FROM project_members WHERE project_id = ? AND user_id != ? ORDER BY added_at ASC LIMIT 1",
+                """SELECT pm.user_id
+                   FROM project_members pm
+                   JOIN users u ON u.id = pm.user_id
+                   JOIN projects p ON p.id = pm.project_id
+                   WHERE pm.project_id = ?
+                     AND pm.user_id != ?
+                     AND u.is_active = 1
+                     AND u.team_id IS NOT NULL
+                     AND p.team_id IS NOT NULL
+                     AND u.team_id = p.team_id
+                     AND u.role != 'admin'
+                   ORDER BY pm.added_at ASC
+                   LIMIT 1""",
                 (proj_id, user_id)
             ).fetchone()
+            conn.execute(
+                "DELETE FROM project_members WHERE project_id = ? AND user_id = ?",
+                (proj_id, user_id)
+            )
             if next_owner:
                 conn.execute(
                     "UPDATE projects SET owner_id = ? WHERE id = ?",

@@ -85,8 +85,7 @@ def can_edit_project(user, project: dict) -> bool:
     if user.get("role") == "admin":
         return True
     if project.get("is_hidden"):
-        proj_id = project.get("id")
-        return proj_id is not None and db.is_hidden_project_visible(proj_id, user)
+        return project.get("owner_id") == user.get("id")
     proj_team = project.get("team_id")
     if proj_team is not None:
         return proj_team == user.get("team_id")
