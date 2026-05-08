@@ -18,6 +18,8 @@ var COLUMNS = [
 
 let _allProjects = [];
 let _allMembers  = [];
+let _hiddenProjectNames = new Set();   // is_hidden=true인 프로젝트 이름
+let _hiddenProjectMembers = {};        // {projectName: [memberName, ...]}
 let _allParentEvents = [];  // 상위 업무 오토컴플릿용
 let _assigneeTags = [];
 let _fpInstance = null;
@@ -84,8 +86,13 @@ function ensureWUEditorAssets() {
 
 // ── 프로젝트 자동완성 ─────────────────────────────────────
 async function loadProjects() {
-  const res = await fetch('/api/projects');
-  _allProjects = await res.json();
+  const [namesRes, metaRes] = await Promise.all([
+    fetch('/api/projects'),
+    fetch('/api/projects-meta'),
+  ]);
+  _allProjects = await namesRes.json();
+  const meta = await metaRes.json();
+  _hiddenProjectNames = new Set(meta.filter(p => p.is_hidden).map(p => p.name));
 }
 
 async function loadMembers() {
@@ -108,6 +115,12 @@ function filterProjects(val) {
 function selectProject(val) {
   document.getElementById('f-project').value = val;
   document.getElementById('project-dropdown').classList.add('hidden');
+  // 히든 프로젝트 선택 시 멤버 목록 사전 캐시
+  if (_hiddenProjectNames.has(val) && !_hiddenProjectMembers[val]) {
+    fetch(`/api/hidden-project-assignees?project=${encodeURIComponent(val)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(names => { _hiddenProjectMembers[val] = names; });
+  }
   // 하위 업무 유형이면 상위 업무 입력 상태 갱신
   if (_currentEventType === 'subtask') {
     _updateParentInputState();
@@ -260,7 +273,11 @@ function handleAssigneeKey(e) {
 
 function filterAssignees(val) {
   const dd = document.getElementById('assignee-dropdown');
-  const filtered = _allMembers.filter(m =>
+  const proj = (document.getElementById('f-project')?.value || '').trim();
+  const pool = (_hiddenProjectNames.has(proj) && _hiddenProjectMembers[proj])
+    ? _hiddenProjectMembers[proj]
+    : _allMembers;
+  const filtered = pool.filter(m =>
     !_assigneeTags.includes(m) && (!val || m.toLowerCase().includes(val.toLowerCase()))
   );
   if (!filtered.length) { dd.classList.add('hidden'); return; }

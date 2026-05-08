@@ -1331,7 +1331,9 @@ function renderProjList() {
   container.querySelectorAll('.ck-proj-dyn').forEach(el => el.remove());
   container.querySelector('[data-proj=""]').classList.toggle('active', _curProj === null || _curProj === '');
 
-  const fromServer = (_projFilter === 'done' ? ALL_DONE_PROJECTS : ALL_PROJECTS).map(p => p.name).filter(Boolean);
+  const serverProjs = _projFilter === 'done' ? ALL_DONE_PROJECTS : ALL_PROJECTS;
+  const hiddenProjNames = new Set(serverProjs.filter(p => p.is_hidden).map(p => p.name));
+  const fromServer = serverProjs.map(p => p.name).filter(Boolean);
   const fromCklists = modeList.map(c => c.project).filter(Boolean);
   const allProjSet = [...new Set([...fromServer, ...fromCklists])];
   const hasUnassigned = allProjSet.includes('미지정') || modeList.some(c => !c.project || !c.project.trim());
@@ -1346,7 +1348,7 @@ function renderProjList() {
     el.onclick = () => selectProject(proj);
     el.innerHTML = `
       <span class="ck-proj-dot" style="background:${projColor(proj)}"></span>
-      <span class="ck-proj-label">${proj}</span>
+      <span class="ck-proj-label">${proj}${hiddenProjNames.has(proj) ? ' 🔒' : ''}</span>
       <span class="ck-dot"></span>
       <span class="ck-proj-cnt">${counts[proj] || 0}</span>
     `;

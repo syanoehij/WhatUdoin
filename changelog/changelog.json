@@ -2,6 +2,33 @@
   "groups": [
     {
       "date": "2026-05-08",
+      "phase": "41차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "✨",
+          "title_html": "<span class=\"cl-tag feat\">feat</span> 히든 프로젝트 — 체크·칸반 🔒 표시 및 담당자 자동완성 개선",
+          "detail_html": "<ul><li>체크리스트 사이드바 프로젝트 목록에서 히든 프로젝트 이름 옆에 🔒 표시</li><li>칸반 카드 프로젝트 뱃지에 🔒 표시 — 백엔드 <code>get_kanban_events</code> JOIN으로 <code>project_is_hidden</code> 플래그 반환</li><li>일정 등록·편집 모달에서 히든 프로젝트 선택 시 담당자 자동완성 후보를 해당 프로젝트 멤버만으로 제한 — <code>/api/projects-meta</code>, <code>/api/hidden-project-assignees</code> 엔드포인트 신규 추가</li><li>수정 파일: <code>templates/check.html</code>, <code>templates/kanban.html</code>, <code>static/js/event-modal.js</code>, <code>app.py</code>, <code>database.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 히든 프로젝트 — 외부·내부 노출 차단 전면 강화",
+          "detail_html": "<ul><li>비로그인 외부 노출 차단: <code>is_private = 1</code> 조건을 <code>(is_private = 1 OR is_hidden = 1)</code>으로 전체 11곳 일괄 수정 — 캘린더·칸반·체크·검색 API 모두 적용</li><li>칸반 <code>private_clause</code>의 <code>is_public = 1</code> 우회 버그 수정 — 히든 프로젝트 소속이면 <code>is_public</code> 여부와 무관하게 비로그인 차단 (3개 함수)</li><li>로그인 비멤버 차단: <code>get_blocked_hidden_project_names(viewer)</code> 헬퍼 추가 — 칸반·체크리스트·MCP 전 함수에 적용, <code>_filter_events_by_visibility</code>에서 캘린더 API에도 적용</li><li><code>can_edit_project</code> 수정 — 히든 프로젝트는 멤버십 검사 후 편집 허용, 기존 <code>team_id IS NULL → True</code> 우회 차단</li><li><code>can_edit_event</code> · <code>can_edit_checklist</code> 수정 — 히든 프로젝트 소속 항목은 멤버만 수정 가능</li><li><code>_can_read_checklist</code> 수정 — 로그인 사용자라도 히든 프로젝트 비멤버면 체크리스트 열람 차단</li><li>히든 프로젝트 멤버 추가 후보에서 admin 제외</li><li>수정 파일: <code>database.py</code>, <code>auth.py</code>, <code>permissions.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> MCP 서버 — 히든 프로젝트 필터링 추가",
+          "detail_html": "<ul><li><code>list_projects</code> · <code>list_events</code> · <code>get_event</code> · <code>search_events</code> 4개 도구에 viewer 정보 전달 — 히든 프로젝트 비멤버에게 노출되던 항목 차단</li><li><code>search_all</code>의 이벤트·체크리스트 섹션에도 히든 프로젝트 post-filter 적용</li><li>수정 파일: <code>database.py</code>, <code>mcp_server.py</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 히든 프로젝트 멤버 모달 — confirm 알림 z-index 버그 수정",
+          "detail_html": "<ul><li>멤버 제거 클릭 시 wuDialog confirm이 멤버 관리 모달 아래로 깔리던 버그 수정</li><li><code>#wu-dialog-overlay</code> z-index 2200 → 3100, <code>#wu-toast-container</code> 3000 → 3200으로 상향 조정</li><li>수정 파일: <code>static/css/style.css</code></li></ul>"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-08",
       "phase": "40차 4단계",
       "phase_class": "phase-4",
       "entries": [

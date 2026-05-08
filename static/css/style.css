@@ -2580,7 +2580,7 @@ select.form-input {
   position: fixed;
   top: 64px;
   right: 16px;
-  z-index: 3000;
+  z-index: 3200;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2609,8 +2609,8 @@ select.form-input {
 .wu-toast.fade-out { opacity: 0; }
 
 /* ── wu-dialog ───────────────────────────────────── */
-/* 기존 sub-modal(z-index:2100)보다 위에 표시되어야 함 */
-#wu-dialog-overlay { z-index: 2200; }
+/* 인라인 z-index:3000 모달(pm-member-overlay 등)보다 위에 표시되어야 함 */
+#wu-dialog-overlay { z-index: 3100; }
 /* base.html 다른 모달들은 .icon-btn / .modal-actions 컨벤션을 사용하지만,
    wu-dialog는 별도 마크업(modal-close-btn / modal-body / modal-footer / modal-title /
    form-control)을 가지므로 해당 클래스에 대한 최소 스타일을 wu-dialog 스코프에서 정의. */

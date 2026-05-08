@@ -70,10 +70,11 @@ async def list_projects(ctx: Context, include_inactive: bool = False) -> list[di
     include_inactive=True로 설정하면 비활성(종료) 프로젝트도 포함합니다.
     반환 필드: name, color, is_active, start_date, end_date
     """
-    if _user_from_ctx(ctx) is None:
+    user = _user_from_ctx(ctx)
+    if user is None:
         raise PermissionError("인증이 필요합니다.")
     with db.get_conn() as conn:
-        return db.get_projects_for_mcp(conn, include_inactive=include_inactive)
+        return db.get_projects_for_mcp(conn, include_inactive=include_inactive, viewer=user)
 
 
 @mcp.tool()
@@ -100,10 +101,11 @@ async def list_events(
     - start_after: 이 날짜 이후 시작하는 일정만 (ISO 8601, 예: "2026-01-01" 또는 "2026-01-01T00:00:00")
     - end_before: 이 날짜 이전 종료하는 일정만 (ISO 8601, 예: "2026-12-31T23:59:59")
     """
-    if _user_from_ctx(ctx) is None:
+    user = _user_from_ctx(ctx)
+    if user is None:
         raise PermissionError("인증이 필요합니다.")
     with db.get_conn() as conn:
-        return db.get_events_filtered(conn, project=project, start_after=start_after, end_before=end_before)
+        return db.get_events_filtered(conn, project=project, start_after=start_after, end_before=end_before, viewer=user)
 
 
 @mcp.tool()
@@ -117,9 +119,10 @@ async def get_event(ctx: Context, event_id: int) -> dict:
 
     삭제된 일정이나 종료 프로젝트 소속 일정은 error 객체를 반환합니다.
     """
-    if _user_from_ctx(ctx) is None:
+    user = _user_from_ctx(ctx)
+    if user is None:
         raise PermissionError("인증이 필요합니다.")
-    result = db.get_event_for_mcp(event_id)
+    result = db.get_event_for_mcp(event_id, viewer=user)
     if result is None:
         return {"error": "not_found", "id": event_id, "reason": "이벤트가 존재하지 않거나 접근 권한이 없습니다."}
     return result
@@ -286,7 +289,7 @@ async def search_events(
         today = datetime.now().date()
         start_after = (today - timedelta(days=7)).isoformat()
         end_before = (today + timedelta(days=7)).isoformat()
-    return db.search_events_mcp(query=query, start_after=start_after, end_before=end_before)
+    return db.search_events_mcp(query=query, start_after=start_after, end_before=end_before, viewer=user)
 
 
 @mcp.tool()

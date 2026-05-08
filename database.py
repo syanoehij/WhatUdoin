@@ -623,6 +623,29 @@ def get_all_events():
     return [dict(r) for r in rows]
 
 
+def get_blocked_hidden_project_names(viewer) -> set[str]:
+    """viewer가 접근할 수 없는 히든 프로젝트 이름 집합.
+    viewer=None(비로그인): 모든 히든 프로젝트 차단.
+    viewer=admin: 빈 셋(전체 접근).
+    viewer=일반 로그인: 멤버가 아닌 히든 프로젝트 차단.
+    """
+    if viewer and viewer.get("role") == "admin":
+        return set()
+    with get_conn() as conn:
+        if viewer is None:
+            rows = conn.execute(
+                "SELECT name FROM projects WHERE is_hidden = 1 AND deleted_at IS NULL"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT name FROM projects
+                   WHERE is_hidden = 1 AND deleted_at IS NULL
+                   AND id NOT IN (SELECT project_id FROM project_members WHERE user_id = ?)""",
+                (viewer["id"],)
+            ).fetchall()
+    return {r[0] for r in rows}
+
+
 def get_events_by_project_range(project: str, start_date: str, end_date: str, include_subtasks: bool = False) -> list[dict]:
     """특정 프로젝트의 날짜 범위 일정 조회 (반복 원본만, 완료 프로젝트 제외)"""
     type_filter = "('schedule', 'subtask')" if include_subtasks else "('schedule')"
@@ -989,8 +1012,12 @@ def get_kanban_events(team_id: int = None, viewer=None) -> list[dict]:
           OR (
             e.is_public IS NULL
             AND e.project IS NOT NULL AND e.project != ''
-            AND e.project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+            AND e.project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
           )
+        )
+        AND (
+          e.project IS NULL OR e.project = ''
+          OR e.project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
         )
     """ if viewer is None else ""
     base_filter = f"""
@@ -1010,16 +1037,43 @@ def get_kanban_events(team_id: int = None, viewer=None) -> list[dict]:
         {private_clause}
     """
     with get_conn() as conn:
+        # visible_hidden_ids: 로그인 사용자가 접근 가능한 히든 프로젝트 ID 집합
+        visible_hidden_ids: set[int] = set()
+        if viewer:
+            if viewer.get("role") == "admin":
+                hidden_rows = conn.execute(
+                    "SELECT id FROM projects WHERE is_hidden = 1 AND deleted_at IS NULL"
+                ).fetchall()
+                visible_hidden_ids = {r[0] for r in hidden_rows}
+            else:
+                member_rows = conn.execute(
+                    "SELECT project_id FROM project_members WHERE user_id = ?", (viewer["id"],)
+                ).fetchall()
+                visible_hidden_ids = {r[0] for r in member_rows}
+        sql = """
+            SELECT e.*, COALESCE(p.is_hidden, 0) AS project_is_hidden, p.id AS _proj_id
+            FROM events e
+            LEFT JOIN projects p ON e.project = p.name AND p.deleted_at IS NULL
+        """
         if team_id:
             rows = conn.execute(
-                f"SELECT * FROM events e WHERE e.team_id = ? {base_filter} ORDER BY e.start_datetime",
+                f"{sql} WHERE e.team_id = ? {base_filter} ORDER BY e.start_datetime",
                 (team_id,)
             ).fetchall()
         else:
             rows = conn.execute(
-                f"SELECT * FROM events e WHERE 1=1 {base_filter} ORDER BY e.start_datetime"
+                f"{sql} WHERE 1=1 {base_filter} ORDER BY e.start_datetime"
             ).fetchall()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        # 로그인했지만 히든 프로젝트 비멤버는 제외
+        if d.get("project_is_hidden") and viewer is not None:
+            if d.get("_proj_id") not in visible_hidden_ids:
+                continue
+        d.pop("_proj_id", None)
+        result.append(d)
+    return result
 
 
 _MISSING = object()
@@ -1724,6 +1778,7 @@ def get_hidden_project_addable_members(project_id: int) -> list[dict]:
                WHERE u.team_id = ?
                AND u.is_active = 1
                AND u.team_id IS NOT NULL
+               AND u.role != 'admin'
                AND u.id NOT IN (SELECT user_id FROM project_members WHERE project_id = ?)
                ORDER BY u.name""",
             (owner_team_id, project_id)
@@ -2779,12 +2834,12 @@ def get_checklists(project: str = None, viewer=None, active_only: bool | None = 
           OR (
             is_public IS NULL
             AND project IS NOT NULL AND project != ''
-            AND project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+            AND project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
           )
         )
         AND (
           project IS NULL OR project = ''
-          OR project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+          OR project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
         )
     """ if viewer is None else ""
     active_filter = ""
@@ -2812,7 +2867,11 @@ def get_checklists(project: str = None, viewer=None, active_only: bool | None = 
                 f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC",
                 (project,)
             ).fetchall()
-    return [dict(r) for r in rows]
+    result = [dict(r) for r in rows]
+    blocked = get_blocked_hidden_project_names(viewer)
+    if blocked:
+        result = [r for r in result if not r.get("project") or r["project"] not in blocked]
+    return result
 
 
 def set_checklist_active(checklist_id: int, is_active: int):
@@ -3399,12 +3458,12 @@ def get_mcp_token_meta(user_id: int) -> dict:
     }
 
 
-def get_event_for_mcp(event_id: int) -> dict | None:
+def get_event_for_mcp(event_id: int, viewer=None) -> dict | None:
     """MCP용 이벤트 조회: ① visibility check → ② get_event() 호출.
     종료 프로젝트(is_active=0) 소속 이벤트, 삭제된 이벤트는 None 반환."""
     with get_conn() as conn:
         row = conn.execute(
-            """SELECT 1 FROM events
+            """SELECT project FROM events
                WHERE id = ?
                  AND deleted_at IS NULL
                  AND (project IS NULL OR project = ''
@@ -3413,10 +3472,15 @@ def get_event_for_mcp(event_id: int) -> dict | None:
         ).fetchone()
     if not row:
         return None
+    proj_name = row[0] if row else None
+    if proj_name:
+        blocked = get_blocked_hidden_project_names(viewer)
+        if proj_name in blocked:
+            return None
     return get_event(event_id)
 
 
-def get_projects_for_mcp(conn, include_inactive: bool = False) -> list[dict]:
+def get_projects_for_mcp(conn, include_inactive: bool = False, viewer=None) -> list[dict]:
     """MCP용 프로젝트 목록 조회.
     deleted_at IS NULL인 프로젝트만 반환.
     include_inactive=False(기본값)이면 is_active=1 조건 추가.
@@ -3427,7 +3491,11 @@ def get_projects_for_mcp(conn, include_inactive: bool = False) -> list[dict]:
         query += " AND is_active = 1"
     query += " ORDER BY name"
     rows = conn.execute(query).fetchall()
-    return [dict(r) for r in rows]
+    result = [dict(r) for r in rows]
+    blocked = get_blocked_hidden_project_names(viewer)
+    if blocked:
+        result = [r for r in result if r["name"] not in blocked]
+    return result
 
 
 def get_events_filtered(
@@ -3435,6 +3503,7 @@ def get_events_filtered(
     project: str | None = None,
     start_after: str | None = None,
     end_before: str | None = None,
+    viewer=None,
 ) -> list[dict]:
     """MCP용 필터링된 이벤트 조회.
     기존 get_all_events()의 조건(deleted_at IS NULL, 비활성 프로젝트 제외)을 유지하면서
@@ -3461,7 +3530,11 @@ def get_events_filtered(
         params.append(end_before)
     query += " ORDER BY start_datetime"
     rows = conn.execute(query, params).fetchall()
-    return [dict(r) for r in rows]
+    result = [dict(r) for r in rows]
+    blocked = get_blocked_hidden_project_names(viewer)
+    if blocked:
+        result = [r for r in result if not r.get("project") or r["project"] not in blocked]
+    return result
 
 
 def get_all_meetings_summary(viewer=None):
@@ -3516,12 +3589,12 @@ def get_checklists_summary(project: str = None, viewer=None) -> list:
           OR (
             is_public IS NULL
             AND project IS NOT NULL AND project != ''
-            AND project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+            AND project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
           )
         )
         AND (
           project IS NULL OR project = ''
-          OR project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+          OR project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
         )
     """ if viewer is None else ""
     with get_conn() as conn:
@@ -3547,6 +3620,9 @@ def get_checklists_summary(project: str = None, viewer=None) -> list:
         d["item_count"] = item_count
         d["done_count"] = done_count
         result.append(d)
+    blocked = get_blocked_hidden_project_names(viewer)
+    if blocked:
+        result = [r for r in result if not r.get("project") or r["project"] not in blocked]
     return result
 
 
@@ -3585,8 +3661,11 @@ def search_all(query: str, type: str = None, viewer=None,
                 params.append(end_before)
             sql += " ORDER BY start_datetime"
             rows = conn.execute(sql, params).fetchall()
+            blocked_evt = get_blocked_hidden_project_names(viewer)
             for r in rows:
                 d = dict(r)
+                if blocked_evt and d.get("project") and d["project"] in blocked_evt:
+                    continue
                 d["type"] = "event"
                 results.append(d)
 
@@ -3640,12 +3719,12 @@ def search_all(query: str, type: str = None, viewer=None,
                   OR (
                     is_public IS NULL
                     AND project IS NOT NULL AND project != ''
-                    AND project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+                    AND project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
                   )
                 )
                 AND (
                   project IS NULL OR project = ''
-                  OR project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+                  OR project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
                 )
             """ if viewer is None else ""
             rows = conn.execute(
@@ -3657,8 +3736,11 @@ def search_all(query: str, type: str = None, viewer=None,
                     ORDER BY updated_at DESC""",
                 (like, like)
             ).fetchall()
+            blocked_cl = get_blocked_hidden_project_names(viewer) if viewer is not None else set()
             for r in rows:
                 d = dict(r)
+                if blocked_cl and d.get("project") and d["project"] in blocked_cl:
+                    continue
                 d["type"] = "checklist"
                 results.append(d)
 
@@ -3666,7 +3748,7 @@ def search_all(query: str, type: str = None, viewer=None,
 
 
 def search_events_mcp(query: str, start_after: str | None = None,
-                      end_before: str | None = None) -> list[dict]:
+                      end_before: str | None = None, viewer=None) -> list[dict]:
     """MCP search_events 도구용 이벤트 키워드 검색.
     - query: 검색 키워드. 비어있으면 빈 리스트 반환.
     - start_after/end_before: 날짜 겹침 조건 적용 (search_all events 부분과 동일 로직).
@@ -3692,7 +3774,11 @@ def search_events_mcp(query: str, start_after: str | None = None,
     sql += " ORDER BY start_datetime"
     with get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()
-    return [dict(r) for r in rows]
+    result = [dict(r) for r in rows]
+    blocked = get_blocked_hidden_project_names(viewer)
+    if blocked:
+        result = [r for r in result if not r.get("project") or r["project"] not in blocked]
+    return result
 
 
 def get_kanban_summary(project: str | None = None, viewer=None) -> list[dict]:
@@ -3708,8 +3794,12 @@ def get_kanban_summary(project: str | None = None, viewer=None) -> list[dict]:
           OR (
             e.is_public IS NULL
             AND e.project IS NOT NULL AND e.project != ''
-            AND e.project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+            AND e.project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
           )
+        )
+        AND (
+          e.project IS NULL OR e.project = ''
+          OR e.project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
         )
     """ if viewer is None else ""
     base_filter = f"""
@@ -3743,7 +3833,11 @@ def get_kanban_summary(project: str | None = None, viewer=None) -> list[dict]:
                 f"{select} WHERE e.project = ? {base_filter} ORDER BY e.start_datetime",
                 (project,)
             ).fetchall()
-    return [dict(r) for r in rows]
+    result = [dict(r) for r in rows]
+    blocked = get_blocked_hidden_project_names(viewer)
+    if blocked:
+        result = [r for r in result if not r.get("project") or r["project"] not in blocked]
+    return result
 
 
 def search_kanban_mcp(query: str, project: str | None = None, viewer=None) -> list[dict]:
@@ -3762,8 +3856,12 @@ def search_kanban_mcp(query: str, project: str | None = None, viewer=None) -> li
           OR (
             e.is_public IS NULL
             AND e.project IS NOT NULL AND e.project != ''
-            AND e.project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+            AND e.project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
           )
+        )
+        AND (
+          e.project IS NULL OR e.project = ''
+          OR e.project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
         )
     """ if viewer is None else ""
     base_filter = f"""
@@ -3799,7 +3897,11 @@ def search_kanban_mcp(query: str, project: str | None = None, viewer=None) -> li
                 f"{select} WHERE e.title LIKE ? AND e.project = ? {base_filter} ORDER BY e.start_datetime",
                 (like, project)
             ).fetchall()
-    return [dict(r) for r in rows]
+    result = [dict(r) for r in rows]
+    blocked = get_blocked_hidden_project_names(viewer)
+    if blocked:
+        result = [r for r in result if not r.get("project") or r["project"] not in blocked]
+    return result
 
 
 def search_documents_mcp(query: str, viewer=None) -> list[dict]:
@@ -3868,12 +3970,12 @@ def search_checklists_mcp(query: str, project: str | None = None, viewer=None) -
           OR (
             is_public IS NULL
             AND project IS NOT NULL AND project != ''
-            AND project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+            AND project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
           )
         )
         AND (
           project IS NULL OR project = ''
-          OR project NOT IN (SELECT name FROM projects WHERE is_private = 1 AND deleted_at IS NULL)
+          OR project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
         )
     """ if viewer is None else ""
     with get_conn() as conn:
@@ -3915,4 +4017,7 @@ def search_checklists_mcp(query: str, project: str | None = None, viewer=None) -
         d["item_count"] = item_count
         d["done_count"] = done_count
         result.append(d)
+    blocked = get_blocked_hidden_project_names(viewer)
+    if blocked:
+        result = [r for r in result if not r.get("project") or r["project"] not in blocked]
     return result

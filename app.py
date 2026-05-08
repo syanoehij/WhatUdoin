@@ -1451,8 +1451,12 @@ def _filter_events_by_visibility(events: list, user) -> list:
     """비공개 일정 필터링. user=None이면 is_public=1만, 있으면 같은 팀 or is_public=1."""
     if user and user.get("role") == "admin":
         return events
+    blocked_hidden = db.get_blocked_hidden_project_names(user)
     result = []
     for e in events:
+        proj = e.get("project") or ""
+        if proj and proj in blocked_hidden:
+            continue
         pub = e.get("is_public")
         team = e.get("team_id")
         if pub == 1:
@@ -2084,6 +2088,25 @@ def list_projects(request: Request):
     if not user:
         projects = [p for p in projects if not p.get("is_private")]
     return [p["name"] for p in projects]
+
+
+@app.get("/api/projects-meta")
+def list_projects_meta(request: Request):
+    """이벤트 모달 담당자 필터용 — 프로젝트별 is_hidden 플래그 반환."""
+    user = auth.get_current_user(request)
+    projects = db.get_unified_project_list(viewer=user)
+    if not user:
+        projects = [p for p in projects if not p.get("is_private") and not p.get("is_hidden")]
+    return [{"name": p["name"], "is_hidden": bool(p.get("is_hidden"))} for p in projects]
+
+
+@app.get("/api/hidden-project-assignees")
+def hidden_project_assignees(request: Request, project: str):
+    """히든 프로젝트 일정 등록 시 담당자 자동완성용 — 멤버면 누구나 호출 가능."""
+    user = _require_editor(request)
+    proj = _get_hidden_proj_or_404(project, user)
+    members = db.get_hidden_project_members(proj["id"])
+    return [m["name"] for m in members]
 
 
 @app.get("/api/project-timeline")

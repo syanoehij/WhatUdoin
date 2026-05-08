@@ -52,6 +52,12 @@ def can_edit_event(user, event: dict) -> bool:
         return False
     if is_admin(user):
         return True
+    proj_name = event.get("project") or ""
+    if proj_name:
+        proj = db.get_project(proj_name)
+        if proj and proj.get("is_hidden"):
+            proj_id = proj.get("id")
+            return proj_id is not None and db.is_hidden_project_visible(proj_id, user)
     event_team = event.get("team_id")
     if event_team is None:
         return True
@@ -62,6 +68,12 @@ def can_edit_checklist(user, checklist: dict) -> bool:
     """해당 사용자가 이 체크리스트를 수정할 수 있는지 확인"""
     if user.get("role") == "admin":
         return True
+    proj_name = checklist.get("project") or ""
+    if proj_name:
+        proj = db.get_project(proj_name)
+        if proj and proj.get("is_hidden"):
+            proj_id = proj.get("id")
+            return proj_id is not None and db.is_hidden_project_visible(proj_id, user)
     cl_team = checklist.get("team_id")
     if cl_team is None:
         return True
@@ -72,6 +84,9 @@ def can_edit_project(user, project: dict) -> bool:
     """해당 사용자가 이 프로젝트를 수정할 수 있는지 확인"""
     if user.get("role") == "admin":
         return True
+    if project.get("is_hidden"):
+        proj_id = project.get("id")
+        return proj_id is not None and db.is_hidden_project_visible(proj_id, user)
     proj_team = project.get("team_id")
     if proj_team is not None:
         return proj_team == user.get("team_id")

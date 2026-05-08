@@ -477,7 +477,7 @@ function cardHTML(e) {
   const color = projectColor(e.project);
   const tColor = badgeTextColor(color);
   const projectBadge = e.project
-    ? `<div class="card-project-badge" style="background:${color};color:${tColor}">${esc(e.project)}</div>`
+    ? `<div class="card-project-badge" style="background:${color};color:${tColor}">${esc(e.project)}${e.project_is_hidden ? ' 🔒' : ''}</div>`
     : '';
   const assignees = (e.assignee || '').split(',').map(s => s.trim()).filter(Boolean);
   const assigneeBadges = assignees.map(a => `<span class="card-assignee">${esc(a)}</span>`).join('');
