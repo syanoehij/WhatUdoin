@@ -107,8 +107,61 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+def _upload_url_from_static_path(path: str) -> str:
+    return "/uploads/meetings/" + path.replace("\\", "/").lstrip("/")
+
+
+def _can_read_uploaded_file(url: str, user) -> bool:
+    refs = db.find_upload_references(url)
+    if not refs:
+        return True
+    for ref in refs:
+        if ref.get("deleted"):
+            if _can_read_deleted_upload_ref(ref, user):
+                return True
+            continue
+        if ref["type"] == "document":
+            doc = db.get_meeting(ref["id"])
+            if doc and _can_read_doc(user, doc):
+                return True
+        elif ref["type"] == "checklist":
+            checklist = db.get_checklist(ref["id"])
+            if checklist and _can_read_checklist(user, checklist):
+                return True
+    return False
+
+
+def _can_read_deleted_upload_ref(ref: dict, user) -> bool:
+    if not user:
+        return False
+    item_type = "meeting" if ref["type"] == "document" else ref["type"]
+    if item_type not in ("meeting", "checklist"):
+        return False
+    hidden_project = db.get_trash_item_hidden_project(item_type, ref["id"])
+    if hidden_project:
+        if user.get("role") == "admin":
+            return True
+        if hidden_project.get("deleted_at"):
+            return hidden_project.get("owner_id") == user.get("id")
+        return db.is_hidden_project_visible(hidden_project["id"], user)
+    if user.get("role") == "admin":
+        return True
+    item_team = db.get_trash_item_team(item_type, ref["id"])
+    return item_team is not None and item_team == user.get("team_id")
+
+
+class _ProtectedMeetingStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        request = Request(scope)
+        user = auth.get_current_user(request)
+        if not _can_read_uploaded_file(_upload_url_from_static_path(path), user):
+            return Response(status_code=404)
+        return await super().get_response(path, scope)
+
+
 app.mount("/static",          StaticFiles(directory=str(_BASE_DIR / "static")),   name="static")
-app.mount("/uploads/meetings", StaticFiles(directory=str(MEETINGS_DIR)),           name="meetings_files")
+app.mount("/uploads/meetings", _ProtectedMeetingStaticFiles(directory=str(MEETINGS_DIR)), name="meetings_files")
 templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
 
 def _asset_mtime(abs_path: str) -> str:
@@ -734,6 +787,8 @@ def check_editor_page(request: Request, checklist_id: int):
     item = db.get_checklist(checklist_id)
     if not item:
         return RedirectResponse("/check")
+    if not auth.can_edit_checklist(user, item):
+        raise HTTPException(status_code=403, detail="Access denied.")
     all_projs = db.get_all_projects_with_events(viewer=user)
     projects = [p for p in all_projs if p.get("is_active", 1) and p.get("name") != "미지정"]
     lock = db.get_checklist_lock(checklist_id)
@@ -768,6 +823,8 @@ def check_history_page(request: Request, checklist_id: int):
     item = db.get_checklist(checklist_id)
     if not item:
         return RedirectResponse("/check")
+    if not _can_read_checklist(user, item):
+        raise HTTPException(status_code=404)
     histories = db.get_checklist_histories(checklist_id)
     return templates.TemplateResponse(
         request, "check_history.html",
@@ -1042,7 +1099,12 @@ def lock_checklist(checklist_id: int, request: Request):
 
 @app.put("/api/checklists/{checklist_id}/lock")
 def heartbeat_checklist_lock(checklist_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
+    item = db.get_checklist(checklist_id)
+    if not item:
+        raise HTTPException(status_code=404)
+    if not auth.can_edit_checklist(user, item):
+        raise HTTPException(status_code=403, detail="Access denied.")
     tab_token = request.query_params.get("tab_token", "")
     ok = db.heartbeat_checklist_lock(checklist_id, tab_token)
     if not ok:
@@ -1056,6 +1118,11 @@ def heartbeat_checklist_lock(checklist_id: int, request: Request):
 def unlock_checklist(checklist_id: int, request: Request):
     user = auth.get_current_user(request)
     if user:
+        item = db.get_checklist(checklist_id)
+        if not item:
+            raise HTTPException(status_code=404)
+        if not auth.can_edit_checklist(user, item):
+            raise HTTPException(status_code=403, detail="Access denied.")
         tab_token = request.query_params.get("tab_token") or None
         if tab_token:  # tab_token 없으면 no-op — 다른 편집자 잠금 보호
             db.release_checklist_lock(checklist_id, tab_token)
@@ -1065,10 +1132,13 @@ def unlock_checklist(checklist_id: int, request: Request):
 
 @app.get("/api/checklists/{checklist_id}/lock")
 def get_checklist_lock_status(checklist_id: int, request: Request):
+    user = auth.get_current_user(request)
+    item = db.get_checklist(checklist_id)
+    if not item or not _can_read_checklist(user, item):
+        raise HTTPException(status_code=404)
     lock = db.get_checklist_lock(checklist_id)
     if not lock:
         return {"locked_by": None, "lock_type": None}
-    user = auth.get_current_user(request)
     lock_type = "self_tab" if (user and lock["user_name"] == user["name"]) else "other_user"
     return {"locked_by": lock["user_name"], "lock_type": lock_type}
 
@@ -1121,7 +1191,7 @@ def get_notification_count(request: Request):
     user = auth.get_current_user(request)
     if not user:
         return {"count": 0}
-    return {"count": db.get_notification_count(user["name"])}
+    return {"count": db.get_notification_count(user["name"], viewer=user)}
 
 
 @app.get("/api/notifications/pending")
@@ -1129,7 +1199,7 @@ def get_pending_notifications(request: Request):
     user = auth.get_current_user(request)
     if not user:
         return []
-    return db.get_pending_notifications(user["name"])
+    return db.get_pending_notifications(user["name"], viewer=user)
 
 
 @app.post("/api/notifications/read-all")
@@ -1851,7 +1921,7 @@ def get_milestone_calendar_events(request: Request):
     if not user:
         return []
     proj_colors = db.get_project_colors()
-    milestones = db.get_calendar_milestones(user["name"])
+    milestones = db.get_calendar_milestones(user["name"], viewer=user)
     for ev in milestones:
         proj_name = ev.get("extendedProps", {}).get("project")
         color = resolve_project_color(proj_name, proj_colors)
@@ -1866,7 +1936,7 @@ def get_my_milestones(request: Request):
     user = auth.get_current_user(request)
     if not user:
         raise HTTPException(status_code=403, detail="로그인이 필요합니다.")
-    return db.get_upcoming_milestones(user["name"], limit=5)
+    return db.get_upcoming_milestones(user["name"], limit=5, viewer=user)
 
 
 @app.patch("/api/events/{event_id}/datetime")
@@ -3574,7 +3644,12 @@ def lock_doc(meeting_id: int, request: Request):
 
 @app.put("/api/doc/{meeting_id}/lock")
 def heartbeat_doc_lock(meeting_id: int, request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
+    doc = db.get_meeting(meeting_id)
+    if not doc:
+        raise HTTPException(status_code=404)
+    if not _can_write_doc(user, doc):
+        raise HTTPException(status_code=403, detail="Access denied.")
     tab_token = request.query_params.get("tab_token", "")
     ok = db.heartbeat_meeting_lock(meeting_id, tab_token)
     if not ok:
@@ -3588,6 +3663,11 @@ def heartbeat_doc_lock(meeting_id: int, request: Request):
 def unlock_doc(meeting_id: int, request: Request):
     user = auth.get_current_user(request)
     if user:
+        doc = db.get_meeting(meeting_id)
+        if not doc:
+            raise HTTPException(status_code=404)
+        if not _can_write_doc(user, doc):
+            raise HTTPException(status_code=403, detail="Access denied.")
         tab_token = request.query_params.get("tab_token") or None
         if tab_token:  # tab_token 없으면 no-op — 다른 편집자 잠금 보호
             db.release_meeting_lock(meeting_id, tab_token)
@@ -3596,10 +3676,13 @@ def unlock_doc(meeting_id: int, request: Request):
 
 @app.get("/api/doc/{meeting_id}/lock")
 def get_doc_lock(meeting_id: int, request: Request):
+    user = auth.get_current_user(request)
+    doc = db.get_meeting(meeting_id)
+    if not doc or not _can_read_doc(user, doc):
+        raise HTTPException(status_code=404)
     lock = db.get_meeting_lock(meeting_id)
     if not lock:
         return {"locked_by": None, "lock_type": None}
-    user = auth.get_current_user(request)
     lock_type = "self_tab" if (user and lock["user_name"] == user["name"]) else "other_user"
     return {"locked_by": lock["user_name"], "lock_type": lock_type}
 
@@ -3844,14 +3927,22 @@ def ai_models(request: Request):
 
 @app.post("/api/ai/generate-event-checklist")
 async def ai_generate_event_checklist(request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     body = await request.json()
-    event_ids = body.get("event_ids", [])
+    raw_event_ids = body.get("event_ids", [])
+    try:
+        event_ids = [int(eid) for eid in raw_event_ids]
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid event_ids.")
     model = body.get("model", llm_parser.DEFAULT_MODEL)
     project = body.get("project", "")
 
     events = [db.get_event(eid) for eid in event_ids]
-    events = [e for e in events if e]
+    if any(e is None for e in events):
+        raise HTTPException(status_code=404, detail="Event not found.")
+    events = _filter_events_by_visibility(events, user)
+    if len(events) != len(event_ids):
+        raise HTTPException(status_code=403, detail="Access denied.")
 
     if not events:
         from datetime import date as _d
@@ -3911,8 +4002,14 @@ async def ai_weekly_report(request: Request):
     future_end   = (base_dt + _td(days=6)).strftime("%Y-%m-%d")
 
     # 겹침 쿼리로 변경됐으므로 7일 이전 시작 이벤트도 포함됨
-    past_events   = db.get_events_by_date_range(past_start, past_end,   team_id)
-    future_events = db.get_events_by_date_range(future_start, future_end, team_id)
+    past_events   = _filter_events_by_visibility(
+        db.get_events_by_date_range(past_start, past_end, team_id),
+        user,
+    )
+    future_events = _filter_events_by_visibility(
+        db.get_events_by_date_range(future_start, future_end, team_id),
+        user,
+    )
 
     def _is_today_active(e):
         start = (e.get("start_datetime") or "")[:10]
@@ -3931,7 +4028,10 @@ async def ai_weekly_report(request: Request):
 
     meetings   = db.get_meetings_by_date_range(past_start, past_end,
                                                 team_id=team_id, created_by=user["id"])
-    checklists = db.get_checklists_by_date_range(past_start, past_end)
+    checklists = [
+        cl for cl in db.get_checklists_by_date_range(past_start, past_end)
+        if _can_read_checklist(user, cl)
+    ]
 
     prev = db.get_previous_weekly_report(base_date, team_id, user["id"])
     if prev:
@@ -3984,21 +4084,27 @@ def api_get_trash(request: Request):
     return db.get_trash_items(team_id, viewer=user)
 
 
+def _can_restore_hidden_trash_item(user: dict, project: dict) -> bool:
+    if user.get("role") == "admin":
+        return True
+    if project.get("deleted_at"):
+        return project.get("owner_id") == user.get("id")
+    return db.is_hidden_project_visible(project["id"], user)
+
+
 @app.post("/api/trash/{item_type}/{item_id}/restore")
 def api_restore_trash(item_type: str, item_id: int, request: Request):
     user = _require_editor(request)
     if item_type not in ("event", "meeting", "checklist", "project"):
         raise HTTPException(status_code=400, detail="잘못된 항목 타입입니다.")
-    if user.get("role") != "admin":
+    hidden_project = db.get_trash_item_hidden_project(item_type, item_id)
+    if hidden_project:
+        if not _can_restore_hidden_trash_item(user, hidden_project):
+            raise HTTPException(status_code=403, detail="히든 프로젝트 항목 복원 권한이 없습니다.")
+    elif user.get("role") != "admin":
         item_team = db.get_trash_item_team(item_type, item_id)
         if item_team is None or item_team != user.get("team_id"):
             raise HTTPException(status_code=403, detail="권한이 없습니다.")
-    # 히든 프로젝트 복원 권한 검사 (admin 또는 owner만 가능)
-    if item_type == "project":
-        proj_row = db.get_trash_hidden_project(item_id)
-        if proj_row and proj_row.get("is_hidden"):
-            if user.get("role") != "admin" and proj_row.get("owner_id") != user.get("id"):
-                raise HTTPException(status_code=403, detail="히든 프로젝트 복원 권한이 없습니다.")
     ok = db.restore_trash_item(item_type, item_id)
     if not ok:
         raise HTTPException(status_code=404, detail="항목을 찾을 수 없습니다.")

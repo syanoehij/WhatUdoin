@@ -34,6 +34,11 @@
           "icon": "🔒",
           "title_html": "<span class=\"cl-tag fix\">fix</span> 히든 프로젝트 — 관리 권한·SSE·팀 소속 경계 추가 강화",
           "detail_html": "<ul><li>히든 프로젝트 관리 권한을 일반 멤버가 아닌 owner/admin으로 제한해 프로젝트 메모·색상·기간·마일스톤·삭제·export API 권한 상승을 차단</li><li><code>/api/events/bulk-visibility</code>와 <code>/api/checklists/bulk-visibility</code>에 히든 프로젝트 멤버십 검사를 추가해 비멤버의 일괄 공개상태·활성상태 변경을 403으로 차단</li><li>전역 SSE <code>projects.changed</code>에서 히든 프로젝트 이름을 <code>null</code>로 마스킹해 비로그인 구독자에게 프로젝트명이 노출되지 않도록 보정</li><li>일반 프로젝트 rename/merge가 히든 프로젝트명을 대상으로 강제 병합되는 우회를 차단</li><li>히든 프로젝트 생성 및 기존 데이터 보정 시 <code>team_id</code>를 owner 소속팀으로 채우고, 팀 제외 시 기존 owner 멤버십 제거 및 active·same-team·non-admin 멤버에게만 자동 이양되도록 강화</li><li>MCP <code>get_kanban_item</code>이 viewer 권한을 전달하도록 수정해 owner/member만 히든 칸반 상세를 조회하고 비멤버는 <code>not_found</code>가 반환되게 수정</li><li>실제 재시작된 <code>https://localhost:8443</code> 서버에서 비로그인·비멤버·일반 멤버·owner 기준으로 칸반, 일정/체크리스트 직접 조회, bulk visibility, export, SSE 마스킹을 재검증</li><li>수정 파일: <code>app.py</code>, <code>auth.py</code>, <code>database.py</code>, <code>mcp_server.py</code></li></ul>"
+        },
+        {
+          "icon": "🔐",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> 히든 프로젝트 — 간접 조회·휴지통·MCP 노출 경로 차단",
+          "detail_html": "<ul><li>휴지통에서 히든 프로젝트 소속 일정·체크리스트가 일반 삭제 항목처럼 노출되던 문제 수정 — <code>trash_project_id</code>와 기존 <code>project</code> 이름 연결을 모두 검사해 owner/admin 또는 활성 히든 멤버에게만 표시·복원 허용</li><li>체크리스트 직접 페이지(<code>/check/{id}/edit</code>, <code>/check/{id}/history</code>)에 읽기/편집 권한 검사를 추가해 비멤버의 URL 직접 접근을 403/404로 차단</li><li>체크리스트·문서 lock API의 <code>locked_by</code> 응답과 423 메시지가 히든 항목 편집자 이름을 흘리지 않도록 대상 항목 권한 검사를 추가</li><li><code>/api/ai/generate-event-checklist</code>가 요청받은 event id를 LLM에 넘기기 전에 현재 사용자 가시성으로 재검증하도록 수정 — 비멤버 IDOR로 히든 일정 제목을 뽑는 경로 차단</li><li>주간 AI 보고서, 알림, 마일스톤 API에 히든 프로젝트 가시성 필터를 추가해 보조 기능 입력·결과에서 히든 일정/체크/프로젝트명이 섞이지 않도록 보정</li><li><code>/uploads/meetings</code> 정적 파일 마운트에 참조 문서·체크리스트 권한 검사를 추가해 히든 항목 첨부파일 URL 직접 다운로드를 차단</li><li>실제 <code>/mcp/</code> SSE 경로(<code>mcp-remote</code>, <code>sse-only</code>)에서 비멤버 12개 MCP 조회 12개 통과·0개 실패, owner 대조 3개 통과·0개 실패 확인</li><li>수정 파일: <code>app.py</code>, <code>auth.py</code>, <code>database.py</code></li></ul>"
         }
       ]
     },

@@ -66,6 +66,8 @@ def can_edit_event(user, event: dict) -> bool:
 
 def can_edit_checklist(user, checklist: dict) -> bool:
     """해당 사용자가 이 체크리스트를 수정할 수 있는지 확인"""
+    if not is_editor(user):
+        return False
     if user.get("role") == "admin":
         return True
     proj_name = checklist.get("project") or ""

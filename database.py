@@ -1250,7 +1250,7 @@ def get_upcoming_meetings(assignee_name: str = None, limit: int = 7) -> list[dic
     return result
 
 
-def _get_user_projects(conn, user_name: str) -> set:
+def _get_user_projects(conn, user_name: str, viewer=None) -> set:
     """events 테이블에서 user_name이 assignee에 포함된 프로젝트명 집합 반환 (Python-side 필터).
     get_upcoming_meetings 패턴과 동일하게 콤마 split+trim 후 정확 비교."""
     rows = conn.execute(
@@ -1266,13 +1266,16 @@ def _get_user_projects(conn, user_name: str) -> set:
         parts = [s.strip().lower() for s in (row["assignee"] or "").split(",")]
         if name_lower in parts:
             matched.add(row["project"])
+    blocked = get_blocked_hidden_project_names(viewer)
+    if blocked:
+        matched = {project for project in matched if project not in blocked}
     return matched
 
 
-def get_calendar_milestones(user_name: str) -> list:
+def get_calendar_milestones(user_name: str, viewer=None) -> list:
     """캘린더 이벤트 소스용. 로그인 사용자가 assignee인 프로젝트의 모든 milestone 반환."""
     with get_conn() as conn:
-        user_projects = _get_user_projects(conn, user_name)
+        user_projects = _get_user_projects(conn, user_name, viewer=viewer)
         if not user_projects:
             return []
         placeholders = ",".join("?" * len(user_projects))
@@ -1310,11 +1313,11 @@ def get_calendar_milestones(user_name: str) -> list:
     return result
 
 
-def get_upcoming_milestones(user_name: str, limit: int = 5) -> list:
+def get_upcoming_milestones(user_name: str, limit: int = 5, viewer=None) -> list:
     """내 스케줄용. 오늘 이후 사용자 프로젝트의 milestone + 종료 예정을 합산해 limit개 반환."""
     today = datetime.now().strftime("%Y-%m-%d")
     with get_conn() as conn:
-        user_projects = _get_user_projects(conn, user_name)
+        user_projects = _get_user_projects(conn, user_name, viewer=viewer)
         if not user_projects:
             return []
         placeholders = ",".join("?" * len(user_projects))
@@ -1368,8 +1371,23 @@ def create_notification_for_all(type_: str, message: str, event_id: int = None, 
             )
 
 
-def get_notification_count(user_name: str) -> int:
-    """미읽은 알림 수 반환 (읽음 처리 없음)"""
+def _notification_visible_to_viewer(conn, notification: dict, viewer=None) -> bool:
+    event_id = notification.get("event_id")
+    if not event_id:
+        return True
+    event = conn.execute(
+        "SELECT id, project, trash_project_id, deleted_at FROM events WHERE id = ?",
+        (event_id,),
+    ).fetchone()
+    if not event:
+        return False
+    return _trash_item_visible_to_viewer(conn, event, viewer)
+
+
+def get_notification_count(user_name: str, viewer=None) -> int:
+    """Return unread notifications count."""
+    if viewer is not None:
+        return len(get_pending_notifications(user_name, viewer=viewer))
     with get_conn() as conn:
         row = conn.execute(
             "SELECT COUNT(*) as cnt FROM notifications WHERE user_name = ? AND is_read = 0",
@@ -1378,14 +1396,37 @@ def get_notification_count(user_name: str) -> int:
     return row["cnt"] if row else 0
 
 
-def get_pending_notifications(user_name: str) -> list[dict]:
+def get_pending_notifications(user_name: str, viewer=None) -> list[dict]:
     """미읽은 알림 반환 (읽음 처리 없음)"""
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM notifications WHERE user_name = ? AND is_read = 0 ORDER BY id DESC",
             (user_name,)
         ).fetchall()
-    return [dict(r) for r in rows]
+        result = [dict(r) for r in rows]
+        if viewer is not None:
+            result = [r for r in result if _notification_visible_to_viewer(conn, r, viewer)]
+    return result
+
+
+def find_upload_references(url: str) -> list[dict]:
+    """Return documents/checklists that reference an uploaded file URL."""
+    like = f"%{url}%"
+    refs: list[dict] = []
+    with get_conn() as conn:
+        for row in conn.execute(
+            """SELECT id, deleted_at FROM meetings
+               WHERE content LIKE ? OR attachments LIKE ?""",
+            (like, like),
+        ).fetchall():
+            refs.append({"type": "document", "id": row["id"], "deleted": row["deleted_at"] is not None})
+        for row in conn.execute(
+            """SELECT id, deleted_at FROM checklists
+               WHERE content LIKE ? OR attachments LIKE ?""",
+            (like, like),
+        ).fetchall():
+            refs.append({"type": "checklist", "id": row["id"], "deleted": row["deleted_at"] is not None})
+    return refs
 
 
 def mark_all_notifications_read(user_name: str):
@@ -1743,20 +1784,73 @@ def is_hidden_project_visible(project_id: int, user: dict) -> bool:
     if user.get("role") == "admin":
         return True
     with get_conn() as conn:
-        row = conn.execute(
-            """SELECT 1
-               FROM project_members pm
-               JOIN users u ON u.id = pm.user_id
-               JOIN projects p ON p.id = pm.project_id
-               WHERE pm.project_id = ?
-                 AND pm.user_id = ?
-                 AND u.is_active = 1
-                 AND u.team_id IS NOT NULL
-                 AND p.team_id IS NOT NULL
-                 AND u.team_id = p.team_id""",
-            (project_id, user["id"])
-        ).fetchone()
+        row = _hidden_project_visible_row(conn, project_id, user)
     return row is not None
+
+
+def _hidden_project_visible_row(conn, project_id: int, user: dict):
+    if not user:
+        return None
+    if user.get("role") == "admin":
+        return {"ok": 1}
+    user_id = user.get("id")
+    if user_id is None:
+        return None
+    return conn.execute(
+        """SELECT 1
+           FROM project_members pm
+           JOIN users u ON u.id = pm.user_id
+           JOIN projects p ON p.id = pm.project_id
+           WHERE pm.project_id = ?
+             AND pm.user_id = ?
+             AND u.is_active = 1
+             AND u.team_id IS NOT NULL
+             AND p.team_id IS NOT NULL
+             AND u.team_id = p.team_id""",
+        (project_id, user_id)
+    ).fetchone()
+
+
+def _can_view_hidden_trash_project(conn, project_row, viewer, project_deleted: bool = False) -> bool:
+    """휴지통에서 히든 프로젝트 또는 그 소속 항목을 viewer에게 보여도 되는지 확인."""
+    if not project_row or not project_row["is_hidden"]:
+        return True
+    if not viewer:
+        return False
+    if viewer.get("role") == "admin":
+        return True
+    if project_deleted:
+        return project_row["owner_id"] == viewer.get("id")
+    return _hidden_project_visible_row(conn, project_row["id"], viewer) is not None
+
+
+def _trash_item_project_row(conn, item: dict | sqlite3.Row):
+    """휴지통 항목이 연결된 프로젝트 행 반환. 없으면 None."""
+    trash_project_id = item["trash_project_id"] if "trash_project_id" in item.keys() else None
+    if trash_project_id is not None:
+        return conn.execute(
+            "SELECT id, name, is_hidden, owner_id, deleted_at FROM projects WHERE id = ?",
+            (trash_project_id,)
+        ).fetchone()
+    project_name = (item["project"] if "project" in item.keys() else None) or ""
+    if not project_name:
+        return None
+    return conn.execute(
+        "SELECT id, name, is_hidden, owner_id, deleted_at FROM projects WHERE name = ?",
+        (project_name,)
+    ).fetchone()
+
+
+def _trash_item_visible_to_viewer(conn, item: dict | sqlite3.Row, viewer) -> bool:
+    project = _trash_item_project_row(conn, item)
+    if not project or not project["is_hidden"]:
+        return True
+    return _can_view_hidden_trash_project(
+        conn,
+        project,
+        viewer,
+        project_deleted=project["deleted_at"] is not None,
+    )
 
 
 def get_project_by_name(name: str) -> dict | None:
@@ -3293,6 +3387,10 @@ def get_trash_items(team_id: int = None, viewer=None) -> dict:
                 ORDER BY deleted_at DESC""",
             team_args
         ).fetchall()
+        ev_unassigned = [
+            r for r in ev_unassigned
+            if _trash_item_visible_to_viewer(conn, r, viewer)
+        ]
         cl_unassigned = conn.execute(
             f"""SELECT id, title, content, project, deleted_at, deleted_by, team_id, trash_project_id
                 FROM checklists
@@ -3300,6 +3398,10 @@ def get_trash_items(team_id: int = None, viewer=None) -> dict:
                 ORDER BY deleted_at DESC""",
             team_args
         ).fetchall()
+        cl_unassigned = [
+            r for r in cl_unassigned
+            if _trash_item_visible_to_viewer(conn, r, viewer)
+        ]
         mt_unassigned = conn.execute(
             f"""SELECT id, title, content, deleted_at, deleted_by, team_id, trash_project_id
                 FROM meetings
@@ -3339,9 +3441,51 @@ def get_trash_hidden_project(project_id: int):
     """휴지통에 있는 프로젝트의 is_hidden, owner_id 반환 (복원 권한 검사용)."""
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT id, is_hidden, owner_id FROM projects WHERE id = ? AND deleted_at IS NOT NULL",
+            "SELECT id, is_hidden, owner_id, deleted_at FROM projects WHERE id = ? AND deleted_at IS NOT NULL",
             (project_id,)
         ).fetchone()
+    return dict(row) if row else None
+
+
+def get_trash_item_hidden_project(item_type: str, item_id: int):
+    """휴지통 항목이 히든 프로젝트에 연결되어 있으면 해당 프로젝트 정보를 반환."""
+    table_map = {
+        "event": ("events", "project"),
+        "checklist": ("checklists", "project"),
+        "meeting": ("meetings", None),
+        "project": ("projects", None),
+    }
+    if item_type not in table_map:
+        return None
+    if item_type == "project":
+        project = get_trash_hidden_project(item_id)
+        return project if project and project.get("is_hidden") else None
+
+    table, project_col = table_map[item_type]
+    with get_conn() as conn:
+        row = conn.execute(
+            f"""SELECT p.id, p.is_hidden, p.owner_id, p.deleted_at
+                FROM {table} t
+                JOIN projects p ON p.id = t.trash_project_id
+                WHERE t.id = ?
+                  AND t.deleted_at IS NOT NULL
+                  AND t.trash_project_id IS NOT NULL
+                  AND p.is_hidden = 1""",
+            (item_id,)
+        ).fetchone()
+        if not row and project_col:
+            row = conn.execute(
+                f"""SELECT p.id, p.is_hidden, p.owner_id, p.deleted_at
+                    FROM {table} t
+                    JOIN projects p ON p.name = t.{project_col}
+                    WHERE t.id = ?
+                      AND t.deleted_at IS NOT NULL
+                      AND t.trash_project_id IS NULL
+                      AND t.{project_col} IS NOT NULL
+                      AND t.{project_col} != ''
+                      AND p.is_hidden = 1""",
+                (item_id,)
+            ).fetchone()
     return dict(row) if row else None
 
 
