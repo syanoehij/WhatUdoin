@@ -552,7 +552,7 @@ def doc_detail_page(request: Request, meeting_id: int):
     current_user = auth.get_current_user(request)
     if not _can_read_doc(current_user, doc):
         raise HTTPException(status_code=404)
-    events = db.get_events_by_meeting(meeting_id)
+    events = _filter_visible_events(db.get_events_by_meeting(meeting_id), current_user)
     can_edit = _can_write_doc(current_user, doc)
     lock = db.get_meeting_lock(meeting_id)
     locked_by = None
@@ -792,6 +792,7 @@ async def create_checklist(request: Request):
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
     project = data.get("project", "").strip()
+    _assert_can_assign_to_project(user, project or None)
     content = data.get("content", "").strip()
     is_public = 1 if data.get("is_public") else 0
     raw_att = data.get("attachments")
@@ -928,6 +929,9 @@ async def update_checklist(checklist_id: int, request: Request):
                     status_code=400,
                     content={"requires_confirm": True, "message": "히든 프로젝트 밖으로 이동합니다. 계속하시겠습니까?"},
                 )
+    # 새 프로젝트가 히든이면 멤버십 검사
+    if "project" in data and project != old_proj:
+        _assert_can_assign_to_project(user, project or None)
     raw_att = data.get("attachments")
     if isinstance(raw_att, str):
         try:
@@ -1660,6 +1664,7 @@ async def create_event(request: Request):
         _proj = db.get_project(proj_name)
         if _proj and _proj.get("is_hidden") and not db.is_hidden_project_visible(_proj["id"], user):
             raise HTTPException(status_code=403, detail="히든 프로젝트에 접근 권한이 없습니다.")
+    _assert_assignees_in_hidden_project(proj_name or None, data.get("assignee"))
     data["created_by"] = str(user["id"])
     data["team_id"] = user.get("team_id")
     event_id = db.create_event(data)
@@ -1710,6 +1715,15 @@ async def update_event(event_id: int, request: Request):
             raise HTTPException(status_code=400, detail="반복 일정에는 하위 업무를 추가할 수 없습니다.")
         if db.has_subtasks(event_id):
             raise HTTPException(status_code=400, detail="하위 업무를 가진 업무는 하위 업무가 될 수 없습니다.")
+
+    # 새 project가 히든이면 멤버십 검사
+    if "project" in data:
+        _new_proj_name = (data.get("project") or "").strip() or None
+        if _new_proj_name != ((event.get("project") or "").strip() or None):
+            _assert_can_assign_to_project(user, _new_proj_name)
+    # 히든 프로젝트 담당자 검증
+    _effective_proj = (data.get("project") if "project" in data else event.get("project")) or None
+    _assert_assignees_in_hidden_project((_effective_proj or "").strip() or None, data.get("assignee"))
 
     # 수정 전 담당자 목록
     prev_assignees = set(a.strip() for a in (event.get("assignee") or "").split(",") if a.strip())
@@ -1941,7 +1955,7 @@ async def check_event_conflicts(request: Request):
     data = await request.json()
     candidates = data.get("events", [])
     team_id = user.get("team_id")
-    existing = db.get_events_for_conflict_check(team_id)
+    existing = _filter_visible_events(db.get_events_for_conflict_check(team_id), user)
 
     results = []
     for i, cand in enumerate(candidates):
@@ -2027,7 +2041,7 @@ async def ai_conflict_review(request: Request):
         return {"results": []}
 
     # 서버에서 직접 DB 재조회 후 similar 구간 재계산 (클라이언트 check_results 무시)
-    existing = db.get_events_for_conflict_check(team_id)
+    existing = _filter_visible_events(db.get_events_for_conflict_check(team_id), user)
     similar_indices: list[int] = []
     ai_funnel_map: dict[int, list] = {}  # ai_candidates 인덱스 → top3 existing
 
@@ -2084,7 +2098,7 @@ def check_conflicts(request: Request, start: str, end: str = None, team_id: int 
     if not user:
         return {"conflicts": []}
     conflicts = db.check_conflicts(start, end or start, team_id, exclude_id)
-    return {"conflicts": conflicts}
+    return {"conflicts": _filter_visible_events(conflicts, user)}
 
 
 # ── 프로젝트 ─────────────────────────────────────────────
@@ -2360,6 +2374,55 @@ async def can_manage_hidden_project(name: str, request: Request):
     is_admin = user.get("role") == "admin"
     is_owner = proj.get("owner_id") == user.get("id")
     return {"can_manage": is_admin or is_owner, "is_owner": is_owner, "is_admin": is_admin}
+
+
+def _assert_can_assign_to_project(user, project_name: str | None):
+    """쓰기 경로 공통: 새 project가 히든이면 멤버십 강제. admin은 통과."""
+    if not project_name or auth.is_admin(user):
+        return
+    proj = db.get_project_by_name(project_name)
+    if proj and proj.get("is_hidden"):
+        if not db.is_hidden_project_visible(proj["id"], user):
+            raise HTTPException(status_code=403, detail="히든 프로젝트에 접근 권한이 없습니다.")
+
+
+def _assert_assignees_in_hidden_project(project_name: str | None, assignee_csv: str | None):
+    """히든 프로젝트 일정/업무의 assignee가 모두 해당 프로젝트 멤버인지 검증. 한 명이라도 아니면 422."""
+    if not project_name or not assignee_csv:
+        return
+    proj = db.get_project_by_name(project_name)
+    if not proj or not proj.get("is_hidden"):
+        return
+    member_names = {m["name"] for m in db.get_hidden_project_members(proj["id"])}
+    invalid = [n.strip() for n in assignee_csv.split(",")
+               if n.strip() and n.strip() not in member_names]
+    if invalid:
+        raise HTTPException(
+            status_code=422,
+            detail=f"히든 프로젝트 멤버가 아닌 담당자: {', '.join(invalid)}"
+        )
+
+
+def _filter_visible_events(events: list, user) -> list:
+    """비멤버에게 히든 프로젝트 일정을 필터링. admin은 전체 반환, 익명은 히든 전부 제거."""
+    if user and auth.is_admin(user):
+        return events
+    cache: dict[str, bool] = {}
+    out = []
+    for e in events:
+        proj_name = e.get("project")
+        if not proj_name:
+            out.append(e)
+            continue
+        if proj_name not in cache:
+            proj = db.get_project_by_name(proj_name)
+            if proj and proj.get("is_hidden"):
+                cache[proj_name] = bool(user) and bool(db.is_hidden_project_visible(proj["id"], user))
+            else:
+                cache[proj_name] = True
+        if cache[proj_name]:
+            out.append(e)
+    return out
 
 
 def _get_hidden_proj_or_404(name: str, user: dict = None):
@@ -3193,7 +3256,9 @@ async def manage_add_event(name: str, request: Request):
             raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
         if project.get("is_private") and user.get("role") != "admin":
             raise HTTPException(status_code=403, detail="비공개 프로젝트에 접근 권한이 없습니다.")
+        _assert_can_assign_to_project(user, name)   # 히든 프로젝트 멤버십 검사
     data = await request.json()
+    _assert_assignees_in_hidden_project(name if name != "미지정" else None, data.get("assignee"))
     title = data.get("title", "").strip()
     start = data.get("start_datetime", "").strip()
     if not title or not start:
@@ -3241,6 +3306,12 @@ async def manage_update_event(event_id: int, request: Request):
     if old_proj and not new_proj and event.get("is_public") is None:
         proj = db.get_project(old_proj)
         updated["is_public"] = 0 if (proj and proj.get("is_private")) else 1
+    # 새 프로젝트가 히든이면 멤버십 검사
+    _mgr_new_proj = (updated.get("project") or "").strip() or None
+    _mgr_old_proj = (event.get("project") or "").strip() or None
+    if _mgr_new_proj != _mgr_old_proj:
+        _assert_can_assign_to_project(user, _mgr_new_proj)
+    _assert_assignees_in_hidden_project(_mgr_new_proj or _mgr_old_proj, updated.get("assignee"))
     db.update_event(event_id, updated)
     wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
@@ -3636,7 +3707,7 @@ def doc_events_api(meeting_id: int, request: Request):
     doc = db.get_meeting(meeting_id)
     if not _can_read_doc(user, doc):
         raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
-    return db.get_events_by_meeting(meeting_id)
+    return _filter_visible_events(db.get_events_by_meeting(meeting_id), user)
 
 
 # ── AI 파싱 ──────────────────────────────────────────────
@@ -3667,7 +3738,7 @@ async def ai_confirm(request: Request):
 
     # 저장 직전 재검사 — force=True가 아닌 경우만
     if not force:
-        existing = db.get_events_for_conflict_check(team_id)
+        existing = _filter_visible_events(db.get_events_for_conflict_check(team_id), user)
         blocked = []
         for i, e in enumerate(events):
             scored_pairs = sorted(
@@ -3696,6 +3767,24 @@ async def ai_confirm(request: Request):
         if val_errors:
             skipped.append({"index": i, "title": e.get("title", ""), "reason": val_errors[0]})
             continue
+        # 히든 프로젝트 권한 검사
+        _ai_proj_name = (payload.get("project") or "").strip() or None
+        _ai_proj = db.get_project_by_name(_ai_proj_name) if _ai_proj_name else None
+        if _ai_proj and _ai_proj.get("is_hidden") and not auth.is_admin(user):
+            if not db.is_hidden_project_visible(_ai_proj["id"], user):
+                skipped.append({"index": i, "title": e.get("title", ""), "reason": "히든 프로젝트에 접근 권한이 없습니다."})
+                continue
+        # 히든 프로젝트 담당자 검증
+        if _ai_proj and _ai_proj.get("is_hidden"):
+            _ai_assignee = payload.get("assignee")
+            if _ai_assignee:
+                _ai_members = {m["name"] for m in db.get_hidden_project_members(_ai_proj["id"])}
+                _ai_invalid = [n.strip() for n in _ai_assignee.split(",")
+                               if n.strip() and n.strip() not in _ai_members]
+                if _ai_invalid:
+                    skipped.append({"index": i, "title": e.get("title", ""),
+                                    "reason": f"히든 프로젝트 멤버가 아닌 담당자: {', '.join(_ai_invalid)}"})
+                    continue
         if payload["start_datetime"]:
             payload["team_id"]    = team_id
             payload["created_by"] = str(user["id"])

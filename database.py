@@ -2121,7 +2121,7 @@ def check_conflicts(start_dt: str, end_dt: str, team_id: int = None, exclude_id:
     end_dt = end_dt or start_dt
     with get_conn() as conn:
         sql = """
-            SELECT id, title, start_datetime, end_datetime
+            SELECT id, title, start_datetime, end_datetime, project
             FROM events
             WHERE start_datetime < ? AND (end_datetime > ? OR (end_datetime IS NULL AND start_datetime >= ?))
         """
