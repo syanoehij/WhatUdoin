@@ -1795,9 +1795,11 @@ def add_hidden_project_member(project_id: int, user_id: int, owner_id: int) -> b
             "SELECT team_id FROM users WHERE id = ?", (owner_id,)
         ).fetchone()
         target_row = conn.execute(
-            "SELECT team_id FROM users WHERE id = ?", (user_id,)
+            "SELECT team_id, role FROM users WHERE id = ?", (user_id,)
         ).fetchone()
         if not owner_row or not target_row:
+            return False
+        if target_row["role"] == "admin":
             return False
         if owner_row["team_id"] is None or owner_row["team_id"] != target_row["team_id"]:
             return False

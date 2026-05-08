@@ -1655,6 +1655,11 @@ async def create_event(request: Request):
         # 프로젝트 미설정 시 부모에서 상속
         if not data.get("project"):
             data["project"] = parent.get("project")
+    proj_name = (data.get("project") or "").strip()
+    if proj_name and not auth.is_admin(user):
+        _proj = db.get_project(proj_name)
+        if _proj and _proj.get("is_hidden") and not db.is_hidden_project_visible(_proj["id"], user):
+            raise HTTPException(status_code=403, detail="히든 프로젝트에 접근 권한이 없습니다.")
     data["created_by"] = str(user["id"])
     data["team_id"] = user.get("team_id")
     event_id = db.create_event(data)
@@ -1891,14 +1896,17 @@ async def update_event_project(event_id: int, request: Request):
                     status_code=400,
                     content={"requires_confirm": True, "message": "히든 프로젝트 밖으로 이동합니다. 계속하시겠습니까?"},
                 )
+    # 새 프로젝트가 히든이면 멤버십 확인
+    _new_proj_for_check = db.get_project_by_name(new_proj_name) if new_proj_name else None
+    if _new_proj_for_check and _new_proj_for_check.get("is_hidden") and not auth.is_admin(user):
+        if not db.is_hidden_project_visible(_new_proj_for_check["id"], user):
+            raise HTTPException(status_code=403, detail="히든 프로젝트에 접근 권한이 없습니다.")
     db.update_event_project(event_id, new_proj_name)
     # 히든 프로젝트로 이동 시 is_public 강제 0
     hidden_forced = False
-    if new_proj_name:
-        _proj = db.get_project_by_name(new_proj_name)
-        if _proj and _proj.get("is_hidden"):
-            db.update_event_visibility(event_id, 0)
-            hidden_forced = True
+    if _new_proj_for_check and _new_proj_for_check.get("is_hidden"):
+        db.update_event_visibility(event_id, 0)
+        hidden_forced = True
     wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True, "hidden_forced": hidden_forced}
 
