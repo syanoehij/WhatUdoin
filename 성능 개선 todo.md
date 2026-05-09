@@ -5,8 +5,19 @@
 ## 상태
 
 - **1차 실행 todo로 동결** (2026-05-09): 마스터 plan rev29 + 다회 외부 검토 사이클을 거쳐 M1a~M1d 실행 + M2 이후 조건부 운영 구조 변경 step이 모두 정합 상태로 확정됐다. 신규 step 추가 사이클은 종결한다.
+- **트랙 단축 결정** (2026-05-09): M1a 완료 후 외부 검토 2차 사이클을 거쳐 M1b~M1d의 실제 실행 경로를 **M1-ULTRA**(사내 소수 사용자 기준)로 낮췄다. 단축 근거는 아래 "단축 배경" 참조. 기존 full case 세부 step은 본 문서 하단 "보수 단축안 / 회사 반입 게이트 / 후속 후보" 섹션으로 이동했고, 회사 반입 결정이나 실제 장애 징후 발생 시 끌어올린다. 상세 단축안은 [`성능 개선 단축안(M1b-M1d).md`](성능%20개선%20단축안(M1b-M1d).md) 참조.
 - **추후 변경 원칙**: 본 todo는 마스터 plan §0 "문서 라이프사이클 정책"과 동일하게 동결 상태로 둔다. 새 의견이 들어와도 M1a~M1d 실행을 막는 실재 코드/운영 리스크가 아니면 본문을 더 확장하지 않고, 구현 중 발견 사실 → commit/PR 메시지, 운영 정책/후속 마일스톤 후보 → 마스터 plan §18로 분리한다.
-- **다음 행동**: M1a-1부터 step 단위 실행. 진입 즉시 가능.
+- **다음 행동**: M1b-U1부터 M1-ULTRA step 단위 실행. 진입 즉시 가능.
+
+## 단축 배경
+
+본 todo가 처음 동결됐을 때는 "상용 SaaS급 검증" 수준의 full case였다. M1a 완료 시점에 다음 사실이 확인되어 트랙을 lite/ULTRA로 낮췄다.
+
+- **운영 환경**: WhatUdoin은 상용 SaaS가 아니라 사내 소수 사용자(n≈1~5명) 인트라넷 도구다. IP whitelist + 사내 LAN 전제이며, 외부 불특정 사용자 공격 모델은 M1 로컬 개선의 기준이 아니다.
+- **M1a-7 baseline 결과**: 50 VU에서도 `database is locked` 0건. 즉 광범위 `BEGIN IMMEDIATE`, DB lock 503 변환, APScheduler 감사, MCP transport/identity/DNS rebinding 검증은 지금 성능 개선의 **필수 항목이 아니다**.
+- **낮은 확률 리스크 정책**: WAL restore drill, 업로드 cap, MCP identity test, DNS rebinding 정책, scheduler 감사는 회사 반입 결정 또는 실제 장애 징후가 생겼을 때 보수 단축안에서 끌어와 보강한다. 사내 환경에서는 발생 시 30분 이내 핫픽스 비용이 선제 검증 비용보다 작다.
+- **M1-ULTRA 예상 시간**: 약 4~5시간 (M1b 1.5h + M1c 2.5h + M1d skip). 보수 단축안 풀세트는 12~16시간, full case는 20~40시간이다.
+- **트랙 변경이 영향 주지 않는 범위**: M1a 진행 로그와 이미 완료된 M1a-1~M1a-13 step은 그대로 보존. M2 이후 조건부 운영 구조 변경도 그대로 유지(M1-ULTRA 완료가 M2 진입 근거가 되는 것은 아님).
 
 ## 운영 원칙
 
@@ -39,12 +50,136 @@
 | [x] M1a-9 | 공통 lazy loader 도입 | Sonnet | §5-1 적용 내용 + readiness 보장 기준 | `static/js/`의 단일 모듈 또는 `base.html` 공통 함수, readiness 5종(CSS/JS 글로벌/의존성/실패 후 재시도/reentrancy) 통과 |
 | [x] M1a-10 | 홈/프로젝트 관리/휴지통/히스토리 lazy-load 적용 | Sonnet | §5-1 적용 내용 (페이지별) | viewer 보조 화면에서 `_wu_editor_assets.html` head 선로딩 제거, 상세 진입 시 한 번만 로드, `check.html` 기존 lazy-load 동작 유지 |
 | [x] M1a-11 | §5-1 4단계 측정 + 회귀 검증 | Sonnet | §5-1 체감 지연 4단계 측정 + §15 프론트엔드 체감 로딩 검증 | 다운로드/parse·eval/`WUEditor.create()`/viewer 표시 4단계 before/after 기록, Mermaid·KaTeX·이미지 viewer 회귀 0 |
-| [x] M1a-12 | M1a 회귀 — Playwright 메인 스위트 | Sonnet | §15 마일스톤 간 회귀 자동화 | `npx playwright test tests/*.spec.js` + lazy-load 관련 phase 통과, 회귀 0건 |
+| [x] M1a-12 | M1a 회귀 — Playwright 메인 스위트 | Sonnet | §15 마일스톤 간 회귀 자동화 | `npx playwright test tests/*.spec.js` + lazy-load 관련 phase 실행. M1a 관련 신규 회귀 0건, 26건 fail은 Group A 사전 부채 + Group B 디자인 변경 expected + Group C orthogonal로 triage 완료 |
 | [x] M1a-13 | M1a exit criteria 점검 | Opus | §17 M1a 완료 기준 | 단계별 baseline 기록 / SSE 분리 지표 기록 / 4단계 측정 기록 / viewer 회귀 0 / 다중 탭 baseline 정량 비교 — 모두 충족 |
 
 ---
 
-## M1b — WAL/PRAGMA + BEGIN IMMEDIATE + 백업/인덱스
+## M1b-ULTRA — SQLite WAL/PRAGMA만 적용 (lite case)
+
+마일스톤 의도: 가장 값싼 SQLite 개선만 적용한다. M1a-7 baseline에서 lock 0건이 측정됐으므로 connection helper 전면 추출, 광범위 BEGIN IMMEDIATE, 503 변환, scheduler 감사, restore drill, 전체 hot path EXPLAIN은 본 단계에서 제외하고 회사 반입 게이트로 내린다. 예상 1.5시간.
+
+| step | 제목 | 모델 | §참조 | exit criteria |
+|------|------|------|-------|---------------|
+| [ ] M1b-U1 | M1b 진입 직전 DB 세트 백업 | Sonnet | §14 단계별 롤백 원칙 + §6 WAL 복원 절차 | 서버 종료 상태에서 `.db`/`.db-wal`/`.db-shm` 세트 보관, 되돌릴 수 있는 위치 기록 |
+| [ ] M1b-U2 | `database.get_conn()` PRAGMA 5종 적용 + WAL 1회 활성화 | Opus | §4 적용 내용 — 연결 단위 + DB 파일 단위 | 매 연결 `timeout=5`/`busy_timeout=5000`/`synchronous=NORMAL`(기본)/`cache_size=-8000`/`temp_store=MEMORY` 적용. `PRAGMA journal_mode=WAL`은 프로세스 단위 idempotent guard로 1회 활성화. `synchronous`는 `WHATUDOIN_SYNCHRONOUS_MODE=FULL`로 override 가능 |
+| [ ] M1b-U3 | `snapshot_db.py`의 WAL 세트 복사 코드 경로 확인 | Sonnet | §6 백업 종류 구분 + 방향 | `.db`/`.db-wal`/`.db-shm` 세트로 복사되는 코드 경로 확인. 별도 restore drill은 본 단계에서 수행하지 않음(보수 단축안 게이트로 이동) |
+| [ ] M1b-U4 | 서버 재시작 + PRAGMA 검증 | Sonnet | §15 WAL 검증 | 재시작 후 `PRAGMA journal_mode;` 결과 `wal` / `wal`/`-shm` 파일 생성 확인 |
+| [ ] M1b-U5 | M1a 도구 재사용 50 VU smoke | Sonnet | §15 동시성 검증(축소) | M1a-7 locust 시나리오 그대로 50 VU 1회 실행. p95 명확한 회귀 없음, `database is locked` 0건. lock 발생 시 함수 위치 기록 후 보수 단축안 게이트로 escalation 판단 |
+
+### M1b-ULTRA에서 제외된 항목
+
+본 단계에서 제외하고 "보수 단축안 / 회사 반입 게이트" 섹션의 M1b-1~M1b-17 표에서 끌어올 수 있는 항목:
+
+- `open_sqlite_connection()` 전면 헬퍼 추출 + `init_db()`/마이그레이션/진단/백업 raw connect 0건 grep 게이트
+- `PRAGMA foreign_key_check` 사전 점검 + `foreign_keys` 정책 결정
+- `write_conn()` + 광범위 `BEGIN IMMEDIATE` 적용
+- DB lock 예외 → 503 변환 정책
+- WAL 파일 크기 안전판 + PASSIVE checkpoint 자동화
+- 8개 hot path `EXPLAIN QUERY PLAN` 전수 점검
+- APScheduler write 작업 6종 감사
+- WAL 복원 drill 1회 수행
+- 저장 100 + 조회 100 동시성 검증
+
+근거: M1a-7 baseline에서 50 VU lock 0건이 이미 측정됐다. startup 단발 경로와 야간 scheduler까지 지금 성능 개선 범위에 끌어들이면 시간이 1.5h → 12h+로 급증한다. 회사 반입 결정 또는 lock/스케줄러 회귀 측정 시점에 끌어올린다.
+
+---
+
+## M1c-ULTRA — Ollama limiter 중심 (lite case)
+
+마일스톤 의도: 외부 Ollama hang/장기 요청이 main app을 잠식하지 않게 한다. 사용자가 admin UI 슬롯 1~5 설정을 원하지만 실제 운영은 거의 1슬롯이다. 업로드 cap, chunked hard cap, ASGI body middleware, 업로드 threadpool, SSE QueueFull 카운터, 로그 회전, 1~5 전체 부하 매트릭스는 본 단계에서 제외하고 회사 반입 게이트로 내린다. 예상 2.5시간.
+
+| step | 제목 | 모델 | §참조 | exit criteria |
+|------|------|------|-------|---------------|
+| [ ] M1c-U1 | Ollama limiter 모든 외부 HTTP 접점 적용 | Opus | §8 limiter 적용 대상 — 모든 외부 Ollama HTTP 접점 | 7개 접점(파싱/refinement/체크리스트 생성/주간 보고/conflict review/health/model) 감싸기, `score_conflict` 제외, `try_acquire` 즉시 false 시 대기 없이 busy 응답 |
+| [ ] M1c-U2 | 기본 동시성 env `WHATUDOIN_OLLAMA_CONCURRENCY=1` | Sonnet | §8 admin UI 설정 항목 | env 미지정 시 기본 1, 허용 범위 1~5 검증. admin DB 설정이 있으면 DB 설정 우선, env는 초기/default fallback |
+| [ ] M1c-U3 | admin UI 1~5 설정 + DB persist | Sonnet | §8 admin UI 설정 항목 | 1~5 선택 UI, 변경 즉시 limiter capacity 반영(사용 중 슬롯 보존), DB persist. 이후 런타임 source of truth는 DB 설정이며, 운영 중 실제 사용은 거의 1슬롯 전제 |
+| [ ] M1c-U4 | 포화/장애 UX 통합 | Sonnet | §8 Ollama 서버 장애 통합 처리 + 통합 거부 응답 | 슬롯 포화/timeout/`ConnectionError`/5xx를 사용자에게 동일한 "AI 사용 중 / 사용 불가, 잠시 후 재시도" 흐름으로 안내. 내부 로그는 사유 구분 |
+| [ ] M1c-U5 | 동시 AI 2개 fire smoke | Sonnet | §15 Ollama limiter 검증(축소) | 기본 1슬롯에서 1개 처리, 1개 즉시 busy 확인. admin UI에서 1→3 resize 시 자연스러운 동작 확인(별도 exit gate 아님) |
+
+### M1c-ULTRA에서 제외된 항목
+
+본 단계에서 제외하고 "보수 단축안 / 회사 반입 게이트" 섹션의 M1c-1~M1c-13 표에서 끌어올 수 있는 항목:
+
+- 업로드 `Content-Length` 사전 거부 + route별 body cap 표
+- chunked read hard cap
+- ASGI body size middleware (request body 한정)
+- 업로드 threadpool + `asyncio.Semaphore(8)`
+- SSE broker QueueFull 카운터 + 큐 크기 결정
+- 로그 회전 + RSS/디스크 모니터링
+- 1~5 전체 부하 매트릭스 + 1→3 resize 전용 검증
+- `/api/stream` 유지 + 업로드 정상/초과 413 focused 회귀
+
+근거: 사내 알려진 사용자 환경에서는 거대 파일 업로드/SSE QueueFull/로그 미회전이 발생 시 30분 내 보완 가능한 리스크다. resize는 admin UI 구현 직후 클릭해보는 자연스러운 동작 확인으로 충분하고 별도 exit gate로 만들지 않는다.
+
+---
+
+---
+
+## M1d — 기본 skip (조건부 threadpool 판단만)
+
+마일스톤 의도: M1에서 MCP는 기본 제외한다. 현재 MCP는 이미 작동 중인 클라이언트에 대해 동작하고 있고, transport 교체·identity 병렬 테스트·DNS rebinding 정책 결정은 성능 개선이 아니라 호환성/보안 운영 변경이다. 회사 반입 게이트 또는 M2 이후로 분리한다.
+
+다음이 실제 측정될 때만 M1d-S3 step만 단독 수행한다.
+
+- MCP 검색 중 웹 UI나 SSE가 실제로 멈춘다.
+- MCP 긴 조회가 일반 API p95에 명확한 회귀를 만든다.
+
+이 경우에도 작업 범위는 "MCP DB 조회 threadpool 적용 여부 판단"까지만 한다. transport 교체, identity 병렬 테스트, DNS rebinding 정책은 본 단계에서 수행하지 않는다.
+
+| step | 제목 | 모델 | §참조 | exit criteria |
+|------|------|------|-------|---------------|
+| [ ] M1d-S1 | MCP 병목 측정 게이트 평가 | Opus | §15 SSE 측정 분리 + §17 M1d 완료 기준 | M1b/M1c 결과에서 위 두 조건(SSE 정지 / 일반 API p95 회귀) 중 1건 이상 측정 시 M1d-S3 진행, 미관측 시 본 마일스톤 skip 사유 기록 후 종료 |
+| [ ] M1d-S3 | MCP DB 조회 threadpool 적용 여부 판단 (조건부) | Opus | §9 적용 내용 — 조회/쓰기 경계 | M1d-S1 게이트 통과 시에만 진입. DB 조회만 threadpool, 사용자 조회·권한 검사는 main async, worker thread `_mcp_user` 재읽기 0건. transport 교체/identity 테스트/DNS rebinding 결정은 본 단계에서 제외하고 회사 반입 게이트로 분리 |
+
+### M1d에서 제외된 항목
+
+본 단계에서 제외하고 "보수 단축안 / 회사 반입 게이트" 섹션의 M1d-1~M1d-9 표에서 끌어올 수 있는 항목:
+
+- MCP 클라이언트 handshake 사전 조사 (Codex CLI/Claude Desktop/Claude Code/Cline)
+- MCP DNS rebinding 보호 정책 결정
+- 권한/가시성 회귀 테스트 시나리오 작성 + 실행
+- 동시 요청 identity 격리 테스트 (두 사용자 토큰 병렬)
+- handshake 통과 시 transport 교체 단일 패키지(7종)
+- 클라이언트 설정 이전 안내 게시 + `/mcp-codex` alias/deprecation
+- DNS rebinding 시뮬레이션 회귀 테스트
+
+근거: 사내 환경에서 동시 MCP 사용 빈도는 낮다. transport 교체는 실제 사용 클라이언트가 새 transport를 지원하는지 확인되기 전까지 강행하지 않는다. DNS rebinding은 IP whitelist + 사내 LAN 전제에서 발생 가능성이 낮고, 필요 시 Host/origin allowlist를 핫픽스로 추가 가능하다.
+
+---
+
+## M1 종료 게이트
+
+본 게이트는 두 가지 트랙으로 분리한다.
+
+### M1-ULTRA 종료 기준 (lite case, 사내 운영 기본 경로)
+
+| step | 제목 | 모델 | §참조 | exit criteria |
+|------|------|------|-------|---------------|
+| [ ] M1-end-U1 | M1-ULTRA 종료 점검 | Opus | §17 M1 종료 부하 테스트 (축소) | (a) M1a lazy-load 회귀 0건과 before/after 측정 기록 / (b) M1b WAL/PRAGMA 적용 후 `journal_mode=wal` / (c) M1b 50 VU smoke에서 명확한 p95 회귀 없음·`database is locked` 0건 유지 / (d) M1c Ollama 기본 1슬롯 limiter 동작 / (e) 동시 AI 2개 smoke 포화 응답 또는 대기 정책 확인 / (f) M1d skip 사유 기록(또는 M1d-S3 수행 시 threadpool 판단 결과 기록) |
+
+### 보수 단축안 / 회사 반입 종료 기준 (회사 반입 결정 또는 장애 징후 발생 시)
+
+| step | 제목 | 모델 | §참조 | exit criteria |
+|------|------|------|-------|---------------|
+| [ ] M1-end-1 | M1 종료 50 VU 부하 테스트 (full case) | Opus | §17 M1 종료 부하 테스트 | `database is locked` 0건 / 업로드·AI 동시성 가드 동작 / 에디터 lazy-load 회귀 0 / before/after 개선 폭 기록 |
+| [ ] M1-end-2 | 회사 반입 패키지 결정 | Opus | §0 문서 라이프사이클 정책 | M1a/M1b/M1c/M1d 각 패키지가 §15 판단 우선순위(1~4) 통과 시 반입, 1건이라도 미통과면 보류. **선결 조건** — 보수 단축안 섹션의 M1b-1~M1b-17, M1c-1~M1c-13, M1d-1~M1d-9 표에서 채택한 항목이 ULTRA 산출물 위에 합쳐져 있어야 함 |
+
+> **여기서 멈춤 권장**: M2 이후는 운영 구조 변경(성능 최적화 아님). M1-ULTRA 종료만으로 M2 진입 근거가 생기는 것은 아니다. 회사 반입 결정 또는 §13 진입 게이트 조건 확인 시에만 다음 마일스톤 진입.
+
+---
+
+## 보수 단축안 / 회사 반입 게이트 / 후속 후보
+
+이 섹션은 M1-ULTRA에서 잘라낸 항목을 회사 반입 결정 또는 실제 장애 징후가 생겼을 때 끌어올리기 위해 보존한다. 본 섹션의 step은 ULTRA 산출물 위에 합쳐지는 형태이며, 단독 마일스톤으로 진입하지 않는다. 잘라낸 항목과 복구 비용 표는 [`성능 개선 단축안(M1b-M1d).md`](성능%20개선%20단축안(M1b-M1d).md) "잘라낸 항목과 복구 비용" 절 참조.
+
+**활성화 조건**
+
+- **M1b full case**: 회사 반입 결정, 또는 M1b-ULTRA smoke에서 `database is locked` 발생, 또는 야간 스케줄러로 일반 API 회귀 측정, 또는 startup 단발 경로 raw connect 일관성 감사 요구.
+- **M1c full case**: 회사 반입 결정, 또는 거대 파일 업로드 OOM/RSS spike 발생, 또는 SSE QueueFull 빈발, 또는 1~5 슬롯 부하 매트릭스 측정 요구.
+- **M1d full case**: 회사 반입 결정, 또는 MCP transport 교체 운영 결정, 또는 두 사용자 동시 MCP 사용 빈도 증가, 또는 MCP DNS rebinding 보호 정책 운영 요구.
+
+### M1b 보수 단축안 — WAL/PRAGMA + BEGIN IMMEDIATE + 백업/인덱스 (full case 보존)
 
 마일스톤 의도: SQLite 동시성 기반을 정리한다. WAL/PRAGMA, 헬퍼 분리, IMMEDIATE 트랜잭션, lock 변환, 백업·복원 절차를 묶어 검증.
 
@@ -68,11 +203,9 @@
 | [ ] M1b-16 | M1b 동시성 검증 | Opus | §15 동시성 검증 | 저장 100 + 조회 100 동시 — `database is locked` 0건, lock 변환 경로 검증 |
 | [ ] M1b-17 | M1b Playwright 회귀 + exit criteria 점검 | Opus | §17 M1b 완료 기준 | 회귀 0 / `init_db()`·마이그레이션·진단·백업 경로의 직접 `sqlite3.connect(DB_PATH)` 호출 0건(저수준 헬퍼 정의부 제외 grep 결과로 확인) / IMMEDIATE 본문 외부 호출 0 / 503 변환 좁은 적용 / 백업 무결성 / restore drill 기록 / scheduler 회귀 0 |
 
----
+### M1c 보수 단축안 — 업로드 / Ollama 세마포어 / SSE 가드 (full case 보존)
 
-## M1c — 업로드 / Ollama 세마포어 / SSE 가드
-
-마일스톤 의도: 리소스 OOM/잠식 가드. M1b 동시성 기반 위에서 측정.
+마일스톤 의도: 리소스 OOM/잠식 가드. M1b 동시성 기반 위에서 측정. M1c-ULTRA의 Ollama limiter 7접점 적용·admin UI·busy UX는 M1c-U1~U5에서 완료된 산출물을 재사용한다.
 
 | step | 제목 | 모델 | §참조 | exit criteria |
 |------|------|------|-------|---------------|
@@ -81,24 +214,22 @@
 | [ ] M1c-3 | chunked read hard cap | Sonnet | §7 옵션 A 안전판 — chunked read hard cap | 업로드 핸들러에서 chunked 누적 추적, 한도 초과 시 413 abort, 임시 버퍼 폐기 |
 | [ ] M1c-4 | ASGI body size middleware (request body 한정) | Opus | §7 옵션 A 안전판 — ASGI body size 제한 + request body 한정·응답 body 미접촉 원칙 | 순수 ASGI middleware, `BaseHTTPMiddleware` 미사용, `receive` wrapper만(send 없음). **본문 없는 method 4종 명시 제외** — `GET`/`HEAD`/`OPTIONS`/`DELETE` 모두 wrapper 통과. `text/event-stream` route 명시 제외. cap 적용 대상은 POST/PUT/PATCH 등 request body가 있는 method + route별 body cap 표에 매핑된 경로에 한정 |
 | [ ] M1c-5 | 업로드 threadpool + 세마포어 | Sonnet | §7 적용 내용 (옵션 A) | `PIL.verify`/`Path.write_bytes` threadpool, `asyncio.Semaphore(8)` 적용, 세마포어 위치 명확화 |
-| [ ] M1c-6 | Ollama resizable limiter 추상 결정 | Opus | §8 resizable limiter 설계 | 카운터+condition 자체 limiter 또는 `anyio.CapacityLimiter` 중 한쪽 채택, capacity 변경 시 사용 슬롯 보존 |
-| [ ] M1c-7 | Ollama limiter 모든 외부 HTTP 접점 적용 | Opus | §8 limiter 적용 대상 — 모든 외부 Ollama HTTP 접점 | 7개 접점(파싱/refinement/체크리스트 생성/주간 보고/conflict review/health/model) 감싸기, `score_conflict` 제외, `try_acquire` 즉시 false 시 busy |
-| [ ] M1c-8 | admin UI 1~5 슬롯 설정 + busy UX | Sonnet | §8 admin UI 설정 항목 + 통합 거부 응답 | 1~5 선택 UI, 변경 즉시 limiter capacity 반영, 사용자 화면 "AI 사용 중 (N/N)" 안내 |
-| [ ] M1c-9 | Ollama 외부 장애 통합 UX | Sonnet | §8 Ollama 서버 장애 통합 처리 | 단계 ① 시점부터 `ConnectionError`/timeout/5xx도 슬롯 포화와 동일한 "AI 사용 불가" UX로 통합. 내부 로그에서는 사유 구분, 사용자에게는 같은 재시도 안내. admin UI에 Ollama 서버 health 표시. 회귀 — 외부 Ollama 일시 정지 시 7개 limiter 적용 접점 모두 동일 UX 응답 |
+| [ ] M1c-6 | Ollama resizable limiter 추상 결정 | Opus | §8 resizable limiter 설계 | M1c-U1에서 채택한 추상(카운터+condition 자체 limiter 또는 `anyio.CapacityLimiter`)이 capacity 변경 시 사용 슬롯 보존하는지 재확인. ULTRA에서 결정 미흡한 경우 본 단계에서 보강 |
+| [ ] M1c-7 | Ollama limiter 모든 외부 HTTP 접점 적용 | Opus | §8 limiter 적용 대상 — 모든 외부 Ollama HTTP 접점 | M1c-U1 산출물 재사용 — 7개 접점(파싱/refinement/체크리스트 생성/주간 보고/conflict review/health/model) 감싸기, `score_conflict` 제외, `try_acquire` 즉시 false 시 busy |
+| [ ] M1c-8 | admin UI 1~5 슬롯 설정 + busy UX | Sonnet | §8 admin UI 설정 항목 + 통합 거부 응답 | M1c-U3 산출물 재사용 — 1~5 선택 UI, 변경 즉시 limiter capacity 반영, 사용자 화면 "AI 사용 중 (N/N)" 안내 |
+| [ ] M1c-9 | Ollama 외부 장애 통합 UX | Sonnet | §8 Ollama 서버 장애 통합 처리 | M1c-U4 산출물 재사용 — 단계 ① 시점부터 `ConnectionError`/timeout/5xx도 슬롯 포화와 동일한 "AI 사용 불가" UX로 통합. 내부 로그에서는 사유 구분, 사용자에게는 같은 재시도 안내. admin UI에 Ollama 서버 health 표시. 회귀 — 외부 Ollama 일시 정지 시 7개 limiter 적용 접점 모두 동일 UX 응답 |
 | [ ] M1c-10 | SSE broker QueueFull 카운터 + 큐 크기 결정 | Sonnet | §10 적용 내용 | `QueueFull` 발생 카운터, 100 → 500 조정 결정 근거 기록 |
 | [ ] M1c-11 | 로그 회전 + 모니터링 | Sonnet | §14 로그 회전 + 메모리/디스크 모니터링 | `RotatingFileHandler`/`TimedRotatingFileHandler` 일별·14일, RSS/`.wal`/업로드 디렉터리 임계값 경고 |
 | [ ] M1c-12 | M1c 회귀 — SSE/응답 스트림 보호 | Opus | §17 M1c 완료 기준 (8차 #6 반영) | `/api/stream` 유지, `/uploads/meetings/*` 조회, export/download 응답 끝까지 완료, GET/HEAD cap 미적용 |
 | [ ] M1c-13 | M1c 부하 + exit criteria 점검 | Opus | §17 M1c 완료 기준 | 업로드 중 일반 API 회귀 0(보조 p95 300ms), 메모리 풀로드 100~160MB, busy p95 100ms, admin 즉시 반영, queue 카운터 동작, Ollama 외부 장애 통합 UX 회귀 0 |
 
----
+### M1d 보수 단축안 — MCP 호환성 + threadpool (full case 보존)
 
-## M1d — MCP 호환성 + threadpool
-
-마일스톤 의도: MCP transport 통합 + 권한/identity 격리. 호환성 게이트 통과 전까지 SSE 제거 강행 금지.
+마일스톤 의도: MCP transport 통합 + 권한/identity 격리. 호환성 게이트 통과 전까지 SSE 제거 강행 금지. M1d-S3가 lite 경로에서 수행됐다면 M1d-1은 그 산출물을 재사용한다.
 
 | step | 제목 | 모델 | §참조 | exit criteria |
 |------|------|------|-------|---------------|
-| [ ] M1d-1 | MCP DB 조회 threadpool 분리 | Opus | §9 적용 내용 — 조회/쓰기 경계 | DB 조회만 threadpool, 사용자 조회·권한 검사는 main async, worker thread `_mcp_user` 재읽기 0건 |
+| [ ] M1d-1 | MCP DB 조회 threadpool 분리 | Opus | §9 적용 내용 — 조회/쓰기 경계 | DB 조회만 threadpool, 사용자 조회·권한 검사는 main async, worker thread `_mcp_user` 재읽기 0건. M1d-S3가 이미 수행된 경우 산출물 재사용 |
 | [ ] M1d-2 | MCP DNS rebinding 보호 정책 결정 | Opus | §9 MCP DNS rebinding 보호 정책 | `enable_dns_rebinding_protection=True` + 허용 Host, 또는 앱/라우터 Host allowlist 중 한쪽 채택 |
 | [ ] M1d-3 | MCP 클라이언트 handshake 사전 조사 | Sonnet | §9 호환성 게이트 + §16 M1d 2번 | Codex CLI/Claude Desktop/Claude Code/Cline 각자 `/mcp` Streamable HTTP handshake 결과 기록 |
 | [ ] M1d-4 | 권한/가시성 회귀 테스트 시나리오 작성 | Opus | §9 권한/가시성 회귀 테스트 + §15 MCP 권한 회귀 | 비멤버/히든 프로젝트/메타데이터 노출 차단 시나리오, transport 변경 전후 같은 시나리오 통과 |
@@ -107,17 +238,6 @@
 | [ ] M1d-7 | 클라이언트 설정 이전 안내 게시 (M1d-6에 통합 완료) | Sonnet | §9 운영 절차 (2번) | README/사내 문서/`/mcp-codex` 접속 시 안내 메시지/MCP 토큰 발급 절차 — **M1d-6과 같은 패키지로 묶어 commit** |
 | [ ] M1d-8 | DNS rebinding 시뮬레이션 회귀 테스트 (M1d-6에 통합 완료) | Opus | §9 회귀 테스트 (rebinding) | 허용 Host 정상 응답 / 외부 도메인 시뮬레이션 403 또는 400 차단 — **M1d-6과 같은 패키지로 묶어 commit** |
 | [ ] M1d-9 | M1d exit criteria 점검 | Opus | §17 M1d 완료 기준 | **공통 항목** — threadpool contextvar 0건 / handshake 결과 기록 / 권한 회귀 통과 / identity 격리 통과 / DNS rebinding 차단 / 롤백 경로 식별. **분기 처리** — (a) **handshake 통과 분기**: M1d-6/7/8 단일 패키지로 transport 교체 + alias/deprecation + 회귀 테스트 모두 commit 완료, `/mcp-codex` 정리 일정 결정. (b) **handshake 미통과 클라이언트 존재 분기**: SSE 제거 보류, M1d 종료 기준은 "threadpool 적용 + 호환성 조사 기록 + 권한 회귀 테스트 통과 + 호환 정책 문서 작성"까지로 한정. transport 교체 commit은 회사 반입 패키지에 포함하지 않고 미통과 클라이언트의 사용 종료/버전 업그레이드 일정 확정 후 별도 마일스톤으로 분리. 어느 분기든 마일스톤 종료 자체는 가능 |
-
----
-
-## M1 종료 게이트
-
-| step | 제목 | 모델 | §참조 | exit criteria |
-|------|------|------|-------|---------------|
-| [ ] M1-end-1 | M1 종료 50 VU 부하 테스트 | Opus | §17 M1 종료 부하 테스트 | `database is locked` 0건 / 업로드·AI 동시성 가드 동작 / 에디터 lazy-load 회귀 0 / before/after 개선 폭 기록 |
-| [ ] M1-end-2 | 회사 반입 패키지 결정 | Opus | §0 문서 라이프사이클 정책 | M1a/M1b/M1c/M1d 각 패키지가 §15 판단 우선순위(1~4) 통과 시 반입, 1건이라도 미통과면 보류 |
-
-> **여기서 멈춤 권장**: M2 이후는 운영 구조 변경(성능 최적화 아님). M1 측정 결과로 진입 게이트 미통과면 §18 후속 후보로 유지.
 
 ---
 
@@ -200,24 +320,35 @@
 
 ## 진행 상태 보드
 
-> 카운트 기준: 진입 게이트(`-0`) step을 포함한 row 총수.
+> 카운트 기준: 진입 게이트(`-0`) step을 포함한 row 총수. M1b/M1c/M1d는 lite/ULTRA 기준이 기본 진행 row이고, 보수 단축안 행은 회사 반입 결정 시에만 활성화한다.
+
+### lite/ULTRA 기본 경로
 
 | 마일스톤 | 진입 게이트 | 진행 중 | 완료 | 비고 |
 |---------|-----------|--------|------|------|
 | M1a | (즉시 가능) | **완료** (Group B spec 업데이트 후속) | **13/13** | baseline run_181951/ + m1a11_run_193829/ 보관; M1a-12 26건 fail은 Group A 사전 부채 + Group B 디자인 변경 expected + Group C orthogonal로 triage 완료 |
-| M1b | M1a 완료 | — | 0/17 | — |
-| M1c | M1b 완료 | — | 0/13 | Ollama 외부 장애 통합 UX 포함 |
-| M1d | M1c 완료 | — | 0/9 | M1d-6/7/8 단일 패키지 묶음 필수 |
-| M1 종료 게이트 | M1a~M1d 완료 | — | 0/2 | 회사 반입 결정 |
+| M1b-ULTRA | M1a 완료 | — | 0/5 | WAL/PRAGMA 1.5h 경로 |
+| M1c-ULTRA | M1b-ULTRA 완료 | — | 0/5 | Ollama limiter + admin UI + busy UX 2.5h 경로 |
+| M1d (조건부) | M1c-ULTRA 완료 | — | 0/1 + 조건부 0/1 | M1d-S1 게이트만 기본 진행, MCP 병목 측정 시 M1d-S3 단독 진입 |
+| M1-ULTRA 종료 | M1a + M1b-U + M1c-U + M1d 처리 완료 | — | 0/1 | M1-end-U1 — lite 기준 종료 |
 | M2 | §13 진입 게이트 통과 | — | 0/21 | 외부 포트 소유자 결정 step + baseline 표 포함 |
 | M3 | §13 진입 게이트 통과 | — | 0/5 | M3-0 게이트 평가 포함 |
 | M4 | §13 진입 게이트 통과 | — | 0/5 | M4-0 게이트 평가 포함 |
 | M5 후보 | M1c 회귀 측정 | — | 0/4 | M5-0 게이트 평가 포함, 조건부 |
 | M6 후보 | 운영 요구 발생 | — | 0/5 | M6-0 게이트 평가 포함, 조건부 |
 
+### 보수 단축안 / 회사 반입 게이트 (회사 반입 결정 또는 장애 징후 시 활성화)
+
+| 마일스톤 | 활성화 조건 | 진행 중 | 완료 | 비고 |
+|---------|-----------|--------|------|------|
+| M1b full case | 회사 반입 결정 또는 lock/스케줄러 회귀 | — | 0/17 | 보수 단축안 섹션 M1b-1~M1b-17 표 |
+| M1c full case | 회사 반입 결정 또는 업로드/SSE 회귀 | — | 0/13 | 보수 단축안 섹션 M1c-1~M1c-13 표, Ollama 외부 장애 통합 UX 포함 |
+| M1d full case | 회사 반입 결정 또는 MCP transport 교체 결정 | — | 0/9 | 보수 단축안 섹션 M1d-1~M1d-9 표, M1d-6/7/8 단일 패키지 묶음 필수 |
+| M1 종료 full case | 보수 단축안 채택 항목 합산 후 | — | 0/2 | M1-end-1 50 VU 부하 + M1-end-2 회사 반입 패키지 결정 |
+
 ## step 결과 기록 형식
 
-step 완료 시 본 todo 또는 별도 진행 노트에 다음 4종을 기록한다(증거 인덱스 필수). M2-20 정책별 증거 인덱스 운영 방식을 step 단위에도 동일하게 적용해 회사 반입 판단 자료가 누락되지 않게 한다.
+step 완료 시 별도 진행 결과 문서에 다음 4종을 기록한다(증거 인덱스 필수). M2-20 정책별 증거 인덱스 운영 방식을 step 단위에도 동일하게 적용해 회사 반입 판단 자료가 누락되지 않게 한다. 본 todo에는 체크박스와 진행 상태만 남긴다.
 
 ```
 M1a-1 완료 (2026-MM-DD)
