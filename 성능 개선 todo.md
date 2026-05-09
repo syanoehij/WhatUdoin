@@ -7,7 +7,7 @@
 - **1차 실행 todo로 동결** (2026-05-09): 마스터 plan rev29 + 다회 외부 검토 사이클을 거쳐 M1a~M1d 실행 + M2 이후 조건부 운영 구조 변경 step이 모두 정합 상태로 확정됐다. 신규 step 추가 사이클은 종결한다.
 - **트랙 단축 결정** (2026-05-09): M1a 완료 후 외부 검토 2차 사이클을 거쳐 M1b~M1d의 실제 실행 경로를 **M1-ULTRA**(사내 소수 사용자 기준)로 낮췄다. 단축 근거는 아래 "단축 배경" 참조. 기존 full case 세부 step은 본 문서 하단 "보수 단축안 / 회사 반입 게이트 / 후속 후보" 섹션으로 이동했고, 회사 반입 결정이나 실제 장애 징후 발생 시 끌어올린다. 상세 단축안은 [`성능 개선 단축안(M1b-M1d).md`](성능%20개선%20단축안(M1b-M1d).md) 참조.
 - **추후 변경 원칙**: 본 todo는 마스터 plan §0 "문서 라이프사이클 정책"과 동일하게 동결 상태로 둔다. 새 의견이 들어와도 M1a~M1d 실행을 막는 실재 코드/운영 리스크가 아니면 본문을 더 확장하지 않고, 구현 중 발견 사실 → commit/PR 메시지, 운영 정책/후속 마일스톤 후보 → 마스터 plan §18로 분리한다.
-- **다음 행동**: M2-13 완료. Web API internal mode에서 `TRUSTED_PROXY`·loopback bind·직접 접근 guard를 한 세트로 묶었고, 비신뢰 source의 XFF 위조 무시 및 non-loopback 직접 접근 403을 확인했다. 다음은 M2-14 Front Router CSRF Host 보존 조건.
+- **다음 행동**: M2-14 완료. Front Router는 ASGI dispatcher라 inbound `Host`가 자연스럽게 외부 원본 그대로 downstream에 전달되고, M2-11 strip-then-set이 `Host`를 strip하지 않아 `_check_csrf()`가 코드 변경 없이 통과한다. probe 15/15 + phase56 회귀 15/15 PASS. 다음은 M2-15 HTTPS probe middleware 라우터 호환.
 
 ## 단축 배경
 
@@ -264,7 +264,7 @@
 | [x] M2-11 | strip-then-set forwarded 헤더 정책 | Opus | §13 Front Router strip-then-set forwarded 헤더 정책 | **Forwarded strip-then-set 적용 (2026-05-10)** — `front_router.py`가 inbound `Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-Port`, `X-Real-IP`를 제거하고 `scope.client`/`Host`/`scheme`/port 기준으로 재작성. Web API와 SSE app 모두 spoof 원문 0건, Cookie/Authorization/Host 보존, `/internal/*` downstream 0건 probe PASS. 상세: `성능 개선 진행 결과(M2).md` |
 | [x] M2-12 | SlowAPI limiter trusted-proxy 통일 | Opus | §13 SlowAPI rate limiter key 통일 | **Limiter key 통일 적용 (2026-05-10)** — `app.py`의 `Limiter(key_func=auth.get_client_ip)` 적용. `tests/phase54_limiter_trusted_proxy.py` 및 isolated probe PASS: trusted proxy 경유 50개 forwarded IP distinct bucket, 비신뢰 source의 XFF 위조 무시, trusted proxy 첫 forwarded IP 채택, 동일 IP `/api/login` 11번째 429 유지. 상세: `성능 개선 진행 결과(M2).md` |
 | [x] M2-13 | TRUSTED_PROXY + 외부 직접 접근 차단 한 세트 | Opus | §13 `TRUSTED_PROXY` + 외부 직접 접근 차단 | **적용 완료 (2026-05-10)** — supervisor Web API service env/factory가 `TRUSTED_PROXY=127.0.0.1`, `WHATUDOIN_BIND_HOST=127.0.0.1`, `WHATUDOIN_WEB_API_INTERNAL_ONLY=1`을 한 세트로 적용하고 `extra_env` override로 분리되지 않게 보호. `main.py`와 direct `app.py` launcher 모두 bind host env 지원. Web API internal-only guard는 non-loopback 직접 접근 403, loopback router 허용. `auth.get_client_ip()` 비신뢰 source XFF 위조 무시 회귀 16/16 PASS. 상세: `성능 개선 진행 결과(M2).md` |
-| [ ] M2-14 | Front Router CSRF Host 보존 조건 | Opus | §13 Front Router CSRF Host 보존 조건 | Host 보존 또는 X-Forwarded-Host 채택, unsafe POST/PUT/DELETE 라우터 경유 통과, Origin 위조 403 |
+| [x] M2-14 | Front Router CSRF Host 보존 조건 | Opus | §13 Front Router CSRF Host 보존 조건 | **Host 보존 채택/적용 (2026-05-10)** — Front Router는 ASGI dispatcher라 별도 proxy hop이 없고 M2-11 strip-then-set의 `FORWARDED_HEADER_NAMES`에 `host`가 없어 inbound Host가 그대로 downstream에 전달된다. `app.py:_check_csrf()`는 코드 변경 없이 통과. probe 15/15 PASS, phase56 회귀 15/15 PASS. 일반 POST 라우터 경유 Host 보존 / X-Forwarded-Host 위조 시 downstream Host 불변 / SSE path Host 보존 / cross-origin 403 / 다중 도메인(LAN IP + hostname) 각 origin 통과 + 교차 차단. 상세: `성능 개선 진행 결과(M2).md` |
 | [ ] M2-15 | HTTPS probe middleware 라우터 호환 | Opus | §13 Front Router HTTPS probe middleware 호환 조건 | 라우터 뒤 비활성화 또는 `scope["scheme"]` 재구성, 라우터 경유 페이지 probe HTML 0, 외부 직접 8000 인증서 안내 회귀 0 |
 | [ ] M2-16 | SSE broker SSE service 프로세스로 이전 | Opus | §13 채택 — SSE service 분리 + main → SSE 통신 | broker 이전, Web API는 publish IPC 클라이언트만, 내부 endpoint loopback bind |
 | [ ] M2-17 | 내부 토큰 인증 + healthcheck + 로그 분리 + crash-loop | Opus | §13 supervisor lifecycle + watchdog + §14 watchdog | `/internal/publish` 토큰 인증, `/healthz`, 5분 3회 crash-loop 차단, degraded 표시 |
@@ -334,7 +334,7 @@
 | M1c-ULTRA | M1b-ULTRA 완료 | **완료** | **5/5** | Ollama limiter + admin UI + busy UX 2.5h 경로. U1~U5 모두 완료. 1슬롯 포화 즉시 거부 확인, 1→3 resize live 반영 확인 |
 | M1d (조건부) | M1c-ULTRA 완료 | **완료 (skip)** | **1/1** + 조건부 0/1 | M1d-S1 skip 종료(MCP 병목 미관측), M1d-S3 미진입. 회사 반입 게이트 시 재평가 |
 | M1-ULTRA 종료 | M1a + M1b-U + M1c-U + M1d 처리 완료 | **완료** | **1/1** | M1-end-U1 lite 기준 6종(a~f) 모두 충족. M1b-U5 closure PASS 반영 완료. M1-ULTRA 사이클 종료 |
-| M2 | target-risk override | M2-14 대기 | **14/21** | M2-1 외부 포트 소유자: Tray/Supervisor/Front Router. M2-2 SSE 접근 경로: (a). M2-3 canonical URL: PC LAN IP 기반. M2-4 HTTP fallback unsafe write 차단. M2-5 HSTS 미적용. M2-6 AVR 사용 배포. M2-7 SSE 별도 LAN 포트 비채택. M2-8 frozen self re-spawn PASS. M2-9 Supervisor skeleton. M2-10 minimal Front Router. M2-11 forwarded strip-then-set. M2-12 limiter trusted-proxy key. M2-13 TRUSTED_PROXY + Web API direct-access boundary |
+| M2 | target-risk override | M2-15 대기 | **15/21** | M2-1 외부 포트 소유자: Tray/Supervisor/Front Router. M2-2 SSE 접근 경로: (a). M2-3 canonical URL: PC LAN IP 기반. M2-4 HTTP fallback unsafe write 차단. M2-5 HSTS 미적용. M2-6 AVR 사용 배포. M2-7 SSE 별도 LAN 포트 비채택. M2-8 frozen self re-spawn PASS. M2-9 Supervisor skeleton. M2-10 minimal Front Router. M2-11 forwarded strip-then-set. M2-12 limiter trusted-proxy key. M2-13 TRUSTED_PROXY + Web API direct-access boundary. M2-14 CSRF Host 보존 채택(코드 변경 0) |
 | M3 | §13 진입 게이트 통과 | — | 0/5 | M3-0 게이트 평가 포함 |
 | M4 | §13 진입 게이트 통과 | — | 0/5 | M4-0 게이트 평가 포함 |
 | M5 후보 | M1c 회귀 측정 | — | 0/4 | M5-0 게이트 평가 포함, 조건부 |
