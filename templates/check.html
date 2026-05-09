@@ -1079,56 +1079,9 @@ const ALL_PROJECTS = {{ projects | tojson | safe }};
 const ALL_DONE_PROJECTS = {{ done_projects | tojson }};
 const TAB_TOKEN = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getItem(k); if (!t) { t = (crypto?.randomUUID?.() ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); })); sessionStorage.setItem(k, t); } return t; })();
 
-// ── 에디터 번들 lazy load ──────────────────────────────────
-const _EDITOR_ASSETS = {
-  hljs:     '/static/lib/highlight.min.js{{ asset_v("static/lib/highlight.min.js") }}',
-  tiptap:   '/static/lib/tiptap-bundle.min.js{{ asset_v("static/lib/tiptap-bundle.min.js") }}',
-  mermaid:  '/static/lib/mermaid-bundle.min.js{{ asset_v("static/lib/mermaid-bundle.min.js") }}',
-  wuEditor: '/static/js/wu-editor.js{{ asset_v("static/js/wu-editor.js") }}',
-  cssHljs:  '/static/lib/highlight-github.min.css{{ asset_v("static/lib/highlight-github.min.css") }}',
-  cssKatex: '/static/lib/katex.min.css{{ asset_v("static/lib/katex.min.css") }}',
-  cssWu:    '/static/css/wu-editor.css{{ asset_v("static/css/wu-editor.css") }}',
-};
-
-let _editorAssetsPromise = null;
+// ── 에디터 번들 lazy load — WuAssets 위임 ────────────────────
 function _loadEditorAssets() {
-  if (!_editorAssetsPromise) _editorAssetsPromise = (async () => {
-    function _loadScript(src) {
-      return new Promise((resolve, reject) => {
-        const base = src.split('?')[0];
-        if (document.querySelector(`script[src^="${base}"]`)) { resolve(); return; }
-        const s = document.createElement('script');
-        s.src = src;
-        s.onload = resolve;
-        s.onerror = reject;
-        document.head.appendChild(s);
-      });
-    }
-    function _loadCss(href) {
-      const base = href.split('?')[0];
-      if (!document.querySelector(`link[href^="${base}"]`)) {
-        const l = document.createElement('link');
-        l.rel = 'stylesheet';
-        l.href = href;
-        document.head.appendChild(l);
-      }
-    }
-    try {
-      _loadCss(_EDITOR_ASSETS.cssHljs);
-      _loadCss(_EDITOR_ASSETS.cssKatex);
-      _loadCss(_EDITOR_ASSETS.cssWu);
-      await Promise.all([
-        _loadScript(_EDITOR_ASSETS.hljs),
-        _loadScript(_EDITOR_ASSETS.tiptap),
-        _loadScript(_EDITOR_ASSETS.mermaid),
-      ]);
-      await _loadScript(_EDITOR_ASSETS.wuEditor);
-    } catch (err) {
-      _editorAssetsPromise = null; // 실패 시 다음 호출에서 재시도 가능
-      throw err;
-    }
-  })();
-  return _editorAssetsPromise;
+  return window.WuAssets.ensure('wu-editor');
 }
 
 let _allChecklists      = [];

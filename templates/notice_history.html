@@ -1,7 +1,4 @@
 {% extends "base.html" %}
-{% block wu_editor_assets %}
-  {% include "_wu_editor_assets.html" %}
-{% endblock %}
 {% block title %}WhatUDoin — 팀 공지 이력{% endblock %}
 
 {% block extra_head %}
@@ -74,8 +71,9 @@
 const HISTORIES = {{ histories | tojson | safe }};
 let viewer = null;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   if (HISTORIES.length > 0) {
+    await window.WuAssets.ensure('wu-editor');
     viewer = WUEditor.create({
       el: document.getElementById('viewer-container'),
       canEdit: false,
@@ -84,16 +82,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-function showHistory(idx) {
+async function showHistory(idx) {
   // 리스트 active 상태 변경
   document.querySelectorAll('.history-item').forEach((el, i) => {
     el.classList.toggle('active', i === idx);
   });
 
-  if (!viewer) return;
   const container = document.getElementById('viewer-container');
-  viewer.destroy();
+  if (!container) return;
+  if (viewer) { viewer.destroy(); viewer = null; }
   container.innerHTML = '';
+  await window.WuAssets.ensure('wu-editor');
   viewer = WUEditor.create({ el: container, canEdit: false, initialMarkdown: HISTORIES[idx].content || '(내용 없음)' });
 }
 </script>

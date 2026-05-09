@@ -1,0 +1,7 @@
+# Performance / QA dev-only dependencies.
+# Kept separate from runtime requirements.txt; excluded from PyInstaller onedir.
+# Install: "D:\Program Files\Python\Python312\python.exe" -m pip install -r requirements-dev.txt
+# ASCII-only comments to avoid Windows pip cp949 decode errors.
+
+locust
+httpx      # M1a-6: SSE PoC and keep-alive script (async streaming client, verify=False for self-signed cert)

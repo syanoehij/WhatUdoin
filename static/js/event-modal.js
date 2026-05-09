@@ -39,49 +39,9 @@ let _boundChecklistAll        = [];     // sub-modal 캐시: 활성 체크리스
 let _boundViewerInstance      = null;   // 본문 viewer WUEditor 인스턴스
 let _kdetailBoundViewerInst   = null;   // 칸반 상세 모달 바인딩 viewer 인스턴스
 
-// ── WUEditor 자산 지연 로드 ───────────────────────────────
+// ── WUEditor 자산 지연 로드 — WuAssets 위임 ─────────────────
 function ensureWUEditorAssets() {
-  if (window.WUEditor) return Promise.resolve();
-  if (window.__wuEditorAssetsPromise) return window.__wuEditorAssetsPromise;
-
-  const v = window.__WU_ASSET_V || {};
-
-  function loadLink(href) {
-    return new Promise(resolve => {
-      const base = href.split('?')[0];
-      if (document.querySelector(`link[rel="stylesheet"][href^="${base}"]`)) return resolve();
-      const el = document.createElement('link');
-      el.rel = 'stylesheet'; el.href = href;
-      el.onload = resolve; el.onerror = resolve;
-      document.head.appendChild(el);
-    });
-  }
-
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const base = src.split('?')[0];
-      const existing = document.querySelector(`script[src^="${base}"]`);
-      if (existing) {
-        if (window.WUEditor) return resolve();
-        existing.addEventListener('load', resolve);
-        existing.addEventListener('error', reject);
-        return;
-      }
-      const el = document.createElement('script');
-      el.src = src;
-      el.onload = resolve; el.onerror = reject;
-      document.head.appendChild(el);
-    });
-  }
-
-  window.__wuEditorAssetsPromise = loadLink(`/static/lib/highlight-github.min.css${v.hlCss || ''}`)
-    .then(() => loadScript(`/static/lib/highlight.min.js${v.hlJs || ''}`))
-    .then(() => loadLink(`/static/lib/katex.min.css${v.katex || ''}`))
-    .then(() => loadLink(`/static/css/wu-editor.css${v.wuCss || ''}`))
-    .then(() => loadScript(`/static/lib/tiptap-bundle.min.js${v.tiptap || ''}`))
-    .then(() => loadScript(`/static/js/wu-editor.js${v.wuJs || ''}`));
-
-  return window.__wuEditorAssetsPromise;
+  return window.WuAssets.ensure('wu-editor');
 }
 
 // ── 프로젝트 자동완성 ─────────────────────────────────────

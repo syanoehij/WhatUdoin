@@ -1,7 +1,4 @@
 {% extends "base.html" %}
-{% block wu_editor_assets %}
-  {% include "_wu_editor_assets.html" %}
-{% endblock %}
 {% block title %}휴지통 – WhatUDoin{% endblock %}
 
 {% block extra_head %}
@@ -852,7 +849,7 @@ function renderGroupDetail(g) {
 }
 
 // ── 오른쪽: 항목 상세 ──
-function renderDetail(item, _unused) {
+async function renderDetail(item, _unused) {
   const ph  = document.getElementById('tr-placeholder');
   const det = document.getElementById('tr-detail');
   const gd  = document.getElementById('tr-group-detail');
@@ -908,6 +905,7 @@ function renderDetail(item, _unused) {
     contentSection.style.display = '';
     contentViewer.style.display  = '';
     contentViewer.innerHTML = '';
+    await window.WuAssets.ensure('wu-editor');
     WUEditor.create({ el: contentViewer, canEdit: false, initialMarkdown: item.content || '' });
   } else if (item.type === 'event' && item.description) {
     contentSection.style.display = '';

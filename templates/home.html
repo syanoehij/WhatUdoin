@@ -1,7 +1,4 @@
 {% extends "base.html" %}
-{% block wu_editor_assets %}
-  {% include "_wu_editor_assets.html" %}
-{% endblock %}
 {% block title %}WhatUDoin{% endblock %}
 
 {% block extra_head %}
@@ -478,7 +475,7 @@ async function loadUser() {
   buildBoard('user-board', mine, true);
 }
 
-function renderNotice(notice) {
+async function renderNotice(notice) {
   const wrap = document.getElementById('notice-content-wrap');
   const metaInline = document.getElementById('notice-meta-inline');
   if (!wrap) return;
@@ -487,6 +484,7 @@ function renderNotice(notice) {
     return;
   }
   wrap.innerHTML = '';
+  await window.WuAssets.ensure('wu-editor');
   WUEditor.create({ el: wrap, canEdit: false, initialMarkdown: notice.content });
   if (metaInline && notice.created_at) {
     const dateStr = notice.created_at.slice(0, 16).replace('T', ' ');

@@ -1,4 +1,4 @@
-# 성능 개선 todo
+﻿# 성능 개선 todo
 
 본 문서는 `성능 개선 계획.md`(rev29 동결, 1차 실행 계획)를 step 단위로 분해한 실행 todo다. 메인 Opus 1M 세션이 마스터 plan을 동결 상태로 들고 있고, 각 step을 하위 에이전트에 위임해 한 번에 한 step씩 처리한다.
 
@@ -28,19 +28,19 @@
 
 | step | 제목 | 모델 | §참조 | exit criteria |
 |------|------|------|-------|---------------|
-| [ ] M1a-1 | `_workspace/perf/` 인프라 골격 | Sonnet | §15 M1a 측정 인프라 | 디렉터리 구조(`locust/`/`fixtures/`/`scripts/`/`baseline_<날짜>/`) 생성, `requirements-dev.txt`에 locust, 운영 코드 변경 0 |
-| [ ] M1a-2 | fixture seed/cleanup 스크립트 | Sonnet | §15 fixture 정책 + cleanup 정책 | `seed_users.py`(test_perf_001~050 + 세션 쿠키 사전 생성) + `cleanup.py`(test_perf_ 접두어 외 row 삭제 가드) + 서버 종료 상태에서만 실행 절차 |
-| [ ] M1a-3 | DB snapshot 백업 가드 | Sonnet | §15 측정 전 DB 백업 가드 | `whatudoin.db`/`.db-wal`/`.db-shm` 세트를 `baseline_<날짜>/db_snapshot/`에 보관, 복원 절차 README |
-| [ ] M1a-4 | background request inventory | Sonnet | §15 background request inventory + 다중 탭 모델 | 페이지×요청 매트릭스 문서(`background_requests.md`) — 알림 1분 polling/lock heartbeat/SSE refetch 전체 식별 |
-| [ ] M1a-5 | locust 시나리오 작성 (단일 탭 + 다중 탭) | Sonnet | §15 VU 사용자 모델 + background inventory | HTTPS 8443 고정, 세션 쿠키 주입, 단일 탭/다중 탭 분리 task, 가중치 적용 |
-| [ ] M1a-6 | SSE 측정 PoC + 분리 스크립트 | Sonnet | §15 SSE 측정 분리 | PoC로 SSE 연결 N개 유지 시 locust 카운트/timeout 동작 확인, 별도 keep-alive 스크립트(`httpx`/`aiohttp` 또는 locust SSE-only) 작성, main locust와 동시 실행 가능, 별도 지표 3종(연결 유지 성공률 / publish→수신 지연 / `QueueFull` 발생 수)을 main API p95와 분리 기록 |
-| [ ] M1a-7 | VU 1→5→10→25→50 단계별 baseline 측정 | Sonnet | §15 VU 단계 상승 절차 | 단계별 p95/p99/`database is locked`/RSS/CPU + 환경 메타데이터(서버-locust 동거 여부, locust CPU%) 단계 분리 기록, SSE 지표는 M1a-6 분리 스크립트 결과를 같은 단계 메타데이터로 묶어 기록 |
-| [ ] M1a-8 | `__WU_ASSET_V` mermaid 항목 추가 | Sonnet | §5-1 적용 내용 (asset map 단일화) | `base.html`의 `__WU_ASSET_V`에 `mermaid` 추가, `_wu_editor_assets.html`/`check.html`/`event-modal.js`가 동일 map 참조 |
-| [ ] M1a-9 | 공통 lazy loader 도입 | Sonnet | §5-1 적용 내용 + readiness 보장 기준 | `static/js/`의 단일 모듈 또는 `base.html` 공통 함수, readiness 5종(CSS/JS 글로벌/의존성/실패 후 재시도/reentrancy) 통과 |
-| [ ] M1a-10 | 홈/프로젝트 관리/휴지통/히스토리 lazy-load 적용 | Sonnet | §5-1 적용 내용 (페이지별) | viewer 보조 화면에서 `_wu_editor_assets.html` head 선로딩 제거, 상세 진입 시 한 번만 로드, `check.html` 기존 lazy-load 동작 유지 |
-| [ ] M1a-11 | §5-1 4단계 측정 + 회귀 검증 | Sonnet | §5-1 체감 지연 4단계 측정 + §15 프론트엔드 체감 로딩 검증 | 다운로드/parse·eval/`WUEditor.create()`/viewer 표시 4단계 before/after 기록, Mermaid·KaTeX·이미지 viewer 회귀 0 |
-| [ ] M1a-12 | M1a 회귀 — Playwright 메인 스위트 | Sonnet | §15 마일스톤 간 회귀 자동화 | `npx playwright test tests/*.spec.js` + lazy-load 관련 phase 통과, 회귀 0건 |
-| [ ] M1a-13 | M1a exit criteria 점검 | Opus | §17 M1a 완료 기준 | 단계별 baseline 기록 / SSE 분리 지표 기록 / 4단계 측정 기록 / viewer 회귀 0 / 다중 탭 baseline 정량 비교 — 모두 충족 |
+| [x] M1a-1 | `_workspace/perf/` 인프라 골격 | Sonnet | §15 M1a 측정 인프라 | 디렉터리 구조(`locust/`/`fixtures/`/`scripts/`/`baseline_<날짜>/`) 생성, `requirements-dev.txt`에 locust, 운영 코드 변경 0 |
+| [x] M1a-2 | fixture seed/cleanup 스크립트 | Sonnet | §15 fixture 정책 + cleanup 정책 | `seed_users.py`(test_perf_001~050 + 세션 쿠키 사전 생성) + `cleanup.py`(test_perf_ 접두어 외 row 삭제 가드) + 서버 종료 상태에서만 실행 절차 |
+| [x] M1a-3 | DB snapshot 백업 가드 | Sonnet | §15 측정 전 DB 백업 가드 | `whatudoin.db`/`.db-wal`/`.db-shm` 세트를 `baseline_<날짜>/db_snapshot/`에 보관, 복원 절차 README |
+| [x] M1a-4 | background request inventory | Sonnet | §15 background request inventory + 다중 탭 모델 | 페이지×요청 매트릭스 문서(`background_requests.md`) — 알림 1분 polling/lock heartbeat/SSE refetch 전체 식별 |
+| [x] M1a-5 | locust 시나리오 작성 (단일 탭 + 다중 탭) | Sonnet | §15 VU 사용자 모델 + background inventory | HTTPS 8443 고정, 세션 쿠키 주입, 단일 탭/다중 탭 분리 task, 가중치 적용 |
+| [x] M1a-6 | SSE 측정 PoC + 분리 스크립트 | Sonnet | §15 SSE 측정 분리 | PoC로 SSE 연결 N개 유지 시 locust 카운트/timeout 동작 확인, 별도 keep-alive 스크립트(`httpx`/`aiohttp` 또는 locust SSE-only) 작성, main locust와 동시 실행 가능, 별도 지표 3종(연결 유지 성공률 / publish→수신 지연 / `QueueFull` 발생 수)을 main API p95와 분리 기록 |
+| [x] M1a-7 | VU 1→5→10→25→50 단계별 baseline 측정 | Sonnet | §15 VU 단계 상승 절차 | 단계별 p95/p99/`database is locked`/RSS/CPU + 환경 메타데이터(서버-locust 동거 여부, locust CPU%) 단계 분리 기록, SSE 지표는 M1a-6 분리 스크립트 결과를 같은 단계 메타데이터로 묶어 기록 |
+| [x] M1a-8 | `__WU_ASSET_V` mermaid 항목 추가 | Sonnet | §5-1 적용 내용 (asset map 단일화) | `base.html`의 `__WU_ASSET_V`에 `mermaid` 추가, `_wu_editor_assets.html`/`check.html`/`event-modal.js`가 동일 map 참조 |
+| [x] M1a-9 | 공통 lazy loader 도입 | Sonnet | §5-1 적용 내용 + readiness 보장 기준 | `static/js/`의 단일 모듈 또는 `base.html` 공통 함수, readiness 5종(CSS/JS 글로벌/의존성/실패 후 재시도/reentrancy) 통과 |
+| [x] M1a-10 | 홈/프로젝트 관리/휴지통/히스토리 lazy-load 적용 | Sonnet | §5-1 적용 내용 (페이지별) | viewer 보조 화면에서 `_wu_editor_assets.html` head 선로딩 제거, 상세 진입 시 한 번만 로드, `check.html` 기존 lazy-load 동작 유지 |
+| [x] M1a-11 | §5-1 4단계 측정 + 회귀 검증 | Sonnet | §5-1 체감 지연 4단계 측정 + §15 프론트엔드 체감 로딩 검증 | 다운로드/parse·eval/`WUEditor.create()`/viewer 표시 4단계 before/after 기록, Mermaid·KaTeX·이미지 viewer 회귀 0 |
+| [x] M1a-12 | M1a 회귀 — Playwright 메인 스위트 | Sonnet | §15 마일스톤 간 회귀 자동화 | `npx playwright test tests/*.spec.js` + lazy-load 관련 phase 통과, 회귀 0건 |
+| [x] M1a-13 | M1a exit criteria 점검 | Opus | §17 M1a 완료 기준 | 단계별 baseline 기록 / SSE 분리 지표 기록 / 4단계 측정 기록 / viewer 회귀 0 / 다중 탭 baseline 정량 비교 — 모두 충족 |
 
 ---
 
@@ -204,7 +204,7 @@
 
 | 마일스톤 | 진입 게이트 | 진행 중 | 완료 | 비고 |
 |---------|-----------|--------|------|------|
-| M1a | (즉시 가능) | — | 0/13 | SSE 측정 분리 step 포함 |
+| M1a | (즉시 가능) | **완료** (Group B spec 업데이트 후속) | **13/13** | baseline run_181951/ + m1a11_run_193829/ 보관; M1a-12 26건 fail은 Group A 사전 부채 + Group B 디자인 변경 expected + Group C orthogonal로 triage 완료 |
 | M1b | M1a 완료 | — | 0/17 | — |
 | M1c | M1b 완료 | — | 0/13 | Ollama 외부 장애 통합 UX 포함 |
 | M1d | M1c 완료 | — | 0/9 | M1d-6/7/8 단일 패키지 묶음 필수 |
@@ -235,3 +235,16 @@ M1a-1 완료 (2026-MM-DD)
 - **다음 step 영향**: 후속 step의 가정/입력에 영향이 가는 사실 1줄. 영향 없으면 생략 가능.
 
 다음 step 시작 전: 직전 step의 위 4종 기록을 메인 컨텍스트에 보존, 하위 에이전트가 만든 diff 전체는 보존하지 않는다. 증거 파일 경로는 메인이 추후 회사 반입 판단(M1-end-2) 단계에서 일괄 점검 가능해야 한다.
+
+---
+
+
+## 진행 로그
+
+step별 결과 기록 4종(변경/증거/회귀/다음 step 영향)은 본문 비대화를 피하기 위해 마일스톤별 별도 파일로 분리한다(2026-05-09 도입).
+
+- M1a: [`성능 개선 진행 결과(M1a).md`](성능%20개선%20진행%20결과(M1a).md)
+- M1b 이후 진입 시 동일 패턴으로 `성능 개선 진행 결과(M1b).md` 등 신설.
+
+본 todo는 **체크박스 + 진행 상태 보드 + 진행 가능 여부 한 줄**만 유지한다. 상세 4종 기록·증거·발견 이슈는 위 파일 참조.
+

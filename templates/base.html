@@ -51,9 +51,11 @@
     katex:   "{{ asset_v('static/lib/katex.min.css') }}",
     wuCss:   "{{ asset_v('static/css/wu-editor.css') }}",
     tiptap:  "{{ asset_v('static/lib/tiptap-bundle.min.js') }}",
-    wuJs:    "{{ asset_v('static/js/wu-editor.js') }}"
+    wuJs:    "{{ asset_v('static/js/wu-editor.js') }}",
+    mermaid: "{{ asset_v('static/lib/mermaid-bundle.min.js') }}"
   };
   </script>
+  <script src="/static/js/wu-asset-loader.js{{ asset_v('static/js/wu-asset-loader.js') }}"></script>
 
   {% block wu_editor_assets %}{% endblock %}
   {% block extra_head %}{% endblock %}
