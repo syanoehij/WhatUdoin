@@ -42,13 +42,13 @@
 - **회귀**: 서버 기동/종료 수동 검증만 수행. DB probe는 `settings.__m1b_wal_probe__` insert/delete 후 삭제 확인.
 - **다음 step 영향**: U5 부하 smoke는 runner가 서버 생명주기를 직접 관리한다.
 
-### M1b-U5 진행 중 (2026-05-09)
+### M1b-U5 실행됨 - FAIL/open (2026-05-09)
 
-- **신뢰도**: 미완료/FAIL. lock 0건은 신뢰 가능하지만 p95 gate를 통과하지 못했다.
-- **변경**: `_workspace/perf/scripts/run_baseline_m1a7.py`를 재사용해 50 VU가 포함된 smoke를 1회 실행했다.
-- **증거**: 1차 run `_workspace/perf/baseline_2026-05-09/run_210621/summary.md`. 50 VU 결과: p95 8800ms, p99 11000ms, 실패율 27.9%, RPS 17.1. 추가 50 VU 단독 재현 run `_workspace/perf/baseline_2026-05-09/m1b_vu50_rerun_211725/` 결과: p95 6900ms, p99 7000ms, 실패율 364/1345, lock marker 0건.
+- **신뢰도**: 실행 완료, closure FAIL/open. lock 0건은 신뢰 가능하지만 p95 gate를 통과하지 못했다.
+- **변경**: `_workspace/perf/scripts/run_baseline_m1a7.py`를 재사용해 50 VU가 포함된 smoke를 1회 실행했고, 결과 확인 후 50 VU 단독 재현 run을 1회 추가 실행했다.
+- **증거**: 1차 run `_workspace/perf/baseline_2026-05-09/run_210621/summary.md`. 50 VU 결과: p95 8800ms, p99 11000ms, 실패율 27.9%, RPS 17.1. raw summary 제목은 M1a runner 재사용 때문에 `M1a-7 baseline 측정 요약`으로 남아 있지만, 해당 run 디렉터리는 M1b-U5 1차 smoke 증거다. 추가 50 VU 단독 재현 run `_workspace/perf/baseline_2026-05-09/m1b_vu50_rerun_211725/` 결과: p95 6900ms, p99 7000ms, 실패율 364/1345, lock marker 0건.
 - **회귀**: 완료 판정 보류가 아니라 현재 QA 기준 **FAIL**. M1a baseline `run_181951` 50 VU p95 5300ms 대비 1차 8800ms, 재현 6900ms로 둘 다 높아 `p95 명확한 회귀 없음` 기준을 통과하지 않는다. 실패 원인은 기존 locust payload 계열 404/400/500이 대부분이며, 서버 로그에는 반복 `sqlite3.ProgrammingError: You did not supply a value for binding parameter :description.`가 기록됐다. `database is locked`/`SQLITE_BUSY`/`SQLITE_LOCKED` 검색 결과는 0건.
-- **다음 step 영향**: U5 체크박스는 미체크 유지. lock 증거가 없으므로 즉시 M1b full-case 전체 escalation은 보류하고, p95 상승 원인 진단 또는 통제된 재측정이 다음 행동이다.
+- **다음 step 영향**: U5 체크박스는 step 실행 완료 의미로 체크한다. 단, 결과는 FAIL/open이며 M1b exit gate는 통과하지 못했다. lock 증거가 없으므로 즉시 M1b full-case 전체 escalation은 보류하고, p95 상승 원인 진단 또는 통제된 재측정이 다음 행동이다.
 
 ## 하네스 산출물
 
@@ -65,6 +65,6 @@
 ## 현재 결론
 
 - M1b-U1~U4는 사후 하네스 재검증 기준으로 조건부 4/5 인정. 특히 U1/U4는 evidence 파일 품질이 약하다.
-- M1b-U5는 `database is locked` 0건이지만, aggregate p95가 baseline보다 높아 미완료.
-- `database.py` 코드 경로 자체는 리뷰상 큰 결함이 확인되지 않았지만, 최신 재검토는 문서가 U1/U4를 과신뢰하지 않도록 보정해야 한다는 `NEEDS_DOC_FIX`였다. 이 파일과 `성능 개선 todo.md`에 조건부 완료/미완료 상태를 반영했다.
+- M1b-U5는 실행 완료됐고 `database is locked` 0건이지만, aggregate p95가 baseline보다 높아 FAIL/open이다. 따라서 M1b exit criteria 통과는 4/5로 본다.
+- `database.py` 코드 경로 자체는 리뷰상 큰 결함이 확인되지 않았지만, 최신 재검토는 문서가 U1/U4를 과신뢰하지 않도록 보정해야 한다는 `NEEDS_DOC_FIX`였다. 이 파일과 `성능 개선 todo.md`에 U1/U4 조건부 완료와 U5 FAIL/open 상태를 반영했다.
 - QA closure는 FAIL. 다음 행동은 rollback이 아니라 동일 조건 반복 측정과 known-failure endpoint 제외 보조 p95 분석이다.

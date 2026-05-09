@@ -2730,8 +2730,10 @@ async function generateScheduleCheck() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event_ids: selectedIds, model, project: _curProj }),
     });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || '생성 실패'); }
-    const { markdown } = await res.json();
+    const _ckSchedErr = await res.json();
+    if (res.status === 503) throw new Error(_ckSchedErr.reason === 'busy' ? 'AI가 다른 요청을 처리 중입니다. 잠시 후 다시 시도해 주세요.' : 'AI 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+    if (!res.ok) throw new Error(_ckSchedErr.detail || '생성 실패');
+    const { markdown } = _ckSchedErr;
 
     const selectedTitles = [...document.querySelectorAll('.sched-ev-chk:checked')]
       .map(c => {
@@ -2810,11 +2812,10 @@ async function runAiGen() {
       body: JSON.stringify({ text, model }),
       signal: _aiAbort.signal,
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || '생성 실패');
-    }
-    const { markdown } = await res.json();
+    const _ckAiErr = await res.json().catch(() => ({}));
+    if (res.status === 503) throw new Error(_ckAiErr.reason === 'busy' ? 'AI가 다른 요청을 처리 중입니다. 잠시 후 다시 시도해 주세요.' : 'AI 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+    if (!res.ok) throw new Error(_ckAiErr.detail || '생성 실패');
+    const { markdown } = _ckAiErr;
     _aiLastMd = markdown;
     _aiLastInput = text;
     document.getElementById('ck-ai-preview').textContent = markdown;

@@ -69,6 +69,16 @@ async def lifespan(app: FastAPI):
     saved_num_ctx = db.get_setting("ollama_num_ctx")
     if saved_num_ctx:
         llm_parser.set_ollama_num_ctx(int(saved_num_ctx))
+    # M1c-U2: Ollama 동시성 — DB 설정 우선, 없으면 env 기반 초기값 유지
+    saved_concurrency = db.get_setting("ollama_concurrency")
+    if saved_concurrency:
+        try:
+            llm_parser.set_ollama_concurrency(int(saved_concurrency))
+        except (TypeError, ValueError):
+            import logging
+            logging.getLogger("whatudoin").warning(
+                "ollama_concurrency DB 설정 파싱 실패: %r (env/기본값 유지)", saved_concurrency,
+            )
     db.finalize_expired_done()  # 서버 시작 시 만료된 done 일정 즉시 처리
     if not scheduler.running:
         # APScheduler: 1분마다 15분 후 일정 알람 체크
@@ -106,6 +116,29 @@ app = FastAPI(title="WhatUDoin", lifespan=lifespan)
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# M1c-U1/U4: Ollama 외부 호출 거부/장애를 사용자에게 503 + 통합 메시지로 변환.
+# 슬롯 포화(busy)와 외부 장애(timeout/connect/5xx)는 사용자 화면에 동일한 "AI 사용 중/불가"
+# 흐름으로 통합되며, 내부 로그에서만 reason을 구분한다(U4에서 timeout/connect/5xx 재mapping).
+@app.exception_handler(llm_parser.OllamaUnavailableError)
+async def _ollama_unavailable_handler(request: Request, exc: llm_parser.OllamaUnavailableError):
+    import logging
+    logger = logging.getLogger("whatudoin.ollama")
+    if exc.reason == "busy" and exc.slots is not None:
+        in_use, cap = exc.slots
+        logger.warning("ollama busy: in_use=%d capacity=%d path=%s", in_use, cap, request.url.path)
+    else:
+        logger.warning("ollama unavailable: reason=%s path=%s", exc.reason, request.url.path)
+    snap = llm_parser.get_ollama_concurrency_snapshot()
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": exc.message,
+            "reason": exc.reason,
+            "slots": {"in_use": snap[0], "capacity": snap[1]},
+        },
+    )
 
 
 def _upload_url_from_static_path(path: str) -> str:
@@ -1386,6 +1419,7 @@ def admin_get_llm_settings(request: Request):
         "ollama_url": db.get_setting("ollama_url") or llm_parser.OLLAMA_BASE_URL,
         "ollama_timeout": int(db.get_setting("ollama_timeout") or 300),
         "ollama_num_ctx": int(db.get_setting("ollama_num_ctx") or 4096),
+        "ollama_concurrency": int(db.get_setting("ollama_concurrency") or llm_parser.get_ollama_concurrency_snapshot()[1]),
     }
 
 
@@ -1410,6 +1444,12 @@ async def admin_set_llm_settings(request: Request):
         n = max(512, int(num_ctx_raw))
         db.set_setting("ollama_num_ctx", str(n))
         llm_parser.set_ollama_num_ctx(n)
+
+    concurrency_raw = data.get("ollama_concurrency")
+    if concurrency_raw is not None:
+        c = max(1, min(5, int(concurrency_raw)))
+        db.set_setting("ollama_concurrency", str(c))
+        llm_parser.set_ollama_concurrency(c)
 
     return {"ok": True}
 
@@ -3820,6 +3860,8 @@ async def ai_parse(request: Request):
         raise HTTPException(status_code=400, detail="텍스트를 입력하세요.")
     try:
         events = await run_in_threadpool(llm_parser.parse_schedule, text, model)
+    except llm_parser.OllamaUnavailableError:
+        raise  # exception_handler에서 503으로 변환
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")
     return {"events": events}
@@ -3911,6 +3953,8 @@ async def ai_refine(request: Request):
         raise HTTPException(status_code=400, detail="텍스트를 입력하세요.")
     try:
         refined = await run_in_threadpool(llm_parser.refine_schedule, text, events, model)
+    except llm_parser.OllamaUnavailableError:
+        raise  # exception_handler에서 503으로 변환
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")
     return {"events": refined}
@@ -3975,6 +4019,8 @@ async def ai_generate_checklist(request: Request):
         raise HTTPException(status_code=400, detail="요청 내용을 입력하세요.")
     try:
         md = await run_in_threadpool(llm_parser.generate_checklist, text, model)
+    except llm_parser.OllamaUnavailableError:
+        raise  # exception_handler에서 503으로 변환
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")
     return {"markdown": md}
@@ -4050,6 +4096,8 @@ async def ai_weekly_report(request: Request):
             checklists=checklists,
             previous_report=prev,
         )
+    except llm_parser.OllamaUnavailableError:
+        raise  # exception_handler에서 503으로 변환
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ollama 오류: {e}")
 

@@ -94,6 +94,7 @@ async function parseText() {
       body: JSON.stringify({ text, model }),
     });
     const data = await res.json();
+    if (res.status === 503) throw new Error(data.reason === 'busy' ? 'AI가 다른 요청을 처리 중입니다. 잠시 후 다시 시도해 주세요.' : 'AI 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
     if (!res.ok) throw new Error(data.detail || '파싱 실패');
     if (!data.events.length) {
       showError('일정 정보를 찾지 못했습니다. 더 구체적인 텍스트를 입력해보세요.');

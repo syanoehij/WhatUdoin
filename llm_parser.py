@@ -1,10 +1,12 @@
 import hashlib
 import json
 import logging
+import os
 import re
+import threading
 import unicodedata
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 
 import requests
 
@@ -21,6 +23,134 @@ _NUM_CTX = 4096
 # trust_env=False 로 시스템/환경변수 프록시 설정을 무시하는 전용 세션 사용
 _session = requests.Session()
 _session.trust_env = False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ollama limiter (M1c-U1/U2)
+# ─────────────────────────────────────────────────────────────────────────────
+# 외부 Ollama HTTP 호출이 main app의 threadpool/이벤트 루프를 잠식하지 못하도록
+# 모든 외부 접점이 try_acquire()에 통과해야만 실제 HTTP를 보낸다.
+# 슬롯 포화 시 즉시 OllamaUnavailableError(reason="busy")를 raise — 큐잉/대기 없음.
+#
+# 설계: threading.Lock + 카운터 + Condition.
+#   - sync(get_available_models_with_status) / threadpool(나머지 6개 함수) 모두에서
+#     호출되므로 asyncio.Lock/anyio.CapacityLimiter 대신 threading 기반 사용.
+#   - Condition은 admin UI capacity 변경 알림용이며, 사용자 요청은 wait()하지 않는다.
+#   - capacity 변경 시 사용 중 슬롯은 보존된다(객체 교체 없이 변수만 갱신).
+
+_OLLAMA_CONCURRENCY_MIN = 1
+_OLLAMA_CONCURRENCY_MAX = 5
+_OLLAMA_CONCURRENCY_DEFAULT = 1
+
+
+def _clamp_concurrency(value: int) -> int:
+    return max(_OLLAMA_CONCURRENCY_MIN, min(_OLLAMA_CONCURRENCY_MAX, int(value)))
+
+
+def _initial_concurrency() -> int:
+    """env WHATUDOIN_OLLAMA_CONCURRENCY 우선, 미지정/파싱 실패 시 기본 1."""
+    raw = os.environ.get("WHATUDOIN_OLLAMA_CONCURRENCY")
+    if not raw:
+        return _OLLAMA_CONCURRENCY_DEFAULT
+    try:
+        return _clamp_concurrency(int(raw))
+    except (TypeError, ValueError):
+        logger.warning(
+            "WHATUDOIN_OLLAMA_CONCURRENCY=%r 파싱 실패, 기본 %d 사용",
+            raw, _OLLAMA_CONCURRENCY_DEFAULT,
+        )
+        return _OLLAMA_CONCURRENCY_DEFAULT
+
+
+class _OllamaLimiter:
+    """Resizable concurrency limiter for Ollama HTTP calls.
+
+    사용자 요청 경로는 try_acquire/release만 사용. wait/acquire 금지.
+    capacity 변경은 set_capacity(n) — 사용 중 슬롯은 보존되고 새 요청만 영향 받는다.
+    """
+
+    def __init__(self, capacity: int):
+        self._capacity = _clamp_concurrency(capacity)
+        self._in_use = 0
+        self._cond = threading.Condition()  # admin 변경 알림용. 사용자 대기에는 쓰지 않는다.
+
+    def try_acquire(self) -> bool:
+        with self._cond:
+            if self._in_use < self._capacity:
+                self._in_use += 1
+                return True
+            return False
+
+    def release(self) -> None:
+        with self._cond:
+            if self._in_use > 0:
+                self._in_use -= 1
+            self._cond.notify_all()
+
+    def set_capacity(self, n: int) -> int:
+        n = _clamp_concurrency(n)
+        with self._cond:
+            self._capacity = n
+            self._cond.notify_all()
+        return n
+
+    def snapshot(self) -> tuple[int, int]:
+        with self._cond:
+            return (self._in_use, self._capacity)
+
+
+_ollama_limiter = _OllamaLimiter(_initial_concurrency())
+
+
+def get_ollama_limiter() -> _OllamaLimiter:
+    return _ollama_limiter
+
+
+def set_ollama_concurrency(n: int) -> int:
+    """admin UI / lifespan에서 capacity를 갱신할 때 사용. 1~5로 clamp 후 적용된 값 반환."""
+    return _ollama_limiter.set_capacity(n)
+
+
+def get_ollama_concurrency_snapshot() -> tuple[int, int]:
+    """(in_use, capacity) — admin 표시용."""
+    return _ollama_limiter.snapshot()
+
+
+class OllamaUnavailableError(Exception):
+    """외부 Ollama 호출 거부/장애를 사용자 503으로 통합 변환하기 위한 예외.
+
+    reason:
+      - "busy"    : limiter 슬롯 포화 (M1c-U1)
+      - "timeout" : requests.Timeout (U4에서 사용 예정)
+      - "connect" : ConnectionError (U4)
+      - "5xx"     : Ollama 서버 5xx (U4)
+    slots: busy일 때만 (in_use, capacity), 그 외 None.
+    """
+
+    def __init__(
+        self,
+        reason: Literal["busy", "timeout", "connect", "5xx"],
+        slots: Optional[tuple[int, int]] = None,
+        message: Optional[str] = None,
+    ):
+        self.reason = reason
+        self.slots = slots
+        self.message = message or self._default_message()
+        super().__init__(self.message)
+
+    def _default_message(self) -> str:
+        if self.reason == "busy" and self.slots is not None:
+            in_use, cap = self.slots
+            return f"AI 사용 중 ({in_use}/{cap}), 잠시 후 다시 시도해주세요."
+        return "AI 사용 불가. 잠시 후 다시 시도해주세요."
+
+
+def _acquire_or_raise() -> None:
+    """7개 외부 Ollama 접점 함수 시작부에서 호출. 실패 시 즉시 raise."""
+    if not _ollama_limiter.try_acquire():
+        snap = _ollama_limiter.snapshot()
+        logger.warning("ollama limiter busy: in_use=%d capacity=%d", snap[0], snap[1])
+        raise OllamaUnavailableError(reason="busy", slots=snap)
 
 
 def set_ollama_base_url(base_url: str):
@@ -47,23 +177,41 @@ def get_available_models() -> list[str]:
 
 
 def get_available_models_with_status() -> tuple[list[str], bool]:
-    """(모델 목록, 연결 성공 여부) 반환."""
+    """(모델 목록, 연결 성공 여부) 반환.
+
+    limiter slot 포화 시 OllamaUnavailableError(reason="busy") raise.
+    timeout/connect 실패 시 OllamaUnavailableError(reason="timeout"/"connect") raise.
+    5xx 응답 시 OllamaUnavailableError(reason="5xx") raise.
+    그 외 예외(4xx 등)는 기존 동작 유지(False 반환).
+    """
+    _acquire_or_raise()
     try:
-        response = _session.get(
-            OLLAMA_BASE_URL + "/api/tags",
-            timeout=5,
-        )
-        response.raise_for_status()
-        models = [m["name"] for m in response.json().get("models", [])]
-        if not models:
-            return [DEFAULT_MODEL], True
-        # DEFAULT_MODEL을 맨 앞으로, 나머지는 알파벳 순
-        rest = sorted(m for m in models if m != DEFAULT_MODEL)
-        if DEFAULT_MODEL in models:
-            return [DEFAULT_MODEL] + rest, True
-        return rest, True
-    except Exception:
-        return [DEFAULT_MODEL], False
+        try:
+            response = _session.get(
+                OLLAMA_BASE_URL + "/api/tags",
+                timeout=5,
+            )
+            if response.status_code >= 500:
+                raise OllamaUnavailableError(reason="5xx")
+            response.raise_for_status()
+            models = [m["name"] for m in response.json().get("models", [])]
+            if not models:
+                return [DEFAULT_MODEL], True
+            # DEFAULT_MODEL을 맨 앞으로, 나머지는 알파벳 순
+            rest = sorted(m for m in models if m != DEFAULT_MODEL)
+            if DEFAULT_MODEL in models:
+                return [DEFAULT_MODEL] + rest, True
+            return rest, True
+        except OllamaUnavailableError:
+            raise
+        except requests.Timeout:
+            raise OllamaUnavailableError(reason="timeout")
+        except requests.ConnectionError:
+            raise OllamaUnavailableError(reason="connect")
+        except Exception:
+            return [DEFAULT_MODEL], False
+    finally:
+        _ollama_limiter.release()
 
 
 def parse_schedule(text: str, model: str = DEFAULT_MODEL) -> list[dict]:
@@ -116,11 +264,15 @@ JSON:"""
         resp.raise_for_status()
         return validate_and_normalize(_extract_json(resp.json().get("response", "")))
 
-    result = _call({"options": {"temperature": 0.1, "num_ctx": _NUM_CTX}})
-    if not result and len(text) >= 30:
-        retry_prompt = "이전 출력이 JSON 배열이 아니었습니다. 반드시 [ 로 시작해 ] 로 끝나는 JSON 배열만 출력하세요.\n\n" + prompt
-        result = _call({"options": {"temperature": 0.0, "num_ctx": _NUM_CTX}, "prompt": retry_prompt})
-    return result
+    _acquire_or_raise()
+    try:
+        result = _call({"options": {"temperature": 0.1, "num_ctx": _NUM_CTX}})
+        if not result and len(text) >= 30:
+            retry_prompt = "이전 출력이 JSON 배열이 아니었습니다. 반드시 [ 로 시작해 ] 로 끝나는 JSON 배열만 출력하세요.\n\n" + prompt
+            result = _call({"options": {"temperature": 0.0, "num_ctx": _NUM_CTX}, "prompt": retry_prompt})
+        return result
+    finally:
+        _ollama_limiter.release()
 
 
 def refine_schedule(text: str, first_pass: list[dict], model: str = DEFAULT_MODEL) -> list[dict]:
@@ -156,16 +308,20 @@ def refine_schedule(text: str, first_pass: list[dict], model: str = DEFAULT_MODE
 
 --- 최종 검토 결과 JSON ---"""
 
-    response = _session.post(
-        OLLAMA_URL,
-        json={"model": model, "prompt": prompt, "stream": False, "options": {"num_ctx": _NUM_CTX}},
-        timeout=_TIMEOUT,
-    )
-    response.raise_for_status()
-    raw = response.json().get("response", "")
-    result = validate_and_normalize(_extract_json(raw))
-    # 2차가 빈 배열을 돌려주면 1차 결과 사용 (안전망)
-    return result if result else first_pass
+    _acquire_or_raise()
+    try:
+        response = _session.post(
+            OLLAMA_URL,
+            json={"model": model, "prompt": prompt, "stream": False, "options": {"num_ctx": _NUM_CTX}},
+            timeout=_TIMEOUT,
+        )
+        response.raise_for_status()
+        raw = response.json().get("response", "")
+        result = validate_and_normalize(_extract_json(raw))
+        # 2차가 빈 배열을 돌려주면 1차 결과 사용 (안전망)
+        return result if result else first_pass
+    finally:
+        _ollama_limiter.release()
 
 
 def _extract_json(raw: str) -> list[dict]:
@@ -579,6 +735,7 @@ def _post_generate(model, prompt, timeout=180):
         {"temperature": 0.1, "top_p": 0.6},
         {"temperature": 0.05, "top_p": 0.4},
     ]
+    _last_reason: Optional[str] = None
     for attempt in range(3):
         try:
             resp = _session.post(
@@ -587,15 +744,26 @@ def _post_generate(model, prompt, timeout=180):
                       "options": _sampling[attempt]},
                 timeout=timeout,
             )
+            if resp.status_code >= 500:
+                logging.warning("generate_weekly_report: HTTP %d (시도 %d)", resp.status_code, attempt + 1)
+                _last_reason = "5xx"
+                continue
             resp.raise_for_status()
             text = resp.json().get("response", "")
             if not _is_bad_report(text):
                 return text
             logging.warning("generate_weekly_report: 불량 응답 (시도 %d), 재시도", attempt + 1)
+            _last_reason = None  # 불량 응답은 UnavailableError가 아님
         except requests.Timeout:
             logging.warning("generate_weekly_report: Timeout (시도 %d)", attempt + 1)
+            _last_reason = "timeout"
+        except requests.ConnectionError:
+            logging.warning("generate_weekly_report: ConnectionError (시도 %d)", attempt + 1)
+            _last_reason = "connect"
         except requests.RequestException as exc:
             logging.warning("generate_weekly_report: 요청 오류 (시도 %d): %s", attempt + 1, exc)
+    if _last_reason in ("timeout", "connect", "5xx"):
+        raise OllamaUnavailableError(reason=_last_reason)
     raise RuntimeError("AI 보고서 생성 실패 (3회 재시도 후에도 유효한 응답 없음)")
 
 
@@ -686,7 +854,11 @@ def generate_weekly_report(
 - 사실이 2개 이상이면 줄을 나눌 것 (`  : 사실1` 다음 줄에 `  : 사실2`).
 - 서두·결론 없이 ## **프로젝트명** 섹션 본문만 출력."""
 
-    return _post_generate(model, prompt)
+    _acquire_or_raise()
+    try:
+        return _post_generate(model, prompt)
+    finally:
+        _ollama_limiter.release()
 
 
 def review_all_conflicts(candidates: list[dict], existing: list[dict], model: str = DEFAULT_MODEL) -> list[dict]:
@@ -841,16 +1013,20 @@ def review_all_conflicts_with_funnel(
 
 JSON:"""
 
+    _acquire_or_raise()
     try:
-        response = _session.post(
-            OLLAMA_URL,
-            json={"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0.0}},
-            timeout=90,
-        )
-        response.raise_for_status()
-        raw = response.json().get("response", "")
-    except Exception:
-        return default
+        try:
+            response = _session.post(
+                OLLAMA_URL,
+                json={"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0.0}},
+                timeout=90,
+            )
+            response.raise_for_status()
+            raw = response.json().get("response", "")
+        except Exception:
+            return default
+    finally:
+        _ollama_limiter.release()
 
     try:
         result_list = _extract_json(raw)
@@ -938,45 +1114,53 @@ def generate_checklist(text: str, model: str = DEFAULT_MODEL) -> str:
         {"temperature": 0.15, "top_p": 0.7},
         {"temperature": 0.05, "top_p": 0.5},
     ]
-    for attempt in range(3):
-        try:
-            resp = _session.post(
-                OLLAMA_URL,
-                json={"model": model, "prompt": prompt, "stream": False,
-                      "options": _sampling[attempt]},
-                timeout=120,
-            )
-            resp.raise_for_status()
-            raw = resp.json().get("response", "").strip()
-            # 코드펜스 strip
-            raw = re.sub(r"^```(?:markdown)?\n?", "", raw, flags=re.IGNORECASE)
-            raw = re.sub(r"\n?```\s*$", "", raw)
-            raw = raw.strip()
-            # 첫 줄이 # 제목이 아니면 prefix 추가
-            if raw and not re.match(r"^\s*#\s", raw):
-                raw = "# 할 일\n\n" + raw
-            if raw:
-                return raw
-            logger.warning("generate_checklist: 빈 응답 (시도 %d), 재시도", attempt + 1)
-        except requests.Timeout:
-            logger.warning("generate_checklist: Timeout (시도 %d)", attempt + 1)
-        except requests.RequestException as exc:
-            logger.warning("generate_checklist: 요청 오류 (시도 %d): %s", attempt + 1, exc)
-    raise RuntimeError("AI 체크리스트 생성 실패 (3회 재시도 후에도 유효한 응답 없음)")
+    _acquire_or_raise()
+    try:
+        for attempt in range(3):
+            try:
+                resp = _session.post(
+                    OLLAMA_URL,
+                    json={"model": model, "prompt": prompt, "stream": False,
+                          "options": _sampling[attempt]},
+                    timeout=120,
+                )
+                resp.raise_for_status()
+                raw = resp.json().get("response", "").strip()
+                # 코드펜스 strip
+                raw = re.sub(r"^```(?:markdown)?\n?", "", raw, flags=re.IGNORECASE)
+                raw = re.sub(r"\n?```\s*$", "", raw)
+                raw = raw.strip()
+                # 첫 줄이 # 제목이 아니면 prefix 추가
+                if raw and not re.match(r"^\s*#\s", raw):
+                    raw = "# 할 일\n\n" + raw
+                if raw:
+                    return raw
+                logger.warning("generate_checklist: 빈 응답 (시도 %d), 재시도", attempt + 1)
+            except requests.Timeout:
+                logger.warning("generate_checklist: Timeout (시도 %d)", attempt + 1)
+            except requests.RequestException as exc:
+                logger.warning("generate_checklist: 요청 오류 (시도 %d): %s", attempt + 1, exc)
+        raise RuntimeError("AI 체크리스트 생성 실패 (3회 재시도 후에도 유효한 응답 없음)")
+    finally:
+        _ollama_limiter.release()
 
 
 def generate_event_checklist_items(events: list[dict], model: str = DEFAULT_MODEL) -> list[dict]:
     """이벤트 목록 → 체크리스트 항목 생성. 내용 있으면 AI가 세부 항목 분류."""
-    results = []
-    for event in events:
-        title = (event.get("title") or "").strip()
-        description = (event.get("description") or "").strip()
+    # 외부 Ollama 호출이 events 수만큼 일어나지만, 사용자 요청 1건 = limiter 슬롯 1개로 처리.
+    # 슬롯이 길게 점유되는 것은 의도된 동작(연속 호출을 한 슬롯에 묶음).
+    _acquire_or_raise()
+    try:
+        results = []
+        for event in events:
+            title = (event.get("title") or "").strip()
+            description = (event.get("description") or "").strip()
 
-        if not description:
-            results.append({"event_id": event["id"], "title": title, "sub_items": []})
-            continue
+            if not description:
+                results.append({"event_id": event["id"], "title": title, "sub_items": []})
+                continue
 
-        prompt = f"""다음 일정의 내용을 읽고 실행 가능한 세부 할 일 목록을 추출하라.
+            prompt = f"""다음 일정의 내용을 읽고 실행 가능한 세부 할 일 목록을 추출하라.
 일정: {title}
 내용:
 {description}
@@ -989,24 +1173,26 @@ def generate_event_checklist_items(events: list[dict], model: str = DEFAULT_MODE
 
 출력:"""
 
-        sub_items = []
-        try:
-            resp = _session.post(
-                OLLAMA_URL,
-                json={"model": model, "prompt": prompt, "stream": False,
-                      "options": {"temperature": 0.2, "top_p": 0.8}},
-                timeout=60,
-            )
-            resp.raise_for_status()
-            raw = resp.json().get("response", "").strip()
-            lines = [
-                l.strip().lstrip("-•*").lstrip("0123456789.").strip()
-                for l in raw.split("\n") if l.strip()
-            ]
-            sub_items = [l for l in lines if l][:5]
-        except Exception as exc:
-            logger.warning("generate_event_checklist_items event=%s: %s", event["id"], exc)
+            sub_items = []
+            try:
+                resp = _session.post(
+                    OLLAMA_URL,
+                    json={"model": model, "prompt": prompt, "stream": False,
+                          "options": {"temperature": 0.2, "top_p": 0.8}},
+                    timeout=60,
+                )
+                resp.raise_for_status()
+                raw = resp.json().get("response", "").strip()
+                lines = [
+                    l.strip().lstrip("-•*").lstrip("0123456789.").strip()
+                    for l in raw.split("\n") if l.strip()
+                ]
+                sub_items = [l for l in lines if l][:5]
+            except Exception as exc:
+                logger.warning("generate_event_checklist_items event=%s: %s", event["id"], exc)
 
-        results.append({"event_id": event["id"], "title": title, "sub_items": sub_items})
+            results.append({"event_id": event["id"], "title": title, "sub_items": sub_items})
 
-    return results
+        return results
+    finally:
+        _ollama_limiter.release()

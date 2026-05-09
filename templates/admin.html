@@ -108,6 +108,19 @@
         <span style="font-size:0.85rem;color:var(--text-muted);">기본값: 4096. 긴 문서 분석 시 늘리세요.</span>
       </div>
     </div>
+    <div class="form-row" style="margin-top:8px;">
+      <label>AI 동시 처리 슬롯</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="llm-concurrency-input" style="width:120px;">
+          <option value="1">1 (기본)</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+        </select>
+        <span style="font-size:0.85rem;color:var(--text-muted);">동시 AI 요청 최대 수. 변경 즉시 반영됩니다.</span>
+      </div>
+    </div>
     <div id="llm-status" style="margin-top:8px;font-size:0.85rem;display:none;"></div>
     <p class="text-muted" style="margin-top:6px;font-size:0.85rem;">변경 후 서버 재시작 없이 즉시 적용됩니다.</p>
   </div>
@@ -376,6 +389,7 @@ async function loadLlmSettings() {
     document.getElementById('llm-url-input').value = data.ollama_url || '';
     document.getElementById('llm-timeout-input').value = data.ollama_timeout || 300;
     document.getElementById('llm-num-ctx-input').value = data.ollama_num_ctx || 4096;
+    document.getElementById('llm-concurrency-input').value = data.ollama_concurrency || 1;
   }
 }
 async function saveLlmSettings() {
@@ -386,7 +400,7 @@ async function saveLlmSettings() {
   const res = await fetch('/api/admin/settings/llm', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ollama_url: url, ollama_timeout: timeout, ollama_num_ctx: numCtx }),
+    body: JSON.stringify({ ollama_url: url, ollama_timeout: timeout, ollama_num_ctx: numCtx, ollama_concurrency: parseInt(document.getElementById('llm-concurrency-input').value) || 1 }),
   });
   if (res.ok) {
     showLlmStatus('저장되었습니다. 연결 테스트를 눌러 확인하세요.', 'info');

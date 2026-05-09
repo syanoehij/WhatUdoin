@@ -727,8 +727,10 @@ async function generateWeeklyReport() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ base_date: baseDate, team_id: teamId ? parseInt(teamId) : null, model }),
     });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || '서버 오류'); }
-    const data = await res.json();
+    const _wrErr = await res.json();
+    if (res.status === 503) throw new Error(_wrErr.reason === 'busy' ? 'AI가 다른 요청을 처리 중입니다. 잠시 후 다시 시도해 주세요.' : 'AI 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+    if (!res.ok) throw new Error(_wrErr.detail || '서버 오류');
+    const data = _wrErr;
     sessionStorage.setItem('weekly_ai_report_draft', JSON.stringify({ title: data.title, content: data.content }));
     location.href = '/doc/new?ai_draft=1';
   } catch (err) {

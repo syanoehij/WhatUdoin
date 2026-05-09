@@ -1457,6 +1457,7 @@ async function runCkAiParse() {
       body: JSON.stringify({ text: content, model }),
     });
     const data1 = await res1.json();
+    if (res1.status === 503) throw new Error(data1.reason === 'busy' ? 'AI가 다른 요청을 처리 중입니다. 잠시 후 다시 시도해 주세요.' : 'AI 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
     if (!res1.ok) throw new Error(data1.detail || '파싱 실패');
     if (!data1.events.length) {
       showCkAiError('일정 정보를 찾지 못했습니다. 더 구체적인 내용을 작성해보세요.');

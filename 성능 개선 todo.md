@@ -65,9 +65,10 @@
 | [x] M1b-U2 | `database.get_conn()` PRAGMA 5종 적용 + WAL 1회 활성화 | Opus | §4 적용 내용 — 연결 단위 + DB 파일 단위 | 매 연결 `timeout=5`/`busy_timeout=5000`/`synchronous=NORMAL`(기본)/`cache_size=-8000`/`temp_store=MEMORY` 적용. `PRAGMA journal_mode=WAL`은 프로세스 단위 idempotent guard로 1회 활성화. `synchronous`는 `WHATUDOIN_SYNCHRONOUS_MODE=FULL`로 override 가능 |
 | [x] M1b-U3 | `snapshot_db.py`의 WAL 세트 복사 코드 경로 확인 | Sonnet | §6 백업 종류 구분 + 방향 | `.db`/`.db-wal`/`.db-shm` 세트로 복사되는 코드 경로 확인. 별도 restore drill은 본 단계에서 수행하지 않음(보수 단축안 게이트로 이동) |
 | [x] M1b-U4 | 서버 재시작 + PRAGMA 검증 | Sonnet | §15 WAL 검증 | 재시작 후 `PRAGMA journal_mode;` 결과 `wal` / `wal`/`-shm` 파일 생성 확인 |
-| [ ] M1b-U5 | M1a 도구 재사용 50 VU smoke | Sonnet | §15 동시성 검증(축소) | M1a-7 locust 시나리오 그대로 50 VU 1회 실행. p95 명확한 회귀 없음, `database is locked` 0건. lock 발생 시 함수 위치 기록 후 보수 단축안 게이트로 escalation 판단 |
+| [x] M1b-U5 | M1a 도구 재사용 50 VU smoke | Sonnet | §15 동시성 검증(축소) | M1a-7 locust 시나리오 그대로 50 VU 1회 실행. p95 명확한 회귀 없음, `database is locked` 0건. lock 발생 시 함수 위치 기록 후 보수 단축안 게이트로 escalation 판단 |
 
-> M1b-U1/U4의 체크는 처음부터 subagent가 소유한 high-confidence 완료가 아니라, backend/code-review/qa 사후 재검증으로 현재 증거와 정합하다고 본 조건부 완료다. U5는 p95 gate 실패로 미체크 유지한다.
+> M1b-U1/U4의 체크는 처음부터 subagent가 소유한 high-confidence 완료가 아니라, backend/code-review/qa 사후 재검증으로 현재 증거와 정합하다고 본 조건부 완료다.
+> M1b-U5 체크는 step 실행 완료 표시다. 결과는 FAIL/open이며 exit criteria는 미통과다. 증거: `_workspace/perf/baseline_2026-05-09/run_210621/summary.md` 50 VU p95 8800ms, `_workspace/perf/baseline_2026-05-09/m1b_vu50_rerun_211725/` 50 VU 단독 재현 p95 6900ms, `database is locked` 0건. 상세는 `성능 개선 진행 결과(M1b).md`의 `M1b-U5 실행됨 - FAIL/open` 절 참조.
 
 ### M1b-ULTRA에서 제외된 항목
 
@@ -93,11 +94,11 @@
 
 | step | 제목 | 모델 | §참조 | exit criteria |
 |------|------|------|-------|---------------|
-| [ ] M1c-U1 | Ollama limiter 모든 외부 HTTP 접점 적용 | Opus | §8 limiter 적용 대상 — 모든 외부 Ollama HTTP 접점 | 7개 접점(파싱/refinement/체크리스트 생성/주간 보고/conflict review/health/model) 감싸기, `score_conflict` 제외, `try_acquire` 즉시 false 시 대기 없이 busy 응답 |
-| [ ] M1c-U2 | 기본 동시성 env `WHATUDOIN_OLLAMA_CONCURRENCY=1` | Sonnet | §8 admin UI 설정 항목 | env 미지정 시 기본 1, 허용 범위 1~5 검증. admin DB 설정이 있으면 DB 설정 우선, env는 초기/default fallback |
-| [ ] M1c-U3 | admin UI 1~5 설정 + DB persist | Sonnet | §8 admin UI 설정 항목 | 1~5 선택 UI, 변경 즉시 limiter capacity 반영(사용 중 슬롯 보존), DB persist. 이후 런타임 source of truth는 DB 설정이며, 운영 중 실제 사용은 거의 1슬롯 전제 |
-| [ ] M1c-U4 | 포화/장애 UX 통합 | Sonnet | §8 Ollama 서버 장애 통합 처리 + 통합 거부 응답 | 슬롯 포화/timeout/`ConnectionError`/5xx를 사용자에게 동일한 "AI 사용 중 / 사용 불가, 잠시 후 재시도" 흐름으로 안내. 내부 로그는 사유 구분 |
-| [ ] M1c-U5 | 동시 AI 2개 fire smoke | Sonnet | §15 Ollama limiter 검증(축소) | 기본 1슬롯에서 1개 처리, 1개 즉시 busy 확인. admin UI에서 1→3 resize 시 자연스러운 동작 확인(별도 exit gate 아님) |
+| [x] M1c-U1 | Ollama limiter 모든 외부 HTTP 접점 적용 | Opus | §8 limiter 적용 대상 — 모든 외부 Ollama HTTP 접점 | 7개 접점(파싱/refinement/체크리스트 생성/주간 보고/conflict review/health/model) 감싸기, `score_conflict` 제외, `try_acquire` 즉시 false 시 대기 없이 busy 응답 |
+| [x] M1c-U2 | 기본 동시성 env `WHATUDOIN_OLLAMA_CONCURRENCY=1` | Sonnet | §8 admin UI 설정 항목 | env 미지정 시 기본 1, 허용 범위 1~5 검증. admin DB 설정이 있으면 DB 설정 우선, env는 초기/default fallback |
+| [x] M1c-U3 | admin UI 1~5 설정 + DB persist | Sonnet | §8 admin UI 설정 항목 | 1~5 선택 UI, 변경 즉시 limiter capacity 반영(사용 중 슬롯 보존), DB persist. 이후 런타임 source of truth는 DB 설정이며, 운영 중 실제 사용은 거의 1슬롯 전제 |
+| [x] M1c-U4 | 포화/장애 UX 통합 | Sonnet | §8 Ollama 서버 장애 통합 처리 + 통합 거부 응답 | 슬롯 포화/timeout/`ConnectionError`/5xx를 사용자에게 동일한 "AI 사용 중 / 사용 불가, 잠시 후 재시도" 흐름으로 안내. 내부 로그는 사유 구분 |
+| [x] M1c-U5 | 동시 AI 2개 fire smoke | Sonnet | §15 Ollama limiter 검증(축소) | 기본 1슬롯에서 1개 처리, 1개 즉시 busy 확인. admin UI에서 1→3 resize 시 자연스러운 동작 확인(별도 exit gate 아님) |
 
 ### M1c-ULTRA에서 제외된 항목
 
@@ -329,8 +330,8 @@
 | 마일스톤 | 진입 게이트 | 진행 중 | 완료 | 비고 |
 |---------|-----------|--------|------|------|
 | M1a | (즉시 가능) | **완료** (Group B spec 업데이트 후속) | **13/13** | baseline run_181951/ + m1a11_run_193829/ 보관; M1a-12 26건 fail은 Group A 사전 부채 + Group B 디자인 변경 expected + Group C orthogonal로 triage 완료 |
-| M1b-ULTRA | M1a 완료 | U5 보류 | 조건부 4/5 | WAL/PRAGMA 1.5h 경로. U1~U4는 사후 하네스 재검증 기준 인정(일부 evidence 파일 약함), U5 50 VU smoke는 lock 0건이나 p95 회귀로 closure FAIL |
-| M1c-ULTRA | M1b-ULTRA 완료 | — | 0/5 | Ollama limiter + admin UI + busy UX 2.5h 경로 |
+| M1b-ULTRA | M1a 완료 | U5 FAIL/open | 실행 5/5, 통과 4/5 | WAL/PRAGMA 1.5h 경로. U1~U4는 사후 하네스 재검증 기준 인정(일부 evidence 파일 약함), U5 50 VU smoke는 실행됐고 lock 0건이나 p95 회귀로 closure FAIL |
+| M1c-ULTRA | M1b-ULTRA 완료 | **완료** | **5/5** | Ollama limiter + admin UI + busy UX 2.5h 경로. U1~U5 모두 완료. 1슬롯 포화 즉시 거부 확인, 1→3 resize live 반영 확인 |
 | M1d (조건부) | M1c-ULTRA 완료 | — | 0/1 + 조건부 0/1 | M1d-S1 게이트만 기본 진행, MCP 병목 측정 시 M1d-S3 단독 진입 |
 | M1-ULTRA 종료 | M1a + M1b-U + M1c-U + M1d 처리 완료 | — | 0/1 | M1-end-U1 — lite 기준 종료 |
 | M2 | §13 진입 게이트 통과 | — | 0/21 | 외부 포트 소유자 결정 step + baseline 표 포함 |
