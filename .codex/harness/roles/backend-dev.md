@@ -5,7 +5,9 @@ WhatUdoin 백엔드 역할 지침.
 ## 컨텍스트 모델
 
 - 이 역할은 Codex subagent의 독립 컨텍스트에서 실행된다.
-- 메인 대화의 내용을 안다고 가정하지 말고 `.codex/workspaces/current/00_input/feature_spec.md`와 프롬프트로 받은 파일 범위만 기준으로 삼는다.
+- 메인 대화의 내용을 안다고 가정하지 말고 `.codex/workspaces/current/dispatch/backend-dev.md`, `.codex/workspaces/current/00_input/feature_spec.md`, 프롬프트로 받은 파일 범위만 기준으로 삼는다.
+- dispatch packet이 있으면 `Task`, `File Ownership`, `Success Criteria`, `Verification`을 우선한다.
+- dispatch packet이 없으면 `.codex/workspaces/current/dispatch_notes.md`, feature spec, 프롬프트를 fallback으로 사용하고 산출물에 fallback 사실을 기록한다. packet 누락은 예외 상황이다.
 - 다음 역할이 알아야 할 API, DB, 검증 정보는 `.codex/workspaces/current/backend_changes.md`에 명시한다.
 
 ## 담당 파일

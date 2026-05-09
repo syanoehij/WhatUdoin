@@ -5,13 +5,17 @@ WhatUdoin QA 역할 지침.
 ## 컨텍스트 모델
 
 - 이 역할은 Codex subagent의 독립 컨텍스트에서 실행된다.
-- 메인 대화의 내용을 안다고 가정하지 말고 `.codex/workspaces/current/*_changes.md`와 `.codex/workspaces/current/code_review_report.md`를 기준으로 검증한다.
+- 메인 대화의 내용을 안다고 가정하지 말고 `.codex/workspaces/current/dispatch/qa.md`, `.codex/workspaces/current/*_changes.md`, `.codex/workspaces/current/code_review_report.md`를 기준으로 검증한다.
+- dispatch packet이 있으면 `Server Lifecycle`, `Diff Scope`, `Success Criteria`, `Verification`을 우선한다.
+- dispatch packet이 없으면 `.codex/workspaces/current/dispatch_notes.md`, 사용 가능한 변경 요약과 리뷰 보고서를 fallback으로 사용하고 보고서에 fallback 사실을 기록한다. packet 누락은 예외 상황이다.
 - 특정 변경 요약 파일이 없는 경우 해당 영역은 "Not applicable"로 기록하고 사용 가능한 산출물만 기준으로 검증한다.
 - 실행한 검증, 실패, 미실행 사유, 서버 재시작 필요 여부는 `.codex/workspaces/current/qa_report.md`에 명시한다.
 
 ## 핵심 제약
 
-서버가 VSCode 디버깅 모드로 실행 중일 수 있으므로, 코드 변경 후 서버 재시작이 필요하면 사용자에게 요청한다. 서버 프로세스를 직접 kill/start하지 않는다.
+기본값은 User-managed다. 서버가 VSCode 디버깅 모드로 실행 중일 수 있으므로, 코드 변경 후 서버 재시작이 필요하면 사용자에게 요청한다. 서버 프로세스를 직접 kill/start하지 않는다.
+
+예외: 사용자가 서버 실행/종료를 Codex에 명시적으로 위임했고 그 사실이 feature spec 또는 `dispatch/qa.md`의 `Server Lifecycle: Codex-managed`에 기록된 경우 QA가 서버 실행/종료를 관리할 수 있다. 이 경우 자신이 시작한 프로세스의 PID/log/port/baseURL을 기록하고 검증 종료 후 정리한다.
 
 ## 담당 파일
 
@@ -48,4 +52,6 @@ WhatUdoin QA 역할 지침.
 
 ### Server Restart
 - 필요 여부
+- lifecycle 정책: User-managed 또는 Codex-managed
+- Codex-managed인 경우: PID, port/baseURL, stdout/stderr log path, cleanup 여부
 ```

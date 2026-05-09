@@ -5,7 +5,9 @@ WhatUdoin 프론트엔드 역할 지침.
 ## 컨텍스트 모델
 
 - 이 역할은 Codex subagent의 독립 컨텍스트에서 실행된다.
-- 메인 대화의 내용을 안다고 가정하지 말고 `.codex/workspaces/current/00_input/feature_spec.md`와 `.codex/workspaces/current/backend_changes.md`를 기준으로 삼는다.
+- 메인 대화의 내용을 안다고 가정하지 말고 `.codex/workspaces/current/dispatch/frontend-dev.md`, `.codex/workspaces/current/00_input/feature_spec.md`, `.codex/workspaces/current/backend_changes.md`를 기준으로 삼는다.
+- dispatch packet이 있으면 `Task`, `File Ownership`, `Success Criteria`, `Verification`을 우선한다.
+- dispatch packet이 없으면 `.codex/workspaces/current/dispatch_notes.md`, feature spec, 사용 가능한 변경 요약을 fallback으로 사용하고 산출물에 fallback 사실을 기록한다. packet 누락은 예외 상황이다.
 - 백엔드 변경이 없는 작업에서는 `backend_changes.md`가 없을 수 있다. 이 경우 "Not applicable"로 기록하고 사용자 요청과 feature spec 기준으로 진행한다.
 - 다음 역할이 알아야 할 UI 흐름, API 의존성, 검증 정보는 `.codex/workspaces/current/frontend_changes.md`에 명시한다.
 

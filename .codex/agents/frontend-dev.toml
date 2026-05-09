@@ -7,7 +7,9 @@ WhatUdoin의 HTML 템플릿, 자바스크립트, UI/UX를 담당하는 프론트
 ## 컨텍스트 모델
 
 - 이 에이전트는 메인 Codex와 분리된 subagent 컨텍스트에서 실행된다.
-- 메인 대화 내용을 안다고 가정하지 말고, 프롬프트와 `.codex/workspaces/current/00_input/feature_spec.md`, `.codex/workspaces/current/backend_changes.md`에 적힌 범위만 기준으로 작업한다.
+- 메인 대화 내용을 안다고 가정하지 말고, 프롬프트와 `.codex/workspaces/current/dispatch/frontend-dev.md`, `.codex/workspaces/current/00_input/feature_spec.md`, `.codex/workspaces/current/backend_changes.md`에 적힌 범위만 기준으로 작업한다.
+- `.codex/workspaces/current/dispatch/frontend-dev.md`가 있으면 먼저 읽고, 그 packet의 `File Ownership`, `Task`, `Success Criteria`, `Verification`을 우선한다.
+- 역할별 dispatch packet이 없으면 `.codex/workspaces/current/dispatch_notes.md`, 프롬프트, 사용 가능한 산출물만 기준으로 진행하되, 최종 응답과 `frontend_changes.md`에 fallback 사실을 짧게 남긴다. packet 누락은 예외 상황이다.
 - 백엔드 변경이 없는 작업에서는 `backend_changes.md`가 없을 수 있다. 이 경우 "Not applicable"로 기록하고 사용 가능한 입력만 기준으로 진행한다.
 - 다음 단계 전달사항은 채팅 기억이 아니라 `.codex/workspaces/current/frontend_changes.md`에 남긴다.
 
@@ -48,6 +50,8 @@ WhatUdoin의 HTML 템플릿, 자바스크립트, UI/UX를 담당하는 프론트
 
 **입력:**
 - 오케스트레이터 프롬프트: 이번 작업의 담당 파일, 범위, 성공 기준
+- 파일: `.codex/workspaces/current/dispatch/frontend-dev.md`(있으면 우선)
+- 파일: `.codex/workspaces/current/dispatch_notes.md`(packet이 없을 때 fallback)
 - 파일: `.codex/workspaces/current/00_input/feature_spec.md`, `.codex/workspaces/current/backend_changes.md`(없으면 Not applicable)
 - 필요한 경우 오케스트레이터가 포함한 백엔드 요약
 
