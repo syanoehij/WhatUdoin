@@ -17,7 +17,6 @@ from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, Request, HTTPException, Response, UploadFile, File
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse, StreamingResponse
@@ -113,7 +112,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="WhatUDoin", lifespan=lifespan)
 
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=auth.get_client_ip)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
