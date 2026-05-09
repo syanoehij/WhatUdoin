@@ -238,6 +238,7 @@ if __name__ == "__main__":
 
     PORT_HTTP  = 8000
     PORT_HTTPS = 8443
+    bind_host = (os.environ.get("WHATUDOIN_BIND_HOST") or "0.0.0.0").strip() or "0.0.0.0"
 
     cert_path = os.path.join(_run_dir(), "whatudoin-cert.pem")
     key_path  = os.path.join(_run_dir(), "whatudoin-key.pem")
@@ -245,6 +246,7 @@ if __name__ == "__main__":
 
     print("=" * 48)
     print("  WhatUdoin 서버 시작")
+    print(f"  BIND  : {bind_host}")
     print(f"  HTTP  : http://localhost:{PORT_HTTP}")
     if have_https:
         print(f"  HTTPS : https://localhost:{PORT_HTTPS}  (CA 설치 시)")
@@ -254,12 +256,12 @@ if __name__ == "__main__":
     print("=" * 48)
 
     http_cfg = uvicorn.Config(
-        fastapi_app, host="0.0.0.0", port=PORT_HTTP, log_level="info"
+        fastapi_app, host=bind_host, port=PORT_HTTP, log_level="info"
     )
     servers = [uvicorn.Server(http_cfg)]
     if have_https:
         https_cfg = uvicorn.Config(
-            fastapi_app, host="0.0.0.0", port=PORT_HTTPS, log_level="info",
+            fastapi_app, host=bind_host, port=PORT_HTTPS, log_level="info",
             ssl_certfile=cert_path, ssl_keyfile=key_path,
         )
         servers.append(uvicorn.Server(https_cfg))

@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import asyncio
+import ipaddress
 import json
 import os
 import hashlib
@@ -354,6 +355,47 @@ class _SecurityHeadersMiddleware:
 app.add_middleware(_SecurityHeadersMiddleware)
 
 
+WEB_API_INTERNAL_ONLY_ENV = "WHATUDOIN_WEB_API_INTERNAL_ONLY"
+
+
+def _env_truthy(name: str) -> bool:
+    return (os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_loopback_host(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host.lower() == "localhost"
+
+
+class _FrontRouterAccessGuardMiddleware:
+    """Future Web API internal mode: only local Front Router may call directly."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http" and _env_truthy(WEB_API_INTERNAL_ONLY_ENV):
+            client = scope.get("client") or ("", 0)
+            peer = str(client[0]) if client else ""
+            if not _is_loopback_host(peer):
+                body = json.dumps(
+                    {"detail": "Web API internal listener requires Front Router."},
+                    ensure_ascii=False,
+                ).encode("utf-8")
+                headers = [
+                    (b"content-type", b"application/json; charset=utf-8"),
+                    (b"content-length", str(len(body)).encode()),
+                    (b"cache-control", b"no-store"),
+                    *_security_headers_for_path(scope.get("path", "")),
+                ]
+                await send({"type": "http.response.start", "status": 403, "headers": headers})
+                await send({"type": "http.response.body", "body": body})
+                return
+        await self.app(scope, receive, send)
+
+
 _HTTP_FALLBACK_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 _HTTP_FALLBACK_WRITE_ALLOW_EXACT = {"/avr", "/remote", "/api/avr"}
 _HTTP_FALLBACK_WRITE_ALLOW_PREFIXES = ("/api/avr/",)
@@ -558,6 +600,7 @@ class _BrowserHTTPSRedirectMiddleware:
 
 
 app.add_middleware(_BrowserHTTPSRedirectMiddleware)
+app.add_middleware(_FrontRouterAccessGuardMiddleware)
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -4396,4 +4439,5 @@ def api_delete_mcp_token(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    bind_host = (os.environ.get("WHATUDOIN_BIND_HOST") or "0.0.0.0").strip() or "0.0.0.0"
+    uvicorn.run("app:app", host=bind_host, port=8000, reload=True)

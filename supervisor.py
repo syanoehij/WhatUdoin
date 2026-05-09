@@ -17,6 +17,11 @@ INTERNAL_TOKEN_FILE_NAME = "internal_token"
 INTERNAL_TOKEN_ENV = "WHATUDOIN_INTERNAL_TOKEN"
 INTERNAL_TOKEN_FILE_ENV = "WHATUDOIN_INTERNAL_TOKEN_FILE"
 SERVICE_NAME_ENV = "WHATUDOIN_SERVICE_NAME"
+TRUSTED_PROXY_ENV = "TRUSTED_PROXY"
+WEB_API_BIND_HOST_ENV = "WHATUDOIN_BIND_HOST"
+WEB_API_INTERNAL_ONLY_ENV = "WHATUDOIN_WEB_API_INTERNAL_ONLY"
+FRONT_ROUTER_LOOPBACK_HOST = "127.0.0.1"
+WEB_API_SERVICE_NAME = "web-api"
 
 M2_STARTUP_SEQUENCE = (
     "resolve_runtime_paths",
@@ -27,6 +32,14 @@ M2_STARTUP_SEQUENCE = (
     "start_sse_service",
     "verify_health_and_publish_status",
 )
+
+
+def web_api_internal_service_env(router_host: str = FRONT_ROUTER_LOOPBACK_HOST) -> dict[str, str]:
+    return {
+        TRUSTED_PROXY_ENV: router_host,
+        WEB_API_BIND_HOST_ENV: FRONT_ROUTER_LOOPBACK_HOST,
+        WEB_API_INTERNAL_ONLY_ENV: "1",
+    }
 
 
 @dataclass(frozen=True)
@@ -43,6 +56,33 @@ class ServiceSpec:
     command: Sequence[str]
     env: Mapping[str, str] = field(default_factory=dict)
     startup_grace_seconds: float = 1.0
+
+
+def web_api_service_spec(
+    command: Sequence[str],
+    *,
+    name: str = WEB_API_SERVICE_NAME,
+    router_host: str = FRONT_ROUTER_LOOPBACK_HOST,
+    extra_env: Mapping[str, str] | None = None,
+    startup_grace_seconds: float = 1.0,
+) -> ServiceSpec:
+    protected = {
+        TRUSTED_PROXY_ENV,
+        WEB_API_BIND_HOST_ENV,
+        WEB_API_INTERNAL_ONLY_ENV,
+    }
+    env = {
+        str(k): str(v)
+        for k, v in (extra_env or {}).items()
+        if str(k) not in protected
+    }
+    env.update(web_api_internal_service_env(router_host))
+    return ServiceSpec(
+        name=name,
+        command=command,
+        env=env,
+        startup_grace_seconds=startup_grace_seconds,
+    )
 
 
 @dataclass
@@ -294,8 +334,14 @@ __all__ = [
     "INTERNAL_TOKEN_FILE_ENV",
     "M2_STARTUP_SEQUENCE",
     "SERVICE_NAME_ENV",
+    "TRUSTED_PROXY_ENV",
+    "WEB_API_BIND_HOST_ENV",
+    "WEB_API_INTERNAL_ONLY_ENV",
+    "WEB_API_SERVICE_NAME",
     "InternalTokenInfo",
     "ServiceSpec",
     "ServiceState",
     "WhatUdoinSupervisor",
+    "web_api_internal_service_env",
+    "web_api_service_spec",
 ]
