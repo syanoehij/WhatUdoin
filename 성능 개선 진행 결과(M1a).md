@@ -165,3 +165,46 @@
   - Group C orthogonal 7건 — 차후 phase별 개별 조사. lazy-load와 인과 없으므로 M1a 종료 차단 사유 아님.
   - M1a-7 baseline (run_181951/) + M1a-11 측정 (m1a11_run_193829/) 두 디렉터리는 M1-end-2 회사 반입 판단 시 핵심 자료.
   - PUT 100% fail (M1a-7) + 자산 다운로드 정확 (M1a-11) 두 baseline은 M1b WAL/IMMEDIATE 적용 후 동일 environment 재측정으로 정량 비교 가능.
+
+---
+
+## M1a 종료 후 후속 fix (2026-05-09)
+
+### PUT payload `project` 필드 추가 (locustfile.py)
+
+- **변경**: `_workspace/perf/locust/locustfile.py` (gitignored). SingleTabUser/MultiTabUser 양쪽 `event_crud` task의 PUT `update_payload`에 `"project": ""` 추가 (`{**payload, "title": f"{title}_updated", "project": ""}` 패턴으로 `replace_all` 일괄). M1a-7 baseline 27% 실패율의 ~10pp(PUT 단독)를 M1b 측정 시 해소 기대.
+- **증거**: `python -m py_compile _workspace/perf/locust/locustfile.py` exit 0. 운영 코드 변경 0. 실 측정 검증은 M1b runner 첫 sanity run 시 PUT 실패율 < 50% 확인으로 자연 검증.
+- **회귀**: locustfile만 변경(gitignored). 운영 흐름 영향 0.
+- **위험**: `database.py _apply_event_update`가 `:project` 외 다른 컬럼도 unbound 요구하면 PUT 여전히 fail 가능 — M1a-7 에러 메시지는 `:project`만 명시했으나, M1b sanity 시 전체 컬럼 정합 spot-check 필요.
+
+## M1b 인계 메모 (codex 또는 다음 세션)
+
+M1a 마일스톤 완료 후 M1b 진입 시 다음 항목 처리 권장:
+
+### 강제 (plan §17 명시)
+
+1. **M1b-1 ~ M1b-17 plan 순서 준수** — DB 세트 백업 → `PRAGMA foreign_key_check` → `foreign_keys` 정책 채택 → `open_sqlite_connection()` 헬퍼 → `init_db()`/마이그레이션/진단 정렬 → 백업 src 정렬 → `database.get_conn()` PRAGMA 5종 → WAL 모드 활성화 → §4-1 사전 조사 → `write_conn()` IMMEDIATE → 503 변환 → WAL 안전판 → EXPLAIN QUERY PLAN → APScheduler 점검 → WAL 복원 drill → 동시성 검증 → Playwright 회귀 + exit criteria.
+2. **M1a-7 baseline (`run_181951/`)이 M1b 효과 정량 비교 기준** — 같은 PC·환경 메타데이터·fixture seed 절차로 측정해야 비교 valid.
+
+### 선택 (효율·정합 목적)
+
+3. **Group B spec 6건 lazy semantics 업데이트** (M1a-12 회귀 26건 중 6건):
+   - `tests/phase37_asset_cache.spec.js` Test 2 — `/check`에서 `tiptap-bundle.min.js` 즉시 로드 → 상세 진입 후 `WuAssets.ensure` 트리거 검증
+   - `tests/phase37_stage2_static_cache.spec.js` Test 1B + Test 4 — 6개 자산 즉시 로드 → lazy 활성화 후 검증
+   - 작업량: ~30~60분 (qa 또는 frontend-dev 1 사이클)
+4. **M1b runner 신설**: `run_baseline_m1a7.py` 9-phase 80% 재사용 — pre-flight / snapshot+seed / uvicorn / SSE는 그대로, 측정 본문만 동시성 100+100 + lock 변환 검증으로 교체. `run_baseline_m1b.py` 변형 또는 m1a7.py에 `--mode=m1b` 인자 추가.
+
+### 보류 (M1b 차단 사유 아님)
+
+5. **Group A 13건** (toastui→Tiptap 마이그레이션 미완료, phase33_doc_linebreak/phase34/phase37_stage3 T1) — plan §18 후속 후보. M1b 회귀에서 같은 fail 재현되면 noise로 처리.
+6. **Group C 7건** (auth/dark theme/TOC/검색/image viewer — lazy-load와 orthogonal) — 개별 phase별 조사 필요. M1b 회귀 spec list에 포함될 수 있으나 lazy-load 인과 0.
+7. **다중 탭 baseline 실측** — M1a-7은 단일 탭 50 VU만. M1a-4 inventory §4 모델(172건/분 상한) 실측은 후속 사이클 권장.
+
+### 환경/도구 인계
+
+- **measurement orchestrator**: `_workspace/perf/scripts/run_baseline_m1a7.py` (978줄, M1a-7 운용) + `run_baseline_m1a11.py` (1156줄, M1a-11/12 운용) — 8/9-phase Python orchestrator, M1a-7 패턴 80% 재사용 가능.
+- **fixture**: `_workspace/perf/fixtures/{seed_users.py, cleanup.py}` (env `WHATUDOIN_PERF_FIXTURE=allow` + WAL/SHM 부재 가드). 첫 실 실행은 snapshot 직후로 묶음.
+- **SSE**: `_workspace/perf/scripts/{sse_poc.py, sse_keepalive.py}`. 50 연결 keep-alive + 지표 3종(연결 유지 / inter-arrival / QueueFull 클라 추정 0).
+- **인벤토리**: `_workspace/perf/background_requests.md` (페이지×요청 매트릭스 + 단일/다중 탭 분당 호출 수 모델).
+- **gitignore 정책**: `_workspace/`, `tests/`는 git untracked. 측정 산출물은 로컬 보관, codex 인계 시 같은 머신/branch에서 진행해야 일관성 유지.
+- **메모리 패턴 (Claude Code 메인 세션)**: `feedback_subprocess_logging.md` (subprocess output 디스크 저장 강제) + `feedback_harness_qa.md` (작업 도메인 에이전트 + qa 사후 검증 2단계 사이클).
