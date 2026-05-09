@@ -1806,7 +1806,8 @@ function closeCkViewExportMenu() {
 }
 function ckViewExportLink() {
   if (!_curId) { wuToast.warning('체크리스트를 먼저 선택하세요.'); return; }
-  const url = `http://${location.hostname}:8000/check?id=${_curId}`;
+  const publicHttpBase = {{ public_http_base|tojson }};
+  const url = `${publicHttpBase}/check?id=${_curId}`;
   navigator.clipboard.writeText(url).then(() => wuToast.success(`링크가 복사되었습니다:\n${url}`)).catch(async () => { await wuDialog.prompt({ title: '링크 복사', message: '링크를 복사하세요:', value: url, readonly: true, copyButton: true }); });
 }
 

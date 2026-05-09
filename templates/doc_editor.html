@@ -615,7 +615,8 @@ function exportMd() {
 
 function exportLink() {
   const loc = window.location;
-  const httpUrl = `http://${loc.hostname}:8000${loc.pathname}${loc.search}${loc.hash}`;
+  const publicHttpBase = {{ public_http_base|tojson }};
+  const httpUrl = `${publicHttpBase}${loc.pathname}${loc.search}${loc.hash}`;
   navigator.clipboard.writeText(httpUrl).then(() => {
     wuToast.success(`링크가 복사되었습니다:\n${httpUrl}`);
   }).catch(async () => {

@@ -12,8 +12,7 @@
     if (localStorage.getItem('whatudoin_force_http') === '1') return;
     var failAt = parseInt(localStorage.getItem('whatudoin_https_fail_at') || '0', 10);
     if (failAt && (Date.now() - failAt) < 10 * 60 * 1000) return;
-    var host = location.hostname;
-    var httpsBase = 'https://' + host + ':{{ https_port }}';
+    var httpsBase = {{ public_https_base|tojson }};
     var probe = new Image();
     var done = false;
     var timer = setTimeout(function () {

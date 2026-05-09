@@ -355,6 +355,47 @@ class _SecurityHeadersMiddleware:
 app.add_middleware(_SecurityHeadersMiddleware)
 
 
+_HTTP_FALLBACK_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+_HTTP_FALLBACK_WRITE_ALLOW_EXACT = {"/avr", "/remote", "/api/avr"}
+_HTTP_FALLBACK_WRITE_ALLOW_PREFIXES = ("/api/avr/",)
+
+
+def _is_http_fallback_write_allowed(path: str) -> bool:
+    return path in _HTTP_FALLBACK_WRITE_ALLOW_EXACT or path.startswith(_HTTP_FALLBACK_WRITE_ALLOW_PREFIXES)
+
+
+class _HTTPFallbackWriteGuardMiddleware:
+    """HTTP 8000 fallback에서는 인증서/AVR 흐름 외 unsafe write를 막는다."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if (
+            scope["type"] == "http"
+            and scope.get("scheme") == "http"
+            and scope.get("method") in _HTTP_FALLBACK_UNSAFE_METHODS
+            and not _is_http_fallback_write_allowed(scope.get("path", "/"))
+        ):
+            body = json.dumps(
+                {"detail": "HTTP fallback에서는 쓰기 요청이 차단됩니다. HTTPS로 접속하세요."},
+                ensure_ascii=False,
+            ).encode("utf-8")
+            headers = [
+                (b"content-type", b"application/json; charset=utf-8"),
+                (b"content-length", str(len(body)).encode()),
+                (b"cache-control", b"no-store"),
+                *_security_headers_for_path(scope.get("path", "")),
+            ]
+            await send({"type": "http.response.start", "status": 403, "headers": headers})
+            await send({"type": "http.response.body", "body": body})
+            return
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(_HTTPFallbackWriteGuardMiddleware)
+
+
 def _extract_host(raw: bytes) -> str:
     """Host 헤더에서 호스트명·IP만 반환 (포트 제거). IPv6 리터럴([::1]) 처리 포함."""
     host = raw.decode(errors="replace").strip()
@@ -362,6 +403,37 @@ def _extract_host(raw: bytes) -> str:
         end = host.find("]")
         return host[:end + 1] if end != -1 else host
     return host.split(":")[0]
+
+
+def _url_host(host: str) -> str:
+    host = (host or "localhost").strip()
+    if ":" in host and not host.startswith("["):
+        return f"[{host}]"
+    return host
+
+
+def _public_base_from_host(host: str, scheme: str = "https") -> str:
+    port = 8443 if scheme == "https" else 8000
+    return f"{scheme}://{_url_host(host)}:{port}"
+
+
+def _configured_public_host() -> str:
+    configured = (os.environ.get("WHATUDOIN_PUBLIC_BASE_URL") or "").strip()
+    if not configured:
+        return ""
+    parsed = urlparse(configured if "://" in configured else f"https://{configured}")
+    return parsed.hostname or ""
+
+
+def _public_base_url(request: Request, scheme: str = "https") -> str:
+    """External origin for user-visible links.
+
+    M2 Front Router/Supervisor should set WHATUDOIN_PUBLIC_BASE_URL to the
+    current PC LAN IP origin. During the existing single-process mode we fall
+    back to the request host to preserve the old IP-based behavior.
+    """
+    host = _configured_public_host() or request.url.hostname or "localhost"
+    return _public_base_from_host(host, scheme)
 
 
 class _BrowserHTTPSRedirectMiddleware:
@@ -444,7 +516,10 @@ class _BrowserHTTPSRedirectMiddleware:
     def _probe_html(host: str, path: str, qs: str) -> str:
         def _js(s: str) -> str:
             return json.dumps(s).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
-        js_host = _js(host)
+        https_base = _public_base_from_host(host, "https")
+        http_base = _public_base_from_host(host, "http")
+        js_https_base = _js(https_base)
+        js_http_base = _js(http_base)
         js_path = _js(path)
         js_qs   = _js(("?" + qs) if qs else "")
         return f"""<!DOCTYPE html>
@@ -458,14 +533,14 @@ class _BrowserHTTPSRedirectMiddleware:
 <body><p>알람용 인증서 확인 중...</p>
 <script>
 (function(){{
-  var host={js_host}, path={js_path}, qs={js_qs};
-  fetch('https://'+host+':8443/api/health',{{mode:'no-cors'}})
+  var httpsBase={js_https_base}, httpBase={js_http_base}, path={js_path}, qs={js_qs};
+  fetch(httpsBase + '/api/health',{{mode:'no-cors'}})
     .then(function(){{
-      location.replace('https://'+host+':8443'+path+qs);
+      location.replace(httpsBase + path + qs);
     }})
     .catch(function(){{
       document.cookie='wd-cert-skip=1; Max-Age=3600; Path=/';
-      location.replace('http://'+host+':8000'+path+qs);
+      location.replace(httpBase + path + qs);
     }});
 }})();
 </script>
@@ -514,6 +589,8 @@ def _ctx(request: Request, **kwargs):
         "https_available": _https_available(),
         "https_port": 8443,
         "http_port": 8000,
+        "public_https_base": _public_base_url(request, "https"),
+        "public_http_base": _public_base_url(request, "http"),
         **kwargs,
     }
 
@@ -702,12 +779,12 @@ def alarm_setup_page(request: Request):
 @app.get("/settings/mcp", response_class=HTMLResponse)
 def settings_mcp_page(request: Request):
     _require_editor(request)
-    base = str(request.base_url).rstrip("/")
-    http_base = f"http://{request.base_url.hostname}:8000"
+    base = _public_base_url(request, "https")
+    mcp_base = base
     cline_config = json.dumps({
         "mcpServers": {
             "whatudoin": {
-                "url": f"{http_base}/mcp/",
+                "url": f"{mcp_base}/mcp/",
                 "headers": {"Authorization": "Bearer <YOUR_TOKEN>"},
                 "disabled": False,
             }
@@ -719,10 +796,9 @@ def settings_mcp_page(request: Request):
         'args = [\n'
         '  "-y",\n'
         '  "mcp-remote",\n'
-        f'  "{http_base}/mcp/",\n'
+        f'  "{mcp_base}/mcp/",\n'
         '  "--transport",\n'
         '  "sse-only",\n'
-        '  "--allow-http",\n'
         '  "--header",\n'
         '  "Authorization: Bearer <YOUR_TOKEN>"\n'
         ']'
@@ -732,9 +808,8 @@ def settings_mcp_page(request: Request):
             "WhatUdoin": {
                 "command": "mcp-remote",
                 "args": [
-                    f"{http_base}/mcp/",
+                    f"{mcp_base}/mcp/",
                     "--transport", "sse-only",
-                    "--allow-http",
                     "--header",
                     "Authorization: Bearer <YOUR_TOKEN>",
                 ],
@@ -742,7 +817,7 @@ def settings_mcp_page(request: Request):
         }
     }, indent=2, ensure_ascii=False)
     claude_code_cmd = (
-        f'claude mcp add --transport http WhatUdoin {http_base}/mcp/'
+        f'claude mcp add --transport http WhatUdoin {mcp_base}/mcp/'
         ' --header "Authorization: Bearer <YOUR_TOKEN>"'
     )
     return templates.TemplateResponse(
@@ -4177,10 +4252,7 @@ def _is_plain_http_url(url: str) -> bool:
 
 
 def _http_avr_url(request: Request) -> str:
-    host = request.url.hostname or "localhost"
-    if ":" in host and not host.startswith("["):
-        host = f"[{host}]"
-    return f"http://{host}:8000/avr"
+    return f"{_public_base_url(request, 'http')}/avr"
 
 
 @app.get("/remote")
