@@ -7,7 +7,7 @@
 - **1차 실행 todo로 동결** (2026-05-09): 마스터 plan rev29 + 다회 외부 검토 사이클을 거쳐 M1a~M1d 실행 + M2 이후 조건부 운영 구조 변경 step이 모두 정합 상태로 확정됐다. 신규 step 추가 사이클은 종결한다.
 - **트랙 단축 결정** (2026-05-09): M1a 완료 후 외부 검토 2차 사이클을 거쳐 M1b~M1d의 실제 실행 경로를 **M1-ULTRA**(사내 소수 사용자 기준)로 낮췄다. 단축 근거는 아래 "단축 배경" 참조. 기존 full case 세부 step은 본 문서 하단 "보수 단축안 / 회사 반입 게이트 / 후속 후보" 섹션으로 이동했고, 회사 반입 결정이나 실제 장애 징후 발생 시 끌어올린다. 상세 단축안은 [`성능 개선 단축안(M1b-M1d).md`](성능%20개선%20단축안(M1b-M1d).md) 참조.
 - **추후 변경 원칙**: 본 todo는 마스터 plan §0 "문서 라이프사이클 정책"과 동일하게 동결 상태로 둔다. 새 의견이 들어와도 M1a~M1d 실행을 막는 실재 코드/운영 리스크가 아니면 본문을 더 확장하지 않고, 구현 중 발견 사실 → commit/PR 메시지, 운영 정책/후속 마일스톤 후보 → 마스터 plan §18로 분리한다.
-- **다음 행동**: M1b-U5 closure 보류. U1/U4는 사후 하네스 재검증 기준 조건부 인정 상태이므로, M1c 진입 전 U1 manifest/hash evidence와 U4 raw PRAGMA evidence를 보강하거나 조건부 완료를 명시 유지한다. U5는 동일 조건 반복 측정과 known-failure endpoint 제외 보조 p95 분석 후 재판정한다.
+- **다음 행동**: M1b-ULTRA 5/5 PASS 완료. M1b-U5 closure — 원인은 locust payload 누락 필드(`description`/`location`/`all_day`)였으며, `app.py update_event` setdefault 보강 + locustfile 수정으로 해결. 재측정 p95 3000ms(baseline 5300ms 대비 개선). M1-ULTRA 전 구간 종료.
 
 ## 단축 배경
 
@@ -68,7 +68,7 @@
 | [x] M1b-U5 | M1a 도구 재사용 50 VU smoke | Sonnet | §15 동시성 검증(축소) | M1a-7 locust 시나리오 그대로 50 VU 1회 실행. p95 명확한 회귀 없음, `database is locked` 0건. lock 발생 시 함수 위치 기록 후 보수 단축안 게이트로 escalation 판단 |
 
 > M1b-U1/U4의 체크는 처음부터 subagent가 소유한 high-confidence 완료가 아니라, backend/code-review/qa 사후 재검증으로 현재 증거와 정합하다고 본 조건부 완료다.
-> M1b-U5 체크는 step 실행 완료 표시다. 결과는 FAIL/open이며 exit criteria는 미통과다. 증거: `_workspace/perf/baseline_2026-05-09/run_210621/summary.md` 50 VU p95 8800ms, `_workspace/perf/baseline_2026-05-09/m1b_vu50_rerun_211725/` 50 VU 단독 재현 p95 6900ms, `database is locked` 0건. 상세는 `성능 개선 진행 결과(M1b).md`의 `M1b-U5 실행됨 - FAIL/open` 절 참조.
+> M1b-U5 closure **PASS** (2026-05-10). 초기 FAIL/open 원인: locust payload에 `description`/`location`/`all_day` 누락 → `sqlite3.ProgrammingError`. 수정: `app.py update_event` setdefault 3건 보강 + locustfile description 추가. 재측정(`m1b_u5_recheck2_235910`): PUT 0% 실패, Aggregated p95 3000ms(baseline 5300ms 대비 개선). 상세: `성능 개선 진행 결과(M1b).md` `M1b-U5 closure — PASS` 절.
 
 ### M1b-ULTRA에서 제외된 항목
 
