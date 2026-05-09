@@ -22,6 +22,12 @@ WEB_API_BIND_HOST_ENV = "WHATUDOIN_BIND_HOST"
 WEB_API_INTERNAL_ONLY_ENV = "WHATUDOIN_WEB_API_INTERNAL_ONLY"
 FRONT_ROUTER_LOOPBACK_HOST = "127.0.0.1"
 WEB_API_SERVICE_NAME = "web-api"
+SSE_SERVICE_NAME = "sse"
+SSE_SERVICE_BIND_HOST_ENV = "WHATUDOIN_BIND_HOST"
+SSE_SERVICE_PORT_ENV = "WHATUDOIN_SSE_SERVICE_PORT"
+SSE_SERVICE_PUBLISH_URL_ENV = "WHATUDOIN_SSE_PUBLISH_URL"
+SSE_SERVICE_URL_ENV = "WHATUDOIN_SSE_SERVICE_URL"
+SSE_SERVICE_DEFAULT_PORT = 8765
 
 M2_STARTUP_SEQUENCE = (
     "resolve_runtime_paths",
@@ -56,6 +62,41 @@ class ServiceSpec:
     command: Sequence[str]
     env: Mapping[str, str] = field(default_factory=dict)
     startup_grace_seconds: float = 1.0
+
+
+def sse_service_spec(
+    command: Sequence[str],
+    *,
+    name: str = SSE_SERVICE_NAME,
+    port: int = SSE_SERVICE_DEFAULT_PORT,
+    extra_env: Mapping[str, str] | None = None,
+    startup_grace_seconds: float = 1.0,
+) -> ServiceSpec:
+    """SSE service 프로세스 spec 팩토리.
+
+    보호 env:
+    - WHATUDOIN_BIND_HOST: 항상 127.0.0.1 (loopback bind 강제)
+    - WHATUDOIN_SSE_SERVICE_PORT: 지정 포트 강제
+
+    향후 M2-17에서 WHATUDOIN_INTERNAL_TOKEN 주입 추가 예정.
+    """
+    protected = {
+        SSE_SERVICE_BIND_HOST_ENV,
+        SSE_SERVICE_PORT_ENV,
+    }
+    env = {
+        str(k): str(v)
+        for k, v in (extra_env or {}).items()
+        if str(k) not in protected
+    }
+    env[SSE_SERVICE_BIND_HOST_ENV] = "127.0.0.1"
+    env[SSE_SERVICE_PORT_ENV] = str(port)
+    return ServiceSpec(
+        name=name,
+        command=command,
+        env=env,
+        startup_grace_seconds=startup_grace_seconds,
+    )
 
 
 def web_api_service_spec(
@@ -334,6 +375,12 @@ __all__ = [
     "INTERNAL_TOKEN_FILE_ENV",
     "M2_STARTUP_SEQUENCE",
     "SERVICE_NAME_ENV",
+    "SSE_SERVICE_BIND_HOST_ENV",
+    "SSE_SERVICE_DEFAULT_PORT",
+    "SSE_SERVICE_NAME",
+    "SSE_SERVICE_PORT_ENV",
+    "SSE_SERVICE_PUBLISH_URL_ENV",
+    "SSE_SERVICE_URL_ENV",
     "TRUSTED_PROXY_ENV",
     "WEB_API_BIND_HOST_ENV",
     "WEB_API_INTERNAL_ONLY_ENV",
@@ -342,6 +389,7 @@ __all__ = [
     "ServiceSpec",
     "ServiceState",
     "WhatUdoinSupervisor",
+    "sse_service_spec",
     "web_api_internal_service_env",
     "web_api_service_spec",
 ]

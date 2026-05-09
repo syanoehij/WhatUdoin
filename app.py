@@ -30,6 +30,7 @@ import auth
 import crypto
 import backup
 from broker import wu_broker
+from publisher import publish as _sse_publish
 from permissions import _can_read_doc, _can_read_checklist
 from mcp_server import mcp, mount_mcp, verify_bearer_token, _mcp_user
 
@@ -1013,7 +1014,7 @@ async def create_checklist(request: Request):
     else:
         attachments = None
     cid = db.create_checklist(project, title, content, user["name"], is_public=is_public, team_id=user.get("team_id"), attachments=attachments)
-    wu_broker.publish("checks.changed", {"id": cid, "action": "create"})
+    _sse_publish("checks.changed", {"id": cid, "action": "create"})
     return {"id": cid}
 
 
@@ -1039,7 +1040,7 @@ async def toggle_checklist_status(checklist_id: int, request: Request):
     data = await request.json()
     is_active = 1 if data.get("is_active", True) else 0
     db.set_checklist_active(checklist_id, is_active)
-    wu_broker.publish("checks.changed", {"id": checklist_id, "action": "update"})
+    _sse_publish("checks.changed", {"id": checklist_id, "action": "update"})
     return {"ok": True, "is_active": is_active}
 
 
@@ -1078,7 +1079,7 @@ async def bulk_event_visibility(request: Request):
             raise HTTPException(status_code=403, detail="히든 프로젝트 항목은 외부 공개할 수 없습니다.")
     team_id_filter = user.get("team_id") if not project else None
     count = db.bulk_update_event_visibility(project, is_public, is_active, team_id=team_id_filter)
-    wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": team_id_filter})
+    _sse_publish("events.changed", {"id": None, "action": "bulk_update", "team_id": team_id_filter})
     return {"ok": True, "updated": count}
 
 
@@ -1160,7 +1161,7 @@ async def update_checklist(checklist_id: int, request: Request):
         _proj = db.get_project_by_name(project)
         if _proj and _proj.get("is_hidden"):
             db.update_checklist_visibility(checklist_id, 0)
-    wu_broker.publish("checks.changed", {"id": checklist_id, "action": "update"})
+    _sse_publish("checks.changed", {"id": checklist_id, "action": "update"})
     return {"ok": True}
 
 
@@ -1183,7 +1184,7 @@ async def update_checklist_content(checklist_id: int, request: Request):
     content = data.get("content", "")
     save_history = data.get("save_history", True)
     db.update_checklist_content(checklist_id, content, user["name"], save_history=save_history)
-    wu_broker.publish("checks.changed", {"id": checklist_id, "action": "content"})
+    _sse_publish("checks.changed", {"id": checklist_id, "action": "content"})
     return {"ok": True}
 
 
@@ -1209,7 +1210,7 @@ async def restore_checklist_history(checklist_id: int, history_id: int, request:
     ok = db.restore_checklist_from_history(checklist_id, history_id, user["name"])
     if not ok:
         raise HTTPException(status_code=404, detail="이력을 찾을 수 없습니다.")
-    wu_broker.publish("checks.changed", {"id": checklist_id, "action": "content"})
+    _sse_publish("checks.changed", {"id": checklist_id, "action": "content"})
     return db.get_checklist(checklist_id)
 
 
@@ -1223,7 +1224,7 @@ def delete_checklist(checklist_id: int, request: Request):
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
     db.release_checklist_lock(checklist_id)  # 삭제 시 강제 해제
     db.delete_checklist(checklist_id, deleted_by=user["name"], team_id=user.get("team_id"))
-    wu_broker.publish("checks.changed", {"id": checklist_id, "action": "delete"})
+    _sse_publish("checks.changed", {"id": checklist_id, "action": "delete"})
     return {"ok": True}
 
 
@@ -1243,7 +1244,7 @@ def lock_checklist(checklist_id: int, request: Request):
         lock = db.get_checklist_lock(checklist_id)
         locked_by = lock["user_name"] if lock else "알 수 없음"
         raise HTTPException(status_code=423, detail=f"{locked_by}님이 편집 중입니다.")
-    wu_broker.publish("checks.changed", {"id": checklist_id, "action": "lock"})
+    _sse_publish("checks.changed", {"id": checklist_id, "action": "lock"})
     return {"ok": True}
 
 
@@ -1276,7 +1277,7 @@ def unlock_checklist(checklist_id: int, request: Request):
         tab_token = request.query_params.get("tab_token") or None
         if tab_token:  # tab_token 없으면 no-op — 다른 편집자 잠금 보호
             db.release_checklist_lock(checklist_id, tab_token)
-            wu_broker.publish("checks.changed", {"id": checklist_id, "action": "unlock"})
+            _sse_publish("checks.changed", {"id": checklist_id, "action": "unlock"})
     return {"ok": True}
 
 
@@ -1903,7 +1904,7 @@ async def create_event(request: Request):
         for name in assignees:
             if name != user["name"]:
                 db.create_notification(name, "assigned", f"📌 담당자로 지정됨: {data.get('title','')}", event_id)
-    wu_broker.publish("events.changed", {"id": event_id, "action": "create", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "create", "team_id": user.get("team_id")})
     return {"id": event_id}
 
 
@@ -1984,7 +1985,7 @@ async def update_event(event_id: int, request: Request):
                 db.create_notification(name, "assigned", f"📌 담당자로 지정됨: {data.get('title', event.get('title',''))}", event_id)
 
     # 반복 3분기(this/from_here/all)·단일 모두 공통 return이므로 여기서 1회 publish
-    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -1999,7 +2000,7 @@ def unlink_event(event_id: int, request: Request):
     with db.get_conn() as conn:
         conn.execute("UPDATE events SET meeting_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (event_id,))
     # sync 핸들러 → broker 내부의 call_soon_threadsafe가 루프 스레드로 안전 전달
-    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -2013,7 +2014,7 @@ def delete_event(event_id: int, request: Request, delete_mode: str = "this"):
         raise HTTPException(status_code=403, detail="다른 팀의 일정은 삭제할 수 없습니다.")
     db.delete_event(event_id, delete_mode, deleted_by=user["name"], team_id=user.get("team_id"))
     # sync 핸들러 → broker 내부의 call_soon_threadsafe가 루프 스레드로 안전 전달
-    wu_broker.publish("events.changed", {"id": event_id, "action": "delete", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "delete", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -2022,10 +2023,20 @@ def delete_event(event_id: int, request: Request, delete_mode: str = "this"):
 async def sse_stream(request: Request):
     """캘린더·칸반·간트 실시간 동기화용 SSE 엔드포인트.
 
+    - WHATUDOIN_SSE_SERVICE_URL 설정 시: SSE service 분리 모드 → 503 반환
+      (Front Router가 이미 /api/stream을 SSE service로 라우팅하므로
+       이 핸들러에 도달하는 경우는 loopback 직접 접근뿐 — defense-in-depth)
+    - 미설정 시(단일 프로세스 fallback): in-process wu_broker 사용
     - 비로그인 게스트 포함 — 페이로드는 id/action 메타 한정
     - 25초마다 ping 주석으로 프록시·브라우저 타임아웃 방지
     - 클라이언트 연결 종료 시 subscribe한 큐를 자동 해제
     """
+    # SSE service 분리 모드 가드
+    if os.environ.get("WHATUDOIN_SSE_SERVICE_URL"):
+        return JSONResponse(
+            {"detail": "SSE endpoint moved to SSE service"},
+            status_code=503,
+        )
 
     async def gen():
         import time
@@ -2114,7 +2125,7 @@ async def update_event_datetime(event_id: int, request: Request):
         end_datetime=data.get("end_datetime"),
         all_day=data.get("all_day", event.get("all_day", 0)),
     )
-    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -2153,7 +2164,7 @@ async def update_event_project(event_id: int, request: Request):
     if _new_proj_for_check and _new_proj_for_check.get("is_hidden"):
         db.update_event_visibility(event_id, 0)
         hidden_forced = True
-    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True, "hidden_forced": hidden_forced}
 
 
@@ -2320,7 +2331,7 @@ async def update_event_kanban(event_id: int, request: Request):
     if "priority" in data:
         kwargs["priority"] = data["priority"]
     db.update_kanban_status(event_id, **kwargs)
-    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -2392,7 +2403,7 @@ def _publish_project_changed(name: str | None, action: str, project: dict | None
         proj = project if project is not None else db.get_project_by_name(name)
         if proj and proj.get("is_hidden"):
             publish_name = None
-    wu_broker.publish("projects.changed", {"name": publish_name, "action": action})
+    _sse_publish("projects.changed", {"name": publish_name, "action": action})
 
 
 # ── 프로젝트 관리 API ────────────────────────────────────
@@ -2602,7 +2613,7 @@ async def create_hidden_project_route(request: Request):
     )
     if result is None:
         raise HTTPException(status_code=422, detail="생성할 수 없습니다. 다른 이름을 넣어주세요.")
-    wu_broker.publish("projects.changed", {"name": None, "action": "create"})
+    _sse_publish("projects.changed", {"name": None, "action": "create"})
     return result
 
 
@@ -2723,7 +2734,7 @@ async def add_hidden_project_member_route(name: str, request: Request):
         raise HTTPException(status_code=403, detail="같은 팀 사용자만 멤버로 추가할 수 있습니다.")
     if result is None:
         raise HTTPException(status_code=409, detail="이미 멤버입니다.")
-    wu_broker.publish("projects.changed", {"name": None, "action": "member_add"})
+    _sse_publish("projects.changed", {"name": None, "action": "member_add"})
     return {"ok": True}
 
 
@@ -2735,7 +2746,7 @@ async def remove_hidden_project_member_route(name: str, user_id: int, request: R
     result = db.remove_hidden_project_member(proj["id"], user_id)
     if result is False:
         raise HTTPException(status_code=403, detail="관리 권한을 먼저 이양하세요.")
-    wu_broker.publish("projects.changed", {"name": None, "action": "member_remove"})
+    _sse_publish("projects.changed", {"name": None, "action": "member_remove"})
     return {"ok": True}
 
 
@@ -2753,7 +2764,7 @@ async def transfer_hidden_project_owner_route(name: str, request: Request):
     result = db.transfer_hidden_project_owner(proj["id"], new_owner_id, user["id"])
     if not result:
         raise HTTPException(status_code=400, detail="해당 사용자는 현재 프로젝트 멤버가 아닙니다.")
-    wu_broker.publish("projects.changed", {"name": None, "action": "owner_transfer"})
+    _sse_publish("projects.changed", {"name": None, "action": "owner_transfer"})
     return {"ok": True}
 
 
@@ -2768,7 +2779,7 @@ async def admin_change_hidden_project_owner_route(name: str, request: Request):
     result = db.admin_change_hidden_project_owner(proj["id"], new_owner_id)
     if not result:
         raise HTTPException(status_code=400, detail="해당 사용자는 현재 프로젝트 멤버가 아닙니다.")
-    wu_broker.publish("projects.changed", {"name": None, "action": "owner_change"})
+    _sse_publish("projects.changed", {"name": None, "action": "owner_change"})
     return {"ok": True}
 
 
@@ -2786,7 +2797,7 @@ async def manage_delete_project_items(name: str, request: Request):
     if not event_ids and not checklist_ids:
         raise HTTPException(status_code=400, detail='선택된 항목 없음')
     ev_n, ck_n = db.bulk_soft_delete_project_items(name, event_ids, checklist_ids, user["name"], user.get("team_id"))
-    wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": None, "action": "bulk_update", "team_id": user.get("team_id")})
     return {"deleted_events": ev_n, "deleted_checklists": ck_n}
 
 
@@ -2801,7 +2812,7 @@ async def manage_delete_project(name: str, request: Request):
     db.delete_project(name, deleted_by=user["name"], team_id=user.get("team_id"))
     # 프로젝트 삭제는 이벤트에도 영향 → 두 채널 모두 publish
     _publish_project_changed(name, "delete", project=proj)
-    wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": None, "action": "bulk_update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -3525,7 +3536,7 @@ async def manage_add_event(name: str, request: Request):
         "team_id":        user.get("team_id"),
     }
     event_id = db.create_event(payload)
-    wu_broker.publish("events.changed", {"id": event_id, "action": "create", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "create", "team_id": user.get("team_id")})
     return {"id": event_id}
 
 
@@ -3558,7 +3569,7 @@ async def manage_update_event(event_id: int, request: Request):
         _assert_can_assign_to_project(user, _mgr_new_proj)
     _assert_assignees_in_hidden_project(_mgr_new_proj or _mgr_old_proj, updated.get("assignee"))
     db.update_event(event_id, updated)
-    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -3575,7 +3586,7 @@ async def manage_event_status(event_id: int, request: Request):
     db.update_event_active_status(event_id, is_active)
     if is_active == 0 and event.get("is_active") != 0 and event.get("event_type") == "schedule":
         db.complete_subtasks(event_id)
-    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -3606,7 +3617,7 @@ async def update_event_visibility_api(event_id: int, request: Request):
             if _proj and _proj.get("is_hidden"):
                 raise HTTPException(status_code=403, detail="히든 프로젝트 항목은 외부 공개할 수 없습니다.")
     db.update_event_visibility(event_id, is_public)
-    wu_broker.publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "update", "team_id": user.get("team_id")})
     return {"ok": True, "is_public": is_public}
 
 
@@ -3620,7 +3631,7 @@ def manage_delete_event(event_id: int, request: Request):
         raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
     db.delete_event(event_id, deleted_by=user["name"], team_id=user.get("team_id"))
     # sync 핸들러 → broker 내부의 call_soon_threadsafe가 루프 스레드로 안전 전달
-    wu_broker.publish("events.changed", {"id": event_id, "action": "delete", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "delete", "team_id": user.get("team_id")})
     return {"ok": True}
 
 
@@ -3721,7 +3732,7 @@ async def create_doc(request: Request):
         title, content, user.get("team_id"), user["id"],
         meeting_date, is_team_doc, is_public, team_share, attachments
     )
-    wu_broker.publish("docs.changed", {"action": "create", "id": meeting_id})
+    _sse_publish("docs.changed", {"action": "create", "id": meeting_id})
     return {"id": meeting_id}
 
 
@@ -3755,7 +3766,7 @@ async def update_doc(meeting_id: int, request: Request):
     old_title = (doc.get("title") or "").strip()
     db.update_meeting(meeting_id, title, content, user["id"], meeting_date, is_team_doc, is_public, team_share, attachments)
     if title != old_title:
-        wu_broker.publish("docs.changed", {"action": "update", "id": meeting_id})
+        _sse_publish("docs.changed", {"action": "update", "id": meeting_id})
     # 저장 완료 시 잠금 해제 (tab_token 없으면 강제 해제)
     tab_token = data.get("tab_token") or None
     db.release_meeting_lock(meeting_id, tab_token)
@@ -3780,7 +3791,7 @@ async def rotate_doc_visibility(meeting_id: int, request: Request):
         elif (is_pub, t_share) == (0, 1): new_pub, new_share = 1, 0
         else:                              new_pub, new_share = 0, 0
     db.update_meeting_visibility(meeting_id, is_team, new_pub, new_share)
-    wu_broker.publish("docs.changed", {"action": "update", "id": meeting_id})
+    _sse_publish("docs.changed", {"action": "update", "id": meeting_id})
     return {"ok": True, "is_team_doc": is_team, "is_public": new_pub, "team_share": new_share}
 
 
@@ -3934,7 +3945,7 @@ def delete_doc(meeting_id: int, request: Request):
     if not _can_write_doc(user, doc):
         raise HTTPException(status_code=403, detail="삭제 권한이 없습니다.")
     db.delete_meeting(meeting_id, deleted_by=user["name"])
-    wu_broker.publish("docs.changed", {"action": "delete", "id": meeting_id})
+    _sse_publish("docs.changed", {"action": "delete", "id": meeting_id})
     return {"ok": True}
 
 
@@ -4057,7 +4068,7 @@ async def ai_confirm(request: Request):
             skipped.append({"index": i, "title": e.get("title", ""), "reason": "날짜를 입력해주세요."})
     # N건 일괄 저장 → publish 1회만 (루프 끝 단일 이벤트)
     if saved > 0:
-        wu_broker.publish("events.changed", {"id": None, "action": "bulk_create", "team_id": team_id})
+        _sse_publish("events.changed", {"id": None, "action": "bulk_create", "team_id": team_id})
     return {"saved": saved, "created": created, "blocked": [], "skipped": skipped, "requires_force": False}
 
 
@@ -4279,10 +4290,10 @@ def api_restore_trash(item_type: str, item_id: int, request: Request):
     # sync 핸들러 → broker 내부의 call_soon_threadsafe가 루프 스레드로 안전 전달
     # event/project 복원 시에만 관련 채널로 publish
     if item_type == "event":
-        wu_broker.publish("events.changed", {"id": item_id, "action": "update", "team_id": user.get("team_id")})
+        _sse_publish("events.changed", {"id": item_id, "action": "update", "team_id": user.get("team_id")})
     elif item_type == "project":
-        wu_broker.publish("projects.changed", {"name": None, "action": "update"})
-        wu_broker.publish("events.changed", {"id": None, "action": "bulk_update", "team_id": user.get("team_id")})
+        _sse_publish("projects.changed", {"name": None, "action": "update"})
+        _sse_publish("events.changed", {"id": None, "action": "bulk_update", "team_id": user.get("team_id")})
     return {"ok": True}
 
 

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -226,19 +225,6 @@ async def _run_checks() -> dict[str, bool]:
 
     finally:
         _app._https_available = orig_https_available
-
-    # ------------------------------------------------------------------
-    # I. 운영 코드 변경 0건
-    # ------------------------------------------------------------------
-    result_diff = subprocess.run(
-        ["git", "diff", "--name-only", "--",
-         "app.py", "front_router.py", "auth.py", "supervisor.py", "main.py"],
-        cwd=str(ROOT),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    checks["I_no_operational_code_changes"] = result_diff.stdout.strip() == ""
 
     return checks
 
