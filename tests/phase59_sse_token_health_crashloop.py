@@ -216,6 +216,10 @@ def test_app_healthz():
             data = r.json()
             _ok("[7b] status=ok", data.get("status") == "ok", str(data))
             _ok("[7c] service=web-api", data.get("service") == "web-api", str(data))
+            # M2-18: 새 키 강제 검증
+            _ok("[7d] sse_publish_failures key", "sse_publish_failures" in data, str(data))
+            _ok("[7e] sse_publish_last_event key", "sse_publish_last_event" in data, str(data))
+            _ok("[7f] sse_publish_last_at key", "sse_publish_last_at" in data, str(data))
         except Exception as e:
             _ok("[7b] JSON parse", False, str(e))
 

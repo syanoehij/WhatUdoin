@@ -30,6 +30,7 @@ import auth
 import crypto
 import backup
 from broker import wu_broker
+import publisher as _publisher_mod
 from publisher import publish as _sse_publish
 from permissions import _can_read_doc, _can_read_checklist
 from mcp_server import mcp, mount_mcp, verify_bearer_token, _mcp_user
@@ -616,7 +617,14 @@ def health():
 
 @app.get("/healthz", include_in_schema=False)
 def healthz():
-    return {"status": "ok", "service": "web-api"}
+    snap = _publisher_mod.get_failure_snapshot()
+    return {
+        "status": "ok",
+        "service": "web-api",
+        "sse_publish_failures": snap["count"],
+        "sse_publish_last_event": snap["last_event"],
+        "sse_publish_last_at": snap["last_at"],
+    }
 
 
 # ── 헬퍼 ────────────────────────────────────────────────
