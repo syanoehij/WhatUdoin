@@ -242,20 +242,24 @@ def test_sse_service_stream():
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. SSE service /internal/publish — ASGI 직접 호출로 loopback / JSON 오류 / 필드 누락
 # ─────────────────────────────────────────────────────────────────────────────
-def _asgi_post(app_obj, path: str, body: bytes, client_host: str = "127.0.0.1") -> dict:
+def _asgi_post(app_obj, path: str, body: bytes, client_host: str = "127.0.0.1",
+               extra_headers: list | None = None) -> dict:
     """ASGI POST 직접 호출 → {"status": int, "body": bytes}"""
     result: list = []
     body_chunks: list = []
 
     async def _call():
+        headers = [
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(body)).encode()),
+        ]
+        if extra_headers:
+            headers.extend(extra_headers)
         scope = {
             "type": "http",
             "method": "POST",
             "path": path,
-            "headers": [
-                (b"content-type", b"application/json"),
-                (b"content-length", str(len(body)).encode()),
-            ],
+            "headers": headers,
             "query_string": b"",
             "client": (client_host, 9999),
         }
@@ -281,26 +285,39 @@ def _asgi_post(app_obj, path: str, body: bytes, client_host: str = "127.0.0.1") 
 
 def test_sse_service_publish_endpoint():
     print("\n[6] SSE service /internal/publish")
-    import sse_service
+    # M2-17: 토큰 인증 추가 — 테스트에 Bearer 헤더 포함
+    token = "test-phase58-token"
+    os.environ["WHATUDOIN_INTERNAL_TOKEN"] = token
+    auth_header = [(b"authorization", f"Bearer {token}".encode())]
 
-    # loopback POST → 200
+    import sse_service
+    import importlib
+    importlib.reload(sse_service)
+
+    # loopback POST + 올바른 토큰 → 200
     r = _asgi_post(sse_service.app,
                    "/internal/publish",
-                   json.dumps({"event": "e", "data": {"k": 1}}).encode())
-    _ok("/internal/publish: loopback → 200", r["status"] == 200, str(r["status"]))
+                   json.dumps({"event": "e", "data": {"k": 1}}).encode(),
+                   extra_headers=auth_header)
+    _ok("/internal/publish: loopback+token → 200", r["status"] == 200, str(r["status"]))
     try:
         ok_val = json.loads(r["body"]).get("ok") is True
     except Exception:
         ok_val = False
     _ok("/internal/publish: ok=true", ok_val)
 
-    # 잘못된 JSON → 400
-    r2 = _asgi_post(sse_service.app, "/internal/publish", b"bad-json")
+    # 잘못된 JSON → 400 (토큰 있어야 401보다 앞서 도달)
+    r2 = _asgi_post(sse_service.app, "/internal/publish", b"bad-json",
+                    extra_headers=auth_header)
     _ok("/internal/publish: 잘못된 JSON → 400", r2["status"] == 400, str(r2["status"]))
 
     # 필드 누락(data 없음) → 400
-    r3 = _asgi_post(sse_service.app, "/internal/publish", json.dumps({"event": "e"}).encode())
+    r3 = _asgi_post(sse_service.app, "/internal/publish",
+                    json.dumps({"event": "e"}).encode(),
+                    extra_headers=auth_header)
     _ok("/internal/publish: data 누락 → 400", r3["status"] == 400, str(r3["status"]))
+
+    os.environ.pop("WHATUDOIN_INTERNAL_TOKEN", None)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

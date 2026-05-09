@@ -483,7 +483,7 @@ class _BrowserHTTPSRedirectMiddleware:
     MCP·API·SSE·AJAX 제외. wd-cert-skip=1 쿠키 있으면 HTTP 그대로 통과."""
 
     _SKIP_PREFIXES = ("/mcp", "/api", "/static", "/uploads")
-    _SKIP_EXACT = ("/favicon.ico", "/avr", "/remote")
+    _SKIP_EXACT = ("/favicon.ico", "/avr", "/remote", "/healthz")
 
     def __init__(self, app):
         self.app = app
@@ -612,6 +612,11 @@ def favicon():
 @app.get("/api/health", include_in_schema=False)
 def health():
     return {"status": "ok"}
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    return {"status": "ok", "service": "web-api"}
 
 
 # ── 헬퍼 ────────────────────────────────────────────────

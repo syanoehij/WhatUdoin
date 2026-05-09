@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -28,6 +29,9 @@ SSE_SERVICE_PORT_ENV = "WHATUDOIN_SSE_SERVICE_PORT"
 SSE_SERVICE_PUBLISH_URL_ENV = "WHATUDOIN_SSE_PUBLISH_URL"
 SSE_SERVICE_URL_ENV = "WHATUDOIN_SSE_SERVICE_URL"
 SSE_SERVICE_DEFAULT_PORT = 8765
+
+CRASH_LOOP_WINDOW_SECONDS = 300
+CRASH_LOOP_MAX_FAILURES = 3
 
 M2_STARTUP_SEQUENCE = (
     "resolve_runtime_paths",
@@ -83,6 +87,7 @@ def sse_service_spec(
     protected = {
         SSE_SERVICE_BIND_HOST_ENV,
         SSE_SERVICE_PORT_ENV,
+        INTERNAL_TOKEN_ENV,  # supervisor가 직접 주입 — extra_env override 차단
     }
     env = {
         str(k): str(v)
@@ -111,6 +116,7 @@ def web_api_service_spec(
         TRUSTED_PROXY_ENV,
         WEB_API_BIND_HOST_ENV,
         WEB_API_INTERNAL_ONLY_ENV,
+        INTERNAL_TOKEN_ENV,  # supervisor가 직접 주입 — extra_env override 차단
     }
     env = {
         str(k): str(v)
@@ -139,6 +145,7 @@ class ServiceState:
     last_error: str = ""
     stdout_log: str = ""
     stderr_log: str = ""
+    crash_history: list = field(default_factory=list)
     _process: subprocess.Popen | None = field(default=None, repr=False)
     _startup_confirmed: bool = False
     _exit_counted: bool = False
@@ -210,6 +217,22 @@ class WhatUdoinSupervisor:
         env.update({str(k): str(v) for k, v in spec.env.items()})
         return env
 
+    @staticmethod
+    def _record_crash(state: "ServiceState") -> None:
+        """현재 시각을 crash_history에 기록하고 5분 윈도우 외 항목을 prune."""
+        now = time.time()
+        state.crash_history.append(now)
+        cutoff = now - CRASH_LOOP_WINDOW_SECONDS
+        state.crash_history = [t for t in state.crash_history if t >= cutoff]
+
+    @staticmethod
+    def _is_crash_loop(state: "ServiceState") -> bool:
+        """5분 윈도우 안 누적 실패 횟수가 임계값 이상이면 crash-loop."""
+        now = time.time()
+        cutoff = now - CRASH_LOOP_WINDOW_SECONDS
+        recent = [t for t in state.crash_history if t >= cutoff]
+        return len(recent) >= CRASH_LOOP_MAX_FAILURES
+
     def start_service(self, spec: ServiceSpec) -> ServiceState:
         self.ensure_runtime_dirs()
         state = self.services.get(spec.name)
@@ -218,7 +241,14 @@ class WhatUdoinSupervisor:
         if state is None:
             state = ServiceState(name=spec.name)
             self.services[spec.name] = state
-        elif state.status in {"running", "crashed", "failed_startup", "stopped"}:
+
+        # crash-loop 차단 — 진입 시 먼저 확인 (restart_count 증가 전)
+        if self._is_crash_loop(state):
+            state.status = "degraded"
+            state.last_error = "crash-loop blocked"
+            return state
+
+        if state.status in {"running", "crashed", "failed_startup", "stopped"}:
             state.restart_count += 1
             state._exit_counted = False
             state._startup_confirmed = False
@@ -250,6 +280,10 @@ class WhatUdoinSupervisor:
             state.startup_failures += 1
             state.last_error = f"spawn failed: {exc}"
             state.pid = None
+            self._record_crash(state)
+            if self._is_crash_loop(state):
+                state.status = "degraded"
+                state.last_error = "crash-loop blocked"
             return state
 
         state._process = proc
@@ -262,6 +296,10 @@ class WhatUdoinSupervisor:
             state.last_error = f"startup exited with code {proc.returncode}"
             state.stopped_at = time.time()
             state._exit_counted = True
+            self._record_crash(state)
+            if self._is_crash_loop(state):
+                state.status = "degraded"
+                state.last_error = "crash-loop blocked"
             return state
         state.status = "running"
         state._startup_confirmed = True
@@ -288,7 +326,44 @@ class WhatUdoinSupervisor:
                 state.status = "failed_startup"
                 state.last_error = f"startup exited with code {returncode}"
             state._exit_counted = True
+            self._record_crash(state)
+            if self._is_crash_loop(state):
+                state.status = "degraded"
         return state
+
+    def reset_crash_loop(self, name: str) -> ServiceState | None:
+        """crash-loop 이력을 초기화하고 status를 stopped으로 재설정.
+
+        다음 start_service 호출 시 정상 spawn 진행.
+        """
+        state = self.services.get(name)
+        if not state:
+            return None
+        state.crash_history = []
+        state.status = "stopped"
+        state.last_error = ""
+        return state
+
+    def probe_healthz(self, state: "ServiceState", url: str) -> dict:
+        """GET <url>/healthz 호출 후 상태 확인.
+
+        반환: {"ok": bool, "status": str|None, "error": str}
+        - ok=True: HTTP 200 + JSON {"status": "ok"}
+        - ok=False: 연결 실패, timeout, 비정상 응답
+        stdlib urllib만 사용 (외부 의존성 없음).
+        """
+        endpoint = url.rstrip("/") + "/healthz"
+        try:
+            req = urllib.request.Request(endpoint, method="GET")
+            with urllib.request.urlopen(req, timeout=1.0) as resp:
+                if resp.status != 200:
+                    return {"ok": False, "status": None, "error": f"http {resp.status}"}
+                body = resp.read(4096)
+                data = __import__("json").loads(body)
+                svc_status = data.get("status")
+                return {"ok": svc_status == "ok", "status": svc_status, "error": ""}
+        except Exception as exc:
+            return {"ok": False, "status": None, "error": str(exc)}
 
     def poll_all(self) -> dict[str, ServiceState]:
         for name in list(self.services):
@@ -371,6 +446,8 @@ def _restrict_token_file(path: Path) -> tuple[bool, str]:
 
 
 __all__ = [
+    "CRASH_LOOP_MAX_FAILURES",
+    "CRASH_LOOP_WINDOW_SECONDS",
     "INTERNAL_TOKEN_ENV",
     "INTERNAL_TOKEN_FILE_ENV",
     "M2_STARTUP_SEQUENCE",

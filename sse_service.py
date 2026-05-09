@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import secrets
 import time
 from contextlib import asynccontextmanager
 
@@ -85,16 +86,42 @@ async def sse_stream(request: Request) -> Response:
 
 # ── /internal/publish ────────────────────────────────────────────────────────
 
-async def internal_publish(request: Request) -> JSONResponse:
-    """IPC publish 엔드포인트. loopback 출처만 허용.
+def _verify_internal_token(request: Request) -> bool:
+    """Bearer 토큰 검증. timing-safe 비교.
 
-    M2-17이 토큰 인증을 추가 예정. 본 step에서는 loopback IP 가드만.
+    env 미설정이면 모든 요청을 거부(production에서는 항상 토큰 발급).
+    토큰 raw 값은 로그에 절대 출력하지 않는다.
+    """
+    expected = os.environ.get("WHATUDOIN_INTERNAL_TOKEN", "").strip()
+    if not expected:
+        # 토큰 미설정 — 안전 동작: 거부
+        return False
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return False
+    provided = auth[len("Bearer "):]
+    if not provided:
+        return False
+    return secrets.compare_digest(expected, provided)
+
+
+async def internal_publish(request: Request) -> JSONResponse:
+    """IPC publish 엔드포인트. loopback 출처 + Bearer 토큰 검증.
+
+    loopback IP 가드 후 토큰 검증. 불일치 시 401.
+    토큰 raw 값은 access log/app log에 출력하지 않는다.
     """
     # loopback 가드
     client = request.client
     client_host = client.host if client else ""
     if client_host not in _LOOPBACK_HOSTS:
         return JSONResponse({"error": "forbidden"}, status_code=403)
+
+    # Bearer 토큰 인증
+    if not _verify_internal_token(request):
+        # 메타만 기록 — raw 토큰 값 절대 미출력
+        print("unauthorized internal publish attempt", flush=True)
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
 
     try:
         body = await request.json()
@@ -110,6 +137,17 @@ async def internal_publish(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True})
 
 
+# ── /healthz ─────────────────────────────────────────────────────────────────
+
+async def healthz_endpoint(request: Request) -> JSONResponse:
+    """서비스 상태 및 구독자 수 반환."""
+    return JSONResponse({
+        "status": "ok",
+        "subscribers": len(_broker._subs),
+        "service": "sse",
+    })
+
+
 # ── ASGI app ─────────────────────────────────────────────────────────────────
 
 app = Starlette(
@@ -117,6 +155,7 @@ app = Starlette(
     routes=[
         Route("/api/stream", sse_stream, methods=["GET"]),
         Route("/internal/publish", internal_publish, methods=["POST"]),
+        Route("/healthz", healthz_endpoint, methods=["GET"]),
     ],
 )
 
