@@ -7,7 +7,7 @@
 - **1차 실행 todo로 동결** (2026-05-09): 마스터 plan rev29 + 다회 외부 검토 사이클을 거쳐 M1a~M1d 실행 + M2 이후 조건부 운영 구조 변경 step이 모두 정합 상태로 확정됐다. 신규 step 추가 사이클은 종결한다.
 - **트랙 단축 결정** (2026-05-09): M1a 완료 후 외부 검토 2차 사이클을 거쳐 M1b~M1d의 실제 실행 경로를 **M1-ULTRA**(사내 소수 사용자 기준)로 낮췄다. 단축 근거는 아래 "단축 배경" 참조. 기존 full case 세부 step은 본 문서 하단 "보수 단축안 / 회사 반입 게이트 / 후속 후보" 섹션으로 이동했고, 회사 반입 결정이나 실제 장애 징후 발생 시 끌어올린다. 상세 단축안은 [`성능 개선 단축안(M1b-M1d).md`](성능%20개선%20단축안(M1b-M1d).md) 참조.
 - **추후 변경 원칙**: 본 todo는 마스터 plan §0 "문서 라이프사이클 정책"과 동일하게 동결 상태로 둔다. 새 의견이 들어와도 M1a~M1d 실행을 막는 실재 코드/운영 리스크가 아니면 본문을 더 확장하지 않고, 구현 중 발견 사실 → commit/PR 메시지, 운영 정책/후속 마일스톤 후보 → 마스터 plan §18로 분리한다.
-- **다음 행동**: M1b-U1부터 M1-ULTRA step 단위 실행. 진입 즉시 가능.
+- **다음 행동**: M1b-U5 closure 보류. U1/U4는 사후 하네스 재검증 기준 조건부 인정 상태이므로, M1c 진입 전 U1 manifest/hash evidence와 U4 raw PRAGMA evidence를 보강하거나 조건부 완료를 명시 유지한다. U5는 동일 조건 반복 측정과 known-failure endpoint 제외 보조 p95 분석 후 재판정한다.
 
 ## 단축 배경
 
@@ -61,11 +61,13 @@
 
 | step | 제목 | 모델 | §참조 | exit criteria |
 |------|------|------|-------|---------------|
-| [ ] M1b-U1 | M1b 진입 직전 DB 세트 백업 | Sonnet | §14 단계별 롤백 원칙 + §6 WAL 복원 절차 | 서버 종료 상태에서 `.db`/`.db-wal`/`.db-shm` 세트 보관, 되돌릴 수 있는 위치 기록 |
-| [ ] M1b-U2 | `database.get_conn()` PRAGMA 5종 적용 + WAL 1회 활성화 | Opus | §4 적용 내용 — 연결 단위 + DB 파일 단위 | 매 연결 `timeout=5`/`busy_timeout=5000`/`synchronous=NORMAL`(기본)/`cache_size=-8000`/`temp_store=MEMORY` 적용. `PRAGMA journal_mode=WAL`은 프로세스 단위 idempotent guard로 1회 활성화. `synchronous`는 `WHATUDOIN_SYNCHRONOUS_MODE=FULL`로 override 가능 |
-| [ ] M1b-U3 | `snapshot_db.py`의 WAL 세트 복사 코드 경로 확인 | Sonnet | §6 백업 종류 구분 + 방향 | `.db`/`.db-wal`/`.db-shm` 세트로 복사되는 코드 경로 확인. 별도 restore drill은 본 단계에서 수행하지 않음(보수 단축안 게이트로 이동) |
-| [ ] M1b-U4 | 서버 재시작 + PRAGMA 검증 | Sonnet | §15 WAL 검증 | 재시작 후 `PRAGMA journal_mode;` 결과 `wal` / `wal`/`-shm` 파일 생성 확인 |
+| [x] M1b-U1 | M1b 진입 직전 DB 세트 백업 | Sonnet | §14 단계별 롤백 원칙 + §6 WAL 복원 절차 | 서버 종료 상태에서 `.db`/`.db-wal`/`.db-shm` 세트 보관, 되돌릴 수 있는 위치 기록 |
+| [x] M1b-U2 | `database.get_conn()` PRAGMA 5종 적용 + WAL 1회 활성화 | Opus | §4 적용 내용 — 연결 단위 + DB 파일 단위 | 매 연결 `timeout=5`/`busy_timeout=5000`/`synchronous=NORMAL`(기본)/`cache_size=-8000`/`temp_store=MEMORY` 적용. `PRAGMA journal_mode=WAL`은 프로세스 단위 idempotent guard로 1회 활성화. `synchronous`는 `WHATUDOIN_SYNCHRONOUS_MODE=FULL`로 override 가능 |
+| [x] M1b-U3 | `snapshot_db.py`의 WAL 세트 복사 코드 경로 확인 | Sonnet | §6 백업 종류 구분 + 방향 | `.db`/`.db-wal`/`.db-shm` 세트로 복사되는 코드 경로 확인. 별도 restore drill은 본 단계에서 수행하지 않음(보수 단축안 게이트로 이동) |
+| [x] M1b-U4 | 서버 재시작 + PRAGMA 검증 | Sonnet | §15 WAL 검증 | 재시작 후 `PRAGMA journal_mode;` 결과 `wal` / `wal`/`-shm` 파일 생성 확인 |
 | [ ] M1b-U5 | M1a 도구 재사용 50 VU smoke | Sonnet | §15 동시성 검증(축소) | M1a-7 locust 시나리오 그대로 50 VU 1회 실행. p95 명확한 회귀 없음, `database is locked` 0건. lock 발생 시 함수 위치 기록 후 보수 단축안 게이트로 escalation 판단 |
+
+> M1b-U1/U4의 체크는 처음부터 subagent가 소유한 high-confidence 완료가 아니라, backend/code-review/qa 사후 재검증으로 현재 증거와 정합하다고 본 조건부 완료다. U5는 p95 gate 실패로 미체크 유지한다.
 
 ### M1b-ULTRA에서 제외된 항목
 
@@ -327,7 +329,7 @@
 | 마일스톤 | 진입 게이트 | 진행 중 | 완료 | 비고 |
 |---------|-----------|--------|------|------|
 | M1a | (즉시 가능) | **완료** (Group B spec 업데이트 후속) | **13/13** | baseline run_181951/ + m1a11_run_193829/ 보관; M1a-12 26건 fail은 Group A 사전 부채 + Group B 디자인 변경 expected + Group C orthogonal로 triage 완료 |
-| M1b-ULTRA | M1a 완료 | — | 0/5 | WAL/PRAGMA 1.5h 경로 |
+| M1b-ULTRA | M1a 완료 | U5 보류 | 조건부 4/5 | WAL/PRAGMA 1.5h 경로. U1~U4는 사후 하네스 재검증 기준 인정(일부 evidence 파일 약함), U5 50 VU smoke는 lock 0건이나 p95 회귀로 closure FAIL |
 | M1c-ULTRA | M1b-ULTRA 완료 | — | 0/5 | Ollama limiter + admin UI + busy UX 2.5h 경로 |
 | M1d (조건부) | M1c-ULTRA 완료 | — | 0/1 + 조건부 0/1 | M1d-S1 게이트만 기본 진행, MCP 병목 측정 시 M1d-S3 단독 진입 |
 | M1-ULTRA 종료 | M1a + M1b-U + M1c-U + M1d 처리 완료 | — | 0/1 | M1-end-U1 — lite 기준 종료 |
@@ -375,7 +377,8 @@ M1a-1 완료 (2026-MM-DD)
 step별 결과 기록 4종(변경/증거/회귀/다음 step 영향)은 본문 비대화를 피하기 위해 마일스톤별 별도 파일로 분리한다(2026-05-09 도입).
 
 - M1a: [`성능 개선 진행 결과(M1a).md`](성능%20개선%20진행%20결과(M1a).md)
-- M1b 이후 진입 시 동일 패턴으로 `성능 개선 진행 결과(M1b).md` 등 신설.
+- M1b: [`성능 개선 진행 결과(M1b).md`](성능%20개선%20진행%20결과(M1b).md)
+- M1c 이후 진입 시 동일 패턴으로 `성능 개선 진행 결과(M1c).md` 등 신설.
 
 본 todo는 **체크박스 + 진행 상태 보드 + 진행 가능 여부 한 줄**만 유지한다. 상세 4종 기록·증거·발견 이슈는 위 파일 참조.
 

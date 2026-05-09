@@ -3,6 +3,7 @@ import os
 import secrets
 import sqlite3
 import string
+import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -11,6 +12,16 @@ from pathlib import Path
 # PyInstaller 번들 시 exe 옆 디렉토리, 개발 시 소스 파일 디렉토리
 _RUN_DIR = Path(os.environ.get("WHATUDOIN_RUN_DIR", Path(__file__).parent))
 DB_PATH  = str(_RUN_DIR / "whatudoin.db")
+
+_SQLITE_TIMEOUT_SECONDS = 5
+_SQLITE_BUSY_TIMEOUT_MS = 5000
+_SQLITE_CACHE_SIZE = -8000
+_SQLITE_SYNCHRONOUS_DEFAULT = "NORMAL"
+_SQLITE_SYNCHRONOUS_ENV = "WHATUDOIN_SYNCHRONOUS_MODE"
+_SQLITE_SYNCHRONOUS_ALLOWED = {"NORMAL", "FULL"}
+
+_WAL_MODE_READY = False
+_WAL_MODE_LOCK = threading.Lock()
 
 
 def init_db():
@@ -613,13 +624,46 @@ def _migrate(conn, table: str, columns: list):
 
 @contextmanager
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = sqlite3.connect(DB_PATH, timeout=_SQLITE_TIMEOUT_SECONDS)
     try:
+        _ensure_wal_mode(conn)
+        _apply_sqlite_pragmas(conn)
+        conn.row_factory = sqlite3.Row
         yield conn
         conn.commit()
     finally:
         conn.close()
+
+
+def _sqlite_synchronous_mode() -> str:
+    mode = os.environ.get(_SQLITE_SYNCHRONOUS_ENV, _SQLITE_SYNCHRONOUS_DEFAULT)
+    mode = mode.strip().upper()
+    if mode in _SQLITE_SYNCHRONOUS_ALLOWED:
+        return mode
+    return _SQLITE_SYNCHRONOUS_DEFAULT
+
+
+def _ensure_wal_mode(conn) -> None:
+    global _WAL_MODE_READY
+    if _WAL_MODE_READY:
+        return
+    with _WAL_MODE_LOCK:
+        if _WAL_MODE_READY:
+            return
+        row = conn.execute("PRAGMA journal_mode=WAL").fetchone()
+        mode = str(row[0]).lower() if row else ""
+        if mode != "wal":
+            raise sqlite3.OperationalError(
+                f"failed to enable WAL journal mode: {mode or 'unknown'}"
+            )
+        _WAL_MODE_READY = True
+
+
+def _apply_sqlite_pragmas(conn) -> None:
+    conn.execute(f"PRAGMA busy_timeout={_SQLITE_BUSY_TIMEOUT_MS}")
+    conn.execute(f"PRAGMA synchronous={_sqlite_synchronous_mode()}")
+    conn.execute(f"PRAGMA cache_size={_SQLITE_CACHE_SIZE}")
+    conn.execute("PRAGMA temp_store=MEMORY")
 
 
 # ── Events ──────────────────────────────────────────────
