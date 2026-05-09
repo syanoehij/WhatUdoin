@@ -8,7 +8,7 @@ __pycache__/
 *.pyc
 events.db
 whatudoin.db
-.claude/
+.agents/
 .playwright-mcp/
 /*.png
 /*.jpg
@@ -26,4 +26,7 @@ playwright.config.js
 tests/
 test-results/
 meetings/
-_workspace_*/
+_workspace/
+.claude/workspaces/
+.codex/workspaces/
+.vscode/launch.json
