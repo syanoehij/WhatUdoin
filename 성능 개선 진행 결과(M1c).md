@@ -64,3 +64,34 @@
 | U3 | PASS | admin.html select 1~5, PUT body `ollama_concurrency` 저장, capacity 즉시 반영 |
 | U4 | PASS | timeout/connect/5xx → `OllamaUnavailableError` 변환. 6개 프론트엔드 파일 503 UX 통합 |
 | U5 | PASS | 1슬롯 포화 시 즉시 거부 확인. 1→3 resize live 반영 확인 |
+
+---
+
+## M1d-S1 skip 종료 (2026-05-09)
+
+- **변경**: 없음 (게이트 평가만, 코드 변경 0).
+- **증거**: M1b-U1~U5 / M1c-U1~U5 전 구간에서 두 트리거 조건 미관측 — (1) "MCP 검색 중 웹 UI나 SSE가 실제로 멈춘다", (2) "MCP 긴 조회가 일반 API p95에 명확한 회귀를 만든다". M1b-U5 p95 회귀는 locust payload 404/400/500 원인으로 MCP 무관(`성능 개선 진행 결과(M1b).md` U5 참조). 사내 환경 동시 MCP 사용 빈도 낮음(2명 사용자 환경, MCP는 주로 단일 사용자가 단발 검색).
+- **회귀**: 해당 없음 (코드 변경 0).
+- **다음 step 영향**: M1d-S3 미진입, M1d 마일스톤 종료. transport 교체·identity 병렬 테스트·DNS rebinding은 회사 반입 게이트 또는 M2 이후로 분리. M1-end-U1 (f)항(M1d skip 사유 기록) 충족.
+
+---
+
+## M1-end-U1 완료 (2026-05-09) — M1-ULTRA 종료 점검
+
+§17 M1 종료 부하 테스트(축소) 6종 exit criteria 충족 확인:
+
+| 항목 | 판정 | 핵심 증거 |
+|------|------|---------|
+| (a) M1a lazy-load 회귀 0건 + before/after 측정 기록 | PASS | M1a-11/12 evidence(`_workspace/perf/baseline_*` + `m1a11_run_193829/`). `성능 개선 진행 결과(M1a).md` 참조 |
+| (b) M1b WAL/PRAGMA 적용 후 `journal_mode=wal` | PASS | M1b-U4에서 `PRAGMA journal_mode;` 결과 `wal`, `.wal`/`.shm` 파일 생성 확인 |
+| (c) M1b 50 VU smoke 명확한 p95 회귀 없음·`database is locked` 0건 유지 | 부분 PASS | M1b-U5 lock 0건은 PASS. p95 회귀는 locust payload 404/400/500 원인이며 DB 동시성 문제 아님(closure FAIL/open로 보존, M1-end-1 full case에서 재측정) |
+| (d) M1c Ollama 기본 1슬롯 limiter 동작 | PASS | M1c-U2 env 기본 1 + DB 우선. M1c-U5 capacity=1 시 1개 200 OK + 4개 503 reason="busy" 즉시 거부 |
+| (e) 동시 AI 2개+ smoke 포화 응답 또는 대기 정책 확인 | PASS | M1c-U5 N=5 동시 fire — capacity=1: 1 통과 + 4 즉시 거부 / capacity=3 (1→3 resize live): 3 통과 + 2 즉시 거부 |
+| (f) M1d skip 사유 기록 | PASS | 본 문서 "M1d-S1 skip 종료" 절에 기록 완료 |
+
+**M1-ULTRA 종료 판정**: lite 경로 6종 중 5종 PASS + 1종 부분 PASS(c는 lock 부재 확인은 통과, p95는 locust 입력 데이터 원인이며 별도 이슈로 분리). M1-ULTRA 사이클 종료.
+
+**후속 트랙**:
+- **M2 진입**: 자동 진입 아님. §13 진입 게이트(SSE 재연결 폭주 → API p95 회귀 또는 SSE 이벤트 루프 점유로 업로드/조회 회귀) 측정 시 진입.
+- **회사 반입 패키지 결정 (M1-end-2)**: 현재 미진입. 회사 반입 결정 시 M1b/M1c/M1d 보수 단축안 표를 ULTRA 산출물 위에 합쳐 별도 사이클 진행.
+- **M1b-U5 p95 closure**: locust payload 정정 후 재측정은 M1-end-1 full case에서 다룸.

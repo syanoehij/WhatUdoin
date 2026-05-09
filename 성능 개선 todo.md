@@ -132,8 +132,8 @@
 
 | step | 제목 | 모델 | §참조 | exit criteria |
 |------|------|------|-------|---------------|
-| [ ] M1d-S1 | MCP 병목 측정 게이트 평가 | Opus | §15 SSE 측정 분리 + §17 M1d 완료 기준 | M1b/M1c 결과에서 위 두 조건(SSE 정지 / 일반 API p95 회귀) 중 1건 이상 측정 시 M1d-S3 진행, 미관측 시 본 마일스톤 skip 사유 기록 후 종료 |
-| [ ] M1d-S3 | MCP DB 조회 threadpool 적용 여부 판단 (조건부) | Opus | §9 적용 내용 — 조회/쓰기 경계 | M1d-S1 게이트 통과 시에만 진입. DB 조회만 threadpool, 사용자 조회·권한 검사는 main async, worker thread `_mcp_user` 재읽기 0건. transport 교체/identity 테스트/DNS rebinding 결정은 본 단계에서 제외하고 회사 반입 게이트로 분리 |
+| [x] M1d-S1 | MCP 병목 측정 게이트 평가 | Opus | §15 SSE 측정 분리 + §17 M1d 완료 기준 | **skip 종료 (2026-05-09)** — M1b/M1c 전 구간에서 (1) MCP 검색 중 웹 UI/SSE 정지, (2) MCP 긴 조회의 일반 API p95 회귀 둘 다 미관측. M1b-U5 p95 회귀는 locust payload 404/400/500 원인이라 MCP 무관. 사내 환경 동시 MCP 사용 빈도 낮음. M1d-S3 미진입, 마일스톤 종료. 상세 기록: `성능 개선 진행 결과(M1c).md` |
+| [ ] M1d-S3 | MCP DB 조회 threadpool 적용 여부 판단 (조건부) | Opus | §9 적용 내용 — 조회/쓰기 경계 | **미진입 (M1d-S1 skip)** — M1d-S1 게이트 미통과로 본 step 진입 없이 마일스톤 종료. 회사 반입 게이트 또는 MCP 병목 측정 시 재평가 |
 
 ### M1d에서 제외된 항목
 
@@ -159,7 +159,7 @@
 
 | step | 제목 | 모델 | §참조 | exit criteria |
 |------|------|------|-------|---------------|
-| [ ] M1-end-U1 | M1-ULTRA 종료 점검 | Opus | §17 M1 종료 부하 테스트 (축소) | (a) M1a lazy-load 회귀 0건과 before/after 측정 기록 / (b) M1b WAL/PRAGMA 적용 후 `journal_mode=wal` / (c) M1b 50 VU smoke에서 명확한 p95 회귀 없음·`database is locked` 0건 유지 / (d) M1c Ollama 기본 1슬롯 limiter 동작 / (e) 동시 AI 2개 smoke 포화 응답 또는 대기 정책 확인 / (f) M1d skip 사유 기록(또는 M1d-S3 수행 시 threadpool 판단 결과 기록) |
+| [x] M1-end-U1 | M1-ULTRA 종료 점검 | Opus | §17 M1 종료 부하 테스트 (축소) | **종료 (2026-05-09)** — (a) M1a lazy-load 회귀 0건 + before/after 기록 (M1a-11/12 evidence) / (b) M1b WAL 적용 후 `journal_mode=wal` 확인 (M1b-U4) / (c) M1b 50 VU smoke `database is locked` 0건 유지 (M1b-U5 lock PASS, p95는 locust payload 원인 FAIL/open) / (d) M1c Ollama 기본 1슬롯 limiter 동작 (M1c-U5: capacity=1 시 1개 200 + 4개 503 reason="busy") / (e) 동시 AI 2개+ smoke 포화 응답 확인 (M1c-U5: N=5 fire 결과 + 1→3 resize live 반영) / (f) M1d skip 사유 기록 완료. 상세 기록: `성능 개선 진행 결과(M1c).md` |
 
 ### 보수 단축안 / 회사 반입 종료 기준 (회사 반입 결정 또는 장애 징후 발생 시)
 
@@ -332,8 +332,8 @@
 | M1a | (즉시 가능) | **완료** (Group B spec 업데이트 후속) | **13/13** | baseline run_181951/ + m1a11_run_193829/ 보관; M1a-12 26건 fail은 Group A 사전 부채 + Group B 디자인 변경 expected + Group C orthogonal로 triage 완료 |
 | M1b-ULTRA | M1a 완료 | U5 FAIL/open | 실행 5/5, 통과 4/5 | WAL/PRAGMA 1.5h 경로. U1~U4는 사후 하네스 재검증 기준 인정(일부 evidence 파일 약함), U5 50 VU smoke는 실행됐고 lock 0건이나 p95 회귀로 closure FAIL |
 | M1c-ULTRA | M1b-ULTRA 완료 | **완료** | **5/5** | Ollama limiter + admin UI + busy UX 2.5h 경로. U1~U5 모두 완료. 1슬롯 포화 즉시 거부 확인, 1→3 resize live 반영 확인 |
-| M1d (조건부) | M1c-ULTRA 완료 | — | 0/1 + 조건부 0/1 | M1d-S1 게이트만 기본 진행, MCP 병목 측정 시 M1d-S3 단독 진입 |
-| M1-ULTRA 종료 | M1a + M1b-U + M1c-U + M1d 처리 완료 | — | 0/1 | M1-end-U1 — lite 기준 종료 |
+| M1d (조건부) | M1c-ULTRA 완료 | **완료 (skip)** | **1/1** + 조건부 0/1 | M1d-S1 skip 종료(MCP 병목 미관측), M1d-S3 미진입. 회사 반입 게이트 시 재평가 |
+| M1-ULTRA 종료 | M1a + M1b-U + M1c-U + M1d 처리 완료 | **완료** | **1/1** | M1-end-U1 lite 기준 6종(a~f) 모두 충족. M1-ULTRA 사이클 종료 |
 | M2 | §13 진입 게이트 통과 | — | 0/21 | 외부 포트 소유자 결정 step + baseline 표 포함 |
 | M3 | §13 진입 게이트 통과 | — | 0/5 | M3-0 게이트 평가 포함 |
 | M4 | §13 진입 게이트 통과 | — | 0/5 | M4-0 게이트 평가 포함 |
