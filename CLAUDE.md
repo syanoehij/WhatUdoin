@@ -6,11 +6,20 @@
 
 **트리거:** WhatUdoin 코드 변경이 필요한 모든 작업(기능 추가, 버그 수정, UI 개선)에 `whatudoin-dev` 스킬을 사용하라. 단순 질문·코드 설명은 직접 응답 가능.
 
+**임시 산출물 저장 위치:**
+- 프로젝트 **루트에 PNG·JSON·log 같은 임시 파일을 직접 생성하지 않는다.** 누적되어 디렉토리 가시성을 해친다.
+- Playwright `browser_take_screenshot` 호출 시:
+  - `filename` 미지정 → 도구가 자동으로 `.playwright-mcp/`에 저장 (기본 권장)
+  - `filename` 지정 시 → 반드시 명시적 폴더 경로 prefix를 붙인다. 예: `.claude/workspaces/current/screenshots/calendar_view.png`. 단순 파일명만 주면 루트에 저장되어 누적된다.
+- 그 외 임시 산출물(diff snapshot, debug log, 분석용 JSON)도 `.claude/workspaces/current/` 하위에 저장한다.
+
 **변경 이력:**
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
 | 2026-04-24 | 초기 구성 | 전체 | - |
 | 2026-05-05 | QA 접속 URL 수정 (`localhost:8000` → `192.168.0.18:8443`) | agents/qa.md | 실제 환경 URL 불일치로 테스트 실패 방지 |
+| 2026-05-09 | 워크스페이스 위치 이전 (`_workspace/` → `.claude/workspaces/current/`, archive 분리) | 7개 하네스 정의 + .gitignore | 루트 가시성 회복, 백업 정책 일관성 |
+| 2026-05-09 | 임시 산출물 저장 위치 정책 추가 | CLAUDE.md | 루트에 디버깅 PNG 46개 + .playwright-mcp/ 8.1MB 누적 사고 방지 |
 
 # CLAUDE.md
 
