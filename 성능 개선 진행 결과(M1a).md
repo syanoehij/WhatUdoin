@@ -177,6 +177,13 @@
 - **회귀**: locustfile만 변경(gitignored). 운영 흐름 영향 0.
 - **위험**: `database.py _apply_event_update`가 `:project` 외 다른 컬럼도 unbound 요구하면 PUT 여전히 fail 가능 — M1a-7 에러 메시지는 `:project`만 명시했으나, M1b sanity 시 전체 컬럼 정합 spot-check 필요.
 
+### Group B lazy-load spec 업데이트 완료 (2026-05-09, Codex)
+
+- **변경**: `tests/phase37_asset_cache.spec.js`, `tests/phase37_stage2_static_cache.spec.js`(gitignored). `/check`에서 Tiptap/WUEditor 자산이 즉시 로드되어야 한다는 OLD eager-load 가정을 제거하고, 목록 초기 진입 0건 + `WuAssets.ensure('wu-editor')` 후 highlight/KaTeX/Tiptap/Mermaid/WUEditor 1회 로드 + 재호출 추가 요청 0건을 검증하도록 갱신. HTTP Playwright 환경에서 `Secure` 세션 쿠키가 누락되지 않도록 로그인 helper는 `/api/login`의 `session_id`를 컨텍스트에 주입한 뒤 origin을 잡는다.
+- **증거**: `node --check tests\phase37_asset_cache.spec.js` 통과, `node --check tests\phase37_stage2_static_cache.spec.js` 통과. 임시 headless config로 `npx.cmd playwright test --config .codex\workspaces\current\playwright.headless.config.js phase37_asset_cache.spec.js phase37_stage2_static_cache.spec.js` 실행 — 8 total / 8 passed / 0 failed / 0 skipped.
+- **회귀**: 운영 앱 소스 변경 0. M1a-12 Group B 6건의 expected spec breakage 해소. Group A/C는 기존 인계 판단대로 M1a 종료 차단 사유 아님.
+- **다음 step 영향**: M1b 진입 전 별도 Group B spec 업데이트 권고는 처리 완료. M1b 회귀에서는 phase37_asset_cache / phase37_stage2_static_cache의 `/check` lazy-load 기대값을 기준으로 본다.
+
 ## M1b 인계 메모 (codex 또는 다음 세션)
 
 M1a 마일스톤 완료 후 M1b 진입 시 다음 항목 처리 권장:
