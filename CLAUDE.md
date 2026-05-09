@@ -20,6 +20,8 @@
 | 2026-05-05 | QA 접속 URL 수정 (`localhost:8000` → `192.168.0.18:8443`) | agents/qa.md | 실제 환경 URL 불일치로 테스트 실패 방지 |
 | 2026-05-09 | 워크스페이스 위치 이전 (`_workspace/` → `.claude/workspaces/current/`, archive 분리) | 7개 하네스 정의 + .gitignore | 루트 가시성 회복, 백업 정책 일관성 |
 | 2026-05-09 | 임시 산출물 저장 위치 정책 추가 | CLAUDE.md | 루트에 디버깅 PNG 46개 + .playwright-mcp/ 8.1MB 누적 사고 방지 |
+| 2026-05-09 | 플래너 에이전트 추가, whatudoin-dev 단순화 | agents/planner.md, skills/whatudoin-dev/SKILL.md | 메인 컨텍스트 보호: 플래너가 코드 탐색·분류·팀 지휘 전담, 메인에는 한 줄 요약만 반환 |
+| 2026-05-09 | planner 모델 sonnet → opus | agents/planner.md | 분류·지휘 판단 품질 향상 |
 
 # CLAUDE.md
 
