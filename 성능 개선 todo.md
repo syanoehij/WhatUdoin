@@ -7,7 +7,7 @@
 - **1차 실행 todo로 동결** (2026-05-09): 마스터 plan rev29 + 다회 외부 검토 사이클을 거쳐 M1a~M1d 실행 + M2 이후 조건부 운영 구조 변경 step이 모두 정합 상태로 확정됐다. 신규 step 추가 사이클은 종결한다.
 - **트랙 단축 결정** (2026-05-09): M1a 완료 후 외부 검토 2차 사이클을 거쳐 M1b~M1d의 실제 실행 경로를 **M1-ULTRA**(사내 소수 사용자 기준)로 낮췄다. 단축 근거는 아래 "단축 배경" 참조. 기존 full case 세부 step은 본 문서 하단 "보수 단축안 / 회사 반입 게이트 / 후속 후보" 섹션으로 이동했고, 회사 반입 결정이나 실제 장애 징후 발생 시 끌어올린다. 상세 단축안은 [`성능 개선 단축안(M1b-M1d).md`](성능%20개선%20단축안(M1b-M1d).md) 참조.
 - **추후 변경 원칙**: 본 todo는 마스터 plan §0 "문서 라이프사이클 정책"과 동일하게 동결 상태로 둔다. 새 의견이 들어와도 M1a~M1d 실행을 막는 실재 코드/운영 리스크가 아니면 본문을 더 확장하지 않고, 구현 중 발견 사실 → commit/PR 메시지, 운영 정책/후속 마일스톤 후보 → 마스터 plan §18로 분리한다.
-- **다음 행동**: M2-8 완료. PyInstaller onedir 최소 probe에서 frozen `sys.executable --service=echo` self re-spawn, `freeze_support`, graceful shutdown을 확인했다. 다음은 M2-9 Supervisor 골격 도입.
+- **다음 행동**: M2-9 완료. Supervisor 골격에 7단계 startup 순서, internal token 파일/env 전달, service status/log path, startup failure/runtime crash 카운터 분리를 추가하고 probe PASS를 확인했다. 다음은 M2-10 Front Router 최소 구현.
 
 ## 단축 배경
 
@@ -259,7 +259,7 @@
 | [x] M2-6 | AVR Front Router 호환 정책 결정 | Opus | §13 AVR Front Router 호환 정책 | **(b) AVR 사용 배포 채택 (2026-05-10)** — AVR은 scope-out하지 않는다. `/remote` redirect, `/avr` IP whitelist 권한, CSP `frame-src`, HTTP fallback 예외, canonical iframe/redirect URL의 Front Router 회귀 시나리오 5종 정의. 직접 probe PASS. 상세: `성능 개선 진행 결과(M2).md` |
 | [x] M2-7 | (b) 옵션 비채택 결정(채택 시 CSP 비용 5종 처리) | Opus | §13 (b) 옵션 CSP/EventSource credential 비용 | **SSE 별도 LAN 포트 (b) 비채택 (2026-05-10)** — M2-2의 (a) Front Router `/api/stream` 라우팅 유지. `EventSource('/api/stream')` same-origin, `connect-src 'self'` 유지. connect-src extra origin·withCredentials·CORS·cookie·SAN 비용 5종 미구현으로 명시. 상세: `성능 개선 진행 결과(M2).md` |
 | [x] M2-8 | PyInstaller frozen self re-spawn 검증 | Sonnet | §15 PyInstaller sidecar 빌드 검증 | **최소 onedir probe PASS (2026-05-10)** — PyInstaller 6.19.0, `_workspace/perf/pyinstaller_m2_8/dist/M2RespawnProbe/M2RespawnProbe.exe`에서 frozen parent/child `sys.frozen=True`, `sys.executable --service=echo` spawn, `freeze_support`, graceful shutdown 모두 확인. 전체 WhatUdoin 패키징은 M2-9 이후 별도 증거 필요. 상세: `성능 개선 진행 결과(M2).md` |
-| [ ] M2-9 | Supervisor 골격 도입 | Opus | §13 Tray/Supervisor + Front Router + supervisor lifecycle | 7단계 startup 순서, 내부 토큰 파일(`_RUN_DIR/internal_token` ACL 평문 + spawn 환경변수), startup 실패 vs runtime crash 카운터 분리 |
+| [x] M2-9 | Supervisor 골격 도입 | Opus | §13 Tray/Supervisor + Front Router + supervisor lifecycle | **Supervisor skeleton 적용 (2026-05-10)** — `supervisor.py`에 7단계 startup 순서, `_RUN_DIR/internal_token` 생성+ACL 적용, spawn env(`WHATUDOIN_INTERNAL_TOKEN*`, `WHATUDOIN_SERVICE_NAME`), pid/status/restart_count/last_error/log path 스냅샷, startup 실패 vs runtime crash 카운터 분리 구현. probe PASS. 상세: `성능 개선 진행 결과(M2).md` |
 | [ ] M2-10 | Front Router 최소 구현 | Opus | §13 외부 라우팅 표 | `/api/stream` → SSE service, `/`/`/api/*` → Web API, `/uploads/meetings/*` → Web API의 `_ProtectedMeetingStaticFiles`, `/internal/*` 외부 차단 |
 | [ ] M2-11 | strip-then-set forwarded 헤더 정책 | Opus | §13 Front Router strip-then-set forwarded 헤더 정책 | 외부 inbound forwarded 6종 폐기 후 라우터 재작성, 위조 헤더 3종 동시 주입 회귀 통과 |
 | [ ] M2-12 | SlowAPI limiter trusted-proxy 통일 | Opus | §13 SlowAPI rate limiter key 통일 | `Limiter(key_func=auth.get_client_ip)` 또는 동등, 50 VU 분리 bucket / 위조 무시 / 분당 11회 429 회귀 통과 |
@@ -334,7 +334,7 @@
 | M1c-ULTRA | M1b-ULTRA 완료 | **완료** | **5/5** | Ollama limiter + admin UI + busy UX 2.5h 경로. U1~U5 모두 완료. 1슬롯 포화 즉시 거부 확인, 1→3 resize live 반영 확인 |
 | M1d (조건부) | M1c-ULTRA 완료 | **완료 (skip)** | **1/1** + 조건부 0/1 | M1d-S1 skip 종료(MCP 병목 미관측), M1d-S3 미진입. 회사 반입 게이트 시 재평가 |
 | M1-ULTRA 종료 | M1a + M1b-U + M1c-U + M1d 처리 완료 | **완료** | **1/1** | M1-end-U1 lite 기준 6종(a~f) 모두 충족. M1b-U5 closure PASS 반영 완료. M1-ULTRA 사이클 종료 |
-| M2 | target-risk override | M2-9 대기 | **9/21** | M2-1 외부 포트 소유자: Tray/Supervisor/Front Router. M2-2 SSE 접근 경로: (a). M2-3 canonical URL: PC LAN IP 기반. M2-4 HTTP fallback unsafe write 차단. M2-5 HSTS 미적용. M2-6 AVR 사용 배포. M2-7 SSE 별도 LAN 포트 비채택. M2-8 frozen self re-spawn PASS |
+| M2 | target-risk override | M2-10 대기 | **10/21** | M2-1 외부 포트 소유자: Tray/Supervisor/Front Router. M2-2 SSE 접근 경로: (a). M2-3 canonical URL: PC LAN IP 기반. M2-4 HTTP fallback unsafe write 차단. M2-5 HSTS 미적용. M2-6 AVR 사용 배포. M2-7 SSE 별도 LAN 포트 비채택. M2-8 frozen self re-spawn PASS. M2-9 Supervisor skeleton |
 | M3 | §13 진입 게이트 통과 | — | 0/5 | M3-0 게이트 평가 포함 |
 | M4 | §13 진입 게이트 통과 | — | 0/5 | M4-0 게이트 평가 포함 |
 | M5 후보 | M1c 회귀 측정 | — | 0/4 | M5-0 게이트 평가 포함, 조건부 |
