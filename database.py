@@ -563,21 +563,15 @@ def init_db():
                      "ON checklist_histories(checklist_id, id)")
 
         # ── 시드 데이터 ──
-        if not conn.execute("SELECT 1 FROM teams LIMIT 1").fetchone():
-            # 팀 기능 그룹 A #2: 시드 INSERT에 name_norm 포함 → Phase 2 노옵 보장.
-            conn.execute(
-                "INSERT INTO teams (name, name_norm) VALUES (?, ?)",
-                ("관리팀", normalize_name("관리팀")),
-            )
+        # 팀 기능 그룹 A #3:
+        #   - 관리팀 자동 생성 제거 (시스템 관리자는 어떤 팀에도 소속되지 않는다).
+        #   - admin은 team_id=NULL 로 시드 → Phase 3 본문이 빈 DB에서 진정으로 노옵.
         if not conn.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone():
-            team_id = conn.execute("SELECT id FROM teams LIMIT 1").fetchone()[0]
             init_pw = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))
-            # 팀 기능 그룹 A #2: 시드 INSERT에 name_norm 포함 → Phase 2 본문이 빈 DB에서
-            # 진정으로 노옵으로 끝나도록 (사양 exit criteria 충족).
             conn.execute(
                 "INSERT INTO users (name, name_norm, password, role, team_id, is_active) "
-                "VALUES (?,?,?,'admin',?,1)",
-                ("admin", normalize_name("admin"), init_pw, team_id)
+                "VALUES (?,?,?,'admin',NULL,1)",
+                ("admin", normalize_name("admin"), init_pw)
             )
             print(f"[WhatUdoin] 초기 관리자 비밀번호: {init_pw}  (최초 1회만 표시, 즉시 변경 권장)")
 
@@ -1077,6 +1071,144 @@ def _phase_4_team_indexes(conn):
 
 
 PHASES.append(("team_phase_4_indexes_v1", _phase_4_team_indexes))
+
+
+# 팀 기능 그룹 A #3 — 시스템 관리자 분리 + 관리팀 시드 처리.
+#
+# 본문은 한 트랜잭션 안에서 다음을 수행한다(모두 idempotent 가드 포함):
+#   1) admin users.team_id → NULL, admin users.mcp_token_hash·created_at → NULL
+#   2) admin user_ips.type='whitelist' → 'history' (row 보존)
+#   3) admin user_teams row 정리 (정상 흐름에선 노옵)
+#   4) name='관리팀' 팀에 대해: admin 외 참조가 1건이라도 있으면 'AdminTeam'으로 rename,
+#      0건이면 DELETE. 사양서가 정의한 8+2개 테이블의 team_id 컬럼을 모두 검사.
+#
+# 가드:
+#   - 모든 UPDATE는 WHERE 절에 NULL/IS NOT NULL/!= 비교를 두어 마커 강제 삭제 후
+#     재실행해도 추가 변경 없이 종료된다.
+#   - 참조 검사 대상 테이블의 team_id 컬럼 존재 여부는 PRAGMA table_info로 가드.
+#
+# 사양서 §주의사항: cascade 외래키 없음 → 참조 0건 검사 후 DELETE 안전.
+_ADMIN_TEAM_REF_TABLES = [
+    # (table_name, column_name) — 사양서가 정의한 참조 데이터 8+2개.
+    # users.team_id는 admin team_id NULL 처리 직후 검사하므로 admin은 자연스럽게 제외된다.
+    ("users",              "team_id"),
+    ("user_teams",         "team_id"),
+    ("events",             "team_id"),
+    ("checklists",         "team_id"),
+    ("meetings",           "team_id"),
+    ("projects",           "team_id"),
+    ("notifications",      "team_id"),
+    ("team_notices",       "team_id"),
+    ("links",              "team_id"),
+    ("team_menu_settings", "team_id"),
+]
+
+
+def _team_has_external_refs(conn, team_id: int) -> bool:
+    """사양서 §13의 참조 데이터 목록을 모두 훑어 1건이라도 가리키면 True."""
+    for table, column in _ADMIN_TEAM_REF_TABLES:
+        if not _table_exists(conn, table):
+            continue
+        if column not in _column_set(conn, table):
+            continue
+        row = conn.execute(
+            f"SELECT 1 FROM {table} WHERE {column} = ? LIMIT 1",
+            (team_id,),
+        ).fetchone()
+        if row:
+            return True
+    return False
+
+
+def _phase_3_admin_separation(conn):
+    """Phase 3: 시스템 관리자(admin) 데이터 분리 + 관리팀 처리.
+
+    본문 자체가 idempotent — 마커 강제 삭제 후 재실행해도 변화 없음.
+    빈 DB 첫 init_db()에서는 admin 시드가 team_id=NULL이고 관리팀이 없으므로 노옵.
+    """
+    # 1. admin users.team_id → NULL  (이미 NULL이면 0행 영향)
+    conn.execute(
+        "UPDATE users SET team_id = NULL "
+        "WHERE role = 'admin' AND team_id IS NOT NULL"
+    )
+
+    # admin mcp_token_hash·created_at → NULL  (컬럼 존재 가드)
+    users_cols = _column_set(conn, "users")
+    if "mcp_token_hash" in users_cols:
+        conn.execute(
+            "UPDATE users SET mcp_token_hash = NULL "
+            "WHERE role = 'admin' AND mcp_token_hash IS NOT NULL"
+        )
+    if "mcp_token_created_at" in users_cols:
+        conn.execute(
+            "UPDATE users SET mcp_token_created_at = NULL "
+            "WHERE role = 'admin' AND mcp_token_created_at IS NOT NULL"
+        )
+
+    # 2. admin user_ips.type='whitelist' → 'history' (row 삭제 X — 이력 보존)
+    if _table_exists(conn, "user_ips"):
+        conn.execute(
+            "UPDATE user_ips SET type = 'history' "
+            "WHERE type = 'whitelist' "
+            "  AND user_id IN (SELECT id FROM users WHERE role = 'admin')"
+        )
+
+    # 3. 안전 보강: admin이 user_teams에 row를 가지면 안 되므로 정리.
+    #    #2 백필이 admin 제외 가드를 가지지만, 본 사이클에서 명시적으로 한 번 더 보강.
+    if _table_exists(conn, "user_teams"):
+        conn.execute(
+            "DELETE FROM user_teams "
+            "WHERE user_id IN (SELECT id FROM users WHERE role = 'admin')"
+        )
+
+    # 4. name='관리팀' 팀 처리.
+    if not _table_exists(conn, "teams"):
+        return
+    teams_cols = _column_set(conn, "teams")
+    admin_team = conn.execute(
+        "SELECT id FROM teams WHERE name = ? LIMIT 1",
+        ("관리팀",),
+    ).fetchone()
+    if not admin_team:
+        return  # 관리팀 자체 없음 → 노옵
+    admin_team_id = admin_team["id"] if isinstance(admin_team, sqlite3.Row) else admin_team[0]
+
+    if _team_has_external_refs(conn, admin_team_id):
+        # 참조 ≥1건 → 'AdminTeam'으로 rename (name·name_norm 동시 갱신).
+        # 단, 운영자가 미리 'AdminTeam' 팀을 만들어둔 환경(name UNIQUE 제약 충돌)에서는
+        # IntegrityError로 phase가 ROLLBACK되어 서버가 시작되지 않으므로,
+        # 사전 SELECT로 충돌을 감지하면 fallback 이름('관리팀_legacy_<id>')으로 rename하고
+        # 운영자가 후속 정리할 수 있도록 team_migration_warnings에 기록한다.
+        target_name = "AdminTeam"
+        conflict_row = conn.execute(
+            "SELECT 1 FROM teams WHERE name = ? AND id != ? LIMIT 1",
+            (target_name, admin_team_id),
+        ).fetchone()
+        if conflict_row:
+            target_name = f"관리팀_legacy_{admin_team_id}"
+            _append_team_migration_warning(
+                conn,
+                "admin_separation",
+                f"AdminTeam 이름 충돌, '관리팀'을 '{target_name}'(id={admin_team_id})로 rename",
+            )
+
+        # name_norm 컬럼 존재 가드 (Phase 1이 추가하지만 방어적).
+        if "name_norm" in teams_cols:
+            conn.execute(
+                "UPDATE teams SET name = ?, name_norm = ? WHERE id = ?",
+                (target_name, normalize_name(target_name), admin_team_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE teams SET name = ? WHERE id = ?",
+                (target_name, admin_team_id),
+            )
+    else:
+        # 참조 0건 → DELETE
+        conn.execute("DELETE FROM teams WHERE id = ?", (admin_team_id,))
+
+
+PHASES.append(("team_phase_3_admin_separation_v1", _phase_3_admin_separation))
 
 
 def _run_preflight_checks(conn) -> list:

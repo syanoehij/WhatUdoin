@@ -107,20 +107,20 @@
 📖 섹션 2, 섹션 13 시드 데이터 정리
 **의존: ← #2**
 
-- [ ] **마이그레이션 (Phase 2 + 3)**
-  - [ ] admin의 `users.team_id` → NULL
-  - [ ] admin의 `users.mcp_token_hash`, `users.mcp_token_created_at` → NULL
-  - [ ] **admin의 `user_ips` whitelist row → `type='history'`로 강등** (row 삭제하지 않음 — 접속 이력 정보는 보존, 자동 로그인 효력만 제거. 자동 로그인 쿼리가 `type='whitelist'`만 매칭하므로 강등만으로 충분)
-  - [ ] 기존 "관리팀" 처리: 참조 데이터 없으면 삭제, 있으면 `AdminTeam`으로 rename (`name`·`name_norm` 동시 갱신)
-- [ ] **구현**
-  - [ ] `init_db()` 신규 환경 시드에서 "관리팀" 자동 생성 제거
-  - [ ] 신규 admin 시드 시 `team_id = NULL` 보장
-  - [ ] 일반 사용자 자동완성·assignee 후보·멤버 목록·MCP 일반 사용자 조회에서 admin 제외
-  - [ ] 히든 프로젝트 멤버 후보에서도 admin 제외 (📖 섹션 12)
-- [ ] **검증**
-  - [ ] admin 로그인 후 일반 사용자 자동완성에 admin이 안 보임
-  - [ ] 관리팀 rename 케이스 → AdminTeam으로 노출됨
-  - [ ] 마이그레이션 전 admin이 whitelist였던 IP에서 마이그레이션 후 접속 → 자동 로그인 안 됨 + history 이력은 `/admin`에서 조회 가능
+- [x] **마이그레이션 (Phase 2 + 3)** — `team_phase_3_admin_separation_v1`로 등록
+  - [x] admin의 `users.team_id` → NULL (`WHERE role='admin' AND team_id IS NOT NULL` 가드)
+  - [x] admin의 `users.mcp_token_hash`, `users.mcp_token_created_at` → NULL (`WHERE role='admin' AND (… IS NOT NULL)` 가드)
+  - [x] **admin의 `user_ips` whitelist row → `type='history'`로 강등** (row 삭제하지 않음 — 접속 이력 정보는 보존, 자동 로그인 효력만 제거. 자동 로그인 쿼리가 `type='whitelist'`만 매칭하므로 강등만으로 충분)
+  - [x] 기존 "관리팀" 처리: 참조 데이터 없으면 삭제, 있으면 `AdminTeam`으로 rename (`name`·`name_norm` 동시 갱신). 사양서 §13의 8+2 테이블(`users`, `user_teams`, `events`, `checklists`, `meetings`, `projects`, `notifications`, `team_notices`, `links`, `team_menu_settings`)을 `_ADMIN_TEAM_REF_TABLES`로 외화하여 검사. **AdminTeam 사전 존재 시 fallback `관리팀_legacy_{id}`** + `team_migration_warnings`에 `admin_separation` 카테고리 누적
+- [x] **구현**
+  - [x] `init_db()` 신규 환경 시드에서 "관리팀" 자동 생성 제거
+  - [x] 신규 admin 시드 시 `team_id = NULL` 보장
+  - [x] 일반 사용자 자동완성·assignee 후보·멤버 목록·MCP 일반 사용자 조회에서 admin 제외 — grep 결과 누락 0건, 의도적 미변경 5건은 backend_changes.md에 사유 명시
+  - [x] 히든 프로젝트 멤버 후보에서도 admin 제외 (📖 섹션 12)
+- [x] **검증**
+  - [x] admin 로그인 후 일반 사용자 자동완성에 admin이 안 보임 — `verify_admin_separation.py` S7 PASS (4 케이스)
+  - [x] 관리팀 rename 케이스 → AdminTeam으로 노출됨 — S3 PASS, S4 fallback PASS, S4-extra(더블 참조) PASS
+  - [x] 마이그레이션 전 admin이 whitelist였던 IP에서 마이그레이션 후 접속 → 자동 로그인 안 됨 + history 이력은 `/admin`에서 조회 가능 — S5 PASS
 
 ### #4. 기존 데이터에 team_id 배정 (Phase 2 백필 — 1차)
 
@@ -688,4 +688,5 @@
 | 날짜 | 항목 | 핵심 결과 | 산출물 |
 |------|------|-----------|--------|
 | 2026-05-10 | #1 DB 마이그레이션 인프라 | `PHASES`/`_PREFLIGHT_CHECKS` 확장 포인트 + 자동 백업(`whatudoin-migrate-*.db`, 90일 retention 공유) + `BEGIN IMMEDIATE` 수동 트랜잭션 + 마커·경고·`normalize_name` 헬퍼. PHASES 본문 SQL은 추가하지 않음 (#2 이후 책임). 검증 8/8 PASS + 운영 DB 복사본 no-op smoke PASS + 사전 조건 2건(`database.py:254` 빈 DB OperationalError, settings 테이블 정의 중복) 인지. | `backup.py:28-42`, `database.py:498-501,631-811`. archive: `archive/TeamA_001_DBInfra_20260510_220510/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_phase_infra.py, scripts/smoke_prod_db_noop.py}` |
-| 2026-05-10 | #2 user_teams + name_norm + 권한 헬퍼 | Phase 1 본문(`team_phase_1_columns_v1`): 9개 컬럼 추가, `user_teams`/`team_menu_settings` 신규, projects 재구성(`name UNIQUE` 제거 + name_norm 추가, id 보존, `_PROJECTS_REBUILD_COLUMNS` 명시 15개). Phase 2 본문(`team_phase_2_backfill_v1`): users.name_norm·teams.name_norm·role:editor→member·user_teams 이관(admin 제외). Phase 4 본문(`team_phase_4_indexes_v1`): user_teams/team_menu_settings UNIQUE 2건. auth.py 신규 헬퍼 7개 + 기존 4개 위임. 사후 수정 4건(시드 name_norm, projects CREATE 컬럼 흡수, sqlite_sequence ON CONFLICT 무효 회피, checklists CREATE 순서). 사전 조건 #1(`database.py:254`) 함께 해결. T1~T4 37 checks + 권한 헬퍼 28 checks ALL PASS. | `database.py`, `auth.py`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_phase_migrations.py`, `scripts/verify_auth_helpers.py` |
+| 2026-05-10 | #2 user_teams + name_norm + 권한 헬퍼 | Phase 1 본문(`team_phase_1_columns_v1`): 9개 컬럼 추가, `user_teams`/`team_menu_settings` 신규, projects 재구성(`name UNIQUE` 제거 + name_norm 추가, id 보존, `_PROJECTS_REBUILD_COLUMNS` 명시 15개). Phase 2 본문(`team_phase_2_backfill_v1`): users.name_norm·teams.name_norm·role:editor→member·user_teams 이관(admin 제외). Phase 4 본문(`team_phase_4_indexes_v1`): user_teams/team_menu_settings UNIQUE 2건. auth.py 신규 헬퍼 7개 + 기존 4개 위임. 사후 수정 4건(시드 name_norm, projects CREATE 컬럼 흡수, sqlite_sequence ON CONFLICT 무효 회피, checklists CREATE 순서). 사전 조건 #1(`database.py:254`) 함께 해결. T1~T4 37 checks + 권한 헬퍼 28 checks ALL PASS. | `database.py`, `auth.py`. archive: `archive/TeamA_002_UserTeams_20260510_223048/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_phase_migrations.py, scripts/verify_auth_helpers.py}` |
+| 2026-05-10 | #3 admin 분리 + 관리팀 시드 | Phase 본문(`team_phase_3_admin_separation_v1`): admin team_id NULL, mcp_token NULL, user_ips whitelist→history 강등, user_teams admin 정리, 관리팀 분기 처리(`_ADMIN_TEAM_REF_TABLES` 10개 검사 → 참조 0건 DELETE / ≥1건 AdminTeam rename). 시드 갱신: 관리팀 자동 생성 제거 + admin team_id=NULL. admin 제외 보강은 grep으로 누락 0건 확인(의도적 미변경 5건 사유 기록). qa 1차 차단 1건 발견(`teams.name UNIQUE` 충돌) → fallback `관리팀_legacy_{id}` + `admin_separation` warning 누적 패치. 9/9 시나리오 PASS(S1~S7 + S4-extra 더블 참조 + S4-rerun warning 중복 가드). | `database.py`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_admin_separation.py` |

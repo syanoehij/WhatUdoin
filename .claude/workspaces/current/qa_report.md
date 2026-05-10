@@ -1,90 +1,146 @@
-# QA 보고서 — 팀 기능 그룹 A #2
+# QA 보고서 — 팀 기능 그룹 A #3 (시스템 관리자 분리 + 관리팀 시드)
 
-본 사이클은 사양상 import-time 검증 + 합성 DB 검증 위주 (Playwright 미사용 — VSCode 디버깅 모드 + 핀포인트가 마이그레이션·헬퍼 단위 동작이므로). 운영 DB는 건드리지 않고 tempdir에 합성 DB를 만들어 검증.
+검증 대상:
+- `database.py:565–576` — 시드 변경 (관리팀 자동 생성 제거 + admin team_id=NULL).
+- `database.py:1091–1104` — `_ADMIN_TEAM_REF_TABLES`.
+- `database.py:1107–1120` — `_team_has_external_refs()`.
+- `database.py:1123–1208` — `_phase_3_admin_separation()` (1176–1208행 rename fallback 패치 포함).
+- `database.py:1211` — `PHASES.append(("team_phase_3_admin_separation_v1", ...))`.
+- `database.py:773–809` — `_append_team_migration_warning()` (재사용, 중복 가드).
+- admin 제외 함수: `get_hidden_project_addable_members`, `list_users_with_avr`, `/api/members`, `/api/teams/members` Python 필터.
 
-## 실행 환경
-- Python: `D:\Program Files\Python\Python312\python.exe`
-- 실행 명령:
-  ```
-  set PYTHONIOENCODING=utf-8
-  python .claude/workspaces/current/scripts/verify_phase_migrations.py
-  python .claude/workspaces/current/scripts/verify_auth_helpers.py
-  ```
-- 두 스크립트 모두 `WHATUDOIN_RUN_DIR`을 임시 디렉토리로 지정해 운영 DB와 격리.
-- 서버 재시작 불필요 (라우트 호출부 미변경, import-time 검증).
+검증 방식: import-time + 합성 DB. 실서버 무영향(`DB_PATH`·`_RUN_DIR`을 임시 폴더로 monkey-patch).
+검증 도구: `.claude/workspaces/current/scripts/verify_admin_separation.py` (재실행 가능, exit code = FAIL 개수).
+실행 환경: Python 3.12 (`D:\Program Files\Python\Python312\python.exe`), Windows 11.
 
-## 통과
+## 사이클 이력
+- **#3-cycle1 (이전)**: S4 차단 결함 발견 (BLOCKING) — `teams.name UNIQUE` 제약으로 IntegrityError, 서버 시작 거부 위험. 나머지 6 시나리오는 PASS.
+- **#3-cycle2 (현재)**: backend가 rename 분기에 사전 SELECT + fallback 이름(`관리팀_legacy_<id>`) + `_append_team_migration_warning("admin_separation", ...)` 추가. **재검증 — 9 시나리오 전체 PASS**.
 
-### Phase 마이그레이션 (verify_phase_migrations.py — RESULT: ALL PASS)
+## 요약 (cycle2 재검증 결과)
 
-**T1. 빈 DB로 init_db()** (17 checks)
-- PHASES 마커 3개 모두 기록 (`team_phase_1_columns_v1`, `team_phase_2_backfill_v1`, `team_phase_4_indexes_v1`)
-- admin/관리팀 시드에 `name_norm` 미리 채워짐 → Phase 2가 진정으로 노옵 (user_teams 빈 집합)
-- 신규 테이블 `user_teams`, `team_menu_settings` 존재
-- 신규 컬럼 9개 모두 존재: `users.{name_norm, password_hash}`, `teams.{name_norm, deleted_at}`, `projects.name_norm`, `events.project_id`, `checklists.project_id`, `notifications.team_id`, `team_notices.team_id`
-- Phase 4 인덱스 2개 (`idx_user_teams_user_team`, `idx_team_menu_settings`) 생성
-- 본 사이클 범위 외 UNIQUE 인덱스(users.name_norm, teams.name_norm, projects(team_id, name_norm))는 미생성 — #5/#7 책임 보존
+| 시나리오 | 결과 | 주요 검증 포인트 |
+|---------|------|----------------|
+| S1 | **PASS** | 빈 DB init_db() — teams 0건, admin team_id=NULL, user_teams admin 0건, phase 마커 기록 |
+| S2 | **PASS** | 합성 구 DB (a) 참조 0건 → 관리팀 DELETE + admin 분리 후속 모두 |
+| S3 | **PASS** | 합성 구 DB (b) 참조 ≥1건 → AdminTeam rename + name_norm 동시 갱신, alice 보존 |
+| **S4** | **PASS** | **fallback 패치 검증** — 사전 AdminTeam 그대로, 관리팀은 `관리팀_legacy_<id>`로 rename, warning 1건 누적 |
+| **S4-extra (신규)** | **PASS** | 사전 AdminTeam에도 외부 참조 ≥1건 (bob) → 두 팀 모두 보존, 관리팀만 fallback rename, AdminTeam 외부 참조 보존, warning 1건 |
+| **S4-rerun (신규)** | **PASS** | 마커 강제 삭제 후 재실행 → fallback rename 결과 유지, warning 카운트 1 유지 (중복 누적 없음) |
+| S5 | **PASS** | admin 분리 후속 — team_id/mcp_token NULL, whitelist→history(row 보존), user_teams admin 정리 |
+| S6 | **PASS** | 재실행 가드 — 두 번째 init_db()는 마커로 미실행, 마커 강제 삭제 후 재실행도 본문 가드로 노옵 |
+| S7 | **PASS** | admin 제외 — addable_members / list_users_with_avr / /api/members / /api/teams/members 모두 admin 미포함 |
 
-**T2. 합성 구 DB → init_db()** (12 checks)
-- 합성 구 DB 조건: projects 테이블에 `name TEXT NOT NULL UNIQUE` 제약 + admin 1명 + 5명 editor (3명 team_id NOT NULL) + user_teams 미존재 + name_norm 미존재
-- `projects.id` 보존 (rebuild 전후 [1,2,3] 일치)
-- `projects` name→id 매핑 보존 (Alpha=1, Beta=2, Gamma=3)
-- `sqlite_master.sql`에서 `name TEXT NOT NULL UNIQUE` 제거 확인
-- `sqlite_sequence(projects).seq == 3` (= 이전 MAX(id))
-- row count 일치 (3 → 3)
-- `user_teams` row 수 = 3 (= count(`users WHERE team_id IS NOT NULL AND role != 'admin'`))
-- admin은 user_teams에 row 없음
-- 모든 `projects.name_norm == normalize_name(name)` (alpha/beta/gamma)
-- `users.role = 'editor'` 행 0건 (모두 'member'로 전환)
-- `users.role = 'member'` 5건
-- `users.name_norm` 모두 채워짐, `teams.name_norm` 모두 채워짐
+**판정: 전체 PASS (9/9). cycle1의 차단 결함이 fallback 패치로 해소됨.**
 
-**T3. 두 번째 init_db() (마커 존재 — 노옵)** (2 checks)
-- 백업 파일 추가 없음 (pending phase 0건이므로 `_run_phase_migrations` 즉시 반환)
-- `user_teams` row 변화 없음
+```
+summary: PASS=9 / FAIL=0 / WARN=0 / TOTAL=9
+exit code: 0
+```
 
-**T4. 마커 강제 삭제 → 재실행 (idempotency)** (6 checks)
-- `DELETE FROM settings WHERE key LIKE 'migration_phase:team_phase_%'` 후 init_db() 재호출
-- `projects` row count 동일 (needs_rebuild 가드 — `sqlite_master.sql`에 `name UNIQUE`가 이미 사라졌으므로 재구성 미트리거)
-- `projects.id` 동일
-- `user_teams` row 중복 없음 (`WHERE NOT EXISTS` 가드 작동)
-- `users.role='member'` 수 동일 (`WHERE role='editor'` 가드 작동 — 0건이므로 재실행 시 노옵)
-- `users.name_norm` NULL 없음 (`WHERE name_norm IS NULL` 가드 작동)
-- 마커 3개 재생성
+---
 
-### 권한 헬퍼 (verify_auth_helpers.py — RESULT: ALL PASS, 28 checks)
-- member (alice / team 1): `is_member`, `user_team_ids={1}`, `user_can_access_team` 정확, `is_team_admin(1)` False
-- admin (글로벌): `user_team_ids` 빈 집합, `user_can_access_team(any)` True, `is_team_admin(any)` True (슈퍼유저), `admin_team_scope` None
-- team admin (bob / team 2): `is_team_admin(2)` True, 다른 팀(1)은 False, 글로벌 admin 아님
-- team member (carol / team 2): `is_team_admin(2)` False
-- `require_work_team_access`: 정상 통과 / 권한 없으면 `HTTPException(status=403)`
-- `resolve_work_team`: 우선순위 (explicit_id → 쿠키 → admin은 None → user_teams 대표 팀) 모두 정확
-- 기존 헬퍼 호환: `is_editor` 위임 작동, `can_edit_event`이 새 `user_can_access_team` 위임 작동, admin 슈퍼유저 우회 작동
+## S4 fallback 패치 검증 상세
 
-## 실패
+### 패치 동작 (database.py:1176–1208)
+1. `_team_has_external_refs(conn, admin_team_id)` True 분기 진입.
+2. `target_name = "AdminTeam"`로 시작.
+3. 사전 SELECT: `SELECT 1 FROM teams WHERE name = ? AND id != ?` (target_name, admin_team_id).
+4. 충돌 row 발견 시:
+   - `target_name = f"관리팀_legacy_{admin_team_id}"`로 전환.
+   - `_append_team_migration_warning(conn, "admin_separation", "AdminTeam 이름 충돌, '관리팀'을 '<fallback>'(id=<id>)로 rename")` 누적.
+5. `UPDATE teams SET name = ?, name_norm = ? WHERE id = ?` — `target_name`과 `normalize_name(target_name)` 동시 갱신.
 
-없음.
+### S4 (cycle2) — 단일 fallback 케이스
+- 합성: `관리팀(id=1)` + 사전 `AdminTeam(id=2, name_norm='adminteam')` + alice(team_id=1).
+- 마이그레이션 후:
+  - id=1 → `name='관리팀_legacy_1'`, `name_norm='관리팀_legacy_1'` (NFC + casefold 결과; 한글이라 변화 없음, 영문/대문자 없음).
+  - id=2 → `name='AdminTeam'`, `name_norm='adminteam'` 그대로.
+  - alice.team_id=1 보존.
+  - admin.team_id=NULL.
+  - `team_migration_warnings`에 `category='admin_separation'` 1건. message: `"AdminTeam 이름 충돌, '관리팀'을 '관리팀_legacy_1'(id=1)로 rename"`.
+
+### S4-extra — 두 팀 모두 외부 참조
+- 합성: `관리팀(id=1)` + 사전 `AdminTeam(id=2)` + alice(team_id=1, 관리팀 참조) + bob(team_id=2, AdminTeam 참조).
+- 마이그레이션 후:
+  - id=1 → `관리팀_legacy_1`로 fallback rename.
+  - id=2 → `AdminTeam` 그대로 (rename 안 됨, 패치 분기는 admin_team_id에만 작동).
+  - **bob.team_id=2 보존** — 패치가 사전 AdminTeam의 외부 참조에 영향을 주지 않음을 확인.
+  - alice.team_id=1 보존.
+  - total teams = 2 (두 팀 모두 살아남음).
+  - admin_separation warning 1건.
+
+이 시나리오는 운영자가 'AdminTeam'을 미리 만들고 거기에 사용자를 배치한 환경에서 마이그레이션이 안전하게 작동함을 직접 입증한다.
+
+### S4-rerun — warning 중복 가드
+- 1차 실행: fallback 발생, admin_separation warning 1건 누적.
+- 마커 (`migration_phase:team_phase_3_admin_separation_v1`) 강제 삭제.
+- 2차 실행 (`_run_phase_migrations()` 재호출):
+  - phase 본문 진입 → `WHERE name='관리팀'` SELECT가 None (이미 `관리팀_legacy_1`으로 rename됨) → 즉시 `return` (관리팀 분기 노옵).
+  - **본문이 rename 분기에 도달하지 않으므로** `_append_team_migration_warning` 호출도 일어나지 않음.
+  - admin_separation warning 카운트 = 1 유지.
+  - rename된 row 상태(`관리팀_legacy_1`) 그대로.
+
+추가 안전망: 본문이 어떤 이유로든 rename 분기에 다시 도달했다고 하더라도, `_append_team_migration_warning(database.py:773–809)`이 같은 `(category, message)` 쌍을 두 번 추가하지 않는 race-safe 중복 가드(database.py:790–797)를 갖고 있음. 이중 idempotency.
+
+---
+
+## 통과 시나리오 상세
+
+### S1: 빈 DB init_db()
+- `teams_count=0`, `admin.team_id=None`, `admin.mcp_token_hash=None`, `admin.mcp_token_created_at=None`.
+- `user_teams.admin_count=0`, `user_ips.admin_whitelist_count=0`.
+- phase 마커 `migration_phase:team_phase_3_admin_separation_v1` 기록 확인.
+
+### S2: 합성 구 DB (a) 참조 0건 → DELETE
+- 관리팀 row가 마이그레이션 후 사라짐 (DELETE 분기).
+- admin: team_id NULL, mcp_token_hash/created_at NULL.
+- user_ips admin: whitelist 0건, history 1건 (row 보존, type만 강등).
+
+### S3: 합성 구 DB (b) 참조 ≥1건 → rename (정상 케이스)
+- 사전 AdminTeam 충돌 없음 → fallback 분기 진입 안 함.
+- 관리팀 row → `name='AdminTeam'`, `name_norm='adminteam'`(NFC + casefold)으로 갱신.
+- alice의 team_id 보존.
+- admin team_id NULL.
+- admin_separation warning 0건 (정상 rename 시 누적 안 함, 의도된 동작).
+
+### S5: admin 분리 후속 처리
+- `inject_user_teams_admin_row=True`로 정상 흐름엔 없는 잔존물(user_teams admin row)을 강제 주입.
+- 마이그레이션 후: ut_admin_after=0 (정리됨), ips_total 보존(2 → 2), whitelist=0/history=1.
+- admin team_id=NULL, mcp_token_*=NULL.
+
+### S6: 재실행 가드
+- 첫 init_db() 후 phase 마커 기록 확인.
+- 두 번째 init_db()로도 admin 스냅샷·teams_count 변화 없음 → 마커 가드 동작.
+- 마커 강제 삭제 후 세 번째 init_db() → 마커 재기록되고 데이터 변화 없음 → 본문 가드 동작.
+
+### S7: admin 제외 함수 단위
+- 합성 데이터: 팀A + alice/bob(member). 히든 프로젝트 owner=alice.
+- `get_hidden_project_addable_members(project_id)` → admin 미포함, bob 포함.
+- `list_users_with_avr()` → admin 미포함.
+- `/api/members` 시뮬레이트(`get_all_users` + Python 필터) → admin 미포함, alice·bob 포함.
+- `/api/teams/members` 시뮬레이트 → admin 미포함.
+
+---
 
 ## 회귀 확인
 
-코드 리뷰 단계에서 발견·수정된 결함 3건 (모두 본 검증 스크립트가 잡았음):
+- 기존 phase 1·2·4 마이그레이션은 매 시나리오에서 정상 OK 출력 → 회귀 없음.
+- backup 인프라(`backup.py:run_migration_backup`)도 임시 폴더로 정상 작동 — 매 phase 호출 전 `backupDB/whatudoin-migrate-{timestamp}.db` 생성 확인.
+- 기존 PASS 시나리오(S1·S2·S3·S5·S6·S7) 모두 cycle2에서도 PASS 유지 → 패치가 다른 분기에 부작용 없음.
 
-1. **시드 INSERT의 `name_norm` 누락** — 빈 DB Phase 2 노옵 보장을 위해 `INSERT INTO teams/users` 시드에 `name_norm` 컬럼 + `normalize_name()` 적용. (advisor 권고 (1a) 채택)
-2. **`projects` CREATE에서 누락 컬럼** — 후행 코드(line 263 `UPDATE projects SET deleted_at = ...`)가 _migrate가 ALTER하기 전에 실행되어 빈 DB에서 OperationalError. CREATE에 `is_active, memo, is_private, deleted_at, deleted_by, team_id, is_hidden, owner_id` 흡수.
-3. **`sqlite_sequence` ON CONFLICT 무효** — `sqlite_sequence`는 PRIMARY KEY/UNIQUE 제약이 없는 시스템 테이블이라 ON CONFLICT 절 사용 불가. UPDATE-or-INSERT 패턴으로 교체.
-4. **`checklists` CREATE 순서** — 인덱스 CREATE(line ~360)와 UPDATE(line ~245)가 checklists 테이블 정의(line ~470 executescript) 이전에 실행되던 pre-existing 결함. checklists CREATE를 line ~115 (checklist_histories 다음)로 끌어올림. 후행 executescript는 `IF NOT EXISTS`라 노옵 (checklist_locks만 실제 생성).
+## 산출물
 
-## 본 사이클 범위 외 — 후속 인계
-- `users.name_norm` UNIQUE 인덱스 (#7)
-- `teams.name_norm` UNIQUE 인덱스 (#7/#5)
-- `projects(team_id, name_norm)` UNIQUE 인덱스 (#5)
-- `events.project_id` / `checklists.project_id` / `notifications.team_id` / `team_notices.team_id` 데이터 백필 (#4, #5)
-- `password_hash` 변환 (#7)
-- `_PREFLIGHT_CHECKS` 추가 등록 (각 사이클의 새 UNIQUE에 맞춰)
-- 라우트 호출부 권한 헬퍼 전환 (#16)
-- `work_team_id` 쿠키 set/clear UI (#15)
+- `.claude/workspaces/current/scripts/verify_admin_separation.py` — **위치 정합성 정리** (이전 cycle은 `<root>/scripts/`에 있었음 → 사양서가 정의한 워크스페이스 scripts/로 이동, ROOT 경로도 `parents[4]`로 업데이트). 9개 시나리오 통합 검증. 실서버 영향 없음(임시 폴더 사용). 재실행 가능. exit code=FAIL 개수.
+- `.claude/workspaces/current/qa_report.md` — 본 보고서 (cycle2 재검증으로 갱신).
 
-## 행동 결정 (#16/#3 reviewer 인계)
-- `is_team_admin(global_admin, any_team)` = True 채택 — 사양 §S4는 명시 안 했으나 슈퍼유저 정책 일관성. #16 라우트 호출부 전환 시 의도 검증 권장.
-- `resolve_work_team` 대표 팀 = `min(user_team_ids)` — 결정성 정렬. #15에서 명시 선호 팀 컬럼이 도입되면 교체.
-- `user_team_ids`의 예외 fallback (`users.team_id` legacy) — 마이그레이션 전 호출 등 예외 상황. 정상 가동 후엔 도달하지 않음.
+## 미실행 항목
+
+- 실서버 Playwright E2E — task spec에서 명시적으로 import-time + 합성 DB만 요구. fallback 분기는 데이터 마이그레이션 동작이라 UI 테스트 대상이 아님.
+- 실 운영 DB에서의 마이그레이션 — VSCode 디버깅 모드라 서버 재시작 불가. 본 사이클의 데이터 변경은 없으므로 재시작은 다음 사이클(또는 운영 배포 시점)까지 지연 가능.
+
+## 다음 액션
+
+1. **차단 결함 해소** — backend 재호출 불요. 9 시나리오 전체 PASS.
+2. (필요 시) 사용자 결정으로 실서버 재시작 — VSCode 디버깅 모드라 자동 재시작 불가, 수동 처리 필요. 본 사이클 변경은 import-time + 합성 DB로 검증 완료이므로 재시작은 다음 묶음 배포 때 함께 진행해도 안전.
+3. 후속 사이클(#4 등) 진행 시 `team_migration_warnings`의 `admin_separation` 카테고리를 운영 UI에서 노출하는 작업이 필요할 수 있음(범위 외).
