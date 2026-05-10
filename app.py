@@ -435,8 +435,8 @@ class _FrontRouterAccessGuardMiddleware:
 
 
 _HTTP_FALLBACK_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-_HTTP_FALLBACK_WRITE_ALLOW_EXACT = {"/avr", "/remote", "/api/avr"}
-_HTTP_FALLBACK_WRITE_ALLOW_PREFIXES = ("/api/avr/",)
+_HTTP_FALLBACK_WRITE_ALLOW_EXACT = {"/avr", "/remote", "/api/avr", "/mcp"}
+_HTTP_FALLBACK_WRITE_ALLOW_PREFIXES = ("/api/avr/", "/mcp/")
 
 
 def _is_http_fallback_write_allowed(path: str) -> bool:
