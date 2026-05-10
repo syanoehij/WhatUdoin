@@ -7,7 +7,7 @@
 - **1차 실행 todo로 동결** (2026-05-09): 마스터 plan rev29 + 다회 외부 검토 사이클을 거쳐 M1a~M1d 실행 + M2 이후 조건부 운영 구조 변경 step이 모두 정합 상태로 확정됐다. 신규 step 추가 사이클은 종결한다.
 - **트랙 단축 결정** (2026-05-09): M1a 완료 후 외부 검토 2차 사이클을 거쳐 M1b~M1d의 실제 실행 경로를 **M1-ULTRA**(사내 소수 사용자 기준)로 낮췄다. 단축 근거는 아래 "단축 배경" 참조. 기존 full case 세부 step은 본 문서 하단 "보수 단축안 / 회사 반입 게이트 / 후속 후보" 섹션으로 이동했고, 회사 반입 결정이나 실제 장애 징후 발생 시 끌어올린다. 상세 단축안은 [`성능 개선 단축안(M1b-M1d).md`](성능%20개선%20단축안(M1b-M1d).md) 참조.
 - **추후 변경 원칙**: 본 todo는 마스터 plan §0 "문서 라이프사이클 정책"과 동일하게 동결 상태로 둔다. 새 의견이 들어와도 M1a~M1d 실행을 막는 실재 코드/운영 리스크가 아니면 본문을 더 확장하지 않고, 구현 중 발견 사실 → commit/PR 메시지, 운영 정책/후속 마일스톤 후보 → 마스터 plan §18로 분리한다.
-- **다음 행동**: M6-3 완료. DB command service 미도입 채택, §18 후속 보존(측정 미발생/Web API 단일 owner/write 다중화 거부 정합/분류 표 zero-rework 이식 가능). 운영 코드 변경 0건. 다음은 M6-4 종료 회귀 + exit criteria.
+- **다음 행동**: **M6 후보 마일스톤 종료 (2026-05-10)**. M6-0~M6-4 5개 step 완료. M6-4 정책별 증거 인덱스 11종 + 게이트 8/8 PASS. phase54~75 22개 회귀 PASS. 운영 코드 변경 0건. **모든 마일스톤(M1a/M1b-ULTRA/M1c-ULTRA/M1d/M1-ULTRA 종료/M2/M3/M4/M5/M6) 종료**. 회사 반입 결정 또는 §18 후속 후보(보수 단축안/MCP write tool 도입/DB command service) 별도 사이클로 처리.
 
 ## 단축 배경
 
@@ -317,7 +317,7 @@
 | [x] M6-1 | write/edit tool 위험도 분류 | Opus | §16 M6 1번 | **확정/코드화 (2026-05-10, M6-2와 통합 패키지)** — `mcp_command_registry.py` 신설(순수 데이터 모듈, 외부 import 0). MCP_WRITE_TOOL_RISK_CLASSES 4종(safe/moderate/destructive/admin_only), CLASSIFICATION 6 항목(create_event=moderate / add_checklist_item=moderate / update_event=moderate / delete_event=destructive / delete_document=destructive / bulk_project_update=destructive&admin), MCP_WRITE_PRIORITY_CANDIDATES 우선 후보 2개. is_destructive/web_api_target 헬퍼. 상세: `성능 개선 진행 결과(M6).md` |
 | [x] M6-2 | Web API command endpoint + MCP proxy | Opus | §9 MCP write/edit 추가 정책 (단기 원칙) | **boundary 잠금 완료 (2026-05-10, M6-1과 통합 패키지)** — mcp_server.py에 `_call_web_api_command(tool_name, payload, ctx)` 헬퍼 추가(미등록 ValueError, 등록 NotImplementedError로 본 사이클 boundary 잠금). 시범 write tool 미추가(운영 요구 미관측). mcp_server write owner grep — SQL write 패턴 0/sqlite3 직접 import 0/db.write 호출 0(AST). supervisor에 WEB_API_INTERNAL_URL_ENV 상수만 추가. probe 21/21 + phase75 21/21 PASS, phase54~74 회귀 PASS. 상세: `성능 개선 진행 결과(M6).md` |
 | [x] M6-3 | DB command service 도입 결정 | Opus | §16 M6 3~4번 + §13 DB command service | **미도입 채택 (2026-05-10), §18 후속 후보로 보존** — (1) 측정 미발생(write tool 미추가), (2) Web API write path 단일 owner 유지, (3) plan §13 write 다중화 거부 정합, (4) M6-1 분류 표 zero-rework 이식 가능, (5) §18 보존. 재평가 트리거: write tool 운영 요구 + 부하 측정 회귀 / multi-worker 전환 검토 시. 운영 코드 변경 0건. 상세: `성능 개선 진행 결과(M6).md` |
-| [ ] M6-4 | M6 종료 회귀 + exit criteria | Opus | §17 M6 후보 완료 기준 | hidden-project 차단 / lock / history / SSE publish 통합 / 베이스라인 회귀 0. **MCP write owner 원칙 재확인 필수** — MCP service 코드에 직접 SQLite write 0건(grep + 코드 리뷰), 모든 write/edit tool이 Web API command endpoint(또는 도입 시 DB command service) 경유로 동작함이 호출 grep으로 확인됨. M6-2에서 잡은 원칙이 후속 tool 추가로 회귀하지 않았는지 종료 단계에서 한 번 더 검증 |
+| [x] M6-4 | M6 종료 회귀 + exit criteria | Opus | §17 M6 후보 완료 기준 | **M6 종료 (2026-05-10)** — 정책별 증거 인덱스 11종 작성. MCP write owner 원칙 재확인: SQL write 패턴 0/sqlite3 직접 import 0/db.write 호출 0(AST Constant + Call 검사) + `_call_web_api_command` IPC boundary 헬퍼 NotImplementedError 잠금. hidden-project/lock/history/SSE publish는 M2~M5 boundary 자연 보존(phase54~75 sweep). DB command service §18 후속 보존. 운영 코드 변경 0건. M6 종료 게이트 8/8 PASS. 상세: `성능 개선 진행 결과(M6).md` |
 
 ---
 
@@ -338,7 +338,7 @@
 | M3 | target-risk override | **완료** | **5/5** | M3-1~M3-3 적용 + M3-4 종료: 라이브 supervisor 14/14 + owner 정책 위반 3종 0건 21/21 + 일반 API p95 12.9ms + lock 0건 8/8. phase54~65 회귀 PASS. 운영 코드 변경 0건. **M3 마일스톤 종료** |
 | M4 | target-risk override | **완료** | **5/5** | M4-0~M4-3 적용 + M4-4 종료: 라이브 4 service 통합 21/21(stop_all 2.03s) + Ollama hang 중 일반 API p95 31.0ms(SLA 500ms 대비 16× 여유) 8/8 + phase69 39/39. phase54~68 회귀 PASS. 운영 코드 변경 0건. **M4 마일스톤 종료** |
 | M5 후보 | target-risk override | **완료** | **4/4** | M5-0~M5-2 적용 + M5-3 종료: 라이브 Media 통합 29/29 + 부하 thread 중 일반 API p95 78ms 8/8 + 소유권 boundary/외부 차단 18/18 + phase71 45/45. phase54~70 17개 회귀 PASS. 운영 코드 변경 0건. **M5 마일스톤 종료** |
-| M6 후보 | target-risk override | M6-4 대기 | **4/5** | M6-0 override. M6-1+M6-2 통합 패키지: mcp_command_registry.py + `_call_web_api_command` boundary + supervisor 상수. M6-3 DB command service 미도입(§18 보존) — 측정 미발생, write 다중화 거부 정합, 분류 표 zero-rework |
+| M6 후보 | target-risk override | **완료** | **5/5** | M6-0~M6-3 적용 + M6-4 종료: 정책별 증거 인덱스 11종 + MCP write owner 원칙 재확인(SQL write/sqlite3 import/db.write 호출 0건 AST 검사) + 게이트 8/8 PASS. phase54~75 22개 회귀 PASS. 운영 코드 변경 0건. **M6 마일스톤 종료** |
 
 ### 보수 단축안 / 회사 반입 게이트 (회사 반입 결정 또는 장애 징후 시 활성화)
 
