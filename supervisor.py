@@ -40,6 +40,10 @@ SCHEDULER_SERVICE_ENABLE_ENV = "WHATUDOIN_SCHEDULER_SERVICE"
 CRASH_LOOP_WINDOW_SECONDS = 300
 CRASH_LOOP_MAX_FAILURES = 3
 
+# M3-3: graceful shutdown 순서 — 의존 서비스부터 종료
+# Ollama → SSE → Scheduler → Web API (M3 시점 Ollama 미도입이므로 skip됨)
+STOP_ORDER = ("ollama", "sse", "scheduler", "web-api")
+
 M2_STARTUP_SEQUENCE = (
     "resolve_runtime_paths",
     "ensure_internal_token_file",
@@ -441,8 +445,17 @@ class WhatUdoinSupervisor:
         return state
 
     def stop_all(self, timeout: float = 5.0) -> None:
+        # STOP_ORDER 기준으로 순서대로 종료, grace 0.5s 확보
+        stopped: set[str] = set()
+        for name in STOP_ORDER:
+            if name in self.services:
+                self.stop_service(name, timeout=timeout)
+                stopped.add(name)
+                time.sleep(0.5)
+        # STOP_ORDER에 없는 서비스는 나머지 처리
         for name in list(self.services):
-            self.stop_service(name, timeout=timeout)
+            if name not in stopped:
+                self.stop_service(name, timeout=timeout)
 
     def snapshot(self) -> dict:
         self.poll_all()
@@ -498,6 +511,7 @@ __all__ = [
     "CRASH_LOOP_MAX_FAILURES",
     "CRASH_LOOP_WINDOW_SECONDS",
     "INTERNAL_TOKEN_ENV",
+    "STOP_ORDER",
     "INTERNAL_TOKEN_FILE_ENV",
     "M2_STARTUP_SEQUENCE",
     "SCHEDULER_SERVICE_BIND_HOST_ENV",
