@@ -52,6 +52,11 @@ MEDIA_SERVICE_URL_ENV = "WHATUDOIN_MEDIA_SERVICE_URL"
 MEDIA_SERVICE_DEFAULT_PORT = 8768
 MEDIA_SERVICE_STAGING_ROOT_ENV = "WHATUDOIN_STAGING_ROOT"
 
+# M6-2: MCP write tool이 Web API write path를 IPC 경유할 때 사용하는 URL env 키.
+# 실제 mcp_server._call_web_api_command에서 참조.
+# 향후 write tool 추가 시 supervisor가 이 env로 internal URL을 주입.
+WEB_API_INTERNAL_URL_ENV = "WHATUDOIN_WEB_API_INTERNAL_URL"
+
 CRASH_LOOP_WINDOW_SECONDS = 300
 CRASH_LOOP_MAX_FAILURES = 3
 

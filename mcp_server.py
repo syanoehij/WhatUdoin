@@ -2,8 +2,14 @@
 WhatUdoin MCP 서버 (v1, read-only)
 - Transport: Streamable HTTP
 - 인증: FastAPI 미들웨어에서 Bearer 토큰 검증 (OAuth 없음 — 일반 API 키 방식)
-- 범위: 7개 read-only 도구
+- 범위: 14개 read-only 도구 (write tool 0건 — M6 boundary 잠금)
 - app.py를 import하지 않음 (순환 import 방지)
+
+MCP write owner 원칙 (plan §9/§13 M6):
+- 본 파일은 직접 SQLite write를 절대 하지 않는다.
+- 향후 write/edit tool 추가 시 반드시 _call_web_api_command 헬퍼를 통해
+  Web API write path 경유. sqlite3, cursor, db.create_/update_/delete_/add_
+  직접 호출 금지.
 """
 import contextvars
 import hashlib
@@ -31,6 +37,31 @@ mcp = FastMCP(
 def _user_from_ctx(ctx) -> dict | None:  # noqa: ARG001
     """미들웨어가 검증·주입한 사용자를 반환한다."""
     return _mcp_user.get()
+
+
+async def _call_web_api_command(tool_name: str, payload: dict, ctx) -> dict:
+    """MCP write/edit tool이 호출하는 Web API write path proxy.
+
+    원칙 (plan §9/§13 M6):
+    - MCP service는 직접 SQLite write를 절대 하지 않는다.
+    - 모든 write/edit는 Web API command endpoint 경유 — 권한, lock,
+      history, SSE publish, audit 모든 후처리가 Web API에 통합되어 있다.
+    - 향후 write tool 추가 시 본 헬퍼를 사용하고, mcp_command_registry
+      의 분류표에서 web_api_path/method/permission을 읽어 호출한다.
+
+    본 사이클(M6-2)에서는 실제 write tool 미추가 — 헬퍼 정의 + boundary
+    잠금까지. 향후 write tool 추가는 별도 마일스톤 또는 §18 후속.
+    """
+    from mcp_command_registry import MCP_WRITE_TOOL_CLASSIFICATION
+    spec = MCP_WRITE_TOOL_CLASSIFICATION.get(tool_name)
+    if not spec:
+        raise ValueError(f"unknown write tool: {tool_name}")
+    # 실제 IPC 호출 구현(stdlib urllib.request, Authorization Bearer
+    # WHATUDOIN_INTERNAL_TOKEN). Web API base URL은 env로 구성:
+    # WHATUDOIN_WEB_API_INTERNAL_URL (기본 http://127.0.0.1:8000).
+    raise NotImplementedError(
+        "M6-2: write tool은 본 사이클 미추가. 운영 요구 발생 시 별도 step."
+    )
 
 
 def mount_mcp(app) -> None:
