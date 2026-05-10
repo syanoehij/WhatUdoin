@@ -242,13 +242,14 @@ def init_db():
             conn.execute("UPDATE checklists SET is_public = 0 WHERE (project IS NULL OR project = '') AND deleted_at IS NULL")
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ck_unset_priv_reset_v1', '1')")
         # '미지정' 문자열로 잘못 저장된 project 값을 빈 문자열로 정리 — 1회성
-        if not conn.execute("SELECT 1 FROM settings WHERE key='ck_fix_mijijeong_project_v1'").fetchone():
+        if _table_exists(conn, "checklists") and not conn.execute("SELECT 1 FROM settings WHERE key='ck_fix_mijijeong_project_v1'").fetchone():
             conn.execute("UPDATE checklists SET project = '' WHERE project = '미지정'")
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('ck_fix_mijijeong_project_v1', '1')")
         # events의 '미지정' project 값 NULL로 정리, 프로젝트 테이블에서 '미지정' 삭제
         if not conn.execute("SELECT 1 FROM settings WHERE key='fix_mijijeong_all_v1'").fetchone():
             conn.execute("UPDATE events SET project = NULL WHERE project = '미지정' AND deleted_at IS NULL")
-            conn.execute("UPDATE checklists SET project = '' WHERE project = '미지정' AND deleted_at IS NULL")
+            if _table_exists(conn, "checklists"):
+                conn.execute("UPDATE checklists SET project = '' WHERE project = '미지정' AND deleted_at IS NULL")
             if _table_exists(conn, "projects"):
                 conn.execute("UPDATE projects SET deleted_at = datetime('now') WHERE name = '미지정' AND deleted_at IS NULL")
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('fix_mijijeong_all_v1', '1')")

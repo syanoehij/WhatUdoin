@@ -68,9 +68,12 @@ def _ensure_admin_guide(run_dir: str) -> None:
         return
     os.makedirs(dst_dir, exist_ok=True)
     for fn in os.listdir(src_dir):
+        src_path = os.path.join(src_dir, fn)
+        if not os.path.isfile(src_path):
+            continue
         dst = os.path.join(dst_dir, fn)
         if not os.path.exists(dst):
-            shutil.copy2(os.path.join(src_dir, fn), dst)
+            shutil.copy2(src_path, dst)
 
 
 # ── 트레이 아이콘 / 콘솔창 제어 ───────────────────────────────────
