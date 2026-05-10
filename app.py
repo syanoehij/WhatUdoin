@@ -2440,22 +2440,39 @@ def manage_list_projects(request: Request):
 
 @app.post("/api/manage/projects")
 async def manage_create_project(request: Request):
-    _require_editor(request)
+    user = _require_editor(request)
     data = await request.json()
     name = data.get("name", "").strip()
     color = data.get("color") or None
     memo  = (data.get("memo") or "").strip() or None
     if not name:
         raise HTTPException(status_code=400, detail="프로젝트 이름을 입력하세요.")
-    if db.project_name_exists(name, case_insensitive=True):
+    # 작업 컨텍스트 팀 결정 — 명시 team_id(요청 본문) → 쿠키 → 사용자 대표 팀.
+    explicit_id = data.get("team_id")
+    team_id = auth.resolve_work_team(request, user, explicit_id=explicit_id)
+    if team_id is None:
+        # 비-admin 사용자는 항상 팀이 결정되어야 한다(legacy fallback 포함).
+        # admin이 명시 team_id 없이 호출한 경우만 None — 사양상 거부.
+        raise HTTPException(status_code=400, detail="작업 팀이 결정되지 않았습니다. team_id를 지정하세요.")
+    auth.require_work_team_access(user, team_id)
+    # 같은 팀 안에서 같은 이름 사전 차단.
+    norm = db.normalize_name(name)
+    with db.get_conn() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM projects "
+            " WHERE team_id = ? AND name_norm = ? AND deleted_at IS NULL",
+            (team_id, norm),
+        ).fetchone()
+    if existing:
         raise HTTPException(status_code=409, detail="같은 이름의 프로젝트가 이미 있습니다.")
     import sqlite3
     try:
-        proj_id = db.create_project(name, color, memo)
+        proj_id = db.create_project(name, color, memo, team_id=team_id)
     except sqlite3.IntegrityError:
+        # race로 인한 중복 — 사전 검사 통과 후 INSERT 직전 다른 호출이 선점한 경우.
         raise HTTPException(status_code=409, detail="같은 이름의 프로젝트가 이미 있습니다.")
     _publish_project_changed(name, "create")
-    return {"id": proj_id, "name": name}
+    return {"id": proj_id, "name": name, "team_id": team_id}
 
 
 @app.put("/api/manage/projects/{name:path}")
@@ -2474,9 +2491,31 @@ async def manage_rename_project(name: str, request: Request):
     target_proj = db.get_project(new_name) if new_name != name else None
     if target_proj and target_proj.get("is_hidden") and not auth.can_edit_project(user, target_proj):
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
-    if new_name != name and not force and db.project_name_exists(new_name):
-        raise HTTPException(status_code=409, detail=f'"{new_name}" 프로젝트가 이미 존재합니다. 병합하시겠습니까?')
-    db.rename_project(name, new_name, merge=bool(force))
+    # 같은 팀 안에서만 충돌 검사 (다른 팀의 동일 이름은 허용).
+    if new_name != name and not force:
+        proj_team_id = proj.get("team_id")
+        if proj_team_id is not None:
+            new_norm = db.normalize_name(new_name)
+            with db.get_conn() as conn:
+                conflict = conn.execute(
+                    "SELECT 1 FROM projects "
+                    " WHERE team_id = ? AND name_norm = ? AND deleted_at IS NULL "
+                    "   AND id != ?",
+                    (proj_team_id, new_norm, proj["id"]),
+                ).fetchone()
+            if conflict:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f'"{new_name}" 프로젝트가 이미 존재합니다. 병합하시겠습니까?',
+                )
+    import sqlite3
+    try:
+        db.rename_project(name, new_name, merge=bool(force))
+    except sqlite3.IntegrityError:
+        raise HTTPException(
+            status_code=409,
+            detail=f'"{new_name}" 프로젝트가 이미 존재합니다. 병합하시겠습니까?',
+        )
     _publish_project_changed(new_name, "update")
     return {"ok": True}
 
@@ -2623,17 +2662,22 @@ async def manage_project_milestones(name: str, request: Request):
 @app.post("/api/manage/hidden-projects")
 async def create_hidden_project_route(request: Request):
     user = _require_editor(request)
-    if not user.get("team_id"):
-        raise HTTPException(status_code=403, detail="팀 소속 사용자만 히든 프로젝트를 생성할 수 있습니다.")
     data = await request.json()
     name = data.get("name", "").strip()
     if not name:
         raise HTTPException(status_code=422, detail="프로젝트 이름을 입력하세요.")
+    # 히든 프로젝트는 항상 팀 컨텍스트 안에서만 생성 가능.
+    explicit_id = data.get("team_id")
+    team_id = auth.resolve_work_team(request, user, explicit_id=explicit_id)
+    if team_id is None:
+        raise HTTPException(status_code=403, detail="팀 소속 사용자만 히든 프로젝트를 생성할 수 있습니다.")
+    auth.require_work_team_access(user, team_id)
     result = db.create_hidden_project(
         name=name,
         color=data.get("color", ""),
         memo=data.get("memo", ""),
         owner_id=user["id"],
+        team_id=team_id,
     )
     if result is None:
         raise HTTPException(status_code=422, detail="생성할 수 없습니다. 다른 이름을 넣어주세요.")

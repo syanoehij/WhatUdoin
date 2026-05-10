@@ -721,8 +721,11 @@ _TEAM_MIGRATION_WARNINGS_KEY = "team_migration_warnings"
 # 본 #1에서는 비어 있다. #2 이후에서 실제 phase를 등록한다.
 PHASES: list = []
 
-# preflight 검사 함수 목록. 각 함수: (conn) -> list[str]  (충돌 메시지 목록)
-# 본 #1에서는 비어 있다. Phase 4 UNIQUE 제약 추가 시 검사 함수를 등록한다.
+# preflight 검사 함수 목록. 각 함수: (conn) -> list[tuple[str, str]]
+#   각 튜플은 (warning_category, message) — 카테고리는 settings.team_migration_warnings에
+#   누적될 때 dedup 단위로 쓰인다(예: 'preflight_projects_team_name').
+# 검사 함수가 raise하면 러너가 ('preflight', '<repr>') 단일 튜플로 변환한다.
+# 본 #1에서는 비어 있다. UNIQUE 제약 추가 시 검사 함수를 등록한다.
 _PREFLIGHT_CHECKS: list = []
 
 
@@ -1514,16 +1517,113 @@ def _phase_4_data_backfill(conn):
 PHASES.append(("team_phase_4_data_backfill_v1", _phase_4_data_backfill))
 
 
+# ── 팀 기능 그룹 A #5 — projects (team_id, name_norm) UNIQUE ─────
+# 본 사이클 본문이 수행하는 일:
+#   1) projects.name_norm 잔존 NULL row 방어용 백필 (Phase 1 본문이 이미 채웠으나
+#      마커 강제 삭제·중간 실패 시나리오에 대비). `WHERE name_norm IS NULL` 가드.
+#   2) (team_id, name_norm) 부분 UNIQUE 인덱스 생성. NULL team_id row는 인덱스 면제
+#      (운영자 #10 후속 정리 영역). `IF NOT EXISTS`로 idempotent.
+#
+# 인덱스 충돌(`team_id IS NOT NULL`인데 동일 (team_id, name_norm) 2+건)은 본문 진입
+# 전 preflight(`_check_projects_team_name_unique`)가 잡아 서버 시작을 거부한다.
+# 운영자가 충돌 row를 정리한 뒤 재시작하면 정상 진입한다.
+
+def _phase_5_projects_unique(conn):
+    """Phase 5: projects (team_id, name_norm) 부분 UNIQUE 인덱스 등록.
+
+    잔존 name_norm NULL row 방어 백필 → 부분 UNIQUE 인덱스(IF NOT EXISTS).
+    빈 DB나 두 번째 init_db()에서는 백필 0건 + 인덱스 노옵으로 끝난다.
+    """
+    if not _table_exists(conn, "projects"):
+        return
+
+    proj_cols = _column_set(conn, "projects")
+    if "name_norm" not in proj_cols:
+        # Phase 1이 컬럼을 추가했어야 한다. 구조적 오류 — 본문 실패로 ROLLBACK.
+        raise RuntimeError("phase 5: projects.name_norm column missing")
+
+    # 1) 잔존 name_norm NULL row 방어 백필.
+    rows = conn.execute(
+        "SELECT id, name FROM projects WHERE name_norm IS NULL"
+    ).fetchall()
+    for row in rows:
+        rid = row["id"] if isinstance(row, sqlite3.Row) else row[0]
+        nm = row["name"] if isinstance(row, sqlite3.Row) else row[1]
+        conn.execute(
+            "UPDATE projects SET name_norm = ? WHERE id = ? AND name_norm IS NULL",
+            (normalize_name(nm), rid),
+        )
+
+    # 2) 부분 UNIQUE 인덱스. SQLite 3.8.0+ partial index 사용.
+    #    team_id IS NULL인 row는 인덱스에서 제외 — 운영자 정리 영역.
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_team_name "
+        "ON projects(team_id, name_norm) WHERE team_id IS NOT NULL"
+    )
+
+
+PHASES.append(("team_phase_5_projects_unique_v1", _phase_5_projects_unique))
+
+
+def _check_projects_team_name_unique(conn):
+    """Preflight: projects (team_id, name_norm) 충돌 검사.
+
+    team_id IS NOT NULL AND name_norm IS NOT NULL 안에서 GROUP BY로 동일 키 2+건이면
+    부분 UNIQUE 인덱스 생성이 실패하므로 사전에 막는다.
+
+    반환: list[(category, message)] — 카테고리는 'preflight_projects_team_name'.
+    충돌 0건이면 빈 리스트 반환(정상 통과).
+    """
+    if not _table_exists(conn, "projects"):
+        return []
+    proj_cols = _column_set(conn, "projects")
+    if "team_id" not in proj_cols or "name_norm" not in proj_cols:
+        # Phase 1·5가 적용되기 전 단계에서는 검사 자체를 skip(노옵).
+        return []
+
+    rows = conn.execute(
+        "SELECT team_id, name_norm, COUNT(*) AS dup, GROUP_CONCAT(id) AS ids "
+        "  FROM projects "
+        " WHERE team_id IS NOT NULL "
+        "   AND name_norm IS NOT NULL "
+        " GROUP BY team_id, name_norm "
+        "HAVING COUNT(*) > 1"
+    ).fetchall()
+
+    conflicts: list = []
+    for row in rows:
+        team_id = row["team_id"] if isinstance(row, sqlite3.Row) else row[0]
+        name_norm = row["name_norm"] if isinstance(row, sqlite3.Row) else row[1]
+        dup = row["dup"] if isinstance(row, sqlite3.Row) else row[2]
+        ids = row["ids"] if isinstance(row, sqlite3.Row) else row[3]
+        conflicts.append((
+            "preflight_projects_team_name",
+            f"projects (team_id={team_id}, name_norm={name_norm!r}) "
+            f"duplicates={dup} ids=[{ids}]",
+        ))
+    return conflicts
+
+
+_PREFLIGHT_CHECKS.append(_check_projects_team_name_unique)
+
+
 def _run_preflight_checks(conn) -> list:
-    """등록된 모든 preflight 검사를 돌려 충돌 메시지를 모은다.
+    """등록된 모든 preflight 검사를 돌려 (카테고리, 메시지) 튜플 목록을 모은다.
+
+    각 검사 함수는 list[tuple[str, str]]을 반환한다 — (category, message).
+    예: ('preflight_projects_team_name', "team_id=1 name_norm='abc' duplicates=2").
+    검사 함수가 raise하면 ('preflight', f'<...> raised: <repr>') 단일 튜플로 변환된다.
     검사 함수가 0개면 빈 리스트 반환(정상 통과)."""
     conflicts: list = []
     for check in _PREFLIGHT_CHECKS:
         try:
             result = check(conn) or []
         except Exception as exc:
-            # 검사 자체 실패도 충돌로 본다(서버 시작 거부)
-            result = [f"preflight check {getattr(check, '__name__', check)!r} raised: {exc!r}"]
+            # 검사 자체 실패도 충돌로 본다(서버 시작 거부) — 일반 카테고리로 기록.
+            result = [(
+                "preflight",
+                f"preflight check {getattr(check, '__name__', check)!r} raised: {exc!r}",
+            )]
         if result:
             conflicts.extend(result)
     return conflicts
@@ -1561,9 +1661,9 @@ def _run_phase_migrations() -> None:
     with get_conn() as conn:
         conflicts = _run_preflight_checks(conn)
         if conflicts:
-            for msg in conflicts:
-                _append_team_migration_warning(conn, "preflight", msg)
-                print(f"{_MIGRATION_LOG_PREFIX} preflight conflict: {msg}")
+            for category, msg in conflicts:
+                _append_team_migration_warning(conn, category, msg)
+                print(f"{_MIGRATION_LOG_PREFIX} preflight conflict[{category}]: {msg}")
             # conn.commit()은 get_conn 종료 시 자동 — 경고는 영속화하고 종료
         # conflicts가 있으면 with 블록 종료 후 raise (경고가 먼저 commit 되도록)
     if conflicts:
@@ -2757,34 +2857,73 @@ def get_all_projects_meta(viewer=None) -> list[dict]:
     return active + inactive
 
 
-def create_project(name: str, color: str = None, memo: str = None) -> int:
+def create_project(name: str, color: str = None, memo: str = None,
+                   team_id: int | None = None) -> int:
+    """프로젝트 생성. team_id가 주어지면 (team_id, name_norm) 안에서 중복 사전 검사.
+
+    team_id=None 호출은 호환 경로 — 운영자 정리 영역에 신규 row를 만든다.
+    팀 컨텍스트 필수인 라우트(`POST /api/manage/projects`)는 항상 team_id 명시.
+    """
+    norm = normalize_name(name)
     with get_conn() as conn:
+        if team_id is not None:
+            existing = conn.execute(
+                "SELECT 1 FROM projects "
+                " WHERE team_id = ? AND name_norm = ? AND deleted_at IS NULL",
+                (team_id, norm),
+            ).fetchone()
+            if existing:
+                raise sqlite3.IntegrityError(
+                    f"project name_norm={norm!r} already exists in team_id={team_id}"
+                )
         cur = conn.execute(
-            "INSERT INTO projects (name, color, memo) VALUES (?, ?, ?)", (name, color, memo)
+            "INSERT INTO projects (name, name_norm, color, memo, team_id) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (name, norm, color, memo, team_id),
         )
     return cur.lastrowid
 
 
-def create_hidden_project(name: str, color: str, memo: str, owner_id: int) -> dict | None:
-    """히든 프로젝트 생성. 이름 중복(휴지통 포함 전체) 시 None 반환."""
+def create_hidden_project(name: str, color: str, memo: str, owner_id: int,
+                          team_id: int | None = None) -> dict | None:
+    """히든 프로젝트 생성. (team_id, name_norm) 안에서 중복 시 None 반환.
+
+    team_id가 None이면 owner의 users.team_id를 fallback으로 사용한다 — 라우트가
+    `resolve_work_team`을 사용해 명시 team_id를 넘기는 게 정상 흐름이지만 호환을 위해 유지.
+    """
+    norm = normalize_name(name)
     with get_conn() as conn:
-        exists = conn.execute(
-            "SELECT 1 FROM projects WHERE LOWER(name) = LOWER(?)", (name,)
-        ).fetchone()
-        if exists:
-            return None
+        # team_id 결정 (명시 인자가 없으면 users.team_id fallback).
+        if team_id is None:
+            owner_row = conn.execute(
+                "SELECT team_id FROM users WHERE id = ?", (owner_id,)
+            ).fetchone()
+            team_id = owner_row["team_id"] if owner_row else None
+
+        # (team_id, name_norm) 중복 검사 — team_id IS NULL인 row끼리는 면제.
+        if team_id is not None:
+            exists = conn.execute(
+                "SELECT 1 FROM projects "
+                " WHERE team_id = ? AND name_norm = ? AND deleted_at IS NULL",
+                (team_id, norm),
+            ).fetchone()
+            if exists:
+                return None
+
         cur = conn.execute(
-            """INSERT INTO projects (name, color, memo, is_hidden, owner_id, team_id)
-               VALUES (?, ?, ?, 1, ?, (SELECT team_id FROM users WHERE id = ?))""",
-            (name, color or None, (memo or "").strip() or None, owner_id, owner_id)
+            "INSERT INTO projects "
+            "    (name, name_norm, color, memo, is_hidden, owner_id, team_id) "
+            "VALUES (?, ?, ?, ?, 1, ?, ?)",
+            (name, norm, color or None, (memo or "").strip() or None,
+             owner_id, team_id),
         )
         project_id = cur.lastrowid
         conn.execute(
             "INSERT INTO project_members (project_id, user_id) VALUES (?, ?)",
-            (project_id, owner_id)
+            (project_id, owner_id),
         )
     return {"id": project_id, "name": name, "color": color, "memo": memo,
-            "is_hidden": 1, "owner_id": owner_id}
+            "is_hidden": 1, "owner_id": owner_id, "team_id": team_id}
 
 
 def get_hidden_project_member_ids(project_id: int) -> list[int]:
@@ -3061,26 +3200,52 @@ def get_unassigned_events() -> list[dict]:
 
 
 def rename_project(old_name: str, new_name: str, merge: bool = False):
+    """프로젝트 이름 변경. 같은 팀 안에서만 (team_id, name_norm) 중복을 차단한다.
+
+    매칭 규칙:
+      - old_proj는 name=old_name로 식별 (legacy 호출부 호환).
+      - target_proj는 (old_proj.team_id, normalize_name(new_name)) 안에서만 검색 →
+        다른 팀의 동일 이름은 충돌이 아니다.
+      - target_proj와 old_proj가 같은 팀에 있고 다른 row면 merge=True 시 합치고,
+        merge=False면 IntegrityError.
+    """
     if old_name == new_name:
         return
+    new_norm = normalize_name(new_name)
     with get_conn() as conn:
         old_proj = conn.execute(
-            "SELECT id FROM projects WHERE name = ? AND deleted_at IS NULL",
+            "SELECT id, team_id FROM projects WHERE name = ? AND deleted_at IS NULL",
             (old_name,)
         ).fetchone()
-        target_proj = conn.execute(
-            "SELECT id FROM projects WHERE name = ? AND deleted_at IS NULL",
-            (new_name,)
-        ).fetchone()
+        old_team_id = old_proj["team_id"] if old_proj else None
+
+        # target_proj는 같은 팀 안에서만 (team_id, name_norm)로 검색.
+        # team_id가 NULL인 row끼리는 (운영자 정리 영역) 충돌 무시 — old_team_id가 NULL이면
+        # 같은 NULL 키들과 매칭하지 않고 None으로 둔다.
+        target_proj = None
+        if old_team_id is not None:
+            target_proj = conn.execute(
+                "SELECT id FROM projects "
+                " WHERE team_id = ? AND name_norm = ? AND deleted_at IS NULL",
+                (old_team_id, new_norm),
+            ).fetchone()
 
         if target_proj and old_proj and target_proj["id"] != old_proj["id"]:
             if not merge:
                 raise sqlite3.IntegrityError(f"project '{new_name}' already exists")
+            # merge 분기는 항상 같은 팀(`old_team_id`) 안에서만 실행된다 — target_proj 검색이
+            # team_id 한정. events/checklists의 project 라벨 갱신도 같은 팀으로 좁혀 다른 팀
+            # 동일 이름이 휘말리지 않도록 한다. old_team_id가 NULL인 경우는 target_proj 자체가
+            # 없으므로 이 분기에 진입하지 않는다.
             conn.execute(
-                "UPDATE events SET project = ? WHERE project = ?", (new_name, old_name)
+                "UPDATE events SET project = ? "
+                " WHERE project = ? AND team_id = ?",
+                (new_name, old_name, old_team_id),
             )
             conn.execute(
-                "UPDATE checklists SET project = ? WHERE project = ?", (new_name, old_name)
+                "UPDATE checklists SET project = ? "
+                " WHERE project = ? AND team_id = ?",
+                (new_name, old_name, old_team_id),
             )
             conn.execute("""
                 DELETE FROM project_milestones
@@ -3099,15 +3264,46 @@ def rename_project(old_name: str, new_name: str, merge: bool = False):
             )
             return
 
-        conn.execute(
-            "UPDATE projects SET name = ? WHERE name = ?", (new_name, old_name)
-        )
-        conn.execute(
-            "UPDATE events SET project = ? WHERE project = ?", (new_name, old_name)
-        )
-        conn.execute(
-            "UPDATE checklists SET project = ? WHERE project = ?", (new_name, old_name)
-        )
+        # 일반 rename: 다른 팀의 동일 이름(다른 row)을 휩쓸지 않도록 id 한정.
+        # old_proj가 None인 경우(orphan label rename — events/checklists에만 존재)는 기존
+        # 전역 동작을 유지한다 — projects 테이블 갱신이 일어나지 않으므로 안전.
+        if old_proj is not None:
+            conn.execute(
+                "UPDATE projects SET name = ?, name_norm = ? WHERE id = ?",
+                (new_name, new_norm, old_proj["id"]),
+            )
+            if old_team_id is not None:
+                conn.execute(
+                    "UPDATE events SET project = ? "
+                    " WHERE project = ? AND team_id = ?",
+                    (new_name, old_name, old_team_id),
+                )
+                conn.execute(
+                    "UPDATE checklists SET project = ? "
+                    " WHERE project = ? AND team_id = ?",
+                    (new_name, old_name, old_team_id),
+                )
+            else:
+                # team_id NULL (운영자 정리 영역): 기존 전역 동작 유지 — 같은 NULL 키 안에서만
+                # 의미가 있다고 가정. 실제로는 NULL 잔존 row가 거의 없으므로 노이즈도 적다.
+                conn.execute(
+                    "UPDATE events SET project = ? WHERE project = ?",
+                    (new_name, old_name),
+                )
+                conn.execute(
+                    "UPDATE checklists SET project = ? WHERE project = ?",
+                    (new_name, old_name),
+                )
+        else:
+            # orphan label rename: events/checklists에만 존재하는 프로젝트 이름의 일괄 변경.
+            conn.execute(
+                "UPDATE events SET project = ? WHERE project = ?",
+                (new_name, old_name),
+            )
+            conn.execute(
+                "UPDATE checklists SET project = ? WHERE project = ?",
+                (new_name, old_name),
+            )
 
 
 def delete_project(name: str, deleted_by: str = None, team_id: int = None):

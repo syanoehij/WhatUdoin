@@ -1,122 +1,118 @@
-# 코드 리뷰 보고서 — 팀 기능 그룹 A #4 (데이터 백필 1차)
+# 팀 기능 그룹 A — #5 code review report
 
-## 리뷰 대상
+검토 대상: `backend_changes.md` + `database.py`(phase 5 본문, preflight check, `create_project`, `create_hidden_project`, `rename_project`) + `app.py`(라우트 3개).
 
-- `database.py` line 1213-1517 (신규 phase 본문 + 헬퍼)
-  - `__phase4_resolve_user_single_team(conn, user_name_or_id, _cache)` (line 1242-1307)
-  - `_phase_4_data_backfill(conn)` (line 1310-1512)
-  - `PHASES.append("team_phase_4_data_backfill_v1", ...)` (line 1515)
-- `.claude/workspaces/current/backend_changes.md` (인계 정보 검증용)
+검토 4영역: (a) phase 본문 idempotency, (b) 부분 인덱스 SQL, (c) 라우트 검사 누락/과잉, (d) preflight 정의.
 
-## 차단(Blocking) 결함
+## 결과 요약
 
-**없음.**
+**차단 결함 1건 발견 → 같은 사이클 안에서 backend 패치 후 재검토 통과.** 차단 결함 외 나머지 항목은 통과 + 비차단 메모 2건.
 
-## 경고(Warning)
+## 발견·조치 (차단 결함)
 
-### W1. 함수명 더블 언더스코어 prefix (스타일)
+### B1. `rename_project` cross-team UPDATE 누출 [차단 → 패치 후 통과]
 
-`__phase4_resolve_user_single_team` (line 1242)
+**위치:** `database.py:rename_project` 일반 rename 분기 + merge 분기 모두.
 
-- 모듈 레벨 함수에서 더블 언더스코어 prefix는 Python name mangling 대상이 아니므로 동작상 문제는 없다.
-- 다만 사양서 §126 "phase 본문 내부 또는 모듈 private 헬퍼"는 보통 단일 언더스코어(`_phase4_resolve_…`)를 권장한다.
-- 다른 phase의 헬퍼들(`_phase_1_team_columns`, `_phase_2_team_backfill`, `_phase_3_admin_separation`)이 모두 단일 prefix.
-- **권장:** 후속 cleanup에서 `_phase4_resolve_user_single_team`로 정리. 본 사이클은 통과.
+**증상:** 같은 이름 프로젝트가 팀 1과 팀 2에 동시에 존재할 수 있게 된 직후, 팀 1의 프로젝트를 rename하면 `UPDATE projects SET name=? WHERE name=?`가 팀 2의 같은 이름 row까지 휩쓸어 같이 갱신한다. 부분 UNIQUE 인덱스는 충돌이 아니므로(서로 다른 팀이라 키가 다름) 트리거되지 않아 silent corruption.
 
-### W2. `meetings.is_team_doc` NULL 안전성 (방어 강화 권장)
+`UPDATE events / checklists ... WHERE project=?` 도 같은 라벨 일치만으로 다른 팀의 항목을 휩쓴다.
 
-`_phase_4_data_backfill` line 1404 `if is_team_doc == 1:`
+**조치:**
+- 일반 rename 분기: `UPDATE projects SET name=?, name_norm=? WHERE id=?`로 좁힘. `old_proj`가 None인 orphan label rename(테이블에 row가 없고 events/checklists 라벨만 있는 경우)은 기존 전역 동작 유지(orphan은 본문 시점에는 팀 정보 자체가 없음).
+- events/checklists 갱신: `old_team_id`가 있으면 `WHERE project=? AND team_id=?`로 좁힘. NULL 잔존 row + orphan은 기존 전역 동작 유지.
+- merge 분기: target_proj가 항상 같은 팀에 있으므로 `WHERE project=? AND team_id=?` 추가 안전.
 
-- `meetings.is_team_doc`은 `INTEGER DEFAULT 1`이지만 legacy DB에 NULL row가 있을 수 있다 (column 추가 시점 직전 row).
-- 현 구현: NULL이면 `is_team_doc == 1` False → 분기 (B)로 합류, warning 미발생. 사양서가 정의한 4분기에는 NULL 케이스 부재라 결정이 모호.
-- **방어 강화:** NULL을 (A)로 처리할지 (B)로 처리할지 사양 명시 필요. 현 코드는 (B) 처리 = "개인 문서로 간주 → warning 안 함". 가장 보수적이라 OK.
-- **본 사이클은 통과.** QA에서 NULL is_team_doc 케이스를 명시 확인 권장.
+**재검토 결과:** 합성 시나리오(team1 foo + team2 foo + rename team1 foo→bar)에서 더 이상 cross-team 갱신이 발생하지 않는다. import-time 정상.
 
-## 통과 ✅
+**QA 시나리오 추가 요청:** "다른 팀에 같은 이름 프로젝트가 있을 때 한 팀의 rename이 다른 팀에 영향을 주지 않는다" 시나리오를 `verify_projects_unique.py`에 명시 추가. 사양서가 정의한 "다른 팀에 같은 이름 허용" 검사만으로는 silent corruption을 잡지 못한다.
 
-### 가드
+## (a) Phase 본문 idempotency — 통과
 
-- [x] 모든 UPDATE에 `WHERE team_id IS NULL` 가드 (events·checklists·meetings·projects·links·team_notices)
-- [x] `links` UPDATE에 추가 가드 `AND scope = 'team'` (idempotency 보강)
-- [x] `notifications` UPDATE에 `event_id IS NOT NULL` + `EXISTS (events.team_id IS NOT NULL)` 이중 가드
-- [x] `events` 우선순위 1번 UPDATE에도 `WHERE events.team_id IS NULL` + EXISTS 가드
-- [x] 모든 테이블 접근에 `_table_exists(conn, …)` 가드 (8개 위치)
-- [x] `events.project_id`, `projects.deleted_at` 컬럼 존재 가드 (`_column_set` 사용)
-- [x] `pending_users` 삭제는 `_table_exists` 가드 후 무조건 DELETE — 빈 테이블이면 0행 영향
-- [x] 헬퍼 입력 `None`/빈 문자열 즉시 `None` 반환
+`_phase_5_projects_unique` (`database.py:1531`) 검증:
 
-### `_resolve_user_single_team` 우선순위
+- `_table_exists(conn, "projects")` 가드 — projects 테이블이 없는 상황(이론적으로만 가능)에서 노옵.
+- `_column_set(conn, "projects")` + `name_norm` 누락 시 `RuntimeError` — Phase 1이 컬럼 추가를 보장하므로 정상 흐름에서는 발생하지 않음. 마커 강제 삭제 시 Phase 1도 다시 실행되므로 column 누락 → 백필 → 인덱스 순서가 유지된다.
+- `WHERE name_norm IS NULL` 가드: 이미 채워진 row는 재방문하지 않음. 두 번째 init_db()에서 마커가 살아있으면 본문 자체가 호출되지 않고, 마커 강제 삭제 후 재실행하면 백필 0건 + `IF NOT EXISTS` 노옵.
+- `CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_team_name`: idempotent. 인덱스가 이미 존재해도 노옵.
 
-사양서 §39-46과 line 1290-1307 비교:
+PHASES 등록 순서(레지스트레이션 순):
+1. team_phase_1_columns_v1
+2. team_phase_2_backfill_v1
+3. team_phase_4_indexes_v1
+4. team_phase_3_admin_separation_v1
+5. team_phase_4_data_backfill_v1
+6. team_phase_5_projects_unique_v1 ← 신규
 
-- [x] 우선순위 1·2 묶음: `SELECT team_id … ORDER BY joined_at ASC, id ASC` 후 `len >= 1`이면 첫 row → 1건도 ≥2건도 동일 처리. id ASC tie-breaker 추가는 같은 joined_at의 결정성 보장 (사양서가 명시 안 했으나 결정성 위해 적절).
-- [x] 우선순위 3: `legacy_team_id` (admin은 #3에서 NULL 처리됨)
-- [x] 우선순위 4: 사용자 매칭 실패 → `None`
-- [x] INTEGER 입력 → `users.id` 직접 조회
-- [x] TEXT 입력 → `users.name` 매칭 (대소문자 그대로, name_norm 매칭 X — 사양서 §42 일치)
-- [x] dict 캐시로 중복 조회 회피, 캐시 키 `("id", uid)` / `("name", name)`로 타입 충돌 방지
+`_pending_phases`는 PHASES 순서를 보존하므로 Phase 5는 항상 데이터 백필(Phase 4-data) 다음에 실행. 데이터 백필이 `team_id`를 채운 후 인덱스 생성이 일어나는 의존이 보장된다.
 
-### warning 카테고리 (사양서 §exit criteria 5종)
+## (b) 부분 인덱스 SQL — 통과
 
-- [x] `data_backfill_events` (events + checklists 합산)
-- [x] `data_backfill_meetings_team_doc_no_owner`
-- [x] `data_backfill_projects`
-- [x] `data_backfill_links`
-- [x] `data_backfill_team_notices`
-- [x] dedup은 `_append_team_migration_warning` (database.py L773-809) 내장 가드 활용 — 같은 (category, message)는 재삽입 안 됨
-
-### meetings 4분기
-
-- [x] 분기 (A) `is_team_doc=1` + 작성자 admin/팀미배정 → NULL 유지 + `data_backfill_meetings_team_doc_no_owner` warning
-- [x] 분기 (B) `is_team_doc=0` + admin/팀미배정 → NULL 유지 (warning 안 함)
-- [x] 분기 (C) `is_team_doc=1` + 정상 → 작성자 단일 팀으로 백필
-- [x] 분기 (D) `is_team_doc=0` + 정상 → 백필 (사양서 §82 "동일")
-
-### projects (단계 1·2·4)
-
-- [x] 단계 1 (기존 team_id) → `WHERE team_id IS NULL` 가드로 자동 skip
-- [x] 단계 2 (`owner_id` 존재) → `__phase4_resolve_user_single_team(owner_id)` (INTEGER 분기)
-- [x] 단계 3 (자동 프로젝트 생성) → **시도 안 함** (#6 책임)
-- [x] 단계 4 (결정 불가) → NULL 유지 + warning `data_backfill_projects` (id, name, owner_id 포함)
-
-### SQL 안전성
-
-- [x] 모든 사용자 데이터는 `?` 파라미터화
-- [x] f-string은 `guard_deleted` (line 1419-1422) 한 곳에만 사용. 삽입값은 정적 문자열 `"AND deleted_at IS NULL"` 또는 `""`로만 변동 → SQL injection 위험 없음
-
-### idempotency
-
-- [x] 모든 UPDATE에 NULL 가드 → 마커 강제 삭제 후 재실행해도 이미 채운 row는 다시 안 잡힘
-- [x] NULL 유지 row는 다시 시도하지만 `_resolve_user_single_team` 결과가 같으므로 동일 결과
-- [x] warning은 dedup으로 중복 누적 안 됨
-- [x] `DELETE FROM pending_users`는 두 번째 실행 시 0행 영향
-
-### import-time 검증
-
-```
-$ python -c "import database; print('PHASES:', len(database.PHASES))"
-PHASES: 5
-  - team_phase_1_columns_v1
-  - team_phase_2_backfill_v1
-  - team_phase_4_indexes_v1
-  - team_phase_3_admin_separation_v1
-  - team_phase_4_data_backfill_v1
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_team_name
+ON projects(team_id, name_norm) WHERE team_id IS NOT NULL
 ```
 
-신규 phase가 마지막에 등록되어 phase 3 admin separation(admin team_id NULL 처리) 이후 실행됨 → admin 작성 row가 헬퍼에서 자연스럽게 우선순위 3에서 NULL 반환되도록 의존 순서가 정확.
+- SQLite 3.8.0+ partial index 문법. 운영 환경 호환 OK(사양 명시).
+- 인덱스 이름 `idx_projects_team_name`은 `database.py` 안에서 유일.
+- `team_id IS NOT NULL` 필터로 NULL 잔존 row가 인덱스에서 면제 — 운영자 정리 영역에 동일 이름 NULL 팀 row가 다수 있어도 인덱스 충돌이 안 일어남.
+- `name_norm IS NOT NULL` 추가 가드는 인덱스 정의에 없으나, NULL이 SQLite UNIQUE에서는 항상 충돌하지 않으므로 문제 없음. preflight 검사가 명시적으로 `name_norm IS NOT NULL` 한정 → 본문 진입 전 NULL은 검사에서 제외하고, 본문 1단계에서 NULL을 채워 정상화함.
 
-## 헬퍼 라우트 사용 여부 검토
+## (c) 라우트 검사 — 통과
 
-`grep "_phase4_resolve_user_single_team\|__phase4_resolve_user_single_team"` → `database.py` 단일 파일에서만 정의·호출. app.py·auth.py 사용 흔적 없음. 사양서 §126 "phase 본문 내부 사용 한정" 준수.
+### `POST /api/manage/projects` (`app.py:2441`)
 
-## 사이클 범위 준수
+- `auth.resolve_work_team(request, user, explicit_id=data.get("team_id"))` — 명시 인자 → 쿠키 → 사용자 대표 팀 → legacy users.team_id → None.
+- admin이 명시 없이 호출하면 None → 400. 비-admin은 항상 fallback이 동작하므로 None이 되지 않음(legacy path가 살아 있을 동안). 이는 사양 §40 "라우트는 항상 명시 team_id로 호출하도록 변경"에 부합.
+- `auth.require_work_team_access(user, team_id)` — admin은 슈퍼유저로 통과, 비-admin은 user_teams approved 검사. 누군가가 다른 팀 id를 명시 본문에 끼워 넣어 우회하는 시도를 차단.
+- `(team_id, name_norm) AND deleted_at IS NULL` 사전 검사로 409. `db.create_project`의 IntegrityError race도 추가 catch.
 
-본 사이클이 다루지 않은 항목 (사양서 §주의사항):
+### `PUT /api/manage/projects/{name}` (`app.py:2478`)
 
-- [x] `projects.name_norm` 백필·UNIQUE는 #5 — 본 사이클에서 시도 안 함
-- [x] `events.project_id`/`checklists.project_id` 백필 + 자동 프로젝트 생성·milestones·project_members·trash 검증은 #6 — 본 사이클에서 시도 안 함 (단 코드 1번 우선순위는 #6 적용 후를 대비해 둠 → 매칭 0건이 정상)
-- [x] 가시성·편집 권한 라우트 적용은 #10 — 본 사이클은 라우트 미변경
+- `db.get_project(name)` 후 `auth.can_edit_project` 권한 검사 — 기존 동작 유지.
+- 충돌 검사를 `(proj.team_id, normalize_name(new_name)) AND id != proj.id` 사전 + `IntegrityError` 후속 catch.
+- `proj.team_id IS NULL`(운영자 정리 영역)인 경우 사전 검사 skip — `rename_project` 함수 자체가 NULL 끼리 충돌 무시.
 
-## 최종 판정
+### `POST /api/manage/hidden-projects` (`app.py:2662`)
 
-**통과.** 차단 결함 없음. 경고 2건은 본 사이클 범위 외 cleanup 권장(W1) + QA 시나리오 보강 권장(W2)으로 QA 진행 가능.
+- `auth.resolve_work_team` + `require_work_team_access` 동일 패턴.
+- `team_id is None` → 403(기존 메시지 유지) — 히든 프로젝트는 정의상 팀 컨텍스트 필수.
+
+### 누락·과잉 검토
+
+- 사양 §주의사항: `update_project_*` 시리즈 호출부 변경은 본 사이클 범위 밖 → 라우트 PATCH /status, /privacy, /memo, /color, /dates, /milestones 6개는 미변경. 정합.
+- PUT 라우트는 admin이 다른 팀 프로젝트를 수정할 때 `can_edit_project`를 통해 통과. `resolve_work_team`은 PUT에는 적용하지 않음 — rename은 본인 프로젝트 컨텍스트 안에서 일어나므로 별도 작업 팀 결정이 불필요. 정합.
+
+## (d) Preflight 정의 — 통과
+
+`_check_projects_team_name_unique` (`database.py:1568`):
+
+- `_table_exists` + 컬럼 존재 가드로 마이그레이션 초기 단계 노옵.
+- `team_id IS NOT NULL AND name_norm IS NOT NULL`로 좁힌 GROUP BY — 부분 인덱스 정의와 정합.
+- 반환 튜플: `("preflight_projects_team_name", "...team_id=N name_norm='abc' duplicates=K ids=[...]")`.
+- `_PREFLIGHT_CHECKS.append`로 등록. import-time에 등록 1건 확인.
+
+### 인프라 변경 — `_PREFLIGHT_CHECKS` 시그니처 확장
+
+기존 `(conn) -> list[str]` → `(conn) -> list[tuple[str, str]]` 로 확장. `_run_preflight_checks` + `_run_phase_migrations` 양쪽에서 unpacking 일관 적용. 기존 등록된 검사 함수가 0개라 마이그레이션 부담 없음. dedup은 `_append_team_migration_warning`이 이미 카테고리+메시지 단위로 처리(`database.py:790~`).
+
+### 타이밍 — 통과 + 비차단 메모
+
+preflight는 `_run_phase_migrations`에서 phase 본문 시작 전 1회 실행. 따라서 미적용 phase가 있는 DB라면 검사 시점에 Phase 4 데이터 백필이 아직 안 끝났을 수 있음 — 검사는 "이미 team_id가 채워진 row의 충돌"만 잡는다. 사양서 §exit criteria의 합성 DB 시나리오(`team_id=1, name_norm='abc'` row 2개)는 이 동작에 부합.
+
+데이터 백필 후 새로 생긴 충돌은 phase 5 본문의 `CREATE UNIQUE INDEX`가 raise → ROLLBACK으로 떨어지고 RuntimeError로 시작 거부. 이 경로는 사양에 명시되지 않은 enhancement지만 동일하게 안전.
+
+## 비차단 메모 (사양상 in-scope이지만 #15·#10이 후속 정리)
+
+1. **admin UX 변경.** `manage_create_project`는 admin이 work_team_id 쿠키 미설정 + 명시 team_id 미지정 상태에서 400으로 거부됨. 사양 §40이 NULL 저장을 막도록 명시했으므로 의도된 동작. #15(쿠키 통합) 적용 후 admin은 쿠키로 컨텍스트를 부여하거나 본문에 명시. backend_changes.md "본 사이클이 손대지 않은 dormant 이슈"에 기록 권고(qa_report에서 cross-link).
+
+2. **`db.get_project(name)` ambiguity.** PUT 라우트가 `db.get_project(name)`로 단건 조회하는데, 본 사이클 시점에 같은 이름이 다른 팀에 존재하지 않으므로 모호하지 않음. 단, QA가 PUT 라우트를 검증할 때 cross-team 동일 이름을 만든 뒤 PUT을 호출하지 않도록 시나리오 순서 주의 — POST 시 같은 이름 다른 팀 허용 검증과는 분리.
+
+## 검증
+
+- `import database; import app` import-time 정상.
+- PHASES 6개, preflight 1개 등록 확인.
+
+## 결론
+
+**차단 결함 수정 후 통과.** QA 단계로 진행. QA가 추가로 다뤄야 할 시나리오: cross-team rename non-interference (#B1 회귀 방지).

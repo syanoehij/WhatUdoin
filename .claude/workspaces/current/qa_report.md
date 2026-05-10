@@ -1,115 +1,85 @@
-# QA 보고서 — 팀 기능 그룹 A #4 (데이터 백필 1차)
+# 팀 기능 그룹 A — #5 QA report
 
-## 검증 방식
+검증 스크립트: `.claude/workspaces/current/scripts/verify_projects_unique.py`.
+실행 환경: Python 3.12, SQLite via stdlib `sqlite3`. 각 시나리오는 별도 `WHATUDOIN_RUN_DIR`(임시 디렉토리)에서 독립 subprocess로 실행되어 module-level state(`DB_PATH`, `_WAL_MODE_READY`, PHASES 마커) 오염 없음.
 
-`team_phase_4_data_backfill_v1`을 합성 DB로 검증. 실서버 미사용 (VSCode 디버깅 모드 호환).
+VSCode 디버깅 모드 — 본 사이클은 import-time + 합성 DB 검증만 수행, 실서버 재시작 불필요.
 
-- 스크립트: `.claude/workspaces/current/scripts/verify_data_backfill.py`
-- 실행: `python .claude/workspaces/current/scripts/verify_data_backfill.py`
-- 격리: 매 시나리오마다 `tempfile.mkdtemp()`로 새 DB + `WHATUDOIN_RUN_DIR`/`WHATUDOIN_BASE_DIR` 환경변수 격리 + `database` 모듈 reload
-- phase 본문 단독 호출: 합성 데이터 주입 → `reset_phase4_marker()` → `db._run_phase_migrations()`
+## 시나리오 결과 — 9/9 PASS
 
-## 결과
+| # | 시나리오 | 사양 매핑 | 결과 |
+|---|---------|----------|------|
+| 1 | empty_db | "빈 DB → phase 본문 노옵, 인덱스 신규 생성" | PASS |
+| 2 | backfill_null_name_norm | "잔존 NULL name_norm row + 같은 팀 다른 프로젝트 → 백필 후 부분 UNIQUE 인덱스" | PASS |
+| 3 | preflight_conflict | "합성 DB (team_id=1, name_norm='abc') 2건 → 시작 거부 + warning(`preflight_projects_team_name`)" | PASS |
+| 4 | cross_team_same_name_allowed | "같은 이름 다른 팀에 생성 → 성공" | PASS |
+| 5 | same_team_duplicate_blocked | "같은 팀 안에서 같은 이름(대소문자·NFC 차이 포함) 두 번째 생성 차단" + "rename 충돌 차단" | PASS |
+| 6 | null_team_id_exempt | "team_id IS NULL 끼리 같은 이름 허용" | PASS |
+| 7 | marker_strip_idempotent | "마커 강제 삭제 후 재실행 → 백필 0건, IF NOT EXISTS 노옵" | PASS |
+| 8 | cross_team_rename_no_interference | (B1 회귀 방지) "다른 팀의 동일 이름 프로젝트가 rename 시 휘말리지 않음" | PASS |
+| 9 | hidden_project_team_scoped | "히든 프로젝트도 (team_id, name_norm) 정책 — 같은 팀 차단, 다른 팀 허용" | PASS |
+
+## 시나리오 본문 요약
+
+### 1. empty_db — 빈 DB → phase 본문 노옵 + 인덱스 신규 생성
+- `init_db()` 1회 호출.
+- 검증: `settings`에 phase 마커 6개(`team_phase_{1,2,4_indexes,3,4_data_backfill,5}_*`), `idx_projects_team_name` 인덱스 존재, `team_migration_warnings`에 `preflight_projects_team_name` 카테고리 없음.
+
+### 2. backfill_null_name_norm
+- `init_db()` 1회 → 팀+프로젝트 2건 삽입(같은 팀 다른 이름) → 한 row의 `name_norm`을 NULL로 강제 → phase 5 마커 삭제 → `init_db()` 재호출.
+- 검증: 재실행 후 `name_norm`이 `normalize_name(name)`으로 채워지고, 인덱스 그대로 유지(IF NOT EXISTS).
+
+### 3. preflight_conflict
+- `init_db()` 1회 → 인덱스 DROP + phase 5 마커 삭제 → 같은 팀에 같은 `name_norm` row 2건 삽입(`Alpha`/`ALPHA` casefold 동일) → warnings 초기화 → `init_db()` 재호출.
+- 검증: `RuntimeError("migration preflight failed with 1 conflict(s); ...")` 발생. `team_migration_warnings`에 `preflight_projects_team_name` 카테고리 추가. preflight 메시지: `projects (team_id=N, name_norm='alpha') duplicates=2 ids=[X,Y]`.
+
+### 4. cross_team_same_name_allowed
+- 두 팀 생성 → `db.create_project("Shared", ..., team_id=t1)` + `db.create_project("Shared", ..., team_id=t2)`.
+- 검증: 두 row의 id 분리, `team_id` 각각 t1/t2로 저장, 동시 존재.
+
+### 5. same_team_duplicate_blocked
+- `db.create_project("MyProj", ..., team_id=t1)` 후 `db.create_project("MYPROJ", ..., team_id=t1)` 시도.
+- 검증: `sqlite3.IntegrityError`. (사전 검사가 casefold 동일 → 차단; 추가로 부분 UNIQUE 인덱스도 backstop.)
+- 추가: `db.create_project("Other", ..., team_id=t1)` 후 `db.rename_project("Other", "myproj")` 시도 → `sqlite3.IntegrityError`.
+
+### 6. null_team_id_exempt
+- `db.create_project("Floating", ..., team_id=None)` × 2.
+- 검증: 두 row 동시 존재. 부분 UNIQUE 인덱스의 `WHERE team_id IS NOT NULL` 정의 정합.
+
+### 7. marker_strip_idempotent
+- `init_db()` 1회 → phase 5 마커만 삭제(인덱스 유지) → `init_db()` 재호출.
+- 검증: 마커 재기록, 인덱스 그대로(IF NOT EXISTS), 백필 0건(`WHERE name_norm IS NULL` 가드).
+
+### 8. cross_team_rename_no_interference (B1 회귀 방지 — code review에서 발견)
+- 두 팀 생성 → 양 팀에 `foo` 프로젝트 + 양 팀에 `events.project='foo'` 1건씩 → `db.rename_project("foo", "bar")`.
+- 검증:
+  - 두 projects row 중 정확히 하나만 `bar`, 다른 하나는 `foo` 유지.
+  - rename된 팀의 events.project='bar', 다른 팀의 events.project='foo' 유지.
+- 결론: `rename_project`의 일반 분기가 `WHERE id = ?`로 좁혀졌고 events/checklists 갱신이 `team_id` 한정으로 동작.
+
+### 9. hidden_project_team_scoped — 사양 §exit criteria "히든 프로젝트도 같은 정책"
+- 두 팀 + 한 사용자(team_id=t1, role=member) 생성.
+- `db.create_hidden_project("Secret", "#fff", "memo", owner_id=alice, team_id=t1)` → 성공.
+- `db.create_hidden_project("SECRET", "#000", None, owner_id=alice, team_id=t1)` → None (casefold 동일, 같은 팀 차단).
+- `db.create_hidden_project("Secret", "#abc", None, owner_id=alice, team_id=t2)` → 다른 id로 성공.
+- 검증: `is_hidden=1` row가 두 팀에 각 1개씩 존재.
+
+## 비차단 메모
+
+1. **admin UX 변화** — `POST /api/manage/projects`는 admin이 work_team_id 쿠키 미설정 + 명시 team_id 미지정 상태에서 400으로 거부됨. 사양 §40이 NULL 저장 회피를 명시했으므로 의도된 변경. #15(쿠키 통합) 적용 후 admin은 쿠키나 본문 명시로 컨텍스트를 결정. backend_changes.md "본 사이클이 손대지 않은 dormant 이슈" 섹션에 기록되어 있음.
+
+2. **`db.get_project(name)` ambiguity** — PUT rename 라우트가 사용. 본 사이클 시점에는 cross-team 동일 이름 row가 아직 존재하지 않으므로 모호하지 않음. QA에서 cross-team 동일 이름은 POST 라우트 검증 시나리오에서만 만들고 PUT 검증은 별도 setup. #10(가시성 라우트 적용)에서 team_id 파라미터 명시화 예정.
+
+3. **단독 시나리오 실행 시 백업 누적** — `verify_projects_unique.py --scenario N`(특정 시나리오 단독 실행)은 RUN_DIR 격리를 거치지 않으므로 `D:\Github\WhatUdoin\backupDB\`에 백업이 생성될 수 있음. 정상 흐름(인자 없이 전체 실행)은 모두 임시 디렉토리에서 동작하므로 영향 없음. 운영 환경에서는 단독 실행을 권장하지 않음.
+
+## 검증 명령
 
 ```
-결과: 40/40 passed, 0 failed
+"D:/Program Files/Python/Python312/python.exe" .claude/workspaces/current/scripts/verify_projects_unique.py
 ```
 
-## 시나리오 매트릭스
+마지막 실행 결과: `OK: all 9 scenarios pass`.
 
-### 시나리오 1 — 빈 DB 노옵 (4/4)
-- [x] 1.1 빈 DB `init_db()` 성공
-- [x] 1.2 phase 4 마커 존재
-- [x] 1.3 빈 DB → 백필 warning 카테고리 누적 없음
-- [x] 1.4 `pending_users` 0건
+## 결론
 
-### 시나리오 2 — 정상 케이스 7개 백필 (10/10)
-- [x] 2.1 events.team_id 백필 (작성자 alice → team 1, bob → team 2)
-- [x] 2.2 checklists.team_id 백필
-- [x] 2.3 meetings 분기 (C) `is_team_doc=1` + 정상 작성자
-- [x] 2.4 meetings 분기 (D) `is_team_doc=0` + 정상 작성자
-- [x] 2.5 projects.team_id 백필 — `owner_id` 기반 단계 2
-- [x] 2.6 notifications.team_id 백필 — `events.team_id` 의존
-- [x] 2.7 links.team_id 백필 — `scope='team'`
-- [x] 2.8 links `scope='personal'` 영향 없음 (NULL 그대로)
-- [x] 2.9 team_notices.team_id 백필
-- [x] 2.10 정상 케이스만 → 백필 warning 누적 없음
-
-### 시나리오 3 — 결정 불가 → NULL 유지 + warning 5종 (7/7)
-- [x] 3.1 events 결정 불가 → NULL + `data_backfill_events`
-- [x] 3.2 checklists 결정 불가 → `data_backfill_events` 카테고리에 합산 + 메시지 prefix `checklists`
-- [x] 3.3 meetings 분기 (A) admin + `is_team_doc=1` → `data_backfill_meetings_team_doc_no_owner`
-- [x] 3.4 projects 단계 4 → `data_backfill_projects`
-- [x] 3.5 links 결정 불가 → `data_backfill_links`
-- [x] 3.6 team_notices 결정 불가 → `data_backfill_team_notices`
-- [x] 3.7 사용된 카테고리는 정확히 5종 (사양서 §exit criteria 일치)
-
-### 시나리오 4 — meetings 4분기 (5/5)
-- [x] 4.A admin + `is_team_doc=1` → NULL
-- [x] 4.A admin + `is_team_doc=1` → warning `meetings_team_doc_no_owner` 생성
-- [x] 4.B admin + `is_team_doc=0` → NULL + warning 생성 안 함 (정상)
-- [x] 4.C member + `is_team_doc=1` → 백필
-- [x] 4.D member + `is_team_doc=0` → 백필
-
-### 시나리오 5 — notifications event_id 분기 (5/5)
-- [x] 5.1 event_id 매칭 + `events.team_id` 있음 → 백필
-- [x] 5.2 event_id 매칭 + `events.team_id` NULL → NULL 유지
-- [x] 5.3 event_id NULL → NULL 유지
-- [x] 5.4 event_id가 존재하지 않는 이벤트 가리킴 → NULL 유지
-- [x] 5.5 notifications 백필이 warning 카테고리 누적 안 함 (transient noise 회피)
-
-### 시나리오 6 — links scope 분기 (4/4)
-- [x] 6.1 personal + team_id NULL → NULL 그대로
-- [x] 6.2 personal + team_id=99(비정상 데이터) → 99 보존 (가드가 `scope='team'`만 잡음)
-- [x] 6.3 team + 정상 → 백필
-- [x] 6.4 team + 결정 불가 → NULL + `data_backfill_links` warning
-
-### 시나리오 7 — pending_users 자동 삭제 (1/1)
-- [x] 7.1 status 무관 (pending/rejected/approved) 모두 삭제 → 0건
-
-### 시나리오 8 — idempotency (3/3)
-- [x] 8.1 마커 강제 삭제 + 재실행 → events 백필 결과 동일 (NULL row는 다시 시도하지만 결과 같음)
-- [x] 8.2 warning dedup — 같은 (category, message) 두 번째 실행에서 재누적 안 됨
-- [x] 8.3 phase 4 마커 재생성
-
-### 시나리오 9 — 다중 팀 멤버 우선순위 (1/1)
-- [x] 9.1 user_teams ≥2건 → `joined_at` 가장 이른 팀(t2)으로 백필 (사양서 §44 우선순위 2)
-
-## 통과 ✅
-
-### 사양서 exit criteria 검증
-
-- [x] 빈 DB → phase 본문 노옵 (UPDATE/DELETE 모두 0행 영향, warning 누적 없음)
-- [x] 합성 구 DB → 정상 케이스 채워지고 실패 케이스는 NULL 유지 + warning 누적
-- [x] 두 번째 init_db() → 마커 덕에 phase 미실행 (1.2에서 마커 존재 확인)
-- [x] 마커 강제 삭제 후 재실행 → 가드 덕에 결과 동일 (8.1·8.2)
-- [x] meetings 4분기 모두 검증 (특히 admin + `is_team_doc=1` warning 생성 4.A)
-- [x] notifications.team_id → events.team_id NULL이면 그대로 NULL (5.2)
-- [x] links scope='personal' 영향 없음 (2.8, 6.1, 6.2)
-- [x] pending_users 마이그레이션 후 0건 (7.1)
-- [x] warning 카테고리 정확히 5종 (3.7)
-- [x] 같은 row 두 번 시도해도 dedup으로 중복 누적 안 됨 (8.2)
-
-## 회귀 확인
-
-- [x] 기존 phase 1·2·3·4(indexes) 모두 OK 로그 출력 (모든 시나리오의 마이그레이션 출력에서 확인)
-- [x] `init_db()` 자체는 본 사이클에서 변경 없음 — 기존 백필·시드 동작 보존
-
-## 발견된 경계 사례 (참고)
-
-1. **시나리오 6.2** — 비정상 데이터 (`scope='personal'` + `team_id=99`)는 백필 가드(`scope='team'`)에 의해 영향 받지 않음. 이는 사양서 의도와 일치 (백필은 NULL row만 채움, 기존 값 보존).
-2. **시나리오 5.4** — 존재하지 않는 event_id를 가리키는 notification은 EXISTS 가드로 NULL 유지. SQL subquery NULL 안전성 확인됨.
-3. **다중 팀 + legacy users.team_id 충돌**: scenario 9에서 user.team_id=1이지만 user_teams 가장 이른 팀이 t2라면 헬퍼는 user_teams 우선(우선순위 1·2 > 3)이라 t2 반환. 이 동작은 사양서 §43-46과 일치.
-
-## 회신 검증 사항
-
-- 코드 리뷰 W2 (meetings.is_team_doc NULL 안전성): 본 시나리오에서 명시 검증은 안 했음. 현 구현 `is_team_doc == 1`은 NULL을 분기 (B) ≡ "warning 안 함"으로 처리. legacy DB에서 NULL row가 있다면 보수적 처리(warning 미발생)로 동작. 본 사이클 범위에서 issue 없음.
-
-## 산출물
-
-- `.claude/workspaces/current/scripts/verify_data_backfill.py` (검증 스크립트, 9 시나리오 / 40 케이스)
-- `.claude/workspaces/current/qa_report.md` (이 문서)
-
-## 최종 판정
-
-**통과.** 40/40 케이스 전부 통과. 차단·실패 없음.
+사양서가 정의한 8개 exit criteria + code review에서 발견된 1개 회귀 시나리오 모두 PASS. 차단 결함 1건은 같은 사이클 안에서 backend 패치 후 재검증 통과. 본 사이클(#5)은 종료 가능.
