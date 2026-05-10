@@ -1539,6 +1539,290 @@ def _phase_4_data_backfill(conn):
 PHASES.append(("team_phase_4_data_backfill_v1", _phase_4_data_backfill))
 
 
+# ── 팀 기능 그룹 A #5a — projects 자동 dedup (안전 그룹만) ────────
+# 본 사이클(보강) 본문이 수행하는 일:
+#   같은 (team_id, name_norm) 그룹에서 "참조 0건 + 빈 row"만 자동 hard DELETE.
+#   - 그룹 모든 row가 참조 0건이면 MIN(id) 1개를 살리고 나머지 DELETE.
+#   - 참조가 있는 row는 보존, unsafe 그룹(살아남는 row가 1건 이상 보존)은 그대로 둠
+#     → 이후 #5 preflight(`_check_projects_team_name_unique`)가 거부.
+#
+# 참조 카운트 (모두 deleted_at IS NULL 또는 NULL 무관 보수적 카운트):
+#   - events.project_id, checklists.project_id (deleted_at IS NULL)
+#   - events.project = projects.name AND project_id IS NULL (문자열 잔존)
+#   - checklists.project = projects.name AND project_id IS NULL
+#   - events.trash_project_id, checklists.trash_project_id, meetings.trash_project_id
+#   - project_members.project_id, project_milestones.project_id
+#
+# Idempotency:
+#   - 두 번째 init_db() → phase 마커가 있어 미실행.
+#   - 마커 강제 삭제 후 재실행 → 이미 row 수가 1이라 GROUP BY HAVING COUNT(*) > 1 자체가
+#     0건 매칭. 본문은 사실상 노옵.
+#
+# 등록 순서:
+#   PHASES.append 순서 = 실행 순서. 본 5a 등록은 #5 등록 *위*에 위치해 같은 init_db()
+#   호출에서 dedup → preflight → 인덱스 생성 순서가 보장된다.
+
+# 도구(migration_doctor)와 phase 본문이 공유하는 안전 정리 헬퍼.
+# (a) 그룹 식별  (b) 참조 카운트  (c) 안전 그룹 정리.
+# 도구는 read-only/dry-run에서 (a)+(b)만, --apply에서 (c)까지 호출한다.
+
+def _projects_duplicate_groups(conn):
+    """projects (team_id, name_norm) 충돌 그룹 목록.
+
+    반환: list[dict{team_id, name_norm, ids: list[int]}] — 그룹당 id 오름차순.
+    빈 테이블/컬럼 미존재면 [].
+    """
+    if not _table_exists(conn, "projects"):
+        return []
+    proj_cols = _column_set(conn, "projects")
+    if "team_id" not in proj_cols or "name_norm" not in proj_cols:
+        return []
+
+    rows = conn.execute(
+        "SELECT team_id, name_norm, GROUP_CONCAT(id) AS ids "
+        "  FROM projects "
+        " WHERE team_id IS NOT NULL "
+        "   AND name_norm IS NOT NULL "
+        " GROUP BY team_id, name_norm "
+        "HAVING COUNT(*) > 1 "
+        "ORDER BY team_id, name_norm"
+    ).fetchall()
+
+    groups = []
+    for row in rows:
+        team_id = row["team_id"] if isinstance(row, sqlite3.Row) else row[0]
+        name_norm = row["name_norm"] if isinstance(row, sqlite3.Row) else row[1]
+        ids_str = row["ids"] if isinstance(row, sqlite3.Row) else row[2]
+        ids = sorted(int(x) for x in (ids_str or "").split(",") if x.strip())
+        groups.append({"team_id": team_id, "name_norm": name_norm, "ids": ids})
+    return groups
+
+
+def _project_reference_count(conn, project_id: int, project_name: str | None) -> int:
+    """주어진 projects.id가 다른 테이블에서 참조되는 총 건수.
+
+    카운트되는 항목 (deleted_at 컬럼이 있으면 NULL 만):
+      - events.project_id, checklists.project_id
+      - events.project = name AND project_id IS NULL (문자열 잔존)
+      - checklists.project = name AND project_id IS NULL
+      - events.trash_project_id, checklists.trash_project_id, meetings.trash_project_id
+      - project_members.project_id, project_milestones.project_id
+
+    참조 0건이어야 안전 정리 대상이 된다. 카운트가 1+면 보존.
+    """
+    total = 0
+
+    def _has_col(table: str, col: str) -> bool:
+        if not _table_exists(conn, table):
+            return False
+        return col in _column_set(conn, table)
+
+    def _count(sql: str, params: tuple) -> int:
+        try:
+            row = conn.execute(sql, params).fetchone()
+        except sqlite3.OperationalError:
+            return 0
+        if not row:
+            return 0
+        return int(row[0] or 0)
+
+    # events.project_id (deleted_at IS NULL)
+    if _has_col("events", "project_id"):
+        if _has_col("events", "deleted_at"):
+            total += _count(
+                "SELECT COUNT(*) FROM events "
+                " WHERE project_id = ? AND deleted_at IS NULL",
+                (project_id,),
+            )
+        else:
+            total += _count(
+                "SELECT COUNT(*) FROM events WHERE project_id = ?",
+                (project_id,),
+            )
+
+    # checklists.project_id (deleted_at IS NULL)
+    if _has_col("checklists", "project_id"):
+        if _has_col("checklists", "deleted_at"):
+            total += _count(
+                "SELECT COUNT(*) FROM checklists "
+                " WHERE project_id = ? AND deleted_at IS NULL",
+                (project_id,),
+            )
+        else:
+            total += _count(
+                "SELECT COUNT(*) FROM checklists WHERE project_id = ?",
+                (project_id,),
+            )
+
+    # 문자열 잔존: events.project = name AND project_id IS NULL
+    if project_name is not None and _has_col("events", "project"):
+        if _has_col("events", "project_id"):
+            if _has_col("events", "deleted_at"):
+                total += _count(
+                    "SELECT COUNT(*) FROM events "
+                    " WHERE project = ? AND project_id IS NULL "
+                    "   AND deleted_at IS NULL",
+                    (project_name,),
+                )
+            else:
+                total += _count(
+                    "SELECT COUNT(*) FROM events "
+                    " WHERE project = ? AND project_id IS NULL",
+                    (project_name,),
+                )
+
+    # 문자열 잔존: checklists.project = name AND project_id IS NULL
+    if project_name is not None and _has_col("checklists", "project"):
+        if _has_col("checklists", "project_id"):
+            if _has_col("checklists", "deleted_at"):
+                total += _count(
+                    "SELECT COUNT(*) FROM checklists "
+                    " WHERE project = ? AND project_id IS NULL "
+                    "   AND deleted_at IS NULL",
+                    (project_name,),
+                )
+            else:
+                total += _count(
+                    "SELECT COUNT(*) FROM checklists "
+                    " WHERE project = ? AND project_id IS NULL",
+                    (project_name,),
+                )
+
+    # trash_project_id (휴지통 메타이지만 참조 보존)
+    for tbl in ("events", "checklists", "meetings"):
+        if _has_col(tbl, "trash_project_id"):
+            total += _count(
+                f"SELECT COUNT(*) FROM {tbl} WHERE trash_project_id = ?",
+                (project_id,),
+            )
+
+    # project_members / project_milestones
+    for tbl in ("project_members", "project_milestones"):
+        if _has_col(tbl, "project_id"):
+            total += _count(
+                f"SELECT COUNT(*) FROM {tbl} WHERE project_id = ?",
+                (project_id,),
+            )
+
+    return total
+
+
+def _classify_projects_dedup_group(conn, group: dict) -> dict:
+    """그룹 안에서 어떤 id를 살리고 어떤 id를 자동 DELETE할지 분류.
+
+    반환: dict{
+        team_id, name_norm, ids,
+        ref_counts: dict[id, int],
+        keep: list[int],         # 보존 (참조 ≥1 또는 그룹 내 MIN id 대표)
+        delete: list[int],       # 자동 DELETE 대상 (참조 0건)
+        safe: bool,              # 본 사이클 자동 정리 가능 여부 (delete가 1건 이상)
+        unsafe_reason: str|None  # safe=False일 때 이유
+    }
+    """
+    ref_counts: dict[int, int] = {}
+    rows = conn.execute(
+        "SELECT id, name FROM projects WHERE id IN (%s)"
+        % ",".join("?" * len(group["ids"])),
+        tuple(group["ids"]),
+    ).fetchall()
+    name_by_id: dict[int, str | None] = {}
+    for row in rows:
+        rid = row["id"] if isinstance(row, sqlite3.Row) else row[0]
+        nm = row["name"] if isinstance(row, sqlite3.Row) else row[1]
+        name_by_id[rid] = nm
+
+    for pid in group["ids"]:
+        ref_counts[pid] = _project_reference_count(conn, pid, name_by_id.get(pid))
+
+    referenced = [pid for pid in group["ids"] if ref_counts[pid] > 0]
+    unreferenced = [pid for pid in group["ids"] if ref_counts[pid] == 0]
+
+    if referenced:
+        # 참조 있는 row 모두 보존, 참조 0건 row는 모두 자동 DELETE.
+        keep = sorted(referenced)
+        delete = sorted(unreferenced)
+        # 참조 row가 2개 이상이면 인덱스 충돌은 여전히 unsafe — phase는 dedup만 하고
+        # 이후 #5 preflight이 충돌을 잡는다. 단, delete가 1건 이상이면 정리는 진행.
+        safe = bool(delete)
+        unsafe_reason = (
+            None if safe
+            else f"all {len(group['ids'])} rows referenced — manual decision needed"
+        )
+    else:
+        # 모두 참조 0건 → MIN(id) 1개 살리고 나머지 DELETE.
+        keep = [min(group["ids"])]
+        delete = sorted(pid for pid in group["ids"] if pid != keep[0])
+        safe = bool(delete)
+        unsafe_reason = None
+
+    return {
+        "team_id": group["team_id"],
+        "name_norm": group["name_norm"],
+        "ids": list(group["ids"]),
+        "ref_counts": ref_counts,
+        "keep": keep,
+        "delete": delete,
+        "safe": safe,
+        "unsafe_reason": unsafe_reason,
+    }
+
+
+def _phase_5a_projects_dedup_safe(conn):
+    """Phase 5a: projects (team_id, name_norm) 안전 dedup.
+
+    참조 0건 + 빈 row만 자동 hard DELETE. 메타데이터 동일성 검사는 안 한다
+    (참조 없는 row는 메타가 무엇이든 운영 영향 0).
+
+    빈 DB나 충돌 0건이면 본문 사실상 노옵.
+    """
+    if not _table_exists(conn, "projects"):
+        return
+
+    proj_cols = _column_set(conn, "projects")
+    if "team_id" not in proj_cols or "name_norm" not in proj_cols:
+        # Phase 1이 적용되지 않은 단계 — 본문 skip(노옵).
+        return
+
+    groups = _projects_duplicate_groups(conn)
+    if not groups:
+        return
+
+    cleaned_total = 0
+    for group in groups:
+        plan = _classify_projects_dedup_group(conn, group)
+        if not plan["safe"]:
+            # 자동 정리 불가 그룹은 그대로 두고 #5 preflight에 위임.
+            continue
+        if not plan["delete"]:
+            continue
+
+        # hard DELETE — phase 시작 전 자동 백업이 떠 있어 복구 가능.
+        # 같은 conn 트랜잭션이라 이 phase가 ROLLBACK되면 모두 되돌아온다.
+        placeholders = ",".join("?" * len(plan["delete"]))
+        conn.execute(
+            f"DELETE FROM projects WHERE id IN ({placeholders})",
+            tuple(plan["delete"]),
+        )
+
+        cleaned_total += len(plan["delete"])
+        _append_team_migration_warning(
+            conn,
+            "dedup_projects_auto",
+            f"projects (team_id={plan['team_id']}, "
+            f"name_norm={plan['name_norm']!r}) "
+            f"kept_ids={plan['keep']} deleted_ids={plan['delete']}",
+        )
+
+    if cleaned_total:
+        print(
+            f"{_MIGRATION_LOG_PREFIX} phase 5a: auto-deleted {cleaned_total} "
+            f"unreferenced duplicate project row(s)"
+        )
+
+
+PHASES.append(("team_phase_5a_projects_dedup_safe_v1", _phase_5a_projects_dedup_safe))
+
+
 # ── 팀 기능 그룹 A #5 — projects (team_id, name_norm) UNIQUE ─────
 # 본 사이클 본문이 수행하는 일:
 #   1) projects.name_norm 잔존 NULL row 방어용 백필 (Phase 1 본문이 이미 채웠으나
@@ -1549,6 +1833,7 @@ PHASES.append(("team_phase_4_data_backfill_v1", _phase_4_data_backfill))
 # 인덱스 충돌(`team_id IS NOT NULL`인데 동일 (team_id, name_norm) 2+건)은 본문 진입
 # 전 preflight(`_check_projects_team_name_unique`)가 잡아 서버 시작을 거부한다.
 # 운영자가 충돌 row를 정리한 뒤 재시작하면 정상 진입한다.
+# Phase 5a가 앞서 안전 그룹을 자동 정리하므로, 여기에 도달하는 충돌은 unsafe(참조 ≥2)뿐.
 
 def _phase_5_projects_unique(conn):
     """Phase 5: projects (team_id, name_norm) 부분 UNIQUE 인덱스 등록.

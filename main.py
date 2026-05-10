@@ -196,8 +196,63 @@ if sys.platform == "win32":
     _pe._ProactorBasePipeTransport._call_connection_lost = _patched_ccl
 
 
+def _is_doctor_invocation(argv: list[str]) -> bool:
+    """argv[1:]에서 도구 모드 진입 여부 판정.
+
+    `--doctor` 또는 `doctor` 첫 인자(또는 직후 위치)면 True. 콘솔/sidecar
+    초기화보다 *일찍* 호출되어, 도구 모드에서 트레이/uvicorn이 안 뜨도록 한다.
+    """
+    if len(argv) < 2:
+        return False
+    return argv[1] in ("--doctor", "doctor")
+
+
+def _run_doctor(argv: list[str]) -> int:
+    """도구 모드 진입점. main.py가 콘솔 초기화 직전에 분기 호출.
+
+    인자: argv[1:] 그대로 (첫 토큰 `--doctor`/`doctor`는 잘라서 doctor에 넘긴다).
+    반환: exit code (도구가 main()에서 반환).
+    """
+    # 도구 sub-args = `--doctor` 다음부터.
+    doctor_args = argv[2:]
+
+    # 환경 준비 — DB 경로 해석을 위해 _RUN_DIR만 주입. 콘솔/트레이는 안 띄운다.
+    os.environ.setdefault("WHATUDOIN_BASE_DIR", _base_dir())
+    os.environ.setdefault("WHATUDOIN_RUN_DIR", _run_dir())
+
+    # Windows 콘솔 인코딩만 가볍게 (도구는 stdout 출력만).
+    if sys.platform == "win32" and not getattr(sys, "frozen", False):
+        try:
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer,
+                                          encoding="utf-8", errors="replace")
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer,
+                                          encoding="utf-8", errors="replace")
+            os.system("chcp 65001 > nul 2>&1")
+        except Exception:
+            pass
+    elif sys.platform == "win32" and getattr(sys, "frozen", False):
+        # 번들 console=False → AllocConsole로 보조 콘솔 (도구도 stdout 필요).
+        if ctypes.windll.kernel32.AllocConsole():
+            sys.stdout = open("CONOUT$", "w", encoding="utf-8",
+                              errors="replace", buffering=1)
+            sys.stderr = open("CONOUT$", "w", encoding="utf-8",
+                              errors="replace", buffering=1)
+            sys.stdin = open("CONIN$", "r", encoding="utf-8",
+                             errors="replace")
+            os.system("chcp 65001 > nul 2>&1")
+
+    from tools.migration_doctor import main as doctor_main
+    return doctor_main(doctor_args)
+
+
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+
+    # ── 도구 sub-command 분기 (콘솔/sidecar 초기화 *전*에 검사) ────
+    # `--doctor` 또는 `doctor` 첫 인자면 트레이/uvicorn 띄우지 않고 종료.
+    if _is_doctor_invocation(sys.argv):
+        sys.exit(_run_doctor(sys.argv))
 
     # ── 콘솔/스트림 초기화 ──────────────────────────────────────────
     if sys.platform == "win32":

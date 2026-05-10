@@ -1,125 +1,197 @@
-# Backend Changes — 팀 기능 그룹 A #7 (비밀번호 hash 변환 + 일반 로그인 + name_norm UNIQUE)
+# 백엔드 변경 — 그룹 A 보강 사이클 (자동 dedup phase + migration_doctor)
 
-## 요약
+## 개요
 
-- 평문 비밀번호 → PBKDF2-SHA256 hash 변환 phase 추가 (`team_phase_7_password_hash_v1`).
-- `users.name_norm` 전역 UNIQUE 인덱스, `teams.name_norm` UNIQUE 인덱스 생성 (phase 7 본문에서).
-- preflight 2건 추가: `_check_users_name_norm_unique`, `_check_teams_name_norm_unique`.
-- `/api/login`: 비밀번호 단독 → 이름+비밀번호 + 정규식 + admin 차단(동일 메시지).
-- `/api/me/change-password`: hash 검증 + 새 비밀번호 정책(영문+숫자 동시 포함).
-- `/api/admin/login`: 외부 동작 동일, 내부 hash 검증으로 교체.
-- `db.get_user_by_password()` 함수 + 모든 호출부 제거.
-- frontend(base.html): 로그인 모달에 이름 입력 필드 추가, JS 1곳 수정 (backend grep 결과 폼 변경 필요했음).
+회사 운영 DB 첫 실행 시 #5 preflight이 충돌을 차단하지 않도록 두 가지 추가:
 
-## 변경 대상 파일
+1. **자동 dedup phase** `team_phase_5a_projects_dedup_safe_v1` — 안전 그룹(빈 + 참조 0건)을
+   같은 init_db() 호출 안에서 자동 정리.
+2. **운영자 도구 `tools/migration_doctor.py`** — `WhatUdoin.exe --doctor` sub-command.
+   사전 점검 / 사후 진단 / 안전 그룹 자동 정리 / unsafe 충돌 SQL 템플릿.
 
-| 파일 | 변경 |
-|------|------|
-| `passwords.py` | **신규**. hash/verify/정규식/정책 헬퍼 + 모듈-스코프 DUMMY_HASH. |
-| `database.py` | import `passwords`, phase 7 본문 추가, preflight 2건 등록, DB 함수 `get_user_by_login` 신규 + `get_user_by_credentials`/`reset_user_password` hash 교체 + `verify_user_password` 신규, `get_user_by_password` 제거. |
-| `app.py` | import `passwords`, `/api/login`/`/api/me/change-password` 라우트 변경. |
-| `templates/base.html` | 로그인 모달에 `<input id="login-name">` 추가 + `doLogin()` JS 수정. |
+## S1 — 자동 dedup phase 본문 등록 (database.py)
 
-## 알고리즘 결정 — PBKDF2-HMAC-SHA256
+### 추가된 헬퍼
 
-- 채택: 표준 라이브러리 `hashlib.pbkdf2_hmac('sha256', ...)`.
-- cost factor: 200,000 회 반복.
-- salt: 16바이트 무작위 (`secrets.token_bytes`).
-- 저장 형식: `f"{algo}${cost}${salt_hex}${hash_hex}"` (단일 컬럼 `users.password_hash`).
-- 사유:
-  - 의존성 0 — PyInstaller spec 변경 필요 없음.
-  - `hashlib.scrypt`는 OpenSSL 1.1.0+ 의존 — Python 빌드의 OpenSSL 링크에 따라 다름. PBKDF2는 모든 CPython에서 사용 가능.
-  - bcrypt/argon2/passlib는 신규 의존성 + spec 갱신 비용. PBKDF2-200k는 SHA-256 기준 OWASP 2023 권장(310k)에 약간 못 미치지만 현실 인트라넷 환경에서 충분.
-- 검증: `hmac.compare_digest`로 timing-safe 비교.
+#### `_projects_duplicate_groups(conn) -> list[dict]`
+projects (team_id, name_norm) 충돌 그룹 목록. `team_id IS NOT NULL AND name_norm IS NOT NULL`
+조건 안에서 GROUP BY HAVING COUNT(*) > 1. 그룹당 `{team_id, name_norm, ids: list[int]}`.
+빈 테이블/컬럼 미존재면 [].
 
-## spec deviation — 평문 컬럼 NULL → 빈 문자열
+#### `_project_reference_count(conn, project_id, project_name) -> int`
+주어진 projects.id의 다른 테이블 참조 총합. 카운트 대상:
+- `events.project_id`, `checklists.project_id` (deleted_at 컬럼이 있으면 IS NULL만)
+- `events.project = name AND project_id IS NULL` (문자열 잔존)
+- `checklists.project = name AND project_id IS NULL`
+- `events/checklists/meetings.trash_project_id`
+- `project_members.project_id`, `project_milestones.project_id`
 
-- spec L49, L93: phase 7이 변환 후 `password = NULL` 처리.
-- 실제: `users.password` 컬럼 정의가 `TEXT NOT NULL DEFAULT ''` (database.py:73) — NULL 처리 시 IntegrityError.
-- 결정: `password = ''`(빈 문자열)로 저장. 의미 동등 — phase 7 변환 가드(`password != ''`)가 NULL/빈 문자열을 동일하게 제외. 컬럼 drop은 Phase 5(별도 릴리스) 책임이므로 본 사이클은 평문 제거만 보장.
-- `reset_user_password()`도 같은 deviation으로 `password = ''` 저장.
+각 카운트는 컬럼 존재 여부를 사전 검사 (`_has_col`) — 합성 DB나 미적용 환경에서도 안전.
 
-## 인덱스 위치 — phase 4 본문이 아닌 phase 7 본문에서 생성
+#### `_classify_projects_dedup_group(conn, group) -> dict`
+그룹 안의 어떤 id를 살리고 어떤 id를 자동 DELETE할지 분류. 반환:
+```
+{
+  team_id, name_norm, ids,
+  ref_counts: dict[id, int],
+  keep:   list[int],   # 보존
+  delete: list[int],   # 자동 DELETE 대상
+  safe:   bool,        # delete 1건 이상 → True
+  unsafe_reason: str | None
+}
+```
 
-- spec L50: "Phase 4 인덱스 + preflight" — 의미상 phase 4 위치이지만 phase 4 마커가 이미 적용된 환경에서는 본문 변경이 무효.
-- 결정: phase 7 본문 안에서 `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_name_norm` / `idx_teams_name_norm` 생성. 신규/기존 환경 모두 phase 7 첫 실행에서 인덱스 생성됨. phase 4 본문 미수정.
+분류 규칙 (사양 §"정리된 자동 dedup 정책"):
+- **참조 있는 row가 1+개**: 참조 ≥1 모두 보존, 참조 0건 row만 자동 DELETE.
+  - 참조 row가 2+면 인덱스 충돌은 여전히 unsafe → 이후 #5 preflight이 잡음.
+  - delete가 0건이면 safe=False.
+- **모두 참조 0건**: MIN(id) 1개 살리고 나머지 DELETE → safe=True.
 
-## sanity check — 첫 변환 row의 평문 캡처
+### 새 phase 본문
 
-- 본문 시작 시점에 첫 변환 대상 row의 `(id, plaintext)`를 로컬 변수로 캡처.
-- 변환 완료 후 같은 id의 `password_hash`를 SELECT하여 캡처한 평문으로 `verify_password` True 확인.
-- 실패 시 `RuntimeError` raise → 러너가 `ROLLBACK` 처리(원본 평문 보존).
-- 평문 변수는 sanity check 직후 `None` 할당하여 참조 끊음. log/print 절대 금지.
+#### `_phase_5a_projects_dedup_safe(conn)`
+- 빈 DB / 컬럼 미존재 / 충돌 0건 → 사실상 노옵.
+- 충돌 그룹 순회 → safe 그룹만 hard DELETE.
+- 정리된 그룹마다 `_append_team_migration_warning`로 카테고리 `dedup_projects_auto`,
+  메시지 `projects (team_id=X, name_norm='Y') kept_ids=[...] deleted_ids=[...]` 누적.
+  dedup 가드는 헬퍼 자체에 내장(중복 메시지 자동 무시).
+- 정리 row가 1건 이상이면 `[WhatUdoin][migration] phase 5a: auto-deleted N ...` 로그.
 
-## 더미 hash로 timing 균등화
+#### 등록 — PHASES 순서
 
-- `passwords.DUMMY_HASH` — 모듈 import 시점에 `hash_password(secrets.token_hex(16))`로 1회 생성.
-- `get_user_by_login` / `get_user_by_credentials` / `verify_user_password`: lookup miss 또는 admin 매칭(일반 로그인) 시 `verify_password(submitted, DUMMY_HASH)`를 한 번 돌려 응답 시간을 정상 경로와 같게 만듦.
-- 효과: admin 존재 노출 차단 + 사용자 enumeration timing oracle 차단.
+```python
+PHASES.append(("team_phase_5a_projects_dedup_safe_v1", _phase_5a_projects_dedup_safe))
+# 그 다음 줄(파일 line 순서)
+PHASES.append(("team_phase_5_projects_unique_v1", _phase_5_projects_unique))
+```
 
-## 라우트 동작
+같은 init_db() 호출에서 **5a (dedup) → 5 (preflight + UNIQUE 인덱스)** 순서가 보장됨.
+preflight `_check_projects_team_name_unique`도 `_PREFLIGHT_CHECKS` 순서에 따라 phase
+실행 직전에 수행되며, 5a가 안전 그룹을 청소한 후 남은 unsafe 충돌만 잡는다.
 
-### POST /api/login (변경)
-- 요청: `{name, password}`.
-- 응답:
-  - 200: 정상 사용자(member). `name`/`role`/`team_id` 반환 + 30일 세션 쿠키.
-  - 400: `name`/`password` 빈 입력, 또는 정규식 위반(`^[A-Za-z0-9가-힣]+$`).
-  - 401: 모든 인증 실패 (admin 시도 / 없는 사용자 / 잘못된 비밀번호) — 동일 메시지 "아이디 또는 비밀번호가 올바르지 않습니다."
-- name_norm(NFC + casefold) 매칭 → `Kim`/`KIM`/`kim` 동일 계정.
+### Idempotency
 
-### POST /api/admin/login (외부 동작 동일)
-- 내부에서 `get_user_by_credentials`가 hash 검증으로 변경됨.
-- 응답·요청 형식 변경 없음.
+- 두 번째 init_db() → phase 마커가 있어 미실행.
+- 마커 강제 삭제 후 재실행 → row 수가 1이라 GROUP BY HAVING COUNT(*) > 1 자체가 0건 매칭.
+  본문 노옵.
 
-### POST /api/me/change-password (변경)
-- 현재 비밀번호 검증을 `db.verify_user_password(user_id, current)`로 교체.
-- 새 비밀번호 정책: 영문 + 숫자 동시 포함 (`is_valid_password_policy`). 위반 시 400.
-- 통과 시 `db.reset_user_password()`가 hash 저장.
+## S2 — 운영자 도구 `tools/migration_doctor.py`
 
-### POST /api/admin/users/{user_id}/reset-password
-- 라우트 자체는 그대로 — `reset_user_password()` 내부가 hash 저장으로 변경되어 자동 반영.
-- 정책 검증 미적용 (admin 운영 편의 — admin 책임). spec 명시 없음.
+### 패키지 구조
 
-## DB 함수 변경
+- `tools/__init__.py` (placeholder)
+- `tools/migration_doctor.py`
 
-| 함수 | 변경 |
-|------|------|
-| `get_user_by_password(password)` | **삭제**. spec L52: 단독 사용 모두 제거. |
-| `get_user_by_credentials(name, plaintext)` | admin 전용 + name_norm 매칭 + hash 검증. lookup miss 시 DUMMY_HASH로 timing 균등화. |
-| `get_user_by_login(name, plaintext)` | **신규**. 일반 로그인용 (admin 제외). name_norm 매칭 + hash 검증 + DUMMY_HASH 균등화. |
-| `verify_user_password(user_id, plaintext)` | **신규**. 본인 인증용 (`/api/me/change-password`). |
-| `reset_user_password(user_id, new_password)` | hash 저장 + `password = ''`. |
+### 명령어
 
-## frontend 변경 — 로그인 폼
+#### `WhatUdoin.exe --doctor check` (read-only)
+1. **projects 충돌 그룹 진단** — 각 그룹의 id별 참조 카운트 + 자동 정리 가능(safe) /
+   운영자 결정 필요(unsafe) 분류 + ASCII 표 출력.
+2. **users.name_norm 충돌 진단** — 자동 정리 X. 권장 SQL 템플릿(UPDATE/DELETE) 출력.
+3. **teams.name_norm 충돌 진단** — 동일.
+4. 종합:
+   - 충돌 0건 → exit 0, "이상 없음".
+   - unsafe 또는 users/teams 충돌 1+ → exit 1.
+   - safe만 남음 → exit 0, "fix-projects --apply 권장".
 
-- backend grep 결과: 기존 `templates/base.html` 로그인 모달은 비밀번호 단독 입력 (line 511 `id="login-pw"`만 존재).
-- 결정: 본 사이클에서 폼 최소 변경 (이름 input 1개 추가, JS 1곳).
-- 사유: 라우트가 `name` 누락 시 400 반환하므로 폼 미수정 시 모든 사용자 로그인 실패. spec L12 "폼 변경 필요 시 #8과 함께"는 폼 변경을 #8로 미루라는 권고지만 라우트 호환성 깨지면 서비스 정지 → 본 사이클 포함 처리.
+DB는 `file:...?mode=ro` URI로 read-only 연결 — 락·트랜잭션 영향 0.
 
-## 검증 스크립트 결과
+#### `WhatUdoin.exe --doctor fix-projects` (dry-run, 기본)
+- 어떤 row가 정리되는지 표로 출력만, 변경 X.
+- read-only 연결.
 
-### `verify_password_hash.py` — 6개 test 모두 PASS
-1. `passwords.py` 단위 (round-trip, salt 차이, 정규식, 정책)
-2. 빈 DB → admin 시드 1명 변환 + 마커 + UNIQUE 인덱스 2개 생성
-3. 합성 구 DB(7명: admin+5+빈) → 6명 변환, Frank(빈 password) 보존
-4. 마커 강제 삭제 후 재실행 → 변환 대상 0건 (idempotent)
-5. preflight `users.name_norm` 충돌 → RuntimeError + warning 누적
-6. preflight `teams.name_norm` 충돌 → RuntimeError + warning 누적
+#### `WhatUdoin.exe --doctor fix-projects --apply`
+1. `backup.run_migration_backup(db_path, run_dir)` 호출 → `whatudoin-migrate-{ts}.db`
+   생성. 백업 실패 시 정리 거부 (exit 2).
+2. read-write 연결로 `BEGIN IMMEDIATE` → 안전 그룹만 `DELETE FROM projects WHERE id IN (...)`
+   → `COMMIT`. 실패 시 `ROLLBACK`.
+3. 정리된 row 수 출력.
 
-### `verify_login_routes.py` — 3개 test 모두 PASS
-1. POST /api/login: 정상/잘못된 비밀번호/admin 차단/없는 사용자/정규식 위반 3종/대소문자/빈 입력
-2. POST /api/admin/login: admin 정상 + member 차단
-3. POST /api/me/change-password: 정상 변경 + 새 비밀번호 로그인 + 현재 비밀번호 틀림 + 정책 위반(영문만/숫자만)
+#### `--db-path PATH`
+기본은 운영 DB(`whatudoin.db`). QA에서 합성 DB 경로 지정 가능.
 
-## 자가 발견 결함 + 패치 (한 사이클 내)
+### 도구가 사용하는 헬퍼
 
-**결함**: phase 7 본문이 `password = NULL`을 시도해서 IntegrityError 발생 (컬럼이 NOT NULL).
-**패치**: 본문 + `reset_user_password` 둘 다 `password = ''`로 변경. doc/주석에 deviation 명시. spec deviation 항목으로 위에 기록.
-**재검증**: verify_password_hash.py + verify_login_routes.py 모두 PASS.
+도구는 database 모듈에서 다음을 import만 한다:
+- `_projects_duplicate_groups`
+- `_classify_projects_dedup_group`
+- `_table_exists`, `_column_set`
 
-## 미해결 / 후속 사이클로 이관
+도구는 phase 본문을 *호출하지 않는다*. 같은 분류 로직을 read-only로 검사 + dry-run 출력
++ apply 시 단일 트랜잭션 정리. 결과는 phase 본문이 떴을 때와 정확히 동일.
 
-- `approve_pending_user`(L4288)는 평문 INSERT 유지 — register 플로우 #8 책임 (spec L26).
-- `check_register_duplicate`의 평문 password SELECT 2건 — register 플로우 #8 책임.
-- `users.password` 컬럼 자체는 Phase 5(별도 릴리스)에서 DROP — 본 사이클 범위 밖.
-- `idx_users_name_norm`이 UNIQUE이므로 신규 회원이 동일 name_norm으로 가입 시도 시 INSERT 실패 — register 플로우(#8)에서 사전 검사 + 친절한 에러 메시지 필요.
+## main.py — sub-command 분기
+
+### 추가된 함수
+
+#### `_is_doctor_invocation(argv) -> bool`
+`argv[1]`이 `--doctor` 또는 `doctor`면 True. 단순 길이/값 검사.
+
+#### `_run_doctor(argv) -> int`
+도구 모드 진입점:
+1. `WHATUDOIN_BASE_DIR` / `WHATUDOIN_RUN_DIR` 환경변수만 주입 (DB 경로 해석용).
+2. Windows 콘솔 인코딩 처리:
+   - dev 모드: stdout/stderr UTF-8 wrapping + `chcp 65001`.
+   - frozen 모드: `AllocConsole` → CONOUT$ open.
+3. `tools.migration_doctor.main(argv[2:])` 호출 → exit code 반환.
+4. 트레이 / uvicorn / sidecar / supervisor 모두 **건드리지 않음**.
+
+### `if __name__ == "__main__"` 분기
+
+```python
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    if _is_doctor_invocation(sys.argv):
+        sys.exit(_run_doctor(sys.argv))
+    # ── 콘솔/스트림 초기화 ──
+    ...
+```
+
+콘솔 초기화·sidecar 토글 검사·트레이 생성 모두 위 분기 *뒤*에 위치 → 도구 모드에서는
+일반 동작 100% 영향 0.
+
+## S3 — PyInstaller spec 업데이트 (WhatUdoin.spec)
+
+### datas 추가
+
+```python
+('tools/__init__.py',         'tools'),
+('tools/migration_doctor.py', 'tools'),
+```
+
+main.py가 frozen 모드에서도 `from tools.migration_doctor import main as doctor_main`을
+import할 수 있도록 패키지 디렉토리째 번들에 포함.
+
+### hiddenimports 추가
+
+```python
+'tools',
+'tools.migration_doctor',
+```
+
+PyInstaller의 모듈 그래프가 동적 import를 추적 못 할 경우를 대비한 명시적 등록.
+
+## 변경 파일 요약
+
+| 파일 | 변경 종류 | 설명 |
+|------|----------|------|
+| `database.py` | 추가 | 5a phase 본문 + 헬퍼 3종 (`_projects_duplicate_groups`, `_project_reference_count`, `_classify_projects_dedup_group`) + `PHASES.append(...5a...)` |
+| `tools/__init__.py` | 신설 | 빈 패키지 마커 |
+| `tools/migration_doctor.py` | 신설 | argparse + check / fix-projects (dry-run · --apply) |
+| `main.py` | 추가 | `_is_doctor_invocation`, `_run_doctor` + `__main__` 첫 줄 분기 |
+| `WhatUdoin.spec` | 추가 | datas / hiddenimports에 tools 패키지 등록 |
+
+## 안전 / 보존 정책
+
+- **자동 정리는 `dedup_projects_auto` 워닝으로 영속 기록** — 운영자가 사후 추적 가능.
+- **phase 5a hard DELETE는 `run_migration_backup()` 백업이 떠 있는 상태에서만 발생** —
+  phase 러너가 백업 → preflight → phase 본문 순서를 강제.
+- **도구 `--apply`도 자체 백업 호출 후 정리** — phase와 별도 백업 파일 생성.
+- **users/teams.name_norm 자동 정리 X** — 합병 의사결정이 필요해 본 사이클에서는 진단·SQL
+  템플릿만 출력. 운영자가 직접 처리.
+
+## 한계 / 후속 사이클
+
+- 같은 (team_id, name_norm) 그룹의 **참조 row가 2+개**이면 5a가 정리하지 않음 (참조 0건이
+  아니므로). #5 preflight이 충돌 거부 → 운영자가 도구로 진단 후 직접 SQL 정리 → 재시작.
+- users/teams 자동 정리는 별도 사이클 검토 (이름 정책·합병 정책 결정 후).

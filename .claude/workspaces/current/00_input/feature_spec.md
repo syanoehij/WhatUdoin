@@ -1,102 +1,145 @@
-# 팀 기능 그룹 A — #7 진행 사양 (메인 → 플래너 인계)
+# 팀 기능 그룹 A — 보강 사이클: 자동 dedup phase + 운영자 도구
 
 ## 요청
 
-`팀 기능 구현 todo.md` 그룹 A의 **#7. 로그인 인증 기반 정비**를 한 사이클로 진행. 마스터 plan은 `팀 기능 구현 계획.md` §6.
+회사 운영 DB 첫 실행에서 #5 preflight(`_check_projects_team_name_unique`)가 충돌을 막을 가능성이 있다. 본 사이클은 두 가지를 함께 추가한다(옵션 C):
 
-#8 이후는 본 사이클 범위 밖.
+1. **자동 dedup phase**: 안전 조건을 만족하는 충돌 그룹은 phase 본문이 자동 흡수 → preflight까지 가지 않게 한다.
+2. **운영자 도구 (`migration_doctor`)**: WhatUdoin.exe에 sub-command(`--doctor`)로 추가. 회사 운영자가 사전 점검·사후 진단·SQL 안내를 받을 수 있게.
+
+이 사이클이 끝나면 회사 첫 실행 위험이 크게 줄고, 만약 unsafe 충돌이 남아 있더라도 운영자가 도구로 진단하고 정리한 뒤 재시작 가능.
 
 ## 분류
 
-백엔드 핵심: **비밀번호 hash 변환 + 일반 로그인을 이름+비밀번호로 전환 + name_norm UNIQUE 인덱스 + 비밀번호 정책 검증**.
-프론트 변경 없음 (로그인 입력은 이미 이름·비밀번호 입력 폼이 있는지 backend가 grep하여 확인. 폼 변경 필요 시 #8과 함께 처리).
-**팀 모드: backend → reviewer → qa.**
+백엔드: 새 phase 본문 1건(`team_phase_5a_projects_dedup_safe_v1`) + 운영자 도구 1건 + main.py sub-command + (필요 시) PyInstaller spec 업데이트.
+프론트 변경 없음. **팀 모드: backend → reviewer → qa.**
 
-## 전제 (#1~#6 완료)
+## 전제 (#1~#7 완료)
 
-- PHASES 인프라 + Phase 1·2·3·4·5·6 본문 (#1~#6).
-- `users.password_hash TEXT` 컬럼만 추가됨 (#2). 본 사이클이 변환 phase 본문 추가.
-- `auth.py`: `is_member`, `user_can_access_team`, `resolve_work_team` 등 헬퍼 (#2).
-- `database.py:165, 367` settings 테이블 정의 중복 (인지만, 본 사이클 X).
+- PHASES 인프라 + Phase 1·2·3·4·5·6·7 본문 등록됨.
+- 회사 운영 DB에 `(team_id, name_norm)` 충돌 가능성 확인됨(개발 DB에서 1건 발견 — `team_id=17`, `name_norm='alpha'`, ids=[104,105], 둘 다 빈 + 참조 0건).
+- `users.name_norm`/`teams.name_norm` 충돌 가능성도 잠재적으로 존재(현재 미확인).
+- 자동 dedup은 **projects만** 다룬다. users/teams는 운영 결정 영역 → 도구 진단까지만, 자동 정리 X.
 
-## 핵심 인계 사실 (메인이 이미 파악)
+## 핵심 설계
 
-### 현재 인증 흐름
-- `app.py:1383` `POST /api/login` — 비밀번호 단독, 30일 세션. `db.get_user_by_password(password)` 호출.
-- `app.py:1404` `POST /api/me/change-password` — `db.get_user_by_password(current_pw)`로 본인 검증, `db.reset_user_password(user_id, new_pw)`로 평문 저장.
-- `app.py:1452` `POST /api/admin/login` — 이름+비밀번호, 5분 세션. `db.get_user_by_credentials(name, password)`. 본 사이클: 함수 내부만 hash 검증으로 교체.
-- `app.py:1434` `POST /api/register` — `db.check_register_duplicate` + `db.create_pending_user`. 본 사이클은 **register 플로우 변경 X (#8 책임)**, 단 정규식 헬퍼는 본 사이클에서 추가하고 #8에서 사용.
+### 1) 자동 dedup phase — 안전 조건
 
-### DB 함수 (database.py)
-- `get_user_by_password(password)` L3875 — 평문 매칭 SELECT. 본 사이클이 제거(또는 deprecated 표시 후 호출부 모두 교체).
-- `get_user_by_credentials(name, password)` L3885 — admin 전용 평문 매칭. 본 사이클: name_norm 매칭 + hash 검증으로 교체.
-- `reset_user_password(user_id, new_pw)` — 평문 저장. 본 사이클: hash 저장으로 교체.
+phase 이름: `team_phase_5a_projects_dedup_safe_v1`. **#5(`team_phase_5_projects_unique_v1`) 앞**에 등록되어 같은 init_db() 호출에서 dedup → preflight → 인덱스 생성 순서가 되도록 PHASES 리스트 순서를 명시 관리.
 
-### crypto.py 현황
-- 기존 `crypto.py`는 Fernet 대칭 암호화 유틸 (credentials.json/`WHATUDOIN_CRYPTO_KEY` 기반). **비밀번호 hash와 무관.**
-- `cryptography` 패키지가 이미 의존성에 있음 → 비밀번호 hash에 `cryptography.hazmat.primitives.kdf.scrypt` 등 사용 가능. 또는 표준 `hashlib.scrypt`/`hashlib.pbkdf2_hmac`. 또는 `passlib` 신규 의존성. **선택은 backend 판단** (사유 backend_changes.md에 기록).
+같은 `(team_id, name_norm)` 그룹의 모든 row가 다음 안전 조건을 모두 만족할 때만 자동 정리 대상:
 
-### 권장 hash 알고리즘 결정 가이드 (backend가 채택)
-- **권장: 표준 `hashlib.scrypt`** (cost-factor 가능, 의존성 0, PyInstaller spec 변경 0). 또는 `hashlib.pbkdf2_hmac('sha256', ...)`.
-- 저장 형식: `f"{algo}${cost}${salt_hex}${hash_hex}"` 단일 컬럼 (`users.password_hash`). 검증 시 split 후 같은 cost·salt로 재계산하여 비교.
-- bcrypt/argon2를 채택하려면 `passlib` 또는 직접 `bcrypt` 패키지 추가 필요 → PyInstaller spec 갱신 필요.
+- `events.project_id` 참조 0건 (`deleted_at IS NULL`만 카운트 — 휴지통은 제외해도 안전)
+- `events.project = projects.name AND project_id IS NULL` 문자열 잔존 참조 0건
+- `checklists.project_id` 참조 0건 (deleted_at IS NULL)
+- `checklists.project = projects.name AND project_id IS NULL` 문자열 잔존 참조 0건
+- `meetings.trash_project_id` 참조 0건 (휴지통 메타이지만 보수적 접근)
+- `events.trash_project_id`, `checklists.trash_project_id` 참조 0건 (동일)
+- `project_members` 참조 0건
+- `project_milestones` 참조 0건
+- 메타데이터 동일 또는 모두 NULL: `memo`, `color`, `owner_id`, `is_hidden`, `is_private`, `start_date`, `end_date`, `is_active` 모든 컬럼이 그룹 내 일치(또는 모두 NULL)
+- 그룹 내 `deleted_at IS NULL` row가 적어도 1개(살릴 row 후보 존재)
 
-## #7 step 분해 (플래너 참고)
+### 정리 동작 (만족 그룹)
+- `MIN(id) WHERE deleted_at IS NULL` row 1개를 유지(없으면 그룹 자체 skip).
+- 나머지 row는 **hard DELETE** (참조 0건이므로 cascade 사고 없음, phase 시작 전 자동 백업이 떠 있어 복구 가능).
+- warning 누적: 카테고리 `dedup_projects_auto`, 메시지에 그룹 키와 정리된 id 목록 포함. dedup 가드는 `_append_team_migration_warning` 내장(중복 누적 방지).
 
-| step | 제목 | exit criteria 핵심 |
-|------|------|--------------------|
-| #7-S1 | hash 유틸 추가 + crypto/auth 모듈 정비 | `hash_password(plaintext) -> str`, `verify_password(plaintext, stored) -> bool` 신규(Crypto 또는 신규 `passwords.py` 모듈, backend 결정). 알고리즘·cost·저장 형식 결정 사유 backend_changes.md 기록. |
-| #7-S2 | phase 본문(`team_phase_7_password_hash_v1`) | `users.password_hash IS NULL AND password IS NOT NULL AND password != ''` 사용자에 대해 `password_hash = hash_password(password)`, **같은 트랜잭션에서 `password = NULL` 처리**. admin 포함. 빈 password row는 변환 안 함(가드). 변환 후 sanity check: 무작위 1건 row의 `verify_password(원래 평문 — 본문 시작 시 임시 캡처, hash)` 결과 True가 아니면 ROLLBACK + RuntimeError. |
-| #7-S3 | Phase 4 인덱스 + preflight | preflight `_check_users_name_norm_unique`, `_check_teams_name_norm_unique` 등록 — 충돌 시 서버 시작 거부 + warning 누적. 인덱스: `users.name_norm` 전역 UNIQUE(`is_active` 무관), `teams.name_norm` UNIQUE. |
-| #7-S4 | DB 함수 + 라우트 변경 | `get_user_by_login(name_or_norm, plaintext) -> Optional[user]` 신규 (admin 제외). `get_user_by_credentials(name, plaintext)`는 admin 전용 + name_norm 매칭 + hash 검증으로 내부 변경. `reset_user_password(user_id, new_pw)` hash 저장으로 변경. POST /api/login 라우트: 이름·비밀번호 받음 + name 정규식 검증(`^[A-Za-z0-9가-힣]+$`) + `get_user_by_login` 호출 + admin이면 401. POST /api/me/change-password: 현재 비밀번호 hash 검증 + 새 비밀번호 정책(영문+숫자 동시 포함) 검증 + hash 저장. POST /api/admin/login: 내부 hash 검증으로 교체(외부 동작 동일). |
-| #7-S5 | 정규식 헬퍼 + 기존 호출부 정리 | `is_valid_user_name(s) -> bool` (정규식 `^[A-Za-z0-9가-힣]+$`) 헬퍼 추가. **register 플로우 변경은 #8**이라 `is_valid_user_name`/비밀번호 정책 헬퍼는 신규 추가만 — 본 사이클 라우트(`/api/login`/`/api/me/change-password`)에서만 사용. `get_user_by_password(password)` 단독 사용은 모두 제거. 호출부가 있다면 함께 정리. |
+### unsafe 그룹
+- 안전 조건 미충족 그룹은 그대로 둔다.
+- 이후 `team_phase_5_projects_unique_v1`의 preflight이 거부 → 운영자가 도구로 진단·정리 → 재시작.
+
+### Idempotency
+- 두 번째 init_db() → 마커로 phase 미실행.
+- 마커 강제 삭제 후 재실행 → 같은 그룹이 이미 정리되어 row 수 1이라 `GROUP BY HAVING COUNT(*) > 1` 자체가 0건 매칭. 노옵.
+
+### 2) 운영자 도구 `tools/migration_doctor.py`
+
+WhatUdoin.exe에 sub-command 형태로 노출. 회사 운영자가 별도 exe 설치/Python 설치 없이 진단 가능.
+
+**진입점 변경 (main.py)**:
+- `if __name__ == "__main__"` 블록 가장 처음에 `sys.argv` 검사. `--doctor` 또는 `doctor` 첫 인자면 도구 모드로 진입(uvicorn·tray 안 뜸).
+
+**도구 명령어**:
+- `WhatUdoin.exe --doctor check` (기본): 등록된 모든 `_PREFLIGHT_CHECKS` 순회 + dedup 그룹 진단(자동 처리 가능 vs 운영자 결정 필요 분류). 운영 DB(`whatudoin.db`)는 read-only로 열어 검사. 출력은 사람이 읽기 좋은 한국어 + ASCII 표.
+- `WhatUdoin.exe --doctor fix-projects --apply`: dedup 안전 조건 충족 그룹만 자동 정리. `--apply` 없으면 dry-run으로 어떤 row가 지워질지 미리보기. 자체 백업 호출 후 정리.
+- `WhatUdoin.exe --doctor --help`: 사용법 출력.
+
+**unsafe 충돌 (users/teams.name_norm)**:
+- 진단만 출력. 자동 정리 안 함. 운영자가 직접 처리하도록 **권장 SQL 템플릿**을 출력(예: `UPDATE users SET name='...' WHERE id=?`). 운영자가 의도 결정.
+
+### 3) PyInstaller spec 업데이트
+
+- `migration_doctor.py`를 `tools/migration_doctor.py`로 두고 `datas` 또는 `pathex`에 추가 — 단일 파일 sub-command 방식이라 별도 entry point는 불필요(main.py가 dispatch).
+- 필요 시 hiddenimports에 추가될 모듈 없음(이미 sqlite3, json만 사용).
+
+## step 분해 (플래너 참고)
+
+| step | 제목 | exit criteria |
+|------|------|---------------|
+| S1 | 자동 dedup phase 본문 등록 + PHASES 순서 정렬 | `team_phase_5a_projects_dedup_safe_v1`이 `team_phase_5_projects_unique_v1` 앞에 위치. 안전 조건 헬퍼 정확. unsafe 그룹은 변경 X. 합성 DB 7 시나리오 PASS. |
+| S2 | `tools/migration_doctor.py` + main.py sub-command | check/fix-projects 두 명령어 동작. read-only 진단 + dry-run 보호. 자체 백업 후 정리. |
+| S3 | PyInstaller spec 업데이트 + 빌드 사전 검증 | spec 변경 후 `pyinstaller --noconfirm WhatUdoin.spec` 시도(qa는 spec 파일 점검만, 실제 빌드는 사용자가 실행 — 시간 큼). 빌드 시도 실패 시 spec 패치. |
 
 ## exit criteria (사이클 전체)
 
-### 마이그레이션 동작
-- [ ] 빈 DB → phase 본문 노옵 (변환할 row 0건).
-- [ ] 합성 구 DB(평문 password 5명, admin 1명, 빈 password 1명) → 5+1=6명 변환, 빈 password 1명은 그대로. 변환 후 `password` 모두 NULL, `password_hash` 모두 채움.
-- [ ] sanity check 통과 (변환된 hash로 원래 평문 검증 OK).
-- [ ] 두 번째 init_db() → 마커로 phase 미실행. 마커 강제 삭제 후 재실행 → `password_hash IS NULL AND password IS NOT NULL` 가드로 노옵 (이미 변환된 row 안전).
-- [ ] preflight `users.name_norm` 충돌 케이스(중복 강제) → 서버 시작 거부 + warning `preflight_users_name_norm` 누적.
-- [ ] preflight `teams.name_norm` 충돌 케이스 → 동일.
-- [ ] 충돌 0건 → 정상 통과 + 인덱스 생성.
+### 자동 dedup phase
+- [ ] 빈 DB → phase 본문 노옵.
+- [ ] 합성 DB 시나리오:
+  - (a) 안전 그룹(빈 + 참조 0 + 메타 일치) → MIN id 유지, 나머지 DELETE, dedup_projects_auto warning 누적.
+  - (b) 한 row만 참조 있음 + 다른 row 빈 + 메타 일치 → 정리 대상 (참조 있는 쪽이 살아남도록 — `MIN(id WHERE 참조有)` 또는 단순 MIN id가 다를 수 있음. **사양 결정**: 단순 MIN(id)를 유지 후, 그것이 우연히 참조 없는 row면 자동 dedup이 위험 — 따라서 **"그룹 내 참조 없는 row만 DELETE"** 정책으로 변경. 사양 명세 끝.)
+  - (c) 메타 다름 → 그대로 둠 → 이후 #5 preflight 거부.
+  - (d) 양쪽 모두 참조 있음 → 그대로 둠 → preflight 거부.
+- [ ] 두 번째 init_db() → 노옵.
+- [ ] 마커 강제 삭제 후 재실행 → row 수 1이라 노옵.
 
-### 라우트
-- [ ] `POST /api/login` 이름+비밀번호 흐름:
-  - 정상 사용자(member) → 200 + 세션.
-  - admin 이름으로 시도 → 401 + 동일 메시지(존재 노출 금지).
-  - 잘못된 비밀번호 → 401.
-  - 정규식 위반 이름(밑줄·공백·특수문자) → 400.
-  - 대소문자 다른 이름(예: `Kim`/`kim`) → 동일 계정으로 인식.
-- [ ] `POST /api/admin/login` 그대로 동작 (admin이 hash로 변환된 후에도 정상).
-- [ ] `POST /api/me/change-password`:
-  - 현재 비밀번호 정확 → 새 비밀번호 정책 통과 시 hash 저장.
-  - 새 비밀번호 영문만 또는 숫자만 → 400 + 정책 메시지.
+### 운영자 도구
+- [ ] `WhatUdoin.exe --doctor check` (또는 dev: `python main.py --doctor check`):
+  - projects (team_id, name_norm) 충돌 그룹 + 안전 분류 출력.
+  - users/teams.name_norm 충돌 출력 + 권장 SQL 템플릿.
+  - 충돌 0건이면 "이상 없음".
+- [ ] `--doctor fix-projects` dry-run: 어떤 row 지워질지만 출력, 변경 X.
+- [ ] `--doctor fix-projects --apply`: 백업 후 안전 그룹 정리. dry-run 결과와 동일 동작.
 
-### 단위 테스트
-- [ ] `hash_password` + `verify_password` round-trip 정상.
-- [ ] 같은 평문이라도 매번 다른 salt → 다른 stored 문자열.
-- [ ] 잘못된 평문 → `verify_password` False.
-- [ ] 정규식 헬퍼: `Kim`, `김민수`, `kim123`, `김123` 통과 / `_kim`, `kim ` (공백), `kim@example` 차단.
+### main.py 변경
+- [ ] `--doctor` 인자 없이 실행 → 기존 동작 100% 유지(uvicorn + tray).
+- [ ] `--doctor` 인자 있으면 도구 모드 진입, 정리 후 종료. tray 안 뜸.
+
+### PyInstaller
+- [ ] spec에 `tools/migration_doctor.py` 포함.
+- [ ] 사용자 직접 빌드 시 정상 패키징.
+
+## 정리된 자동 dedup 정책 (사양 확정)
+
+**룰**: 같은 `(team_id, name_norm)` 그룹에서 다음을 만족하는 row만 자동 DELETE:
+- 그 row의 events/checklists.project_id 참조 0건
+- 그 row의 events/checklists/meetings.trash_project_id 참조 0건
+- 그 row의 project_members 참조 0건
+- 그 row의 project_milestones 참조 0건
+- `events.project = projects.name AND project_id IS NULL` 문자열 참조 0건
+- `checklists.project = projects.name AND project_id IS NULL` 문자열 참조 0건
+- 그룹 내에 살아남을 row(참조 ≥ 1건 또는 메타데이터 보존이 필요한 row)가 존재
+
+→ 즉 그룹의 "빈 + 참조 0건" row만 DELETE. 모든 row가 참조 0건이면 `MIN(id)` 1개를 살리고 나머지 DELETE. 메타데이터 동일성 검사는 살아남는 row의 메타가 그룹 대표가 되도록 설계가 단순해짐. 메타가 서로 달라도 빈 row는 안전 정리, 메타 보존은 살아남는 row가 자기 메타 그대로.
+
+이 룰의 장점: 메타 동일성 검사를 안 해도 안전(참조 없는 row는 메타가 무엇이든 운영 영향 0).
 
 ## 진행 방식
 
-- backend 1~2회 호출(S1+S2가 한 흐름, S3+S4+S5가 한 흐름). step별 섹션으로 분리.
-- reviewer는 (a) hash 알고리즘·저장 형식 검토, (b) sanity check 정합성, (c) preflight 정의, (d) 라우트 검사 누락, (e) admin 노출 차단(동일 메시지) 검토.
-- qa는 (1) 합성 구 DB 변환·sanity, (2) preflight 충돌 거부, (3) 라우트 정상/실패 시나리오, (4) 비밀번호 정책 단위.
+- backend가 S1+S2+S3을 한 흐름으로 처리. step별 섹션으로 분리.
+- reviewer는 (a) phase 순서 (b) 안전 조건 정밀도(거짓 양성/음성) (c) 도구 dry-run 보호 (d) main.py sub-command 분기.
+- qa는 시나리오 (1) 안전 그룹 자동 정리, (2) unsafe 그룹 보존, (3) 도구 check, (4) 도구 fix-projects dry-run, (5) 도구 fix-projects --apply, (6) main.py 일반 모드 영향 0.
 - 메인에는 한 줄 요약만 반환.
 
 ## 주의사항
 
-- **본 사이클은 #7 범위만.** 계정 가입 분리·팀 신청은 #8. IP 자동 로그인 토글은 #9. 가시성 라우트 적용은 #10.
-- **password 컬럼 drop은 Phase 5(별도 릴리스)** — 본 사이클은 NULL 처리만.
-- **admin 존재 여부 노출 금지**: 일반 `/api/login`이 admin 이름·비밀번호로 시도해도 일반 사용자 401과 동일 메시지("아이디 또는 비밀번호가 올바르지 않습니다.")로 응답. 응답 시간도 차이 최소화 (가능하면 더미 hash 비교).
-- **변환 phase 트랜잭션 안전**: `password` NULL 처리는 hash 검증·sanity check 통과 후. 실패 시 ROLLBACK으로 원본 평문 보존(보안 공백 회피).
-- **VSCode 디버깅 모드** — qa는 import-time + 합성 DB. 실서버 재시작 필요 시 사용자에게 요청.
-- 의존성 추가 시 PyInstaller spec(`WhatUdoin.spec`) 업데이트 필요 — 표준 라이브러리만 쓰면 회피 가능.
+- **정리는 hard DELETE**. phase 시작 시 `run_migration_backup()`이 자동으로 떠 있고, 도구의 `--apply`도 자체 백업 호출 후 진행. 백업 위치는 `backupDB/whatudoin-migrate-*.db`.
+- 도구는 `whatudoin.db`를 default로 사용하지만 `--db-path` 옵션으로 다른 경로 지정 가능(QA 시 합성 DB 사용).
+- **users.name_norm / teams.name_norm 자동 정리는 본 사이클 X.** 도구가 진단·SQL 템플릿만 출력. 자동 정리는 운영 합병 의사결정이 필요해 별도 사이클 검토.
+- `--doctor` sub-command는 sys.argv를 일찍(콘솔 초기화 전·트레이 전·sidecar 전) 검사. 도구 모드에서는 colon stdout/stderr 인코딩만 하고 나머지 초기화 skip.
+- VSCode 디버깅 모드 — 서버 자동 재시작 불가. qa는 import-time + 합성 DB.
 
 ## 산출물 위치
 
 - `backend_changes.md`, `code_review_report.md`, `qa_report.md`: `.claude/workspaces/current/` 직속
-- 검증 스크립트: `.claude/workspaces/current/scripts/verify_password_hash.py`, `verify_login_routes.py`
+- 검증 스크립트: `.claude/workspaces/current/scripts/verify_dedup_phase.py`, `verify_migration_doctor.py`

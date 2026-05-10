@@ -30,6 +30,10 @@ a = Analysis(
         ('publisher.py',            '.'),
         ('maintenance_owners.py',   '.'),
         ('mcp_command_registry.py', '.'),
+        # 그룹 A 보강 사이클 — 운영자 진단 도구.
+        # main.py가 `--doctor` sub-command로 dispatch (tools.migration_doctor).
+        ('tools/__init__.py',         'tools'),
+        ('tools/migration_doctor.py', 'tools'),
     ],
     hiddenimports=[
         # ── uvicorn ──────────────────────────────────────
@@ -140,6 +144,9 @@ a = Analysis(
         'maintenance_owners',
         'mcp_command_registry',
         'broker',
+        # ── 그룹 A 보강 사이클 — migration_doctor sub-command ──
+        'tools',
+        'tools.migration_doctor',
         # ── httpx (Front Router reverse HTTP proxy 모드) ──
         # 분리 4단계(WHATUDOIN_ENABLE_FRONTEND_ROUTING=1) 활성화 시 사용.
         # fallback 모드에서는 import 자체가 발생하지 않으니 부담 0.
