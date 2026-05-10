@@ -44,12 +44,21 @@ OLLAMA_SERVICE_PORT_ENV = "WHATUDOIN_OLLAMA_PORT"
 OLLAMA_SERVICE_URL_ENV = "WHATUDOIN_OLLAMA_SERVICE_URL"
 OLLAMA_SERVICE_DEFAULT_PORT = 8767
 
+# M5-2: Media service 상수
+MEDIA_SERVICE_NAME = "media"
+MEDIA_SERVICE_BIND_HOST_ENV = "WHATUDOIN_MEDIA_BIND_HOST"
+MEDIA_SERVICE_PORT_ENV = "WHATUDOIN_MEDIA_PORT"
+MEDIA_SERVICE_URL_ENV = "WHATUDOIN_MEDIA_SERVICE_URL"
+MEDIA_SERVICE_DEFAULT_PORT = 8768
+MEDIA_SERVICE_STAGING_ROOT_ENV = "WHATUDOIN_STAGING_ROOT"
+
 CRASH_LOOP_WINDOW_SECONDS = 300
 CRASH_LOOP_MAX_FAILURES = 3
 
-# M3-3: graceful shutdown 순서 — 의존 서비스부터 종료
-# Ollama → SSE → Scheduler → Web API (M3 시점 Ollama 미도입이므로 skip됨)
-STOP_ORDER = ("ollama", "sse", "scheduler", "web-api")
+# M3-3/M5-2: graceful shutdown 순서 — 의존 서비스부터 종료
+# Ollama → Media → SSE → Scheduler → Web API
+# Media는 외부 endpoint 미보유라 SSE보다 먼저 stop.
+STOP_ORDER = ("ollama", "media", "sse", "scheduler", "web-api")
 
 M2_STARTUP_SEQUENCE = (
     "resolve_runtime_paths",
@@ -60,6 +69,7 @@ M2_STARTUP_SEQUENCE = (
     "start_sse_service",
     "start_scheduler_service",   # M3-2: Scheduler service (5번째, SSE 다음)
     "start_ollama_service",      # M4-1: Ollama service (6번째, Scheduler 다음)
+    "start_media_service",       # M5-2: Media service (7번째, Ollama 다음)
     "verify_health_and_publish_status",
 )
 
@@ -67,6 +77,7 @@ M2_STARTUP_SEQUENCE = (
 def web_api_internal_service_env(
     router_host: str = FRONT_ROUTER_LOOPBACK_HOST,
     ollama_port: int = OLLAMA_SERVICE_DEFAULT_PORT,
+    media_port: int = MEDIA_SERVICE_DEFAULT_PORT,
 ) -> dict[str, str]:
     return {
         TRUSTED_PROXY_ENV: router_host,
@@ -77,6 +88,8 @@ def web_api_internal_service_env(
         SCHEDULER_SERVICE_ENABLE_ENV: "1",
         # M4-1: Ollama service URL — web-api가 외부 Ollama 직접 호출 대신 IPC 위임.
         OLLAMA_SERVICE_URL_ENV: f"http://127.0.0.1:{ollama_port}/internal/llm",
+        # M5-2: Media service URL — web-api가 파일 처리 위임.
+        MEDIA_SERVICE_URL_ENV: f"http://127.0.0.1:{media_port}/internal/process",
     }
 
 
@@ -197,6 +210,48 @@ def ollama_service_spec(
     }
     env[OLLAMA_SERVICE_BIND_HOST_ENV] = "127.0.0.1"
     env[OLLAMA_SERVICE_PORT_ENV] = str(port)
+    return ServiceSpec(
+        name=name,
+        command=command,
+        env=env,
+        startup_grace_seconds=startup_grace_seconds,
+    )
+
+
+def media_service_spec(
+    command: Sequence[str],
+    *,
+    name: str = MEDIA_SERVICE_NAME,
+    port: int = MEDIA_SERVICE_DEFAULT_PORT,
+    staging_root: str | None = None,
+    extra_env: Mapping[str, str] | None = None,
+    startup_grace_seconds: float = 1.0,
+) -> ServiceSpec:
+    """Media service 프로세스 spec 팩토리.
+
+    보호 env (extra_env override 차단):
+    - WHATUDOIN_MEDIA_BIND_HOST: 항상 127.0.0.1 (loopback bind 강제)
+    - WHATUDOIN_MEDIA_PORT: 지정 포트 강제
+    - WHATUDOIN_INTERNAL_TOKEN: supervisor가 직접 주입
+    - WHATUDOIN_STAGING_ROOT: supervisor가 결정한 staging 루트 강제
+
+    WHATUDOIN_MEDIA_SERVICE_URL은 web-api 측 env이므로 이 spec에 포함하지 않는다.
+    """
+    protected = {
+        MEDIA_SERVICE_BIND_HOST_ENV,
+        MEDIA_SERVICE_PORT_ENV,
+        INTERNAL_TOKEN_ENV,  # supervisor가 직접 주입 — extra_env override 차단
+        MEDIA_SERVICE_STAGING_ROOT_ENV,  # supervisor가 결정 — 사용자 override 차단
+    }
+    env = {
+        str(k): str(v)
+        for k, v in (extra_env or {}).items()
+        if str(k) not in protected
+    }
+    env[MEDIA_SERVICE_BIND_HOST_ENV] = "127.0.0.1"
+    env[MEDIA_SERVICE_PORT_ENV] = str(port)
+    if staging_root is not None:
+        env[MEDIA_SERVICE_STAGING_ROOT_ENV] = staging_root
     return ServiceSpec(
         name=name,
         command=command,
@@ -592,4 +647,12 @@ __all__ = [
     "OLLAMA_SERVICE_NAME",
     "OLLAMA_SERVICE_PORT_ENV",
     "OLLAMA_SERVICE_URL_ENV",
+    # M5-2: Media service
+    "MEDIA_SERVICE_BIND_HOST_ENV",
+    "MEDIA_SERVICE_DEFAULT_PORT",
+    "MEDIA_SERVICE_NAME",
+    "MEDIA_SERVICE_PORT_ENV",
+    "MEDIA_SERVICE_STAGING_ROOT_ENV",
+    "MEDIA_SERVICE_URL_ENV",
+    "media_service_spec",
 ]

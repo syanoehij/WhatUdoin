@@ -53,6 +53,16 @@ _RUN_DIR  = Path(os.environ.get("WHATUDOIN_RUN_DIR",  Path(__file__).parent))
 MEETINGS_DIR = _RUN_DIR / "meetings"
 MEETINGS_DIR.mkdir(exist_ok=True)
 
+# M5-2: Media service IPC 분기
+# WHATUDOIN_MEDIA_SERVICE_URL 미설정 시 기존 in-process 동작 100% 유지.
+_MEDIA_SERVICE_URL: str = os.environ.get("WHATUDOIN_MEDIA_SERVICE_URL", "").strip()
+
+# M5-1: staging 루트 (Media service와 공유 — WHATUDOIN_STAGING_ROOT env로 통일)
+STAGING_ROOT = Path(
+    os.environ.get("WHATUDOIN_STAGING_ROOT", str(_RUN_DIR / "staging"))
+)
+STAGING_ROOT.mkdir(parents=True, exist_ok=True)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -3920,28 +3930,146 @@ def docs_calendar(request: Request):
     return result
 
 
+def _call_media_service(
+    *,
+    kind: str,
+    staging_path: Path,
+    original_name: str,
+    max_bytes: int,
+) -> dict:
+    """Media service IPC 호출 헬퍼 (M5-1).
+
+    POST _MEDIA_SERVICE_URL JSON {kind, staging_path, original_name, max_bytes}
+    + Authorization Bearer 토큰.
+
+    반환: Media service 응답 dict.
+    - 2xx 성공 응답: JSON 파싱 후 반환.
+    - 4xx 업무 오류 응답 (invalid_image, too_large 등): HTTPError.read()로 body 파싱 후 반환.
+      urllib.urlopen은 4xx도 HTTPError를 raise하므로 별도 처리 필요.
+    - 연결 실패/timeout/URLError → RuntimeError("unavailable") raise.
+    stdlib urllib.request만 사용 — 외부 의존성 추가 0.
+    """
+    import urllib.error as _ue
+    import urllib.request as _ur
+    import json as _json
+
+    token = os.environ.get("WHATUDOIN_INTERNAL_TOKEN", "").strip()
+    payload = _json.dumps({
+        "kind": kind,
+        "staging_path": str(staging_path),
+        "original_name": original_name,
+        "max_bytes": max_bytes,
+    }).encode("utf-8")
+    req = _ur.Request(
+        _MEDIA_SERVICE_URL,
+        data=payload,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    try:
+        with _ur.urlopen(req, timeout=30) as resp:
+            body = resp.read(4 * 1024 * 1024)
+            return _json.loads(body)
+    except _ue.HTTPError as exc:
+        # 4xx 응답: media service가 업무 오류를 JSON으로 반환 (ok:false + reason).
+        # urlopen은 4xx도 HTTPError로 raise하므로 body를 읽어서 반환.
+        try:
+            body = exc.read(4 * 1024 * 1024)
+            return _json.loads(body)
+        except Exception:
+            # body 파싱 불가 시 (예: 401/403 인증 오류) → 연결 불가로 처리
+            raise RuntimeError("unavailable") from exc
+    except Exception as exc:
+        raise RuntimeError("unavailable") from exc
+
+
 @app.post("/api/upload/image")
 async def upload_image(request: Request, file: UploadFile = File(...)):
     """회의록 이미지 업로드 — meetings/{year}/{month}/{uuid}.ext 로 저장"""
-    from PIL import Image as _PilImage
     _require_editor(request)
-    data = await file.read()
-    if len(data) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="파일 크기는 10MB 이하여야 합니다.")
+
+    if not _MEDIA_SERVICE_URL:
+        # ── in-process fallback (기존 동작 100% 보존) ──────────────────────
+        from PIL import Image as _PilImage
+        data = await file.read()
+        if len(data) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="파일 크기는 10MB 이하여야 합니다.")
+        try:
+            img = _PilImage.open(io.BytesIO(data))
+            img.verify()
+        except Exception:
+            raise HTTPException(status_code=400, detail="유효하지 않은 이미지 파일입니다.")
+        ext = Path(file.filename).suffix.lower() if file.filename else ".png"
+        if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+            ext = ".png"
+        now = datetime.now()
+        folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
+        folder.mkdir(parents=True, exist_ok=True)
+        filename = f"{uuid.uuid4().hex}{ext}"
+        (folder / filename).write_bytes(data)
+        return {"url": f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"}
+
+    # ── Media service IPC 경로 ────────────────────────────────────────────────
+    # ext 정규화: 알 수 없는 ext는 .png로 fallback (기존 in-process 정책 보존)
+    raw_ext = Path(file.filename).suffix.lower() if file.filename else ".png"
+    _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+    normalized_ext = raw_ext if raw_ext in _IMAGE_EXTS else ".png"
+    # original_name ext를 정규화한 이름으로 Media service에 전달
+    original_name = (Path(file.filename).stem + normalized_ext) if file.filename else f"image{normalized_ext}"
+
+    staging_file: Path | None = STAGING_ROOT / f"{uuid.uuid4().hex}.tmp"
     try:
-        img = _PilImage.open(io.BytesIO(data))
-        img.verify()
-    except Exception:
-        raise HTTPException(status_code=400, detail="유효하지 않은 이미지 파일입니다.")
-    ext = Path(file.filename).suffix.lower() if file.filename else ".png"
-    if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
-        ext = ".png"
-    now = datetime.now()
-    folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
-    folder.mkdir(parents=True, exist_ok=True)
-    filename = f"{uuid.uuid4().hex}{ext}"
-    (folder / filename).write_bytes(data)
-    return {"url": f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"}
+        # stream → staging 파일 저장 (큰 파일 메모리 피크 회피)
+        written = 0
+        max_bytes = 10 * 1024 * 1024
+        with open(staging_file, "wb") as f:
+            while True:
+                chunk = await file.read(65536)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > max_bytes:
+                    raise HTTPException(status_code=400, detail="파일 크기는 10MB 이하여야 합니다.")
+                f.write(chunk)
+
+        try:
+            result = await run_in_threadpool(
+                _call_media_service,
+                kind="image",
+                staging_path=staging_file,
+                original_name=original_name,
+                max_bytes=max_bytes,
+            )
+        except RuntimeError:
+            raise HTTPException(status_code=500, detail="이미지 처리 서비스 일시 사용 불가")
+
+        if not result.get("ok"):
+            reason = result.get("reason", "")
+            if reason == "too_large":
+                raise HTTPException(status_code=413, detail="파일 크기는 10MB 이하여야 합니다.")
+            elif reason == "invalid_image":
+                raise HTTPException(status_code=400, detail="유효하지 않은 이미지 파일입니다.")
+            elif reason == "forbidden_ext":
+                raise HTTPException(status_code=415, detail="허용되지 않는 이미지 형식입니다.")
+            else:
+                raise HTTPException(status_code=400, detail="이미지 처리 실패")
+
+        # Web API가 staging → MEETINGS_DIR 이동 (owner)
+        ext = result.get("ext", normalized_ext) or normalized_ext
+        now = datetime.now()
+        folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
+        folder.mkdir(parents=True, exist_ok=True)
+        filename = f"{uuid.uuid4().hex}{ext}"
+        staging_file.rename(folder / filename)
+        staging_file = None  # renamed — cleanup 불필요
+
+        return {"url": f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"}
+    finally:
+        if staging_file is not None and staging_file.exists():
+            staging_file.unlink(missing_ok=True)
 
 
 @app.post("/api/upload/attachment")
@@ -3949,21 +4077,83 @@ async def upload_attachment(request: Request, file: UploadFile = File(...)):
     """문서 첨부파일 업로드 — meetings/{year}/{month}/{uuid}.ext 로 저장"""
     _require_editor(request)
     _ALLOWED_EXTS = {".txt", ".xls", ".xlsx", ".ppt", ".pptx", ".pdf", ".zip", ".7z"}
+
+    if not _MEDIA_SERVICE_URL:
+        # ── in-process fallback (기존 동작 100% 보존) ──────────────────────
+        ext = Path(file.filename).suffix.lower() if file.filename else ""
+        if ext not in _ALLOWED_EXTS:
+            raise HTTPException(status_code=400, detail="허용되지 않는 파일 형식입니다.")
+        data = await file.read()
+        if len(data) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="파일 크기는 20MB 이하여야 합니다.")
+        now = datetime.now()
+        folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
+        folder.mkdir(parents=True, exist_ok=True)
+        filename = f"{uuid.uuid4().hex}{ext}"
+        (folder / filename).write_bytes(data)
+        original_name = file.filename or filename
+        url = f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"
+        uploaded_at = now.strftime("%y%m%d_%H%M")
+        return {"name": original_name, "url": url, "size": len(data), "uploaded_at": uploaded_at}
+
+    # ── Media service IPC 경로 ────────────────────────────────────────────────
     ext = Path(file.filename).suffix.lower() if file.filename else ""
     if ext not in _ALLOWED_EXTS:
         raise HTTPException(status_code=400, detail="허용되지 않는 파일 형식입니다.")
-    data = await file.read()
-    if len(data) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="파일 크기는 20MB 이하여야 합니다.")
-    now = datetime.now()
-    folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
-    folder.mkdir(parents=True, exist_ok=True)
-    filename = f"{uuid.uuid4().hex}{ext}"
-    (folder / filename).write_bytes(data)
-    original_name = file.filename or filename
-    url = f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"
-    uploaded_at = now.strftime("%y%m%d_%H%M")
-    return {"name": original_name, "url": url, "size": len(data), "uploaded_at": uploaded_at}
+
+    original_name = file.filename or f"attachment{ext}"
+
+    staging_file: Path | None = STAGING_ROOT / f"{uuid.uuid4().hex}.tmp"
+    try:
+        # stream → staging 파일 저장 (큰 파일 메모리 피크 회피)
+        written = 0
+        max_bytes = 20 * 1024 * 1024
+        with open(staging_file, "wb") as f:
+            while True:
+                chunk = await file.read(65536)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > max_bytes:
+                    raise HTTPException(status_code=400, detail="파일 크기는 20MB 이하여야 합니다.")
+                f.write(chunk)
+
+        try:
+            result = await run_in_threadpool(
+                _call_media_service,
+                kind="attachment",
+                staging_path=staging_file,
+                original_name=original_name,
+                max_bytes=max_bytes,
+            )
+        except RuntimeError:
+            raise HTTPException(status_code=500, detail="파일 처리 서비스 일시 사용 불가")
+
+        if not result.get("ok"):
+            reason = result.get("reason", "")
+            if reason == "too_large":
+                raise HTTPException(status_code=413, detail="파일 크기는 20MB 이하여야 합니다.")
+            elif reason == "forbidden_ext":
+                raise HTTPException(status_code=415, detail="허용되지 않는 파일 형식입니다.")
+            else:
+                raise HTTPException(status_code=400, detail="파일 처리 실패")
+
+        # Web API가 staging → MEETINGS_DIR 이동 (owner)
+        ext = result.get("ext", ext) or ext
+        file_size = result.get("size", written)
+        now = datetime.now()
+        folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
+        folder.mkdir(parents=True, exist_ok=True)
+        filename = f"{uuid.uuid4().hex}{ext}"
+        staging_file.rename(folder / filename)
+        staging_file = None  # renamed — cleanup 불필요
+
+        url = f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"
+        uploaded_at = now.strftime("%y%m%d_%H%M")
+        return {"name": original_name, "url": url, "size": file_size, "uploaded_at": uploaded_at}
+    finally:
+        if staging_file is not None and staging_file.exists():
+            staging_file.unlink(missing_ok=True)
 
 
 def _delete_meeting_images(content: str):
