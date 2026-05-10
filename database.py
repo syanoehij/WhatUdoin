@@ -1211,6 +1211,309 @@ def _phase_3_admin_separation(conn):
 PHASES.append(("team_phase_3_admin_separation_v1", _phase_3_admin_separation))
 
 
+# ── 팀 기능 그룹 A #4 — 데이터 백필 phase 본문 ──────────────────
+# 이름은 todo의 항목 번호 기반(`team_phase_4_data_backfill_v1`).
+# 위 `team_phase_4_indexes_v1`(L~1073)과 별개의 phase이며 등록 순서상 마지막에 실행된다.
+#
+# 책임:
+#   1) events.team_id 백필                — created_by(TEXT) 기반
+#   2) checklists.team_id 백필             — created_by(TEXT) 기반
+#   3) meetings.team_id 백필 (4분기)       — created_by(INTEGER) + is_team_doc 분기
+#   4) projects.team_id 백필 (단계 1/2/4)  — owner_id 기반 (자동 생성은 #6)
+#   5) notifications.team_id 백필          — events.team_id 의존
+#   6) links.team_id 백필                  — scope='team' 한정, created_by(TEXT)
+#   7) team_notices.team_id 백필           — created_by(TEXT)
+#   8) pending_users 자동 삭제              — 가드 불필요
+#
+# 모든 UPDATE에 `WHERE team_id IS NULL` 가드 → 마커 강제 삭제 후 재실행해도
+# 이미 채워진 row를 다시 건드리지 않는다.
+#
+# 헬퍼 `_resolve_user_single_team`은 phase 본문 내부 전용(__phase4 prefix). 라우트·UI에서
+# 쓰지 말 것 — 런타임 헬퍼는 #15의 `resolve_work_team` 책임.
+#
+# warning 카테고리 5종:
+#   - data_backfill_events
+#   - data_backfill_meetings_team_doc_no_owner
+#   - data_backfill_projects
+#   - data_backfill_links
+#   - data_backfill_team_notices
+
+
+def __phase4_resolve_user_single_team(conn, user_name_or_id, _cache: dict):
+    """작성자 → 단일 팀 결정 헬퍼 (phase 4 데이터 백필 전용).
+
+    우선순위 (사양서 §13 확정안):
+      1) user_teams approved row가 정확히 1건이면 그 팀
+      2) ≥2건이면 joined_at 최선(가장 이른) 팀 — 대표 팀
+      3) 0건이면 legacy users.team_id (admin이거나 미배정이면 NULL)
+      4) 사용자 매칭 실패 → None
+
+    입력 타입:
+      - INTEGER  → users.id 직접 조회 (예: meetings.created_by)
+      - TEXT     → users.name 매칭 (대소문자 그대로; name_norm 매칭은 후속 사이클 책임)
+
+    매 row마다 호출되므로 dict 캐시로 중복 조회 회피. 캐시 키는 ('id', uid) 또는 ('name', name).
+    None/빈문자열 입력은 즉시 None 반환.
+    """
+    if user_name_or_id is None:
+        return None
+    if isinstance(user_name_or_id, str) and not user_name_or_id.strip():
+        return None
+
+    if isinstance(user_name_or_id, int):
+        cache_key = ("id", user_name_or_id)
+    else:
+        cache_key = ("name", str(user_name_or_id))
+
+    if cache_key in _cache:
+        return _cache[cache_key]
+
+    # 사용자 row 조회
+    if cache_key[0] == "id":
+        user_row = conn.execute(
+            "SELECT id, team_id, role FROM users WHERE id = ?",
+            (cache_key[1],),
+        ).fetchone()
+    else:
+        user_row = conn.execute(
+            "SELECT id, team_id, role FROM users WHERE name = ?",
+            (cache_key[1],),
+        ).fetchone()
+
+    if not user_row:
+        _cache[cache_key] = None
+        return None
+
+    uid = user_row["id"] if isinstance(user_row, sqlite3.Row) else user_row[0]
+    legacy_team_id = user_row["team_id"] if isinstance(user_row, sqlite3.Row) else user_row[1]
+
+    # user_teams approved 멤버십 조회 (joined_at ASC = 가장 이른 가입)
+    ut_rows = conn.execute(
+        "SELECT team_id FROM user_teams "
+        "WHERE user_id = ? AND status = 'approved' "
+        "ORDER BY joined_at ASC, id ASC",
+        (uid,),
+    ).fetchall()
+
+    if len(ut_rows) >= 1:
+        # 1건이면 그 팀, ≥2건이면 가장 이른 팀(대표 팀)
+        first = ut_rows[0]
+        team_id = first["team_id"] if isinstance(first, sqlite3.Row) else first[0]
+        _cache[cache_key] = team_id
+        return team_id
+
+    # 0건 → legacy users.team_id (admin은 이미 #3에서 NULL 처리됨)
+    _cache[cache_key] = legacy_team_id
+    return legacy_team_id
+
+
+def _phase_4_data_backfill(conn):
+    """Phase 4 데이터 백필 (#4 사이클): 7개 테이블 team_id 백필 + pending_users 삭제.
+
+    전체 본문이 idempotent — 마커 강제 삭제 후 재실행해도 결과 동일:
+      - 모든 UPDATE에 `WHERE team_id IS NULL` 가드
+      - DELETE FROM pending_users 는 빈 테이블이면 노옵
+      - 결정 불가 row는 NULL 유지 + warning 누적 (dedup은 _append_team_migration_warning 내장)
+    """
+    cache: dict = {}
+
+    # ─── 1) events.team_id 백필 ─────────────────────────────────────
+    # (1번) project_id → projects.team_id: project_id 백필은 #6 책임이라
+    #        본 사이클에서는 매칭 0건이 정상이지만, #6 PHASES.append 후를 대비해 코드는 둔다.
+    #        가드 컬럼 존재 확인 + WHERE team_id IS NULL.
+    if _table_exists(conn, "events"):
+        events_cols = _column_set(conn, "events")
+        if "project_id" in events_cols and _table_exists(conn, "projects"):
+            conn.execute(
+                "UPDATE events "
+                "   SET team_id = (SELECT p.team_id FROM projects p "
+                "                   WHERE p.id = events.project_id) "
+                " WHERE events.team_id IS NULL "
+                "   AND events.project_id IS NOT NULL "
+                "   AND EXISTS (SELECT 1 FROM projects p "
+                "                WHERE p.id = events.project_id "
+                "                  AND p.team_id IS NOT NULL)"
+            )
+
+        # (2번) 작성자 단일 팀
+        rows = conn.execute(
+            "SELECT id, created_by FROM events WHERE team_id IS NULL"
+        ).fetchall()
+        for row in rows:
+            row_id = row["id"]
+            created_by = row["created_by"]
+            resolved = __phase4_resolve_user_single_team(conn, created_by, cache)
+            if resolved is not None:
+                conn.execute(
+                    "UPDATE events SET team_id = ? WHERE id = ? AND team_id IS NULL",
+                    (resolved, row_id),
+                )
+            else:
+                _append_team_migration_warning(
+                    conn,
+                    "data_backfill_events",
+                    f"events id={row_id} created_by={created_by!r} resolution failed",
+                )
+
+    # ─── 2) checklists.team_id 백필 (events와 동일 규칙) ────────────
+    if _table_exists(conn, "checklists"):
+        rows = conn.execute(
+            "SELECT id, created_by FROM checklists WHERE team_id IS NULL"
+        ).fetchall()
+        for row in rows:
+            row_id = row["id"]
+            created_by = row["created_by"]
+            resolved = __phase4_resolve_user_single_team(conn, created_by, cache)
+            if resolved is not None:
+                conn.execute(
+                    "UPDATE checklists SET team_id = ? WHERE id = ? AND team_id IS NULL",
+                    (resolved, row_id),
+                )
+            else:
+                _append_team_migration_warning(
+                    conn,
+                    "data_backfill_events",  # 사양서 §exit criteria: 5개 카테고리만 사용 → checklists는 events 카테고리에 합산
+                    f"checklists id={row_id} created_by={created_by!r} resolution failed",
+                )
+
+    # ─── 3) meetings.team_id 백필 (4분기) ────────────────────────────
+    # created_by는 INTEGER NOT NULL.
+    # 분기:
+    #   (A) is_team_doc=1 + 작성자 admin/팀미배정  → NULL 유지 + warning(team_doc_no_owner)
+    #   (B) is_team_doc=0 + 작성자 admin/팀미배정  → NULL 유지 (정상, 개인 문서)
+    #   (C) is_team_doc=1 + 정상                    → 작성자 단일 팀으로 백필
+    #   (D) is_team_doc=0 + 정상                    → 동일 (작성자 본인 가시성 + 팀 컨텍스트)
+    if _table_exists(conn, "meetings"):
+        rows = conn.execute(
+            "SELECT id, created_by, is_team_doc FROM meetings WHERE team_id IS NULL"
+        ).fetchall()
+        for row in rows:
+            row_id = row["id"]
+            created_by = row["created_by"]
+            is_team_doc = row["is_team_doc"]
+
+            resolved = __phase4_resolve_user_single_team(conn, created_by, cache)
+            if resolved is not None:
+                # 분기 (C)/(D): 정상 백필
+                conn.execute(
+                    "UPDATE meetings SET team_id = ? WHERE id = ? AND team_id IS NULL",
+                    (resolved, row_id),
+                )
+            else:
+                # 작성자 admin이거나 팀 미배정
+                if is_team_doc == 1:
+                    # 분기 (A): 팀 문서인데 소유자 없음 → 명시 warning
+                    _append_team_migration_warning(
+                        conn,
+                        "data_backfill_meetings_team_doc_no_owner",
+                        f"meetings id={row_id} created_by={created_by!r} is_team_doc=1 but no team",
+                    )
+                # 분기 (B): 개인 문서 + 팀 미배정 → 정상, warning 안 함
+
+    # ─── 4) projects.team_id 백필 (단계 1/2/4) ──────────────────────
+    # 단계 3(자동 프로젝트 생성)은 #6 책임 — 본 사이클에서 시도 X.
+    # 단계 1(기존 team_id 사용)은 가드(`WHERE team_id IS NULL`)로 자연 skip.
+    # deleted_at 컬럼 존재 가드 — Phase 1이 추가하지만 방어적.
+    if _table_exists(conn, "projects"):
+        proj_cols = _column_set(conn, "projects")
+        guard_deleted = "AND deleted_at IS NULL" if "deleted_at" in proj_cols else ""
+        rows = conn.execute(
+            f"SELECT id, name, owner_id FROM projects "
+            f" WHERE team_id IS NULL {guard_deleted}"
+        ).fetchall()
+        for row in rows:
+            row_id = row["id"]
+            name = row["name"]
+            owner_id = row["owner_id"]
+
+            resolved = None
+            if owner_id is not None:
+                # 단계 2: owner의 user_teams 단일 팀 / legacy users.team_id
+                resolved = __phase4_resolve_user_single_team(conn, owner_id, cache)
+
+            if resolved is not None:
+                conn.execute(
+                    "UPDATE projects SET team_id = ? WHERE id = ? AND team_id IS NULL",
+                    (resolved, row_id),
+                )
+            else:
+                # 단계 4: 결정 불가 → NULL 유지 + warning
+                _append_team_migration_warning(
+                    conn,
+                    "data_backfill_projects",
+                    f"projects id={row_id} name={name!r} owner_id={owner_id!r} resolution failed",
+                )
+
+    # ─── 5) notifications.team_id 백필 ──────────────────────────────
+    # event_id가 있고 events.team_id가 있으면 그 값으로. 없으면 NULL 유지(warning 안 함).
+    # 알림은 transient 데이터라 사양서가 noise 회피를 위해 warning 생략을 명시.
+    if _table_exists(conn, "notifications") and _table_exists(conn, "events"):
+        conn.execute(
+            "UPDATE notifications "
+            "   SET team_id = (SELECT e.team_id FROM events e "
+            "                   WHERE e.id = notifications.event_id) "
+            " WHERE notifications.team_id IS NULL "
+            "   AND notifications.event_id IS NOT NULL "
+            "   AND EXISTS (SELECT 1 FROM events e "
+            "                WHERE e.id = notifications.event_id "
+            "                  AND e.team_id IS NOT NULL)"
+        )
+
+    # ─── 6) links.team_id 백필 (scope='team' 한정) ──────────────────
+    # scope='personal'은 team_id NULL이 정상.
+    if _table_exists(conn, "links"):
+        rows = conn.execute(
+            "SELECT id, title, created_by FROM links "
+            " WHERE scope = 'team' AND team_id IS NULL"
+        ).fetchall()
+        for row in rows:
+            row_id = row["id"]
+            title = row["title"]
+            created_by = row["created_by"]
+            resolved = __phase4_resolve_user_single_team(conn, created_by, cache)
+            if resolved is not None:
+                conn.execute(
+                    "UPDATE links SET team_id = ? "
+                    "WHERE id = ? AND scope = 'team' AND team_id IS NULL",
+                    (resolved, row_id),
+                )
+            else:
+                _append_team_migration_warning(
+                    conn,
+                    "data_backfill_links",
+                    f"links id={row_id} created_by={created_by!r} title={title!r} resolution failed",
+                )
+
+    # ─── 7) team_notices.team_id 백필 ───────────────────────────────
+    if _table_exists(conn, "team_notices"):
+        rows = conn.execute(
+            "SELECT id, created_by FROM team_notices WHERE team_id IS NULL"
+        ).fetchall()
+        for row in rows:
+            row_id = row["id"]
+            created_by = row["created_by"]
+            resolved = __phase4_resolve_user_single_team(conn, created_by, cache)
+            if resolved is not None:
+                conn.execute(
+                    "UPDATE team_notices SET team_id = ? WHERE id = ? AND team_id IS NULL",
+                    (resolved, row_id),
+                )
+            else:
+                _append_team_migration_warning(
+                    conn,
+                    "data_backfill_team_notices",
+                    f"team_notices id={row_id} created_by={created_by!r} resolution failed",
+                )
+
+    # ─── 8) pending_users 자동 삭제 ─────────────────────────────────
+    # status 무관 전체 삭제. 빈 테이블이면 0행 영향 (노옵).
+    if _table_exists(conn, "pending_users"):
+        conn.execute("DELETE FROM pending_users")
+
+
+PHASES.append(("team_phase_4_data_backfill_v1", _phase_4_data_backfill))
+
+
 def _run_preflight_checks(conn) -> list:
     """등록된 모든 preflight 검사를 돌려 충돌 메시지를 모은다.
     검사 함수가 0개면 빈 리스트 반환(정상 통과)."""

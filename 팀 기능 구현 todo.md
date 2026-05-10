@@ -127,36 +127,36 @@
 📖 섹션 13 마이그레이션 대상
 **의존: ← #2**
 
-- [ ] **마이그레이션 (events/checklists/meetings)**
-  - [ ] `events.team_id` / `checklists.team_id` NULL 보강 — **추론 우선순위 (계획서 섹션 13 확정안)**:
-    1. 같은 row의 `project_id` (또는 백필 후 채워진 `project_id`)가 가리키는 `projects.team_id`
+- [x] **마이그레이션 (events/checklists/meetings)** — `team_phase_4_data_backfill_v1`로 등록
+  - [x] `events.team_id` / `checklists.team_id` NULL 보강 — **추론 우선순위 (계획서 섹션 13 확정안)**:
+    1. 같은 row의 `project_id` (또는 백필 후 채워진 `project_id`)가 가리키는 `projects.team_id` — 본 사이클은 project_id 미백필이라 노옵, #6 채움 시 활성화
     2. 작성자(`created_by` 문자열 → users.name)가 단일 팀(`user_teams.join_status='approved'` 1건)에 소속이면 그 팀
     3. 결정 불가 시 `team_id` NULL 유지 + `team_migration_warnings`에 row id·시도 결과 기록 (마이그레이션은 통과, 서버 시작 거부 X)
-  - [ ] **임의 "기본 팀" 일괄 배정 금지** — 섞이면 분리 비용이 큼
-  - [ ] NULL 잔존 row의 가시성: 작성자 본인 + admin 슈퍼유저에게만 노출 (가시성 쿼리에 명시)
-  - [ ] `meetings.team_id` 백필 규칙 — **정상 경로 + 예외 분기 (계획서 섹션 13)**:
+  - [x] **임의 "기본 팀" 일괄 배정 금지** — 섞이면 분리 비용이 큼
+  - [ ] NULL 잔존 row의 가시성: 작성자 본인 + admin 슈퍼유저에게만 노출 (가시성 쿼리에 명시) — #10 라우트 적용 책임
+  - [x] `meetings.team_id` 백필 규칙 — **정상 경로 + 예외 분기 (계획서 섹션 13)**:
     - **정상 경로 (`is_team_doc=1` 팀 문서)**: 기존 `team_id`가 있으면 유지, 없으면 작성자(`created_by` INTEGER → users.id)의 기존 `users.team_id`로 백필
     - **정상 경로 (`is_team_doc=0` 개인 문서)**: 작성자의 기존 `users.team_id`로 1회 백필 (이후 작업 팀이 바뀌어도 변하지 않음)
     - **예외 (팀 문서, 작성자 admin/`team_id` NULL)**: 자동 백필 제외 + 경고 로그 — 운영자가 `/admin`에서 수동 배정
     - **예외 (개인 문서, 작성자 admin/`team_id` NULL)**: `team_id` NULL 유지 — 작성자 본인 한정 가시성 (가시성 쿼리에 명시)
     - 모든 경로에 `WHERE team_id IS NULL` 가드 적용 (이미 채운 row 보호)
-- [ ] **마이그레이션 (projects fallback — 계획서 섹션 13 "프로젝트 백필 원칙")**
-  - [ ] `projects.team_id` NULL 보강 — fallback 우선순위:
-    1. 기존 `projects.team_id`가 있으면 우선 사용
+- [x] **마이그레이션 (projects fallback — 계획서 섹션 13 "프로젝트 백필 원칙")** — 단계 1·2·4만 본 사이클, 단계 3은 #6 책임
+  - [x] `projects.team_id` NULL 보강 — fallback 우선순위:
+    1. 기존 `projects.team_id`가 있으면 우선 사용 (`WHERE team_id IS NULL` 가드로 자연 skip)
     2. `team_id`가 없고 `owner_id`가 있으면 owner의 기존 `users.team_id` 또는 이관된 대표 팀으로 배정
-    3. `events.project` / `checklists.project` 문자열만 있고 대응 프로젝트가 없으면, 해당 항목의 `team_id` 안에 프로젝트 row를 **자동 생성**하고 `project_id` 연결
+    3. `events.project` / `checklists.project` 문자열만 있고 대응 프로젝트가 없으면, 해당 항목의 `team_id` 안에 프로젝트 row를 **자동 생성**하고 `project_id` 연결 — **#6 책임** (본 사이클 X)
     4. 위 3단계로도 결정 불가 시 `projects.team_id` NULL 유지 + `team_migration_warnings`에 row id 기록 (마이그레이션 통과, 서버 시작 거부 X — events/checklists의 NULL 잔존 정책과 일관)
-  - [ ] **NULL 잔존 projects 가시성 정책**: `team_id IS NULL` 프로젝트는 `owner_id` 본인 + admin 슈퍼유저에게만 노출. 그 프로젝트에 연결된 events/checklists도 같은 제한 (events/checklists의 NULL 정책과 일관). 일반 팀 화면·공개 포털에는 노출되지 않음.
-  - [ ] **문자열 프로젝트명만으로 전역 update를 하지 않는다** (같은 이름 프로젝트가 여러 팀에 생길 수 있음)
-- [ ] **마이그레이션 (보조 테이블)**
-  - [ ] `notifications.team_id` 백필 (`event_id → events.team_id`, 매핑 불가는 NULL = "팀 미상")
-  - [ ] `links.team_id` 백필 (`scope='team'` + NULL인 row만, 작성자 `users.team_id` 매칭, 매칭 실패는 로그만 남기고 그대로 둠)
-  - [ ] `team_notices.team_id` 백필 — `created_by` 문자열 → users.name 매칭 → 작성자 단일 팀이면 그 팀, 다중 팀이면 대표 팀(`joined_at` 최선), 작성자 admin/매칭 실패는 NULL 유지 + `team_migration_warnings`에 기록
-  - [ ] `pending_users` 모든 row 자동 삭제 (status 무관)
-- [ ] **검증**
-  - [ ] `team_migration_warnings` 조회 → 백필 누락 항목 확인
-  - [ ] meetings/events/checklists의 NULL team_id row가 의도된 것만 남았는지 확인
-  - [ ] 자동 생성된 프로젝트 row가 의도된 팀 안에만 들어갔는지 확인
+  - [ ] **NULL 잔존 projects 가시성 정책**: `team_id IS NULL` 프로젝트는 `owner_id` 본인 + admin 슈퍼유저에게만 노출. 그 프로젝트에 연결된 events/checklists도 같은 제한 (events/checklists의 NULL 정책과 일관). 일반 팀 화면·공개 포털에는 노출되지 않음. — #10 라우트 적용 책임
+  - [x] **문자열 프로젝트명만으로 전역 update를 하지 않는다** (같은 이름 프로젝트가 여러 팀에 생길 수 있음) — 사양서 명시 + 백필이 owner.team_id 기반으로만 동작
+- [x] **마이그레이션 (보조 테이블)**
+  - [x] `notifications.team_id` 백필 (`event_id → events.team_id`, 매핑 불가는 NULL = "팀 미상")
+  - [x] `links.team_id` 백필 (`scope='team'` + NULL인 row만, 작성자 `users.team_id` 매칭, 매칭 실패는 로그만 남기고 그대로 둠)
+  - [x] `team_notices.team_id` 백필 — `created_by` 문자열 → users.name 매칭 → 작성자 단일 팀이면 그 팀, 다중 팀이면 대표 팀(`joined_at` 최선), 작성자 admin/매칭 실패는 NULL 유지 + `team_migration_warnings`에 기록
+  - [x] `pending_users` 모든 row 자동 삭제 (status 무관)
+- [x] **검증**
+  - [x] `team_migration_warnings` 조회 → 백필 누락 항목 확인 (5개 카테고리 사용)
+  - [x] meetings/events/checklists의 NULL team_id row가 의도된 것만 남았는지 확인 (`verify_data_backfill.py` 40/40 PASS)
+  - [ ] 자동 생성된 프로젝트 row가 의도된 팀 안에만 들어갔는지 확인 — #6 책임
 
 ### #5. 프로젝트 식별자 정리 (project_id 표준화)
 
@@ -689,4 +689,5 @@
 |------|------|-----------|--------|
 | 2026-05-10 | #1 DB 마이그레이션 인프라 | `PHASES`/`_PREFLIGHT_CHECKS` 확장 포인트 + 자동 백업(`whatudoin-migrate-*.db`, 90일 retention 공유) + `BEGIN IMMEDIATE` 수동 트랜잭션 + 마커·경고·`normalize_name` 헬퍼. PHASES 본문 SQL은 추가하지 않음 (#2 이후 책임). 검증 8/8 PASS + 운영 DB 복사본 no-op smoke PASS + 사전 조건 2건(`database.py:254` 빈 DB OperationalError, settings 테이블 정의 중복) 인지. | `backup.py:28-42`, `database.py:498-501,631-811`. archive: `archive/TeamA_001_DBInfra_20260510_220510/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_phase_infra.py, scripts/smoke_prod_db_noop.py}` |
 | 2026-05-10 | #2 user_teams + name_norm + 권한 헬퍼 | Phase 1 본문(`team_phase_1_columns_v1`): 9개 컬럼 추가, `user_teams`/`team_menu_settings` 신규, projects 재구성(`name UNIQUE` 제거 + name_norm 추가, id 보존, `_PROJECTS_REBUILD_COLUMNS` 명시 15개). Phase 2 본문(`team_phase_2_backfill_v1`): users.name_norm·teams.name_norm·role:editor→member·user_teams 이관(admin 제외). Phase 4 본문(`team_phase_4_indexes_v1`): user_teams/team_menu_settings UNIQUE 2건. auth.py 신규 헬퍼 7개 + 기존 4개 위임. 사후 수정 4건(시드 name_norm, projects CREATE 컬럼 흡수, sqlite_sequence ON CONFLICT 무효 회피, checklists CREATE 순서). 사전 조건 #1(`database.py:254`) 함께 해결. T1~T4 37 checks + 권한 헬퍼 28 checks ALL PASS. | `database.py`, `auth.py`. archive: `archive/TeamA_002_UserTeams_20260510_223048/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_phase_migrations.py, scripts/verify_auth_helpers.py}` |
-| 2026-05-10 | #3 admin 분리 + 관리팀 시드 | Phase 본문(`team_phase_3_admin_separation_v1`): admin team_id NULL, mcp_token NULL, user_ips whitelist→history 강등, user_teams admin 정리, 관리팀 분기 처리(`_ADMIN_TEAM_REF_TABLES` 10개 검사 → 참조 0건 DELETE / ≥1건 AdminTeam rename). 시드 갱신: 관리팀 자동 생성 제거 + admin team_id=NULL. admin 제외 보강은 grep으로 누락 0건 확인(의도적 미변경 5건 사유 기록). qa 1차 차단 1건 발견(`teams.name UNIQUE` 충돌) → fallback `관리팀_legacy_{id}` + `admin_separation` warning 누적 패치. 9/9 시나리오 PASS(S1~S7 + S4-extra 더블 참조 + S4-rerun warning 중복 가드). | `database.py`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_admin_separation.py` |
+| 2026-05-10 | #3 admin 분리 + 관리팀 시드 | Phase 본문(`team_phase_3_admin_separation_v1`): admin team_id NULL, mcp_token NULL, user_ips whitelist→history 강등, user_teams admin 정리, 관리팀 분기 처리(`_ADMIN_TEAM_REF_TABLES` 10개 검사 → 참조 0건 DELETE / ≥1건 AdminTeam rename). 시드 갱신: 관리팀 자동 생성 제거 + admin team_id=NULL. admin 제외 보강은 grep으로 누락 0건 확인(의도적 미변경 5건 사유 기록). qa 1차 차단 1건 발견(`teams.name UNIQUE` 충돌) → fallback `관리팀_legacy_{id}` + `admin_separation` warning 누적 패치. 9/9 시나리오 PASS(S1~S7 + S4-extra 더블 참조 + S4-rerun warning 중복 가드). | `database.py`. archive: `archive/TeamA_003_AdminSeparation_20260510_230342/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_admin_separation.py}` |
+| 2026-05-10 | #4 데이터 백필 (1차) | Phase 본문(`team_phase_4_data_backfill_v1`): events/checklists.team_id 추론(2번 작성자 단일 팀 — 1번은 #6 후 활성화, 3번 NULL+warning), meetings 4분기(팀 문서×정상/예외, 개인 문서×정상/예외), projects fallback 단계 1·2·4(단계 3 자동 생성은 #6), notifications.team_id(event_id→events.team_id), links.team_id(`scope='team'` + NULL만, 작성자 → 단일 팀), team_notices.team_id(작성자 → 단일 팀/대표 팀), pending_users 전건 삭제. 헬퍼 `__phase4_resolve_user_single_team`(user_teams 단건 → 다건 시 joined_at 최선 → legacy users.team_id → None). 5개 warning 카테고리(`data_backfill_events`, `data_backfill_meetings_team_doc_no_owner`, `data_backfill_projects`, `data_backfill_links`, `data_backfill_team_notices`). 9 시나리오 40/40 PASS, 합성 DB. 리뷰 차단 0건(경고 2건). | `database.py`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_data_backfill.py` |

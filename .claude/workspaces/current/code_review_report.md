@@ -1,142 +1,122 @@
-# 코드 리뷰 보고서 — 팀 기능 그룹 A #3 (시스템 관리자 분리)
+# 코드 리뷰 보고서 — 팀 기능 그룹 A #4 (데이터 백필 1차)
 
-리뷰 대상: `.claude/workspaces/current/backend_changes.md`
-실제 검증 파일: `database.py`
-참고 사양: `.claude/workspaces/current/00_input/feature_spec.md`
+## 리뷰 대상
 
-## 리뷰 대상 변경 요약 (현재 코드 기준 라인)
-
-- `database.py:565–576` — 시드 변경 (관리팀 자동 생성 제거 + admin team_id=NULL 시드).
-- `database.py:1091–1104` — `_ADMIN_TEAM_REF_TABLES` 정의 (사양서 8+2 테이블).
-- `database.py:1107–1120` — `_team_has_external_refs(conn, team_id)` 헬퍼.
-- `database.py:1123–1191` — `_phase_3_admin_separation(conn)` 본문.
-- `database.py:1194` — `PHASES.append(("team_phase_3_admin_separation_v1", _phase_3_admin_separation))`.
-
-## 포커스 (a) — `_team_has_external_refs` 8+2 테이블 커버리지
-
-사양서 §13(spec line 41–47)이 정의한 참조 테이블 = users.team_id, user_teams.team_id, events·checklists·meetings·projects.team_id (4), notifications.team_id, team_notices.team_id, links.team_id, team_menu_settings.team_id. 합계 **10개**(=8+2).
-
-`_ADMIN_TEAM_REF_TABLES` 실제 정의 (database.py:1091–1104):
-
-```
-users / user_teams / events / checklists / meetings / projects /
-notifications / team_notices / links / team_menu_settings
-```
-
-→ **10개 정확히 일치, 누락 0건.** `_table_exists` + `_column_set` 가드로 합성 DB·구버전 DB 양쪽에서 안전. 컬럼명 모두 `team_id` 통일.
-
-users.team_id 검사가 admin team_id NULL 처리 직후 시점에 일어나므로 NULL=? 비교가 SQL 표준에 따라 항상 false → admin 자신이 외부 참조로 잡히지 않음 (사양서 §13 의도와 일치).
-
-판정: **통과 ✅**
-
-## 포커스 (b) — phase 본문 idempotency 가드
-
-| 조작 | WHERE 가드 | 재실행 시 영향 행 |
-|------|-----------|------------------|
-| `UPDATE users SET team_id=NULL` | `role='admin' AND team_id IS NOT NULL` (1132) | 0 |
-| `UPDATE users SET mcp_token_hash=NULL` | `role='admin' AND mcp_token_hash IS NOT NULL` (1140) | 0 |
-| `UPDATE users SET mcp_token_created_at=NULL` | `role='admin' AND mcp_token_created_at IS NOT NULL` (1145) | 0 |
-| `UPDATE user_ips SET type='history'` | `type='whitelist' AND user_id IN (admins)` (1151–1153) | 이미 history면 0 |
-| `DELETE FROM user_teams` | `user_id IN (admins)` (1160–1161) | 이미 row 없으면 0 |
-| 관리팀 처리 | `WHERE name='관리팅'` (1169) → rename 후 'AdminTeam'은 매칭 안 됨; DELETE 후 row 없음 | 노옵 |
-
-mcp_token_* UPDATE 에 `IS NOT NULL` 가드를 둔 것은 SQL 의미적으로는 0행 보장을 위한 것이 아니라(어차피 SET=NULL은 멱등) 변경 행 수 자체를 0 으로 만들어 마이그레이션 모니터링에서 노이즈가 안 나오게 하는 목적 — 의도는 합리적이며 문제 없음.
-
-phase 러너(database.py:1262–1277)가 `BEGIN IMMEDIATE … COMMIT/ROLLBACK` 으로 본문 전체를 단일 트랜잭션으로 감싸므로 부분 적용 불가. 마커 강제 삭제 후 재실행 케이스도 위 가드 덕에 데이터 변화 없음.
-
-판정: **통과 ✅**
-
-## 포커스 (c) — 시드 변경 ↔ 빈 DB 노옵 일관성
-
-시드 (database.py:566–576):
-- 관리팀 INSERT 블록 완전 삭제 ✅
-- admin INSERT: `VALUES (?,?,?,'admin',NULL,1)` 로 team_id=NULL 명시 ✅
-
-빈 DB 첫 init_db() 결과:
-- `teams` 테이블: 빈 상태 → Phase 3 본문 step 4 `WHERE name='관리팀'` SELECT 결과 없음 → return (1172–1173).
-- `users.admin`: team_id=NULL → step 1 `team_id IS NOT NULL` 가드로 0행.
-- `users.admin.mcp_token_*`: 시드는 컬럼 미설정 → NULL 기본값 → step 2 가드로 0행.
-- `user_ips`: admin row 없음 → step 3 0행.
-- `user_teams`: admin row 없음 → step 4 0행.
-
-Phase 2 (`_phase_2_team_backfill`, database.py:995–1048)와의 일관성:
-- Phase 2 의 user_teams 백필 가드: `WHERE u.team_id IS NOT NULL AND u.role != 'admin'` (1042–1043).
-- 빈 DB 의 새 admin 시드는 team_id=NULL → NULL 가드 + role 가드 둘 다로 자동 제외. user_teams 백필이 admin row 를 만들지 않음.
-- 결과적으로 Phase 3 본문이 user_teams 에서 정리할 admin row 도 없음 → 진정한 노옵.
-
-판정: **통과 ✅** — 빈 DB 에서 전 phase 가 노옵으로 끝나는 일관성 보장됨.
-
-## 포커스 (d) — admin 제외 보강 grep 누락/과잉 판정
-
-backend_changes.md 의 grep 결과표는 phase 본문 추가 전 시점 라인 번호 기준(예: 1049, 2482, 2561, 2590, 3463, 4106). phase 추가로 라인이 시프트되어 현재 코드의 실제 라인은 다음과 같이 모두 살아있음을 직접 확인:
-
-| backend 인용 | 실제 현재 라인 | 함수 | admin 필터 존재 |
-|-------------|---------------|------|-----------------|
-| 1049 | 1043 | `_phase_2_team_backfill` user_teams 백필 | ✅ |
-| 2482 | (확인 안 함, 함수명 일치) | `get_hidden_project_addable_members` | 2597 ✅ |
-| 2561 | 2597 부근 | (히든 프로젝트 멤버 후보) | ✅ |
-| 2590 | 2676 | `transfer_hidden_project_owner` | ✅ |
-| - | 2705 | `admin_change_hidden_project_owner` | ✅ |
-| 3463 | 3578 | `list_users_with_avr` | ✅ |
-| 4106 | 4221 | `release_hidden_project_owner_by_user` | ✅ |
-| app.py:1616 | 1616 | `/api/teams/members` Python 필터 | ✅ |
-| app.py:3665 | 3665 | `/api/members` Python 필터 | ✅ |
-
-추가 후보군 검증 결과:
-- `get_hidden_project_members` (database.py:2564) — `project_members` 테이블 조회만 하므로 admin 진입로 없음 (`get_hidden_project_addable_members` 가 이미 admin 제외 → admin 이 멤버로 추가될 길 자체가 없음). **변경 불필요.**
-- `get_pending_users` (database.py:3174) — 가입 승인 대상. admin 무관. **변경 불필요.**
-- `mcp_server.py` — `list_users` / `get_users` / `search_users` 류 함수 부재 (assignee 키워드는 docstring 의 반환 필드 이름에만 매칭). **변경 불필요.**
-- 회의록·일정 assignee 자동완성 라우트는 `/api/teams/members`(1610)·`/api/members`(3662)·`/api/hidden-project-assignees`(2392) 3개로 통합되며, 첫 두 개는 Python 필터로 admin 제외, 세 번째는 `db.get_hidden_project_members` 경유로 admin 진입 불가.
-
-backend 가 의도적으로 변경하지 않은 5개 후보(`get_all_users`, `create_notification_for_all`, `get_user_by_password`, `check_register_duplicate`, admin 카운트 쿼리) 모두 사유 타당:
-- `get_all_users` 는 admin 화면 의존 — 변경 시 회귀 위험. 호출처별 필터가 정답.
-- `create_notification_for_all` 은 사양서가 정의한 4군 외 영역(알림 발송 정책). 본 사이클 범위 외.
-- 나머지 3개는 admin 포함이 정상 동작.
-
-판정: **통과 ✅** — 누락 0건, 과잉 0건.
-
-⚠️ 경고(blocking 아님): backend_changes.md 의 grep 표 라인 번호는 phase 본문 추가 전 스냅샷 — 현재 코드 라인과 다름. 후속 사이클에서 backend_changes.md 를 다시 참조할 때 혼동 가능. 다음 사이클에서 라인 번호 갱신 권장.
-
-## 포커스 (e) — 관리팀 분기 처리 안전성
-
-rename 경로 (database.py:1176–1188):
-- `name_norm` 컬럼 존재 가드 (1179) — Phase 1 이 추가하지만 합성 구 DB 대비 방어적 OK.
-- `normalize_name("AdminTeam")` 호출 — `normalize_name` 은 같은 파일에 정의되어 있고 phase 본문 로드 시점에 가용. OK.
-- name 만 `AdminTeam` 으로 갱신, `name_norm` 도 동시 갱신 — UNIQUE 제약 충돌 가능성: 같은 DB 에 이미 다른 팀이 'AdminTeam' 이름을 가지면 UNIQUE 위반 가능. 사양서가 이 케이스를 명시하지 않았으나, 실제 운영 DB 에서 'AdminTeam' 이라는 한국어 외 이름이 미리 존재할 가능성은 낮음. **경고 수준 — qa 가 합성 케이스로 검증할 때 하나 추가 권장.**
-
-DELETE 경로 (database.py:1190–1191):
-- 참조 0건 검사 후 DELETE → dangling FK 없음. SQLite FK enforcement 도 OFF (PRAGMA foreign_keys 미설정). 안전.
-
-`teams` 테이블 자체 미존재 케이스 (1165–1166) 가드 OK. `admin_team` row 없음 가드 (1172–1173) OK. `sqlite3.Row` / 튜플 양쪽 호환 (1174) OK.
-
-판정: **통과 ✅** (경고 1건: AdminTeam UNIQUE 충돌 — qa 시나리오에서 검증 권장)
-
-## 추가 관찰 (참고)
-
-- Phase 등록 순서: 1 → 2 → 4 → 3 (PHASES 등록 순서대로 1051, 1083(?), 1194). backend_changes.md 가 명시한 대로 본문 모두 컬럼/테이블 가드를 가지므로 순서 의존성 없음 — OK.
-- phase 러너의 `BEGIN IMMEDIATE` (database.py:1266) — phase 본문이 DDL 없이 DML 만 사용하므로 트랜잭션 보호 정상 동작.
-- `auth.py` 의 `get_user_by_whitelist_ip` admin 차단 (코드 측) + 본 사이클의 whitelist→history 강등 (데이터 측) 이중 보호.
+- `database.py` line 1213-1517 (신규 phase 본문 + 헬퍼)
+  - `__phase4_resolve_user_single_team(conn, user_name_or_id, _cache)` (line 1242-1307)
+  - `_phase_4_data_backfill(conn)` (line 1310-1512)
+  - `PHASES.append("team_phase_4_data_backfill_v1", ...)` (line 1515)
+- `.claude/workspaces/current/backend_changes.md` (인계 정보 검증용)
 
 ## 차단(Blocking) 결함
 
-**0건.**
+**없음.**
 
 ## 경고(Warning)
 
-1. `database.py:1180–1183` — 합성 구 DB 에서 `teams.name='AdminTeam'` 이 이미 존재하면 (rename 경로에서) `name_norm` UNIQUE 제약 충돌 가능. 사양서가 명시하지 않은 엣지 케이스이므로 차단은 아님. qa 가 검증 시나리오에 케이스 추가 권장.
+### W1. 함수명 더블 언더스코어 prefix (스타일)
 
-2. `backend_changes.md` 의 grep 라인 번호가 phase 본문 추가 전 스냅샷 — 다음 사이클에서 같은 문서를 참조할 때 혼동 방지를 위해 라인 갱신 권장.
+`__phase4_resolve_user_single_team` (line 1242)
+
+- 모듈 레벨 함수에서 더블 언더스코어 prefix는 Python name mangling 대상이 아니므로 동작상 문제는 없다.
+- 다만 사양서 §126 "phase 본문 내부 또는 모듈 private 헬퍼"는 보통 단일 언더스코어(`_phase4_resolve_…`)를 권장한다.
+- 다른 phase의 헬퍼들(`_phase_1_team_columns`, `_phase_2_team_backfill`, `_phase_3_admin_separation`)이 모두 단일 prefix.
+- **권장:** 후속 cleanup에서 `_phase4_resolve_user_single_team`로 정리. 본 사이클은 통과.
+
+### W2. `meetings.is_team_doc` NULL 안전성 (방어 강화 권장)
+
+`_phase_4_data_backfill` line 1404 `if is_team_doc == 1:`
+
+- `meetings.is_team_doc`은 `INTEGER DEFAULT 1`이지만 legacy DB에 NULL row가 있을 수 있다 (column 추가 시점 직전 row).
+- 현 구현: NULL이면 `is_team_doc == 1` False → 분기 (B)로 합류, warning 미발생. 사양서가 정의한 4분기에는 NULL 케이스 부재라 결정이 모호.
+- **방어 강화:** NULL을 (A)로 처리할지 (B)로 처리할지 사양 명시 필요. 현 코드는 (B) 처리 = "개인 문서로 간주 → warning 안 함". 가장 보수적이라 OK.
+- **본 사이클은 통과.** QA에서 NULL is_team_doc 케이스를 명시 확인 권장.
 
 ## 통과 ✅
 
-- (a) `_ADMIN_TEAM_REF_TABLES` 8+2 테이블 커버리지 정확.
-- (b) phase 본문 idempotency 가드 모두 0행 보장.
-- (c) 빈 DB → 시드 → Phase 2·3 모두 노옵 일관성.
-- (d) admin 제외 grep 누락 0건, 과잉 0건.
-- (e) 관리팀 rename/DELETE 분기 안전 (UNIQUE 엣지만 경고).
+### 가드
+
+- [x] 모든 UPDATE에 `WHERE team_id IS NULL` 가드 (events·checklists·meetings·projects·links·team_notices)
+- [x] `links` UPDATE에 추가 가드 `AND scope = 'team'` (idempotency 보강)
+- [x] `notifications` UPDATE에 `event_id IS NOT NULL` + `EXISTS (events.team_id IS NOT NULL)` 이중 가드
+- [x] `events` 우선순위 1번 UPDATE에도 `WHERE events.team_id IS NULL` + EXISTS 가드
+- [x] 모든 테이블 접근에 `_table_exists(conn, …)` 가드 (8개 위치)
+- [x] `events.project_id`, `projects.deleted_at` 컬럼 존재 가드 (`_column_set` 사용)
+- [x] `pending_users` 삭제는 `_table_exists` 가드 후 무조건 DELETE — 빈 테이블이면 0행 영향
+- [x] 헬퍼 입력 `None`/빈 문자열 즉시 `None` 반환
+
+### `_resolve_user_single_team` 우선순위
+
+사양서 §39-46과 line 1290-1307 비교:
+
+- [x] 우선순위 1·2 묶음: `SELECT team_id … ORDER BY joined_at ASC, id ASC` 후 `len >= 1`이면 첫 row → 1건도 ≥2건도 동일 처리. id ASC tie-breaker 추가는 같은 joined_at의 결정성 보장 (사양서가 명시 안 했으나 결정성 위해 적절).
+- [x] 우선순위 3: `legacy_team_id` (admin은 #3에서 NULL 처리됨)
+- [x] 우선순위 4: 사용자 매칭 실패 → `None`
+- [x] INTEGER 입력 → `users.id` 직접 조회
+- [x] TEXT 입력 → `users.name` 매칭 (대소문자 그대로, name_norm 매칭 X — 사양서 §42 일치)
+- [x] dict 캐시로 중복 조회 회피, 캐시 키 `("id", uid)` / `("name", name)`로 타입 충돌 방지
+
+### warning 카테고리 (사양서 §exit criteria 5종)
+
+- [x] `data_backfill_events` (events + checklists 합산)
+- [x] `data_backfill_meetings_team_doc_no_owner`
+- [x] `data_backfill_projects`
+- [x] `data_backfill_links`
+- [x] `data_backfill_team_notices`
+- [x] dedup은 `_append_team_migration_warning` (database.py L773-809) 내장 가드 활용 — 같은 (category, message)는 재삽입 안 됨
+
+### meetings 4분기
+
+- [x] 분기 (A) `is_team_doc=1` + 작성자 admin/팀미배정 → NULL 유지 + `data_backfill_meetings_team_doc_no_owner` warning
+- [x] 분기 (B) `is_team_doc=0` + admin/팀미배정 → NULL 유지 (warning 안 함)
+- [x] 분기 (C) `is_team_doc=1` + 정상 → 작성자 단일 팀으로 백필
+- [x] 분기 (D) `is_team_doc=0` + 정상 → 백필 (사양서 §82 "동일")
+
+### projects (단계 1·2·4)
+
+- [x] 단계 1 (기존 team_id) → `WHERE team_id IS NULL` 가드로 자동 skip
+- [x] 단계 2 (`owner_id` 존재) → `__phase4_resolve_user_single_team(owner_id)` (INTEGER 분기)
+- [x] 단계 3 (자동 프로젝트 생성) → **시도 안 함** (#6 책임)
+- [x] 단계 4 (결정 불가) → NULL 유지 + warning `data_backfill_projects` (id, name, owner_id 포함)
+
+### SQL 안전성
+
+- [x] 모든 사용자 데이터는 `?` 파라미터화
+- [x] f-string은 `guard_deleted` (line 1419-1422) 한 곳에만 사용. 삽입값은 정적 문자열 `"AND deleted_at IS NULL"` 또는 `""`로만 변동 → SQL injection 위험 없음
+
+### idempotency
+
+- [x] 모든 UPDATE에 NULL 가드 → 마커 강제 삭제 후 재실행해도 이미 채운 row는 다시 안 잡힘
+- [x] NULL 유지 row는 다시 시도하지만 `_resolve_user_single_team` 결과가 같으므로 동일 결과
+- [x] warning은 dedup으로 중복 누적 안 됨
+- [x] `DELETE FROM pending_users`는 두 번째 실행 시 0행 영향
+
+### import-time 검증
+
+```
+$ python -c "import database; print('PHASES:', len(database.PHASES))"
+PHASES: 5
+  - team_phase_1_columns_v1
+  - team_phase_2_backfill_v1
+  - team_phase_4_indexes_v1
+  - team_phase_3_admin_separation_v1
+  - team_phase_4_data_backfill_v1
+```
+
+신규 phase가 마지막에 등록되어 phase 3 admin separation(admin team_id NULL 처리) 이후 실행됨 → admin 작성 row가 헬퍼에서 자연스럽게 우선순위 3에서 NULL 반환되도록 의존 순서가 정확.
+
+## 헬퍼 라우트 사용 여부 검토
+
+`grep "_phase4_resolve_user_single_team\|__phase4_resolve_user_single_team"` → `database.py` 단일 파일에서만 정의·호출. app.py·auth.py 사용 흔적 없음. 사양서 §126 "phase 본문 내부 사용 한정" 준수.
+
+## 사이클 범위 준수
+
+본 사이클이 다루지 않은 항목 (사양서 §주의사항):
+
+- [x] `projects.name_norm` 백필·UNIQUE는 #5 — 본 사이클에서 시도 안 함
+- [x] `events.project_id`/`checklists.project_id` 백필 + 자동 프로젝트 생성·milestones·project_members·trash 검증은 #6 — 본 사이클에서 시도 안 함 (단 코드 1번 우선순위는 #6 적용 후를 대비해 둠 → 매칭 0건이 정상)
+- [x] 가시성·편집 권한 라우트 적용은 #10 — 본 사이클은 라우트 미변경
 
 ## 최종 판정
 
-**통과 — qa 진행 가능.**
-
-차단 결함 없음. 경고 2건은 qa 검증 시나리오에 케이스 추가 + 다음 사이클 문서 정합성 정도로 흡수 가능.
+**통과.** 차단 결함 없음. 경고 2건은 본 사이클 범위 외 cleanup 권장(W1) + QA 시나리오 보강 권장(W2)으로 QA 진행 가능.
