@@ -18,6 +18,18 @@ a = Analysis(
         ('docs',            'docs'),
         ('changelog',       'changelog'),
         ('credentials.json', '.'),
+        # 분리 service 진입점 (42차 사이클 — 향후 frozen self re-spawn 시 사용)
+        # 현재 fallback 모드에서는 hiddenimports만으로 충분하지만, 분리 토글
+        # 활성화 시 supervisor가 sub-process로 띄울 수 있게 .py 파일도 번들에 포함.
+        ('sse_service.py',          '.'),
+        ('scheduler_service.py',    '.'),
+        ('ollama_service.py',       '.'),
+        ('media_service.py',        '.'),
+        ('front_router.py',         '.'),
+        ('supervisor.py',           '.'),
+        ('publisher.py',            '.'),
+        ('maintenance_owners.py',   '.'),
+        ('mcp_command_registry.py', '.'),
     ],
     hiddenimports=[
         # ── uvicorn ──────────────────────────────────────
@@ -115,6 +127,27 @@ a = Analysis(
         'apscheduler.triggers.interval',
         'apscheduler.triggers.cron',
         'apscheduler.triggers.date',
+        # ── 42차 사이클: 분리 인프라 모듈 ─────────────────
+        # fallback 모드(분리 토글 미설정) 정상 import 보장 + 향후
+        # frozen self re-spawn 시 sub-process가 import할 service 모듈.
+        'publisher',
+        'supervisor',
+        'sse_service',
+        'scheduler_service',
+        'ollama_service',
+        'media_service',
+        'front_router',
+        'maintenance_owners',
+        'mcp_command_registry',
+        'broker',
+        # ── httpx (Front Router reverse HTTP proxy 모드) ──
+        # 분리 4단계(WHATUDOIN_ENABLE_FRONTEND_ROUTING=1) 활성화 시 사용.
+        # fallback 모드에서는 import 자체가 발생하지 않으니 부담 0.
+        'httpx',
+        'httpx._transports',
+        'httpx._transports.default',
+        'httpx._transports.asgi',
+        'httpcore',
     ],
     hookspath=[],
     hooksconfig={},
