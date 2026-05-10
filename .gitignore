@@ -32,5 +32,7 @@ _workspace/
 .vscode/launch.json
 # Supervisor 런타임 로그
 logs/
+# Supervisor 내부 토큰 파일 (런타임 발급, 절대 커밋 금지)
+internal_token
 # 루트 임시 산출물
 _tmp_*.txt

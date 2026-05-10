@@ -136,8 +136,8 @@ def test_startup_sequence():
     _ok("[8b] start_scheduler_service가 start_sse_service 다음",
         seq.index("start_scheduler_service") == seq.index("start_sse_service") + 1,
         str(seq))
-    _ok("[8c] 총 9개 항목 (M4-1: start_ollama_service 추가)",
-        len(seq) == 9, f"got {len(seq)}")
+    _ok("[8c] 총 10개 항목 (M5-2: start_media_service 추가)",
+        len(seq) == 10, f"got {len(seq)}")
 
 
 def test_no_secret_logging():

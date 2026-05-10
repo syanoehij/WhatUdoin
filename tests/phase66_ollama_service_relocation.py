@@ -223,8 +223,8 @@ _ok("OllamaUnavailableError 클래스 존재", "OllamaUnavailableError" in llm_s
 # supervisor M3-3 패턴 유지
 _ok("STOP_ORDER에 ollama 포함",
     "ollama" in _sup.STOP_ORDER)
-_ok("STOP_ORDER 순서: ollama → sse → scheduler → web-api",
-    list(_sup.STOP_ORDER[:4]) == ["ollama", "sse", "scheduler", "web-api"])
+_ok("STOP_ORDER 순서: ollama → media → sse → scheduler → web-api (M5-2 이후)",
+    list(_sup.STOP_ORDER[:5]) == ["ollama", "media", "sse", "scheduler", "web-api"])
 
 # scheduler_service_spec 회귀
 sched_spec = _sup.scheduler_service_spec(["python", "scheduler_service.py"])

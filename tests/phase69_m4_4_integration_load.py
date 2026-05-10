@@ -178,8 +178,8 @@ _ok("M2_STARTUP_SEQUENCE: start_sse_service 포함",
     "start_sse_service" in seq)
 _ok("M2_STARTUP_SEQUENCE: start_scheduler_service 포함",
     "start_scheduler_service" in seq)
-_ok("M2_STARTUP_SEQUENCE: 9개 항목",
-    len(seq) == 9, f"count={len(seq)}")
+_ok("M2_STARTUP_SEQUENCE: 10개 항목 (M5-2: start_media_service 추가)",
+    len(seq) == 10, f"count={len(seq)}")
 
 # A7. probe_healthz 인터페이스
 _ok("supervisor.probe_healthz 메서드 callable",
