@@ -871,7 +871,8 @@ def alarm_setup_page(request: Request):
 @app.get("/settings/mcp", response_class=HTMLResponse)
 def settings_mcp_page(request: Request):
     _require_editor(request)
-    base = _public_base_url(request, "https")
+    scheme = "http" if request.url.scheme == "http" else "https"
+    base = _public_base_url(request, scheme)
     mcp_base = base
     cline_config = json.dumps({
         "mcpServers": {
