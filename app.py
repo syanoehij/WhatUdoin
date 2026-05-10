@@ -82,6 +82,21 @@ async def lifespan(app: FastAPI):
                 "ollama_concurrency DB 설정 파싱 실패: %r (env/기본값 유지)", saved_concurrency,
             )
     db.finalize_expired_done()  # 서버 시작 시 만료된 done 일정 즉시 처리
+    # ── M3-1 startup maintenance 단일 owner 표 (§11) ──────────────────────────
+    # 작업                           | owner
+    # finalize_expired_done          | scheduler (cron + startup) 단독
+    #   ※ 현재 lifespan(위) + APScheduler(아래 03:05) 동거 — M3-2에서 lifespan 호출 이관
+    # cleanup_old_trash              | scheduler (cron) 단독
+    # check_upcoming_event_alarms    | scheduler (interval) 단독
+    # run_backup_startup_safetynet   | web_api_lifespan 단독 (시작 직전 안전판)
+    # run_backup_nightly             | scheduler (cron 03:00) 단독
+    # cleanup_old_backups            | scheduler (cron 03:10) 단독
+    # cleanup_orphan_images          | scheduler (cron 03:30) 단독
+    #
+    # 본 표는 M3-2 APScheduler 분리 시 두 service가 같은 job을 동시에
+    # 실행하지 않도록 사전에 박은 정책이다. 단일 owner 위반은 회귀로 본다.
+    # 권위 있는 원본: maintenance_owners.MAINTENANCE_JOB_OWNERS
+    # ──────────────────────────────────────────────────────────────────────────
     if not scheduler.running:
         # APScheduler: 1분마다 15분 후 일정 알람 체크
         scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)
