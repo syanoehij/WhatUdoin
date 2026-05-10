@@ -434,45 +434,11 @@ class _FrontRouterAccessGuardMiddleware:
         await self.app(scope, receive, send)
 
 
-_HTTP_FALLBACK_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-_HTTP_FALLBACK_WRITE_ALLOW_EXACT = {"/avr", "/remote", "/api/avr", "/mcp"}
-_HTTP_FALLBACK_WRITE_ALLOW_PREFIXES = ("/api/avr/", "/mcp/")
-
-
-def _is_http_fallback_write_allowed(path: str) -> bool:
-    return path in _HTTP_FALLBACK_WRITE_ALLOW_EXACT or path.startswith(_HTTP_FALLBACK_WRITE_ALLOW_PREFIXES)
-
-
-class _HTTPFallbackWriteGuardMiddleware:
-    """HTTP 8000 fallback에서는 인증서/AVR 흐름 외 unsafe write를 막는다."""
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if (
-            scope["type"] == "http"
-            and scope.get("scheme") == "http"
-            and scope.get("method") in _HTTP_FALLBACK_UNSAFE_METHODS
-            and not _is_http_fallback_write_allowed(scope.get("path", "/"))
-        ):
-            body = json.dumps(
-                {"detail": "HTTP fallback에서는 쓰기 요청이 차단됩니다. HTTPS로 접속하세요."},
-                ensure_ascii=False,
-            ).encode("utf-8")
-            headers = [
-                (b"content-type", b"application/json; charset=utf-8"),
-                (b"content-length", str(len(body)).encode()),
-                (b"cache-control", b"no-store"),
-                *_security_headers_for_path(scope.get("path", "")),
-            ]
-            await send({"type": "http.response.start", "status": 403, "headers": headers})
-            await send({"type": "http.response.body", "body": body})
-            return
-        await self.app(scope, receive, send)
-
-
-app.add_middleware(_HTTPFallbackWriteGuardMiddleware)
+# HTTP 8000 fallback unsafe write 차단(M2-4 권장안)은 사용자 의도와 충돌하여
+# 미적용 — 사내 인트라넷 망 전제(§2) + HTTP/HTTPS 기능 동등 + HTTPS는 알람용
+# 이라는 운영 모델 회복(plan §13 (대안) "HTTP write 유지" 정책 채택).
+# 회선 신뢰는 §2 사내 LAN 운영 전제 + Front Router strip-then-set(M2-11) +
+# TRUSTED_PROXY 외부 직접 접근 차단(M2-13)으로 보호한다.
 
 
 def _extract_host(raw: bytes) -> str:
