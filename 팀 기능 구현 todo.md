@@ -206,25 +206,25 @@
 📖 섹션 6 (로그인/인증), 섹션 17 #7
 **의존: ← #2**
 
-- [ ] **마이그레이션 (Phase 2: 비밀번호 변환 + 평문 컬럼 비우기)**
-  - [ ] `users.password` → `users.password_hash` 일괄 변환 (정책 검증 없음, admin 포함)
-  - [ ] **hash 변환 성공 직후 같은 트랜잭션 안에서 `users.password` ← NULL 처리** (보안 공백 최소화). 컬럼 자체 drop은 Phase 5에서.
-  - [ ] 변환·NULL 처리 후 hash로 기존 평문 비밀번호 로그인이 정상 동작하는지 sanity check
-- [ ] **구현**
-  - [ ] 일반 `/api/login`을 비밀번호 단독 → 이름+비밀번호로 전환
-  - [ ] 일반 `/api/login`은 `users.role = admin` 사용자 조회 제외 (admin 존재 여부도 노출 금지 — 동일 에러 메시지)
-  - [ ] `/api/admin/login`은 그대로 유지 (5분 세션)
-  - [ ] `name_norm` 기반 case-insensitive 로그인·중복 검사
-  - [ ] **계정명 입력 검증 정규식**: 영문(대소문자) + 한글 + 숫자만 허용 (밑줄·공백·특수문자 차단). 정확한 정규식: `^[A-Za-z0-9가-힣]+$` (계획서 섹션 6)
-  - [ ] `/api/me/change-password`에서 비밀번호 정책(영문+숫자 동시 포함) 검증
-  - [ ] 기존 `get_user_by_password` 단독 사용 제거
-- [ ] **마이그레이션 (Phase 4: 제약)**
-  - [ ] `users.name_norm` 전역 UNIQUE 인덱스 생성 (`is_active` 무관)
-  - [ ] `teams.name_norm` UNIQUE 인덱스 생성
-- [ ] **테스트**
-  - [ ] 평문 → hash 변환 후 기존 비밀번호로 로그인 가능
-  - [ ] admin 이름으로 일반 `/api/login` 시도 시 401
-  - [ ] `Kim`과 `kim` 동일 계정으로 인식
+- [x] **마이그레이션 (Phase 2: 비밀번호 변환 + 평문 컬럼 비우기)** — `team_phase_7_password_hash_v1`로 등록
+  - [x] `users.password` → `users.password_hash` 일괄 변환 (admin 포함)
+  - [x] **hash 변환 성공 직후 같은 트랜잭션 안에서 `users.password` ← `''` 처리** (NOT NULL 제약 deviation으로 빈 문자열 사용 — 자가 발견 결함 패치). 컬럼 자체 drop은 Phase 5에서.
+  - [x] 변환·NULL 처리 후 hash로 기존 평문 비밀번호 로그인이 정상 동작하는지 sanity check
+- [x] **구현**
+  - [x] 일반 `/api/login`을 비밀번호 단독 → 이름+비밀번호로 전환
+  - [x] 일반 `/api/login`은 `users.role = admin` 사용자 조회 제외 (admin 존재 여부도 노출 금지 — 동일 에러 메시지, 더미 hash 비교로 timing 차이 최소화)
+  - [x] `/api/admin/login`은 그대로 유지 (5분 세션, 내부 hash 검증으로 교체)
+  - [x] `name_norm` 기반 case-insensitive 로그인·중복 검사
+  - [x] **계정명 입력 검증 정규식**: `^[A-Za-z0-9가-힣]+$` — 헬퍼 추가
+  - [x] `/api/me/change-password`에서 비밀번호 정책(영문+숫자 동시 포함) 검증
+  - [x] 기존 `get_user_by_password` 단독 사용 제거
+- [x] **마이그레이션 (Phase 4: 제약)** — preflight 2건 등록
+  - [x] `users.name_norm` 전역 UNIQUE 인덱스 생성 (`is_active` 무관) — `_check_users_name_norm_unique` preflight
+  - [x] `teams.name_norm` UNIQUE 인덱스 생성 — `_check_teams_name_norm_unique` preflight
+- [x] **테스트**
+  - [x] 평문 → hash 변환 후 기존 비밀번호로 로그인 가능 — 63 import-time PASS
+  - [x] admin 이름으로 일반 `/api/login` 시도 시 401
+  - [x] `Kim`과 `kim` 동일 계정으로 인식
 
 ### #8. 계정 가입과 팀 신청 분리
 
@@ -692,4 +692,5 @@
 | 2026-05-10 | #3 admin 분리 + 관리팀 시드 | Phase 본문(`team_phase_3_admin_separation_v1`): admin team_id NULL, mcp_token NULL, user_ips whitelist→history 강등, user_teams admin 정리, 관리팀 분기 처리(`_ADMIN_TEAM_REF_TABLES` 10개 검사 → 참조 0건 DELETE / ≥1건 AdminTeam rename). 시드 갱신: 관리팀 자동 생성 제거 + admin team_id=NULL. admin 제외 보강은 grep으로 누락 0건 확인(의도적 미변경 5건 사유 기록). qa 1차 차단 1건 발견(`teams.name UNIQUE` 충돌) → fallback `관리팀_legacy_{id}` + `admin_separation` warning 누적 패치. 9/9 시나리오 PASS(S1~S7 + S4-extra 더블 참조 + S4-rerun warning 중복 가드). | `database.py`. archive: `archive/TeamA_003_AdminSeparation_20260510_230342/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_admin_separation.py}` |
 | 2026-05-10 | #4 데이터 백필 (1차) | Phase 본문(`team_phase_4_data_backfill_v1`): events/checklists.team_id 추론(2번 작성자 단일 팀 — 1번은 #6 후 활성화, 3번 NULL+warning), meetings 4분기(팀 문서×정상/예외, 개인 문서×정상/예외), projects fallback 단계 1·2·4(단계 3 자동 생성은 #6), notifications.team_id(event_id→events.team_id), links.team_id(`scope='team'` + NULL만, 작성자 → 단일 팀), team_notices.team_id(작성자 → 단일 팀/대표 팀), pending_users 전건 삭제. 헬퍼 `__phase4_resolve_user_single_team`(user_teams 단건 → 다건 시 joined_at 최선 → legacy users.team_id → None). 5개 warning 카테고리(`data_backfill_events`, `data_backfill_meetings_team_doc_no_owner`, `data_backfill_projects`, `data_backfill_links`, `data_backfill_team_notices`). 9 시나리오 40/40 PASS, 합성 DB. 리뷰 차단 0건(경고 2건). | `database.py`. archive: `archive/TeamA_004_DataBackfill_20260510_233008/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_data_backfill.py}` |
 | 2026-05-10 | #5 projects (team_id, name_norm) UNIQUE + 라우트 중복 검사 | Phase 본문(`team_phase_5_projects_unique_v1`): 잔존 `name_norm IS NULL` 백필 + `idx_projects_team_name` 부분 UNIQUE 인덱스(`WHERE team_id IS NOT NULL` — NULL 잔존 면제). preflight `_check_projects_team_name_unique`로 충돌 시 서버 시작 거부 + `preflight_projects_team_name` warning. DB 함수: `create_project(team_id=None)` 시그니처 확장, `create_hidden_project`의 `LOWER(name)` 전역 검사 → `(team_id, name_norm)` 팀 제한, `rename_project` cross-team 누출 차단(리뷰 발견 결함 패치). 라우트: POST /api/manage/projects, PUT /api/manage/projects/{name}, POST /api/manage/hidden-projects에서 `resolve_work_team` 사용으로 team_id 결정. 9/9 시나리오 PASS(빈 DB·NULL 백필·preflight 충돌·다른 팀 같은 이름·같은 팀 차단·NULL 면제·마커 강제 삭제·cross-team rename 비간섭·히든 프로젝트). | `database.py`, `app.py`. archive: `archive/TeamA_005_ProjectsUnique_20260510_235413/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_projects_unique.py}` |
-| 2026-05-11 | #6 events/checklists.project_id 백필 + 자동 프로젝트 생성 | Phase 본문(`team_phase_6_project_id_backfill_v1`): events/checklists.project_id 매칭 백필(`(team_id, name_norm)`, deleted_at IS NULL 우선) + team_id 있고 매칭 실패 row의 자동 프로젝트 생성(같은 phase 내 캐시로 중복 방지, `(team_id, name_norm)` 부분 UNIQUE와 정합). team_id NULL row는 project_id NULL + `project_id_backfill_no_team` warning. project_milestones/project_members/trash_project_id dangling 검증(발견 시 `project_id_backfill_dangling_trash` warning, 데이터 변경 X). Phase 4 인덱스(`idx_events_project_id`, `idx_checklists_project_id`) 추가. 신규 쓰기 경로: INSERT INTO events/checklists + PATCH /api/events/{id}/project + `update_checklist`(리뷰 1차 차단 결함 패치)에서 project_id 동반 갱신. 읽기 경로 전환은 #10 책임. 17 케이스 PASS. | `database.py`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_project_id_backfill.py` |
+| 2026-05-11 | #6 events/checklists.project_id 백필 + 자동 프로젝트 생성 | Phase 본문(`team_phase_6_project_id_backfill_v1`): events/checklists.project_id 매칭 백필(`(team_id, name_norm)`, deleted_at IS NULL 우선) + team_id 있고 매칭 실패 row의 자동 프로젝트 생성(같은 phase 내 캐시로 중복 방지, `(team_id, name_norm)` 부분 UNIQUE와 정합). team_id NULL row는 project_id NULL + `project_id_backfill_no_team` warning. project_milestones/project_members/trash_project_id dangling 검증(발견 시 `project_id_backfill_dangling_trash` warning, 데이터 변경 X). Phase 4 인덱스(`idx_events_project_id`, `idx_checklists_project_id`) 추가. 신규 쓰기 경로: INSERT INTO events/checklists + PATCH /api/events/{id}/project + `update_checklist`(리뷰 1차 차단 결함 패치)에서 project_id 동반 갱신. 읽기 경로 전환은 #10 책임. 17 케이스 PASS. | `database.py`. archive: `archive/TeamA_006_ProjectIdBackfill_20260511_001118/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_project_id_backfill.py}` |
+| 2026-05-11 | #7 비밀번호 hash + 일반 로그인 이름+비밀번호 + name_norm UNIQUE | 신규 `passwords.py` 모듈(hash_password/verify_password). Phase 본문(`team_phase_7_password_hash_v1`): 평문 password → password_hash 일괄 변환(admin 포함, 빈 password 가드), 같은 트랜잭션에서 `password = ''` 처리(NOT NULL 제약 deviation으로 빈 문자열 — 자가 발견 결함 패치). preflight 2건(`_check_users_name_norm_unique`, `_check_teams_name_norm_unique`) → 충돌 시 서버 시작 거부. Phase 4 인덱스: `users.name_norm` 전역 UNIQUE, `teams.name_norm` UNIQUE. 라우트: POST /api/login 이름+비밀번호 + 정규식(`^[A-Za-z0-9가-힣]+$`) + name_norm 매칭 + admin 제외(더미 hash 비교로 timing 차이 최소화), POST /api/me/change-password 새 비밀번호 정책(영문+숫자 동시 포함) + hash 저장, POST /api/admin/login 내부 hash 검증으로 교체(외부 동작 동일). DB 함수 `get_user_by_login` 신규, `get_user_by_credentials` 내부 변경, `reset_user_password` hash 저장. **운영 DB 반영은 서버 재시작 시 phase 자동 적용** — 재시작 전 `users.name_norm`/`teams.name_norm` 충돌 검사 SQL은 qa_report.md 참고. import-time 63 PASS. | `database.py`, `app.py`, `passwords.py`(신규), `templates/base.html`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_password_hash.py`, `scripts/verify_login_routes.py` |

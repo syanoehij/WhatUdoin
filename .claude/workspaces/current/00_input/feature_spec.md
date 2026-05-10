@@ -1,98 +1,102 @@
-# 팀 기능 그룹 A — #6 진행 사양 (메인 → 플래너 인계)
+# 팀 기능 그룹 A — #7 진행 사양 (메인 → 플래너 인계)
 
 ## 요청
 
-`팀 기능 구현 todo.md` 그룹 A의 **#6. events/checklists/milestones/project_members/trash을 project_id 기준으로 백필**을 한 사이클로 진행. 마스터 plan은 `팀 기능 구현 계획.md` §13 프로젝트 백필 원칙.
+`팀 기능 구현 todo.md` 그룹 A의 **#7. 로그인 인증 기반 정비**를 한 사이클로 진행. 마스터 plan은 `팀 기능 구현 계획.md` §6.
 
-#7 이후는 본 사이클 범위 밖.
+#8 이후는 본 사이클 범위 밖.
 
 ## 분류
 
-백엔드: 새 phase 본문 1건 등록 (events.project_id, checklists.project_id 백필 + 자동 프로젝트 생성 + Phase 4 인덱스 추가) + 신규 쓰기 경로 일부 변경.
-프론트 변경 없음. **팀 모드: backend → reviewer → qa.**
+백엔드 핵심: **비밀번호 hash 변환 + 일반 로그인을 이름+비밀번호로 전환 + name_norm UNIQUE 인덱스 + 비밀번호 정책 검증**.
+프론트 변경 없음 (로그인 입력은 이미 이름·비밀번호 입력 폼이 있는지 backend가 grep하여 확인. 폼 변경 필요 시 #8과 함께 처리).
+**팀 모드: backend → reviewer → qa.**
 
-## 전제 (#1·#2·#3·#4·#5 완료)
+## 전제 (#1~#6 완료)
 
-- PHASES 인프라 + `normalize_name()` (#1).
-- Phase 1 본문에서 events.project_id, checklists.project_id 컬럼 추가됨 (#2).
-- Phase 4 데이터 백필 phase에서 events.team_id, checklists.team_id, projects.team_id 등 백필 완료. 단 일부 row는 NULL 잔존 가능 (warning 누적됨, #4).
-- Phase 5에서 `(team_id, name_norm)` 부분 UNIQUE 인덱스 + DB 함수·라우트 중복 검사 교체 완료 (#5).
-- `create_project(name, color, memo, team_id=None)` 시그니처 + `(team_id, name_norm)` 사전 검사 사용 가능 (#5).
+- PHASES 인프라 + Phase 1·2·3·4·5·6 본문 (#1~#6).
+- `users.password_hash TEXT` 컬럼만 추가됨 (#2). 본 사이클이 변환 phase 본문 추가.
+- `auth.py`: `is_member`, `user_can_access_team`, `resolve_work_team` 등 헬퍼 (#2).
+- `database.py:165, 367` settings 테이블 정의 중복 (인지만, 본 사이클 X).
 
 ## 핵심 인계 사실 (메인이 이미 파악)
 
-### 현재 컬럼 상태
-- `events.project` (TEXT, 호환용 유지), `events.project_id` (INTEGER, 본 사이클이 백필) — `database.py:36-37`.
-- `checklists.project` (TEXT NOT NULL DEFAULT ''), `checklists.project_id` (INTEGER) — `database.py:133-134`.
-- `events.trash_project_id`, `checklists.trash_project_id`, `meetings.trash_project_id` — 휴지통 참조. #2 재구성 후 매핑 그대로 동작해야 함 (검증 대상).
-- `project_milestones.project_id` (CREATE @ L529), `project_members.project_id` (CREATE @ L331). #2 재구성 후 dangling 없는지 검증.
+### 현재 인증 흐름
+- `app.py:1383` `POST /api/login` — 비밀번호 단독, 30일 세션. `db.get_user_by_password(password)` 호출.
+- `app.py:1404` `POST /api/me/change-password` — `db.get_user_by_password(current_pw)`로 본인 검증, `db.reset_user_password(user_id, new_pw)`로 평문 저장.
+- `app.py:1452` `POST /api/admin/login` — 이름+비밀번호, 5분 세션. `db.get_user_by_credentials(name, password)`. 본 사이클: 함수 내부만 hash 검증으로 교체.
+- `app.py:1434` `POST /api/register` — `db.check_register_duplicate` + `db.create_pending_user`. 본 사이클은 **register 플로우 변경 X (#8 책임)**, 단 정규식 헬퍼는 본 사이클에서 추가하고 #8에서 사용.
 
-### 매칭 규칙 (사양서 정의)
-백필은 row 단위로 다음을 수행:
-1. row의 `team_id`가 있고 `project` 문자열이 비어있지 않을 때만 시도.
-2. `projects` 테이블에서 `(team_id, name_norm = normalize_name(project))` 매칭. (deleted_at IS NULL 우선, 없으면 deleted_at 포함 row).
-3. 매칭 1건 → 그 `projects.id`로 events/checklists.project_id UPDATE.
-4. 매칭 0건 + row의 team_id 있음 → **자동 프로젝트 생성**: `INSERT INTO projects (team_id, name, name_norm, created_at) VALUES (?, ?, normalize_name(name), CURRENT_TIMESTAMP)`. 생성된 id로 연결. warning 카테고리 `project_id_backfill_auto_created`(생성 row 카운트만).
-5. row의 team_id NULL → project_id NULL 유지 + warning `project_id_backfill_no_team` (row id, project 문자열 포함).
-6. project 문자열 비어있음 → 그대로 NULL.
+### DB 함수 (database.py)
+- `get_user_by_password(password)` L3875 — 평문 매칭 SELECT. 본 사이클이 제거(또는 deprecated 표시 후 호출부 모두 교체).
+- `get_user_by_credentials(name, password)` L3885 — admin 전용 평문 매칭. 본 사이클: name_norm 매칭 + hash 검증으로 교체.
+- `reset_user_password(user_id, new_pw)` — 평문 저장. 본 사이클: hash 저장으로 교체.
 
-### 자동 생성 정책
-- `is_active=1`, `is_hidden=0`, `is_private=0`, `owner_id=NULL`, `color=NULL`, `memo=NULL`.
-- 같은 phase 안에서 이미 자동 생성된 (team_id, name_norm)을 재사용 (메모리 dict 캐시).
-- 같은 phase에서 events·checklists 양쪽이 같은 (team_id, name) 자동 생성하면 1개만 생성됨.
-- 자동 생성 후 `(team_id, name_norm)` 부분 UNIQUE 인덱스(#5)와 충돌하지 않음 (정상 INSERT).
+### crypto.py 현황
+- 기존 `crypto.py`는 Fernet 대칭 암호화 유틸 (credentials.json/`WHATUDOIN_CRYPTO_KEY` 기반). **비밀번호 hash와 무관.**
+- `cryptography` 패키지가 이미 의존성에 있음 → 비밀번호 hash에 `cryptography.hazmat.primitives.kdf.scrypt` 등 사용 가능. 또는 표준 `hashlib.scrypt`/`hashlib.pbkdf2_hmac`. 또는 `passlib` 신규 의존성. **선택은 backend 판단** (사유 backend_changes.md에 기록).
 
-### 검증 대상 (회귀 방지)
-- `project_milestones.project_id`, `project_members.project_id`가 `projects.id`로 모두 살아있는지 (dangling 없음).
-- `events.trash_project_id`, `checklists.trash_project_id`, `meetings.trash_project_id` row가 `projects.id` 유효 참조인지. 무효 참조 발견 시 warning `project_id_backfill_dangling_trash` 누적, 데이터 변경 X.
-- 본 사이클은 dangling 발견 시 데이터 cleanup이 아니라 warning만 누적 (cleanup은 별도 운영 작업).
+### 권장 hash 알고리즘 결정 가이드 (backend가 채택)
+- **권장: 표준 `hashlib.scrypt`** (cost-factor 가능, 의존성 0, PyInstaller spec 변경 0). 또는 `hashlib.pbkdf2_hmac('sha256', ...)`.
+- 저장 형식: `f"{algo}${cost}${salt_hex}${hash_hex}"` 단일 컬럼 (`users.password_hash`). 검증 시 split 후 같은 cost·salt로 재계산하여 비교.
+- bcrypt/argon2를 채택하려면 `passlib` 또는 직접 `bcrypt` 패키지 추가 필요 → PyInstaller spec 갱신 필요.
 
-## #6 step 분해 (플래너 참고)
+## #7 step 분해 (플래너 참고)
 
 | step | 제목 | exit criteria 핵심 |
 |------|------|--------------------|
-| #6-S1 | phase 본문(`team_phase_6_project_id_backfill_v1`) + Phase 4 인덱스 | events/checklists.project_id 백필 + 자동 프로젝트 생성 + dangling 검증 + warning 누적 + 인덱스 `idx_events_project_id`, `idx_checklists_project_id`. |
-| #6-S2 | 신규 쓰기 경로에 project_id 동반 | INSERT INTO events / checklists 시 project_id도 동반 저장. PATCH /api/events/{id}/project 갱신 시 project_id 동기화. rename_project는 events/checklists의 project 문자열도 갱신하던 기존 로직 유지(project_id는 그대로 — id가 동일하므로 이름만 갱신해도 정합). 호환 읽기 경로는 본 사이클 범위 외(#10 라우트 전환 시 함께). |
-
-> 1 backend 호출에서 S1+S2 묶음 권장.
+| #7-S1 | hash 유틸 추가 + crypto/auth 모듈 정비 | `hash_password(plaintext) -> str`, `verify_password(plaintext, stored) -> bool` 신규(Crypto 또는 신규 `passwords.py` 모듈, backend 결정). 알고리즘·cost·저장 형식 결정 사유 backend_changes.md 기록. |
+| #7-S2 | phase 본문(`team_phase_7_password_hash_v1`) | `users.password_hash IS NULL AND password IS NOT NULL AND password != ''` 사용자에 대해 `password_hash = hash_password(password)`, **같은 트랜잭션에서 `password = NULL` 처리**. admin 포함. 빈 password row는 변환 안 함(가드). 변환 후 sanity check: 무작위 1건 row의 `verify_password(원래 평문 — 본문 시작 시 임시 캡처, hash)` 결과 True가 아니면 ROLLBACK + RuntimeError. |
+| #7-S3 | Phase 4 인덱스 + preflight | preflight `_check_users_name_norm_unique`, `_check_teams_name_norm_unique` 등록 — 충돌 시 서버 시작 거부 + warning 누적. 인덱스: `users.name_norm` 전역 UNIQUE(`is_active` 무관), `teams.name_norm` UNIQUE. |
+| #7-S4 | DB 함수 + 라우트 변경 | `get_user_by_login(name_or_norm, plaintext) -> Optional[user]` 신규 (admin 제외). `get_user_by_credentials(name, plaintext)`는 admin 전용 + name_norm 매칭 + hash 검증으로 내부 변경. `reset_user_password(user_id, new_pw)` hash 저장으로 변경. POST /api/login 라우트: 이름·비밀번호 받음 + name 정규식 검증(`^[A-Za-z0-9가-힣]+$`) + `get_user_by_login` 호출 + admin이면 401. POST /api/me/change-password: 현재 비밀번호 hash 검증 + 새 비밀번호 정책(영문+숫자 동시 포함) 검증 + hash 저장. POST /api/admin/login: 내부 hash 검증으로 교체(외부 동작 동일). |
+| #7-S5 | 정규식 헬퍼 + 기존 호출부 정리 | `is_valid_user_name(s) -> bool` (정규식 `^[A-Za-z0-9가-힣]+$`) 헬퍼 추가. **register 플로우 변경은 #8**이라 `is_valid_user_name`/비밀번호 정책 헬퍼는 신규 추가만 — 본 사이클 라우트(`/api/login`/`/api/me/change-password`)에서만 사용. `get_user_by_password(password)` 단독 사용은 모두 제거. 호출부가 있다면 함께 정리. |
 
 ## exit criteria (사이클 전체)
 
 ### 마이그레이션 동작
-- [ ] 빈 DB → phase 본문 노옵.
-- [ ] 합성 구 DB(events 5건, checklists 5건, projects 3건, team_id 결정 row + NULL 잔존 row 혼합):
-  - 매칭 케이스 → project_id 채움.
-  - 매칭 실패 + team_id 있음 → 자동 프로젝트 생성 + 연결.
-  - team_id NULL → project_id NULL + warning.
-  - project 문자열 비어있음 → 그대로 NULL.
-- [ ] 두 번째 init_db() → 마커로 phase 미실행. 마커 강제 삭제 후 재실행 → `WHERE project_id IS NULL` 가드로 노옵.
-- [ ] `project_milestones.project_id`/`project_members.project_id` 모두 살아있음 검증 (dangling 0건).
-- [ ] trash_project_id dangling 합성 케이스 → warning 누적, 데이터 변경 X.
-- [ ] 자동 생성된 projects가 부분 UNIQUE 인덱스(#5)에 충돌하지 않고 정상 INSERT.
+- [ ] 빈 DB → phase 본문 노옵 (변환할 row 0건).
+- [ ] 합성 구 DB(평문 password 5명, admin 1명, 빈 password 1명) → 5+1=6명 변환, 빈 password 1명은 그대로. 변환 후 `password` 모두 NULL, `password_hash` 모두 채움.
+- [ ] sanity check 통과 (변환된 hash로 원래 평문 검증 OK).
+- [ ] 두 번째 init_db() → 마커로 phase 미실행. 마커 강제 삭제 후 재실행 → `password_hash IS NULL AND password IS NOT NULL` 가드로 노옵 (이미 변환된 row 안전).
+- [ ] preflight `users.name_norm` 충돌 케이스(중복 강제) → 서버 시작 거부 + warning `preflight_users_name_norm` 누적.
+- [ ] preflight `teams.name_norm` 충돌 케이스 → 동일.
+- [ ] 충돌 0건 → 정상 통과 + 인덱스 생성.
 
-### 신규 쓰기 경로
-- [ ] 새 events INSERT 시 project 문자열 + project_id 함께 저장 (project가 비어있으면 둘 다 NULL/'').
-- [ ] 새 checklists INSERT 시 동일.
-- [ ] PATCH /api/events/{id}/project 호출 시 project 문자열 + project_id 동시 갱신.
-- [ ] rename_project 시 같은 (team_id) 내 events/checklists의 project 문자열이 갱신됨 (기존 동작 유지). project_id는 그대로 (id 자체는 변경 없음).
+### 라우트
+- [ ] `POST /api/login` 이름+비밀번호 흐름:
+  - 정상 사용자(member) → 200 + 세션.
+  - admin 이름으로 시도 → 401 + 동일 메시지(존재 노출 금지).
+  - 잘못된 비밀번호 → 401.
+  - 정규식 위반 이름(밑줄·공백·특수문자) → 400.
+  - 대소문자 다른 이름(예: `Kim`/`kim`) → 동일 계정으로 인식.
+- [ ] `POST /api/admin/login` 그대로 동작 (admin이 hash로 변환된 후에도 정상).
+- [ ] `POST /api/me/change-password`:
+  - 현재 비밀번호 정확 → 새 비밀번호 정책 통과 시 hash 저장.
+  - 새 비밀번호 영문만 또는 숫자만 → 400 + 정책 메시지.
+
+### 단위 테스트
+- [ ] `hash_password` + `verify_password` round-trip 정상.
+- [ ] 같은 평문이라도 매번 다른 salt → 다른 stored 문자열.
+- [ ] 잘못된 평문 → `verify_password` False.
+- [ ] 정규식 헬퍼: `Kim`, `김민수`, `kim123`, `김123` 통과 / `_kim`, `kim ` (공백), `kim@example` 차단.
 
 ## 진행 방식
 
-- backend가 1회 호출에서 phase 본문 + 신규 쓰기 경로 변경 함께 처리.
-- reviewer는 (a) 매칭/자동 생성 정책 정합성 (b) dangling 검증의 false positive 방지 (c) 신규 쓰기 경로 동기화 누락 검토.
-- qa는 시나리오 합성 DB로 (1) 매칭 케이스, (2) 자동 생성, (3) NULL team_id 잔존, (4) dangling 검증, (5) 마커 강제 삭제 후 재실행, (6) 신규 INSERT/PATCH 시 project_id 동반.
+- backend 1~2회 호출(S1+S2가 한 흐름, S3+S4+S5가 한 흐름). step별 섹션으로 분리.
+- reviewer는 (a) hash 알고리즘·저장 형식 검토, (b) sanity check 정합성, (c) preflight 정의, (d) 라우트 검사 누락, (e) admin 노출 차단(동일 메시지) 검토.
+- qa는 (1) 합성 구 DB 변환·sanity, (2) preflight 충돌 거부, (3) 라우트 정상/실패 시나리오, (4) 비밀번호 정책 단위.
 - 메인에는 한 줄 요약만 반환.
 
 ## 주의사항
 
-- **본 사이클은 #6 범위만.** 가시성 라우트 적용·project_id 기반 읽기 경로 전환은 #10. project 문자열 컬럼 drop은 Phase 5(별도 릴리스).
-- **자동 생성 프로젝트는 추후 운영자가 정리 가능하도록 warning에 row 카운트만 누적** (이름 목록은 노이즈 우려). 운영자는 `team_migration_warnings` + `projects` 조회로 확인.
-- **idempotent 가드**: 모든 UPDATE는 `WHERE project_id IS NULL`. 자동 생성도 같은 phase 안 캐시로 중복 없음. 마커 강제 삭제 후 재실행 시에도 이미 채워진 row는 다시 안 잡힘.
-- 매칭 시 `deleted_at IS NULL` 우선, 없으면 deleted_at 포함 row 사용 (운영 의미: 활성 프로젝트 우선, 휴지통 프로젝트라도 매칭되면 연결 — 활성 복구 시점에 자연 정합).
-- `(team_id, name_norm)` 부분 UNIQUE 인덱스(#5) 덕분에 같은 팀 안에서 자동 생성이 같은 이름 두 번 발생하지 않음 (캐시가 fail-safe로도 동작).
-- VSCode 디버깅 모드 — qa는 import-time + 합성 DB 위주.
+- **본 사이클은 #7 범위만.** 계정 가입 분리·팀 신청은 #8. IP 자동 로그인 토글은 #9. 가시성 라우트 적용은 #10.
+- **password 컬럼 drop은 Phase 5(별도 릴리스)** — 본 사이클은 NULL 처리만.
+- **admin 존재 여부 노출 금지**: 일반 `/api/login`이 admin 이름·비밀번호로 시도해도 일반 사용자 401과 동일 메시지("아이디 또는 비밀번호가 올바르지 않습니다.")로 응답. 응답 시간도 차이 최소화 (가능하면 더미 hash 비교).
+- **변환 phase 트랜잭션 안전**: `password` NULL 처리는 hash 검증·sanity check 통과 후. 실패 시 ROLLBACK으로 원본 평문 보존(보안 공백 회피).
+- **VSCode 디버깅 모드** — qa는 import-time + 합성 DB. 실서버 재시작 필요 시 사용자에게 요청.
+- 의존성 추가 시 PyInstaller spec(`WhatUdoin.spec`) 업데이트 필요 — 표준 라이브러리만 쓰면 회피 가능.
 
 ## 산출물 위치
 
 - `backend_changes.md`, `code_review_report.md`, `qa_report.md`: `.claude/workspaces/current/` 직속
-- 검증 스크립트: `.claude/workspaces/current/scripts/verify_project_id_backfill.py`
+- 검증 스크립트: `.claude/workspaces/current/scripts/verify_password_hash.py`, `verify_login_routes.py`

@@ -502,10 +502,13 @@
         <h2>로그인</h2>
         <button class="icon-btn" onclick="closeLoginModal()">✕</button>
       </div>
-      <p class="login-desc">비밀번호를 입력하세요.<br><small>비밀번호가 아이디 역할을 합니다.</small></p>
+      <p class="login-desc">이름과 비밀번호를 입력하세요.</p>
       <div id="login-error" class="form-error hidden"></div>
       <form onsubmit="doLogin(); return false;" autocomplete="on">
-      <input type="text" name="username" autocomplete="username" class="autofill-username" aria-hidden="true" tabindex="-1" />
+      <div class="form-row-inline">
+        <label>이름</label>
+        <input type="text" id="login-name" name="username" placeholder="이름" autocomplete="username" />
+      </div>
       <div class="form-row-inline">
         <label>비밀번호</label>
         <input type="password" id="login-pw" name="password" placeholder="비밀번호 입력" autocomplete="current-password" />
@@ -982,10 +985,11 @@
     /* ── 로그인 모달 ── */
     function openLoginModal() {
       document.getElementById('login-modal-overlay').classList.remove('hidden');
-      setTimeout(() => document.getElementById('login-pw').focus(), 50);
+      setTimeout(() => document.getElementById('login-name').focus(), 50);
     }
     function closeLoginModal() {
       document.getElementById('login-modal-overlay').classList.add('hidden');
+      document.getElementById('login-name').value = '';
       document.getElementById('login-pw').value = '';
       document.getElementById('login-error').classList.add('hidden');
     }
@@ -993,12 +997,13 @@
       if (e.target === document.getElementById('login-modal-overlay')) closeLoginModal();
     }
     async function doLogin() {
+      const name = document.getElementById('login-name').value.trim();
       const pw = document.getElementById('login-pw').value.trim();
-      if (!pw) return;
+      if (!name || !pw) return;
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw }),
+        body: JSON.stringify({ name: name, password: pw }),
       });
       if (res.ok) {
         location.reload();

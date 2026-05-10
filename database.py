@@ -9,6 +9,8 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import passwords
+
 # PyInstaller 번들 시 exe 옆 디렉토리, 개발 시 소스 파일 디렉토리
 _RUN_DIR = Path(os.environ.get("WHATUDOIN_RUN_DIR", Path(__file__).parent))
 DB_PATH  = str(_RUN_DIR / "whatudoin.db")
@@ -1824,6 +1826,107 @@ def _phase_6_project_id_backfill(conn):
 PHASES.append(("team_phase_6_project_id_backfill_v1", _phase_6_project_id_backfill))
 
 
+# ── 팀 기능 그룹 A #7 — 비밀번호 hash 변환 + name_norm UNIQUE ──────
+#
+# 본 phase 본문은 한 트랜잭션 안에서 다음을 수행한다:
+#   1) 평문 password 보유 사용자(빈 문자열·NULL 제외, admin 포함)에 대해
+#      `password_hash = hash_password(password)` 갱신 + 같은 row의 `password = ''`.
+#   2) sanity check: 변환 후 무작위(SQL ORDER BY id LIMIT 1) row의 hash를
+#      본문 시작 시점에 캡처해 둔 평문으로 verify_password하여 True 확인.
+#      실패 시 raise → 러너가 ROLLBACK으로 원본 평문 보존.
+#   3) `users.name_norm` 전역 UNIQUE 인덱스, `teams.name_norm` UNIQUE 인덱스 생성.
+#
+# spec deviation: spec은 "password = NULL"로 명시하지만 `users.password` 컬럼이
+#   `NOT NULL DEFAULT ''`이라 NULL 처리가 IntegrityError를 낸다. 빈 문자열로 저장하면
+#   기존 가드(`password != ''`)가 NULL/빈 문자열을 동일 취급하므로 의미적으로 동등하다.
+#   `password` 컬럼 drop은 Phase 5(별도 릴리스) 책임이므로 본 사이클은 평문 제거만 보장.
+#
+# 인덱스 생성을 본 phase 7에 둔 이유:
+#   - 이미 phase 4 마커가 찍힌 환경에서는 phase 4 본문 변경이 무효 (재실행 안 됨).
+#   - 인덱스를 phase 7에 두면 신규 환경(phase 4 → phase 7 순서) / 기존 환경 모두에서
+#     실행된다. CREATE UNIQUE INDEX IF NOT EXISTS 가드로 idempotent.
+#
+# 가드:
+#   - WHERE password_hash IS NULL AND password IS NOT NULL AND password != ''
+#   - 마커 강제 삭제 후 재실행 시 변환 대상 0건이면 sanity check도 skip(노옵).
+def _phase_7_password_hash(conn):
+    """Phase 7: 평문 비밀번호 → hash 변환 + name_norm UNIQUE 인덱스 생성.
+
+    팀 기능 그룹 A #7 사양:
+      - 빈 password row는 변환 안 함 (가드).
+      - sanity check 실패 시 raise → 러너 ROLLBACK으로 원본 평문 보존.
+      - name_norm UNIQUE: users 전역(is_active 무관), teams 전역.
+    """
+    if not _table_exists(conn, "users"):
+        return  # 신규 init_db 시 users는 phase 1 이전 단계에서 이미 생성된다.
+
+    user_cols = _column_set(conn, "users")
+    if "password_hash" not in user_cols:
+        # phase 1이 password_hash 컬럼을 추가하므로 phase 7 시점에는 반드시 존재.
+        # 방어적 가드: 없으면 노옵으로 종료(러너가 RuntimeError 내지 않게).
+        return
+
+    # 1) 변환 대상 추출 — 평문 보유 + hash 미보유.
+    targets = conn.execute(
+        "SELECT id, password FROM users "
+        " WHERE password_hash IS NULL "
+        "   AND password IS NOT NULL "
+        "   AND password != ''"
+    ).fetchall()
+
+    converted_count = 0
+    sanity_id = None
+    sanity_plain = None  # 본문 종료 후 GC 대상. 절대 log/print 금지.
+
+    for row in targets:
+        uid = row["id"] if isinstance(row, sqlite3.Row) else row[0]
+        plaintext = row["password"] if isinstance(row, sqlite3.Row) else row[1]
+        new_hash = passwords.hash_password(plaintext)
+        # 같은 트랜잭션에서 hash 저장 + 평문 제거 ('' — 컬럼 NOT NULL 제약 회피).
+        conn.execute(
+            "UPDATE users SET password_hash = ?, password = '' WHERE id = ?",
+            (new_hash, uid),
+        )
+        converted_count += 1
+        # 첫 번째 변환 row를 sanity 검사 대상으로 캡처.
+        if sanity_id is None:
+            sanity_id = uid
+            sanity_plain = plaintext
+
+    # 2) sanity check — 변환 row가 1건 이상이면 반드시 검증.
+    if sanity_id is not None:
+        row = conn.execute(
+            "SELECT password_hash FROM users WHERE id = ?", (sanity_id,)
+        ).fetchone()
+        stored = row["password_hash"] if isinstance(row, sqlite3.Row) else (row[0] if row else None)
+        if not stored or not passwords.verify_password(sanity_plain, stored):
+            raise RuntimeError(
+                f"phase 7 sanity check failed: verify_password mismatch for user_id={sanity_id}"
+            )
+
+    # 평문은 더 이상 필요 없음 — 명시적으로 None 할당하여 참조 끊는다.
+    sanity_plain = None
+
+    # 3) UNIQUE 인덱스 생성 — users.name_norm 전역, teams.name_norm 전역.
+    #    phase 4 본문이 이미 적용된 환경에서도 이 phase가 처음 돌면서 인덱스가 생성된다.
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_name_norm "
+        "ON users(name_norm)"
+    )
+    if _table_exists(conn, "teams"):
+        teams_cols = _column_set(conn, "teams")
+        if "name_norm" in teams_cols:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_name_norm "
+                "ON teams(name_norm)"
+            )
+
+    print(f"{_MIGRATION_LOG_PREFIX} phase 7: converted {converted_count} plaintext password(s) to hash")
+
+
+PHASES.append(("team_phase_7_password_hash_v1", _phase_7_password_hash))
+
+
 def _check_projects_team_name_unique(conn):
     """Preflight: projects (team_id, name_norm) 충돌 검사.
 
@@ -1864,6 +1967,79 @@ def _check_projects_team_name_unique(conn):
 
 
 _PREFLIGHT_CHECKS.append(_check_projects_team_name_unique)
+
+
+def _check_users_name_norm_unique(conn):
+    """Preflight: users.name_norm 전역 충돌 검사 (#7).
+
+    name_norm IS NOT NULL 안에서 GROUP BY로 동일 키 2+건이면 UNIQUE 인덱스
+    생성이 실패한다. is_active 무관 (휴면 계정 포함 전수 검사).
+
+    반환: list[(category, message)] — 카테고리는 'preflight_users_name_norm'.
+    """
+    if not _table_exists(conn, "users"):
+        return []
+    if "name_norm" not in _column_set(conn, "users"):
+        # phase 1 이전엔 컬럼이 없어 검사 자체 skip(노옵).
+        return []
+
+    rows = conn.execute(
+        "SELECT name_norm, COUNT(*) AS dup, GROUP_CONCAT(id) AS ids "
+        "  FROM users "
+        " WHERE name_norm IS NOT NULL "
+        " GROUP BY name_norm "
+        "HAVING COUNT(*) > 1"
+    ).fetchall()
+
+    conflicts: list = []
+    for row in rows:
+        name_norm = row["name_norm"] if isinstance(row, sqlite3.Row) else row[0]
+        dup = row["dup"] if isinstance(row, sqlite3.Row) else row[1]
+        ids = row["ids"] if isinstance(row, sqlite3.Row) else row[2]
+        conflicts.append((
+            "preflight_users_name_norm",
+            f"users (name_norm={name_norm!r}) duplicates={dup} ids=[{ids}]",
+        ))
+    return conflicts
+
+
+_PREFLIGHT_CHECKS.append(_check_users_name_norm_unique)
+
+
+def _check_teams_name_norm_unique(conn):
+    """Preflight: teams.name_norm 전역 충돌 검사 (#7).
+
+    deleted_at 무관 — 같은 정규 이름이 여러 row에 살아 있으면 UNIQUE 실패한다.
+    soft delete 정책 변경이 필요하면 후속 사이클에서 부분 인덱스로 재정의한다.
+
+    반환: list[(category, message)] — 카테고리는 'preflight_teams_name_norm'.
+    """
+    if not _table_exists(conn, "teams"):
+        return []
+    if "name_norm" not in _column_set(conn, "teams"):
+        return []
+
+    rows = conn.execute(
+        "SELECT name_norm, COUNT(*) AS dup, GROUP_CONCAT(id) AS ids "
+        "  FROM teams "
+        " WHERE name_norm IS NOT NULL "
+        " GROUP BY name_norm "
+        "HAVING COUNT(*) > 1"
+    ).fetchall()
+
+    conflicts: list = []
+    for row in rows:
+        name_norm = row["name_norm"] if isinstance(row, sqlite3.Row) else row[0]
+        dup = row["dup"] if isinstance(row, sqlite3.Row) else row[1]
+        ids = row["ids"] if isinstance(row, sqlite3.Row) else row[2]
+        conflicts.append((
+            "preflight_teams_name_norm",
+            f"teams (name_norm={name_norm!r}) duplicates={dup} ids=[{ids}]",
+        ))
+    return conflicts
+
+
+_PREFLIGHT_CHECKS.append(_check_teams_name_norm_unique)
 
 
 def _run_preflight_checks(conn) -> list:
@@ -3872,24 +4048,66 @@ def get_user(user_id: int):
     return dict(row) if row else None
 
 
-def get_user_by_password(password: str):
-    """에디터 로그인: 비밀번호로 사용자 조회"""
+def get_user_by_login(name: str, plaintext: str):
+    """일반 로그인 (#7): name_norm 매칭 + password_hash 검증. admin 제외.
+
+    동작:
+      1. ``normalize_name(name)``로 name_norm 산출.
+      2. role != 'admin' AND is_active = 1 AND name_norm = ? 로 SELECT.
+      3. 매칭된 사용자가 있으면 ``passwords.verify_password(plaintext, password_hash)``.
+      4. 매칭 실패 시 ``passwords.DUMMY_HASH``로 verify를 한 번 돌려 timing 균등화.
+
+    반환: dict(user) | None.
+    """
+    norm = normalize_name(name)
+    if not norm:
+        # 빈 입력은 lookup miss로 취급 — 그래도 dummy verify로 시간 균등화.
+        passwords.verify_password(plaintext or "", passwords.DUMMY_HASH)
+        return None
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT * FROM users WHERE password = ? AND is_active = 1",
-            (password,)
+            "SELECT * FROM users "
+            " WHERE name_norm = ? "
+            "   AND role != 'admin' "
+            "   AND is_active = 1",
+            (norm,),
         ).fetchone()
-    return dict(row) if row else None
+    if not row:
+        passwords.verify_password(plaintext or "", passwords.DUMMY_HASH)
+        return None
+    user = dict(row)
+    stored = user.get("password_hash")
+    if not stored or not passwords.verify_password(plaintext or "", stored):
+        return None
+    return user
 
 
-def get_user_by_credentials(name: str, password: str):
-    """관리자 로그인: 이름 + 비밀번호"""
+def get_user_by_credentials(name: str, plaintext: str):
+    """관리자 로그인 (#7): admin 전용 + name_norm 매칭 + hash 검증.
+
+    외부 동작은 변경 없음 (admin이 hash로 변환된 후에도 정상 로그인).
+    매칭 miss 시에도 DUMMY_HASH로 verify를 돌려 timing 균등화.
+    """
+    norm = normalize_name(name)
+    if not norm:
+        passwords.verify_password(plaintext or "", passwords.DUMMY_HASH)
+        return None
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT * FROM users WHERE name = ? AND password = ? AND role = 'admin' AND is_active = 1",
-            (name, password)
+            "SELECT * FROM users "
+            " WHERE name_norm = ? "
+            "   AND role = 'admin' "
+            "   AND is_active = 1",
+            (norm,),
         ).fetchone()
-    return dict(row) if row else None
+    if not row:
+        passwords.verify_password(plaintext or "", passwords.DUMMY_HASH)
+        return None
+    user = dict(row)
+    stored = user.get("password_hash")
+    if not stored or not passwords.verify_password(plaintext or "", stored):
+        return None
+    return user
 
 
 def update_user(user_id: int, data: dict):
@@ -3901,8 +4119,41 @@ def update_user(user_id: int, data: dict):
 
 
 def reset_user_password(user_id: int, new_password: str):
+    """비밀번호 리셋 (#7): hash 저장 + 평문 컬럼 비움 ('').
+
+    `users.password` 컬럼이 NOT NULL DEFAULT '' 이라 NULL 대신 빈 문자열로 저장한다.
+    Phase 7 본문과 동일한 deviation. Phase 5(컬럼 drop) 후 정리.
+
+    호출처:
+      - /api/me/change-password (자기 비밀번호 변경) — 라우트가 정책 검증 선행.
+      - /api/admin/users/{id}/reset-password (admin 운영) — 정책 미적용 (admin 책임).
+    """
+    new_hash = passwords.hash_password(new_password)
     with get_conn() as conn:
-        conn.execute("UPDATE users SET password = ? WHERE id = ?", (new_password, user_id))
+        conn.execute(
+            "UPDATE users SET password_hash = ?, password = '' WHERE id = ?",
+            (new_hash, user_id),
+        )
+
+
+def verify_user_password(user_id: int, plaintext: str) -> bool:
+    """본인 인증용 hash 검증 (#7). /api/me/change-password 등에서 사용.
+
+    user_id 기준 단일 row의 password_hash와 비교. 사용자가 사라졌거나 hash가
+    비어 있으면 False (DUMMY_HASH로 timing 균등화).
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT password_hash FROM users WHERE id = ? AND is_active = 1",
+            (user_id,),
+        ).fetchone()
+    stored = None
+    if row:
+        stored = row["password_hash"] if isinstance(row, sqlite3.Row) else row[0]
+    if not stored:
+        passwords.verify_password(plaintext or "", passwords.DUMMY_HASH)
+        return False
+    return passwords.verify_password(plaintext or "", stored)
 
 
 # ── Sessions ────────────────────────────────────────────

@@ -28,6 +28,7 @@ import database as db
 import llm_parser
 import auth
 import crypto
+import passwords
 import backup
 from broker import wu_broker
 import publisher as _publisher_mod
@@ -1383,13 +1384,23 @@ def mark_all_notifications_read(request: Request):
 @app.post("/api/login")
 @limiter.limit("10/minute")
 async def login(request: Request, response: Response):
+    """일반 로그인 (#7): 이름 + 비밀번호. admin 제외, name_norm 매칭, hash 검증.
+
+    응답 메시지는 모든 실패 케이스에서 동일 (admin 존재 노출 금지).
+    """
     data = await request.json()
+    name = data.get("name", "").strip()
     password = data.get("password", "").strip()
-    if not password:
-        raise HTTPException(status_code=400, detail="비밀번호를 입력하세요.")
-    user = db.get_user_by_password(password)
+    if not name or not password:
+        raise HTTPException(status_code=400, detail="이름과 비밀번호를 입력하세요.")
+    if not passwords.is_valid_user_name(name):
+        # 정규식 위반(공백·특수문자) — 별도 메시지: 입력 형식 자체가 잘못됨.
+        raise HTTPException(status_code=400, detail="이름은 영문·숫자·한글만 사용할 수 있습니다.")
+    user = db.get_user_by_login(name, password)
     if not user:
-        raise HTTPException(status_code=401, detail="비밀번호가 올바르지 않습니다.")
+        # admin 시도 / 없는 사용자 / 잘못된 비밀번호 모두 동일 메시지.
+        # get_user_by_login가 DUMMY_HASH로 timing 균등화까지 처리.
+        raise HTTPException(status_code=401, detail="아이디 또는 비밀번호가 올바르지 않습니다.")
     session_id = db.create_session(user["id"], role=user["role"])
     db.record_ip(user["id"], auth.get_client_ip(request))
     response.set_cookie(
@@ -1411,9 +1422,10 @@ async def change_my_password(request: Request):
     new_pw = data.get("new_password", "").strip()
     if not current_pw or not new_pw:
         raise HTTPException(status_code=400, detail="모두 입력하세요.")
-    existing = db.get_user_by_password(current_pw)
-    if not existing or existing["id"] != user["id"]:
+    if not db.verify_user_password(user["id"], current_pw):
         raise HTTPException(status_code=401, detail="현재 비밀번호가 올바르지 않습니다.")
+    if not passwords.is_valid_password_policy(new_pw):
+        raise HTTPException(status_code=400, detail="새 비밀번호는 영문과 숫자를 모두 포함해야 합니다.")
     db.reset_user_password(user["id"], new_pw)
     return {"ok": True}
 
