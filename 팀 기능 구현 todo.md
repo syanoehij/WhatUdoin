@@ -182,24 +182,24 @@
 📖 섹션 13 프로젝트 백필 원칙
 **의존: ← #5**
 
-- [ ] **마이그레이션 (Phase 2: 백필 마무리)**
-  - [ ] `events.project_id` 백필 (`(team_id, name_norm)` 매칭, 실패 시 경고 로그)
-  - [ ] `checklists.project_id` 백필 (동일)
-  - [ ] `events.project` / `checklists.project` 문자열 컬럼은 호환용으로 유지(drop 안 함)
-  - [ ] 매칭 실패한 row가 있으면 해당 `team_id` 안에 프로젝트 row 자동 생성 후 연결
-- [ ] **마이그레이션 (테이블 재생성 후 매핑 검증)**
-  - [ ] `project_milestones.project_id`: 프로젝트 테이블 재생성(`#5`) 후 새 id로 매핑 정상인지 검증 (FK 끊김/dangling 없는지)
-  - [ ] `project_members.project_id`: 동일 검증 (히든 프로젝트 멤버 row 보존)
-  - [ ] `events.trash_project_id`, `checklists.trash_project_id`, `meetings.trash_project_id`, `projects.deleted_at` 휴지통 참조도 새 id 기준으로 동작 확인
-  - [ ] 매핑 누락은 `team_migration_warnings`에 기록
-- [ ] **마이그레이션 (Phase 4: 인덱스)**
-  - [ ] `idx_events_project_id`, `idx_checklists_project_id` 생성
-- [ ] **구현**
-  - [ ] events·checklists 신규 쓰기 경로는 `project_id`를 우선 저장
-  - [ ] 읽기 경로는 `project_id` 기반으로 전환, `project` 문자열은 표시·호환용
-- [ ] **검증**
-  - [ ] 백필 후 `events.project_id`, `checklists.project_id`가 의도대로 채워졌는지 확인
-  - [ ] 신규 일정·체크 작성 시 `project_id` 저장 확인
+- [x] **마이그레이션 (Phase 2: 백필 마무리)** — `team_phase_6_project_id_backfill_v1`로 등록
+  - [x] `events.project_id` 백필 (`(team_id, name_norm)` 매칭, deleted_at IS NULL 우선, 실패 시 자동 생성)
+  - [x] `checklists.project_id` 백필 (동일)
+  - [x] `events.project` / `checklists.project` 문자열 컬럼은 호환용으로 유지(drop 안 함, Phase 5 책임)
+  - [x] 매칭 실패한 row가 있으면 해당 `team_id` 안에 프로젝트 row 자동 생성 후 연결 (같은 phase 내 캐시로 중복 방지, warning `project_id_backfill_auto_created`)
+- [x] **마이그레이션 (테이블 재생성 후 매핑 검증)** — dangling 검증, 발견 시 warning만 누적, 데이터 변경 X
+  - [x] `project_milestones.project_id` 매핑 정상 검증
+  - [x] `project_members.project_id` 매핑 정상 검증
+  - [x] `events.trash_project_id`, `checklists.trash_project_id`, `meetings.trash_project_id` 검증
+  - [x] 매핑 누락은 `team_migration_warnings`(`project_id_backfill_dangling_trash`)에 기록
+- [x] **마이그레이션 (Phase 4: 인덱스)**
+  - [x] `idx_events_project_id`, `idx_checklists_project_id` 생성
+- [x] **구현**
+  - [x] events·checklists 신규 쓰기 경로는 `project_id`를 우선 저장 (INSERT + PATCH /api/events/{id}/project + update_checklist 동반 갱신, 리뷰 1차 차단 결함 패치)
+  - [ ] 읽기 경로는 `project_id` 기반으로 전환, `project` 문자열은 표시·호환용 — #10 책임
+- [x] **검증**
+  - [x] 백필 후 `events.project_id`, `checklists.project_id`가 의도대로 채워졌는지 확인 — 17 케이스 PASS
+  - [x] 신규 일정·체크 작성 시 `project_id` 저장 확인
 
 ### #7. 로그인 인증 기반 정비 (#8과 한 페이즈)
 
@@ -691,4 +691,5 @@
 | 2026-05-10 | #2 user_teams + name_norm + 권한 헬퍼 | Phase 1 본문(`team_phase_1_columns_v1`): 9개 컬럼 추가, `user_teams`/`team_menu_settings` 신규, projects 재구성(`name UNIQUE` 제거 + name_norm 추가, id 보존, `_PROJECTS_REBUILD_COLUMNS` 명시 15개). Phase 2 본문(`team_phase_2_backfill_v1`): users.name_norm·teams.name_norm·role:editor→member·user_teams 이관(admin 제외). Phase 4 본문(`team_phase_4_indexes_v1`): user_teams/team_menu_settings UNIQUE 2건. auth.py 신규 헬퍼 7개 + 기존 4개 위임. 사후 수정 4건(시드 name_norm, projects CREATE 컬럼 흡수, sqlite_sequence ON CONFLICT 무효 회피, checklists CREATE 순서). 사전 조건 #1(`database.py:254`) 함께 해결. T1~T4 37 checks + 권한 헬퍼 28 checks ALL PASS. | `database.py`, `auth.py`. archive: `archive/TeamA_002_UserTeams_20260510_223048/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_phase_migrations.py, scripts/verify_auth_helpers.py}` |
 | 2026-05-10 | #3 admin 분리 + 관리팀 시드 | Phase 본문(`team_phase_3_admin_separation_v1`): admin team_id NULL, mcp_token NULL, user_ips whitelist→history 강등, user_teams admin 정리, 관리팀 분기 처리(`_ADMIN_TEAM_REF_TABLES` 10개 검사 → 참조 0건 DELETE / ≥1건 AdminTeam rename). 시드 갱신: 관리팀 자동 생성 제거 + admin team_id=NULL. admin 제외 보강은 grep으로 누락 0건 확인(의도적 미변경 5건 사유 기록). qa 1차 차단 1건 발견(`teams.name UNIQUE` 충돌) → fallback `관리팀_legacy_{id}` + `admin_separation` warning 누적 패치. 9/9 시나리오 PASS(S1~S7 + S4-extra 더블 참조 + S4-rerun warning 중복 가드). | `database.py`. archive: `archive/TeamA_003_AdminSeparation_20260510_230342/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_admin_separation.py}` |
 | 2026-05-10 | #4 데이터 백필 (1차) | Phase 본문(`team_phase_4_data_backfill_v1`): events/checklists.team_id 추론(2번 작성자 단일 팀 — 1번은 #6 후 활성화, 3번 NULL+warning), meetings 4분기(팀 문서×정상/예외, 개인 문서×정상/예외), projects fallback 단계 1·2·4(단계 3 자동 생성은 #6), notifications.team_id(event_id→events.team_id), links.team_id(`scope='team'` + NULL만, 작성자 → 단일 팀), team_notices.team_id(작성자 → 단일 팀/대표 팀), pending_users 전건 삭제. 헬퍼 `__phase4_resolve_user_single_team`(user_teams 단건 → 다건 시 joined_at 최선 → legacy users.team_id → None). 5개 warning 카테고리(`data_backfill_events`, `data_backfill_meetings_team_doc_no_owner`, `data_backfill_projects`, `data_backfill_links`, `data_backfill_team_notices`). 9 시나리오 40/40 PASS, 합성 DB. 리뷰 차단 0건(경고 2건). | `database.py`. archive: `archive/TeamA_004_DataBackfill_20260510_233008/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_data_backfill.py}` |
-| 2026-05-10 | #5 projects (team_id, name_norm) UNIQUE + 라우트 중복 검사 | Phase 본문(`team_phase_5_projects_unique_v1`): 잔존 `name_norm IS NULL` 백필 + `idx_projects_team_name` 부분 UNIQUE 인덱스(`WHERE team_id IS NOT NULL` — NULL 잔존 면제). preflight `_check_projects_team_name_unique`로 충돌 시 서버 시작 거부 + `preflight_projects_team_name` warning. DB 함수: `create_project(team_id=None)` 시그니처 확장, `create_hidden_project`의 `LOWER(name)` 전역 검사 → `(team_id, name_norm)` 팀 제한, `rename_project` cross-team 누출 차단(리뷰 발견 결함 패치). 라우트: POST /api/manage/projects, PUT /api/manage/projects/{name}, POST /api/manage/hidden-projects에서 `resolve_work_team` 사용으로 team_id 결정. 9/9 시나리오 PASS(빈 DB·NULL 백필·preflight 충돌·다른 팀 같은 이름·같은 팀 차단·NULL 면제·마커 강제 삭제·cross-team rename 비간섭·히든 프로젝트). | `database.py`, `app.py`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_projects_unique.py` |
+| 2026-05-10 | #5 projects (team_id, name_norm) UNIQUE + 라우트 중복 검사 | Phase 본문(`team_phase_5_projects_unique_v1`): 잔존 `name_norm IS NULL` 백필 + `idx_projects_team_name` 부분 UNIQUE 인덱스(`WHERE team_id IS NOT NULL` — NULL 잔존 면제). preflight `_check_projects_team_name_unique`로 충돌 시 서버 시작 거부 + `preflight_projects_team_name` warning. DB 함수: `create_project(team_id=None)` 시그니처 확장, `create_hidden_project`의 `LOWER(name)` 전역 검사 → `(team_id, name_norm)` 팀 제한, `rename_project` cross-team 누출 차단(리뷰 발견 결함 패치). 라우트: POST /api/manage/projects, PUT /api/manage/projects/{name}, POST /api/manage/hidden-projects에서 `resolve_work_team` 사용으로 team_id 결정. 9/9 시나리오 PASS(빈 DB·NULL 백필·preflight 충돌·다른 팀 같은 이름·같은 팀 차단·NULL 면제·마커 강제 삭제·cross-team rename 비간섭·히든 프로젝트). | `database.py`, `app.py`. archive: `archive/TeamA_005_ProjectsUnique_20260510_235413/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_projects_unique.py}` |
+| 2026-05-11 | #6 events/checklists.project_id 백필 + 자동 프로젝트 생성 | Phase 본문(`team_phase_6_project_id_backfill_v1`): events/checklists.project_id 매칭 백필(`(team_id, name_norm)`, deleted_at IS NULL 우선) + team_id 있고 매칭 실패 row의 자동 프로젝트 생성(같은 phase 내 캐시로 중복 방지, `(team_id, name_norm)` 부분 UNIQUE와 정합). team_id NULL row는 project_id NULL + `project_id_backfill_no_team` warning. project_milestones/project_members/trash_project_id dangling 검증(발견 시 `project_id_backfill_dangling_trash` warning, 데이터 변경 X). Phase 4 인덱스(`idx_events_project_id`, `idx_checklists_project_id`) 추가. 신규 쓰기 경로: INSERT INTO events/checklists + PATCH /api/events/{id}/project + `update_checklist`(리뷰 1차 차단 결함 패치)에서 project_id 동반 갱신. 읽기 경로 전환은 #10 책임. 17 케이스 PASS. | `database.py`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_project_id_backfill.py` |

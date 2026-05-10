@@ -656,6 +656,11 @@ def _generate_recurrence_children(conn, parent_id: int, parent_data: dict):
             "title":               parent_data["title"],
             "team_id":             parent_data.get("team_id"),
             "project":             parent_data.get("project"),
+            # #6: 부모와 동일한 project_id 상속 (없으면 conn으로 해석).
+            "project_id":          parent_data.get("project_id") if parent_data.get("project_id") is not None
+                                   else _resolve_project_id_for_write(
+                                       conn, parent_data.get("team_id"), parent_data.get("project")
+                                   ),
             "description":         parent_data.get("description"),
             "location":            parent_data.get("location"),
             "assignee":            parent_data.get("assignee"),
@@ -677,13 +682,13 @@ def _generate_recurrence_children(conn, parent_id: int, parent_data: dict):
         }
         conn.execute(
             """INSERT INTO events
-               (title, team_id, project, description, location, assignee, all_day,
+               (title, team_id, project, project_id, description, location, assignee, all_day,
                 start_datetime, end_datetime, created_by, source, meeting_id,
                 kanban_status, priority, event_type, is_active, is_public,
                 recurrence_rule, recurrence_end, recurrence_parent_id,
                 bound_checklist_id)
                VALUES
-               (:title, :team_id, :project, :description, :location, :assignee, :all_day,
+               (:title, :team_id, :project, :project_id, :description, :location, :assignee, :all_day,
                 :start_datetime, :end_datetime, :created_by, :source, :meeting_id,
                 :kanban_status, :priority, :event_type, :is_active, :is_public,
                 :recurrence_rule, :recurrence_end, :recurrence_parent_id,
@@ -1055,10 +1060,12 @@ PHASES.append(("team_phase_2_backfill_v1", _phase_2_team_backfill))
 
 
 def _phase_4_team_indexes(conn):
-    """Phase 4: 본 사이클 범위의 UNIQUE 인덱스 2개만 생성.
+    """Phase 4: 본 사이클 범위의 UNIQUE 인덱스 2개 + #6 비-UNIQUE 인덱스 2개 생성.
 
     - idx_user_teams_user_team: user_teams(user_id, team_id) UNIQUE
     - idx_team_menu_settings:    team_menu_settings(team_id, menu_key) UNIQUE
+    - idx_events_project_id:     events(project_id) — #6 추가, 비-UNIQUE
+    - idx_checklists_project_id: checklists(project_id) — #6 추가, 비-UNIQUE
 
     users.name_norm UNIQUE / teams.name_norm UNIQUE / projects(team_id, name_norm) UNIQUE는
     각각 #7/#5 후속 사이클 책임이므로 본 사이클에서 만들지 않는다.
@@ -1071,6 +1078,19 @@ def _phase_4_team_indexes(conn):
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_team_menu_settings "
         "ON team_menu_settings(team_id, menu_key)"
     )
+    # #6: project_id 기준 조회/JOIN 가속용 비-UNIQUE 인덱스.
+    # 컬럼 존재 가드 — Phase 1이 추가하지만 빈 DB 첫 init_db()에서 phase 4가
+    # phase 1 뒤에 실행되므로 정상적으로 존재. 방어적 가드만 둔다.
+    if _table_exists(conn, "events") and "project_id" in _column_set(conn, "events"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_project_id "
+            "ON events(project_id)"
+        )
+    if _table_exists(conn, "checklists") and "project_id" in _column_set(conn, "checklists"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_checklists_project_id "
+            "ON checklists(project_id)"
+        )
 
 
 PHASES.append(("team_phase_4_indexes_v1", _phase_4_team_indexes))
@@ -1565,6 +1585,245 @@ def _phase_5_projects_unique(conn):
 PHASES.append(("team_phase_5_projects_unique_v1", _phase_5_projects_unique))
 
 
+# ── 팀 기능 그룹 A #6 — events/checklists.project_id 백필 ────────────
+# 본 사이클 본문이 수행하는 일:
+#   1) events.project_id 백필                — (team_id, name_norm) 매칭 + 자동 생성
+#   2) checklists.project_id 백필             — 동일 정책
+#   3) project_milestones / project_members / *_trash_project_id dangling 검증 (warning만)
+#
+# 매칭 정책 (사양서 §13):
+#   - row.team_id 있고 row.project 비어있지 않을 때만 시도.
+#   - (team_id, normalize_name(project)) 매칭. deleted_at IS NULL 우선, 없으면 deleted_at 포함.
+#   - 매칭 0건 + team_id 있음 → 자동 프로젝트 생성 후 연결.
+#   - team_id NULL → project_id NULL + warning.
+#   - project 비어있음 → 그대로 NULL.
+#
+# 자동 생성 캐시:
+#   - 같은 phase 안에서 동일 (team_id, name_norm)에 대해 1번만 INSERT.
+#   - events·checklists 양쪽이 같은 (team_id, name)을 자동 생성해도 1개만 생성.
+#   - (team_id, name_norm) 부분 UNIQUE 인덱스(#5) 덕분에 race-safe.
+#
+# Idempotent 가드:
+#   - 모든 UPDATE는 `WHERE project_id IS NULL`. 마커 강제 삭제 후 재실행 시에도 노옵.
+#   - 자동 생성도 같은 phase 안 캐시로 중복 없음.
+#
+# warning 카테고리 (4종):
+#   - project_id_backfill_no_team       (row.team_id NULL → 연결 불가, row id + project)
+#   - project_id_backfill_auto_created  (자동 생성 row 카운트만 — 노이즈 우려)
+#   - project_id_backfill_dangling_trash       (events/checklists/meetings.trash_project_id 무효 참조)
+#   - project_id_backfill_dangling_milestone   (project_milestones.project_id 무효 참조)
+#   - project_id_backfill_dangling_member      (project_members.project_id 무효 참조)
+
+
+def _phase_6_lookup_or_create_project(
+    conn,
+    team_id: int,
+    project_name: str,
+    cache: dict,
+    auto_created_ids: set,
+) -> int:
+    """주어진 (team_id, project_name)에 대응하는 projects.id를 찾거나 생성.
+
+    검색 우선순위:
+      1) cache[(team_id, name_norm)]
+      2) projects 매칭 — deleted_at IS NULL 우선, 없으면 deleted_at 포함 가장 작은 id
+      3) 매칭 0건 → 자동 INSERT (is_active=1, is_hidden=0, is_private=0,
+         owner_id=NULL, color=NULL, memo=NULL, name_norm 동시 채움)
+
+    auto_created_ids에는 자동 생성된 projects.id가 추가된다 (set 누적).
+
+    반환: projects.id (정수) — caller가 events/checklists에 UPDATE.
+    """
+    norm = normalize_name(project_name)
+    cache_key = (team_id, norm)
+    if cache_key in cache:
+        return cache[cache_key]
+
+    # 활성 프로젝트(deleted_at IS NULL) 우선 매칭.
+    row = conn.execute(
+        "SELECT id FROM projects "
+        " WHERE team_id = ? AND name_norm = ? AND deleted_at IS NULL "
+        " ORDER BY id LIMIT 1",
+        (team_id, norm),
+    ).fetchone()
+    if row is None:
+        # 활성 0건 → 휴지통 포함 매칭.
+        row = conn.execute(
+            "SELECT id FROM projects "
+            " WHERE team_id = ? AND name_norm = ? "
+            " ORDER BY id LIMIT 1",
+            (team_id, norm),
+        ).fetchone()
+
+    if row is not None:
+        proj_id = row["id"] if isinstance(row, sqlite3.Row) else row[0]
+        cache[cache_key] = proj_id
+        return proj_id
+
+    # 매칭 0건 → 자동 생성. (team_id, name_norm) 부분 UNIQUE 인덱스(#5) 덕분에
+    # 동시성 문제는 phase 본문 안 단일 트랜잭션에서 발생할 수 없음.
+    cur = conn.execute(
+        "INSERT INTO projects "
+        "    (team_id, name, name_norm, is_active, is_hidden, is_private, "
+        "     owner_id, color, memo, created_at) "
+        "VALUES (?, ?, ?, 1, 0, 0, NULL, NULL, NULL, CURRENT_TIMESTAMP)",
+        (team_id, project_name, norm),
+    )
+    new_id = cur.lastrowid
+    cache[cache_key] = new_id
+    auto_created_ids.add(new_id)
+    return new_id
+
+
+def _phase_6_backfill_table_project_id(
+    conn,
+    table: str,
+    cache: dict,
+    auto_created_ids: set,
+) -> None:
+    """events 또는 checklists의 project_id를 일괄 백필.
+
+    가드: WHERE project_id IS NULL 만 대상으로 한다. 이미 채워진 row는 노옵.
+    매칭 정책은 _phase_6_lookup_or_create_project 참고.
+    """
+    if not _table_exists(conn, table):
+        return
+
+    cols = _column_set(conn, table)
+    if "project_id" not in cols or "team_id" not in cols or "project" not in cols:
+        # Phase 1이 컬럼을 추가했어야 한다. 구조적 오류 — 본문 실패로 ROLLBACK.
+        raise RuntimeError(f"phase 6: {table} missing project_id/team_id/project column")
+
+    rows = conn.execute(
+        f"SELECT id, team_id, project FROM {table} "
+        f" WHERE project_id IS NULL"
+    ).fetchall()
+
+    for row in rows:
+        rid = row["id"]
+        team_id = row["team_id"]
+        project = row["project"]
+
+        # 1) project 문자열 비어있음 → NULL 유지 (공백만도 빈 것으로 간주).
+        if project is None or str(project).strip() == "":
+            continue
+
+        # 2) team_id NULL → 연결 불가 + warning.
+        if team_id is None:
+            _append_team_migration_warning(
+                conn,
+                "project_id_backfill_no_team",
+                f"{table} id={rid} project={project!r} team_id=NULL → project_id 미설정",
+            )
+            continue
+
+        # 3) 매칭 또는 자동 생성.
+        proj_id = _phase_6_lookup_or_create_project(
+            conn, team_id, project, cache, auto_created_ids
+        )
+
+        # idempotent 가드 보강: WHERE project_id IS NULL.
+        conn.execute(
+            f"UPDATE {table} SET project_id = ? "
+            f" WHERE id = ? AND project_id IS NULL",
+            (proj_id, rid),
+        )
+
+
+def _phase_6_check_dangling_refs(conn) -> None:
+    """project_milestones / project_members / *_trash_project_id의 무효 참조 검증.
+
+    데이터 변경 X — warning만 누적. cleanup은 별도 운영 작업.
+    """
+    # 1) project_milestones.project_id 무효 참조
+    if _table_exists(conn, "project_milestones"):
+        rows = conn.execute(
+            "SELECT pm.id, pm.project_id "
+            "  FROM project_milestones pm "
+            "  LEFT JOIN projects p ON p.id = pm.project_id "
+            " WHERE p.id IS NULL"
+        ).fetchall()
+        for row in rows:
+            mid = row["id"]
+            pid = row["project_id"]
+            _append_team_migration_warning(
+                conn,
+                "project_id_backfill_dangling_milestone",
+                f"project_milestones id={mid} project_id={pid} → projects 매칭 없음",
+            )
+
+    # 2) project_members.project_id 무효 참조 — (project_id, user_id) 복합 PK라 id 컬럼 없음
+    if _table_exists(conn, "project_members"):
+        rows = conn.execute(
+            "SELECT pm.project_id, pm.user_id "
+            "  FROM project_members pm "
+            "  LEFT JOIN projects p ON p.id = pm.project_id "
+            " WHERE p.id IS NULL"
+        ).fetchall()
+        for row in rows:
+            pid = row["project_id"]
+            uid = row["user_id"]
+            _append_team_migration_warning(
+                conn,
+                "project_id_backfill_dangling_member",
+                f"project_members project_id={pid} user_id={uid} → projects 매칭 없음",
+            )
+
+    # 3) events / checklists / meetings의 trash_project_id 무효 참조
+    for table in ("events", "checklists", "meetings"):
+        if not _table_exists(conn, table):
+            continue
+        if "trash_project_id" not in _column_set(conn, table):
+            continue
+        rows = conn.execute(
+            f"SELECT t.id, t.trash_project_id "
+            f"  FROM {table} t "
+            f"  LEFT JOIN projects p ON p.id = t.trash_project_id "
+            f" WHERE t.trash_project_id IS NOT NULL AND p.id IS NULL"
+        ).fetchall()
+        for row in rows:
+            rid = row["id"]
+            tpid = row["trash_project_id"]
+            _append_team_migration_warning(
+                conn,
+                "project_id_backfill_dangling_trash",
+                f"{table} id={rid} trash_project_id={tpid} → projects 매칭 없음",
+            )
+
+
+def _phase_6_project_id_backfill(conn):
+    """Phase 6: events/checklists.project_id 백필 + 자동 프로젝트 생성 + dangling 검증.
+
+    빈 DB 첫 init_db()에서는 events·checklists 모두 빈 상태이므로 노옵.
+    두 번째 init_db()에서는 마커가 있어 _pending_phases가 이 phase를 제외.
+    마커 강제 삭제 후 재실행 시에도 `WHERE project_id IS NULL` 가드로 노옵.
+    """
+    if not _table_exists(conn, "projects"):
+        # 구조적 전제 위반 — phase 1·5가 먼저 실행되어야 한다.
+        raise RuntimeError("phase 6: projects table missing")
+
+    # 1) events / checklists 백필 — 자동 생성 캐시 + 자동 생성 id 집합 공유.
+    cache: dict = {}
+    auto_created_ids: set = set()
+
+    _phase_6_backfill_table_project_id(conn, "events", cache, auto_created_ids)
+    _phase_6_backfill_table_project_id(conn, "checklists", cache, auto_created_ids)
+
+    # 자동 생성 row 카운트만 누적 (이름 목록은 노이즈 우려 — 사양서 §주의사항).
+    if auto_created_ids:
+        _append_team_migration_warning(
+            conn,
+            "project_id_backfill_auto_created",
+            f"auto-created projects count={len(auto_created_ids)} (운영자 후속 정리 권장)",
+        )
+
+    # 2) dangling 검증 — warning만 누적, 데이터 변경 X.
+    _phase_6_check_dangling_refs(conn)
+
+
+PHASES.append(("team_phase_6_project_id_backfill_v1", _phase_6_project_id_backfill))
+
+
 def _check_projects_team_name_unique(conn):
     """Preflight: projects (team_id, name_norm) 충돌 검사.
 
@@ -1872,15 +2131,20 @@ def create_event(data: dict) -> int:
     if data.get("event_type") in ("meeting", "journal", "subtask"):
         data["kanban_status"] = None
     with get_conn() as conn:
+        # #6: project_id 동반. caller가 명시 지정한 값이 있으면 우선 사용.
+        if "project_id" not in data or data.get("project_id") is None:
+            data["project_id"] = _resolve_project_id_for_write(
+                conn, data.get("team_id"), data.get("project")
+            )
         cur = conn.execute(
             """INSERT INTO events
-               (title, team_id, project, description, location, assignee, all_day,
+               (title, team_id, project, project_id, description, location, assignee, all_day,
                 start_datetime, end_datetime, created_by, source, meeting_id,
                 kanban_status, priority, event_type, is_public,
                 recurrence_rule, recurrence_end, recurrence_parent_id, parent_event_id,
                 bound_checklist_id)
                VALUES
-               (:title, :team_id, :project, :description, :location, :assignee, :all_day,
+               (:title, :team_id, :project, :project_id, :description, :location, :assignee, :all_day,
                 :start_datetime, :end_datetime, :created_by, :source, :meeting_id,
                 :kanban_status, :priority, :event_type, :is_public,
                 :recurrence_rule, :recurrence_end, :recurrence_parent_id, :parent_event_id,
@@ -1912,10 +2176,19 @@ def _apply_event_update(conn, event_id: int, data: dict):
     data.setdefault("recurrence_end", None)
     data.setdefault("parent_event_id", None)
     data.setdefault("bound_checklist_id", None)
+    # #6: project 변경 시 project_id 동기화. team_id는 기존 row에서 가져온다.
+    row = conn.execute(
+        "SELECT team_id FROM events WHERE id = ?", (event_id,)
+    ).fetchone()
+    row_team_id = (row["team_id"] if row else None) if isinstance(row, sqlite3.Row) else (row[0] if row else None)
+    data["project_id"] = _resolve_project_id_for_write(
+        conn, row_team_id, data.get("project")
+    )
     conn.execute(
         """UPDATE events SET
             title              = :title,
             project            = :project,
+            project_id         = :project_id,
             description        = :description,
             location           = :location,
             assignee           = :assignee,
@@ -1938,14 +2211,20 @@ def _apply_event_update(conn, event_id: int, data: dict):
 
 def update_event(event_id: int, data: dict):
     with get_conn() as conn:
-        existing = conn.execute("SELECT project, event_type FROM events WHERE id = ?", (event_id,)).fetchone()
+        existing = conn.execute("SELECT project, team_id, event_type FROM events WHERE id = ?", (event_id,)).fetchone()
         _apply_event_update(conn, event_id, data)
         # 업무 일정의 프로젝트가 바뀌면 하위 업무들도 함께 이동
         if (existing and data.get("event_type", "schedule") == "schedule"
                 and data.get("project") != (existing["project"] if existing else None)):
+            # #6: 하위 업무도 project_id 동기화. existing.team_id 사용 (자식은 부모와 같은 팀).
+            existing_team_id = existing["team_id"] if existing else None
+            child_pid = _resolve_project_id_for_write(
+                conn, existing_team_id, data.get("project")
+            )
             conn.execute(
-                "UPDATE events SET project = ?, updated_at = CURRENT_TIMESTAMP WHERE parent_event_id = ? AND deleted_at IS NULL",
-                (data.get("project"), event_id)
+                "UPDATE events SET project = ?, project_id = ?, updated_at = CURRENT_TIMESTAMP "
+                " WHERE parent_event_id = ? AND deleted_at IS NULL",
+                (data.get("project"), child_pid, event_id)
             )
 
 
@@ -2037,15 +2316,19 @@ def update_event_recurring_from_here(event_id: int, data: dict):
         if new_parent.get("event_type") in ("meeting", "journal"):
             new_parent["kanban_status"] = None
 
+        # #6: 새 부모 INSERT에 project_id 동반.
+        new_parent["project_id"] = _resolve_project_id_for_write(
+            conn, new_parent.get("team_id"), new_parent.get("project")
+        )
         cur = conn.execute(
             """INSERT INTO events
-               (title, team_id, project, description, location, assignee, all_day,
+               (title, team_id, project, project_id, description, location, assignee, all_day,
                 start_datetime, end_datetime, created_by, source, meeting_id,
                 kanban_status, priority, event_type, is_active,
                 recurrence_rule, recurrence_end, recurrence_parent_id,
                 bound_checklist_id)
                VALUES
-               (:title, :team_id, :project, :description, :location, :assignee, :all_day,
+               (:title, :team_id, :project, :project_id, :description, :location, :assignee, :all_day,
                 :start_datetime, :end_datetime, :created_by, :source, :meeting_id,
                 :kanban_status, :priority, :event_type, :is_active,
                 :recurrence_rule, :recurrence_end, :recurrence_parent_id,
@@ -2060,9 +2343,17 @@ def update_event_recurring_from_here(event_id: int, data: dict):
 
 def update_event_project(event_id: int, project: str | None):
     with get_conn() as conn:
+        # #6: project 문자열 + project_id 동시 갱신.
+        # 기존 row의 team_id를 기준으로 (team_id, name_norm) 매칭.
+        row = conn.execute(
+            "SELECT team_id FROM events WHERE id = ?", (event_id,)
+        ).fetchone()
+        row_team_id = (row["team_id"] if row else None) if isinstance(row, sqlite3.Row) else (row[0] if row else None)
+        new_project_id = _resolve_project_id_for_write(conn, row_team_id, project)
         conn.execute(
-            "UPDATE events SET project = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (project or None, event_id),
+            "UPDATE events SET project = ?, project_id = ?, updated_at = CURRENT_TIMESTAMP "
+            " WHERE id = ?",
+            (project or None, new_project_id, event_id),
         )
 
 
@@ -3020,6 +3311,49 @@ def get_project_by_name(name: str) -> dict | None:
     return dict(row) if row else None
 
 
+def _resolve_project_id_for_write(
+    conn,
+    team_id: int | None,
+    project_name: str | None,
+) -> int | None:
+    """신규 쓰기 경로에서 project 문자열 → projects.id 해석 (#6).
+
+    범위:
+      - INSERT INTO events / checklists 시 호출
+      - PATCH /api/events/{id}/project (project 변경) 시 호출
+
+    매칭 정책 (백필과 동일):
+      - team_id가 None이거나 project가 비어있으면 None 반환
+      - (team_id, name_norm) 매칭. deleted_at IS NULL 우선.
+      - 매칭 0건이어도 자동 생성하지 않고 None 반환 (자동 생성은 phase 본문 책임).
+        라우트 계층이 별도로 create_project를 호출했을 때 자연스럽게 매칭된다.
+
+    이름이 약간 다르지만 이미 존재하는 프로젝트와 매칭되도록 normalize_name 사용.
+    """
+    if team_id is None or project_name is None:
+        return None
+    if not str(project_name).strip():
+        return None
+    norm = normalize_name(project_name)
+    row = conn.execute(
+        "SELECT id FROM projects "
+        " WHERE team_id = ? AND name_norm = ? AND deleted_at IS NULL "
+        " ORDER BY id LIMIT 1",
+        (team_id, norm),
+    ).fetchone()
+    if row is None:
+        # 활성 매칭 없음 → 휴지통 포함 (운영 의미: 활성 복구 시점에 자연 정합).
+        row = conn.execute(
+            "SELECT id FROM projects "
+            " WHERE team_id = ? AND name_norm = ? "
+            " ORDER BY id LIMIT 1",
+            (team_id, norm),
+        ).fetchone()
+    if row is None:
+        return None
+    return row["id"] if isinstance(row, sqlite3.Row) else row[0]
+
+
 def get_hidden_project_members(project_id: int) -> list[dict]:
     """히든 프로젝트 멤버 목록 (owner 포함). user 정보 JOIN."""
     with get_conn() as conn:
@@ -3237,6 +3571,12 @@ def rename_project(old_name: str, new_name: str, merge: bool = False):
             # team_id 한정. events/checklists의 project 라벨 갱신도 같은 팀으로 좁혀 다른 팀
             # 동일 이름이 휘말리지 않도록 한다. old_team_id가 NULL인 경우는 target_proj 자체가
             # 없으므로 이 분기에 진입하지 않는다.
+            #
+            # TODO #10: 본 merge 분기는 events/checklists.project 문자열만 갱신하므로
+            #   project_id는 여전히 soft-deleted된 old_proj.id를 가리킨다. 사양서 §주의사항
+            #   ("rename_project: project_id는 그대로")에 따라 #6 사이클은 이 비정합을
+            #   유지하고, 라우트 읽기 경로 전환(#10) 시 project_id도 target_proj.id로 일괄
+            #   재동기화한다. 그 전까지는 read 경로가 project_id를 신뢰하지 않으므로 안전.
             conn.execute(
                 "UPDATE events SET project = ? "
                 " WHERE project = ? AND team_id = ?",
@@ -4167,9 +4507,12 @@ def create_checklist(project: str, title: str, content: str, created_by: str, is
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     _attachments = json.dumps(attachments if isinstance(attachments, list) else [])
     with get_conn() as conn:
+        # #6: project_id 동반.
+        project_id = _resolve_project_id_for_write(conn, team_id, project)
         cur = conn.execute(
-            "INSERT INTO checklists (project, title, content, created_by, created_at, updated_at, is_public, team_id, attachments) VALUES (?,?,?,?,?,?,?,?,?)",
-            (project, title, content, created_by, now, now, is_public, team_id, _attachments)
+            "INSERT INTO checklists (project, project_id, title, content, created_by, created_at, updated_at, is_public, team_id, attachments) "
+            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (project, project_id, title, content, created_by, now, now, is_public, team_id, _attachments)
         )
     return cur.lastrowid
 
@@ -4324,16 +4667,24 @@ def get_checklist(checklist_id: int) -> dict | None:
 def update_checklist(checklist_id: int, title: str, project: str, attachments=None):
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     with get_conn() as conn:
+        # #6: project 변경 시 project_id 동기화. team_id는 기존 row에서 가져온다.
+        row = conn.execute(
+            "SELECT team_id FROM checklists WHERE id = ?", (checklist_id,)
+        ).fetchone()
+        row_team_id = (row["team_id"] if row else None) if isinstance(row, sqlite3.Row) else (row[0] if row else None)
+        new_project_id = _resolve_project_id_for_write(conn, row_team_id, project)
         if attachments is not None:
             _attachments = json.dumps(attachments if isinstance(attachments, list) else [])
             conn.execute(
-                "UPDATE checklists SET title = ?, project = ?, attachments = ?, updated_at = ? WHERE id = ?",
-                (title, project, _attachments, now, checklist_id)
+                "UPDATE checklists SET title = ?, project = ?, project_id = ?, "
+                " attachments = ?, updated_at = ? WHERE id = ?",
+                (title, project, new_project_id, _attachments, now, checklist_id)
             )
         else:
             conn.execute(
-                "UPDATE checklists SET title = ?, project = ?, updated_at = ? WHERE id = ?",
-                (title, project, now, checklist_id)
+                "UPDATE checklists SET title = ?, project = ?, project_id = ?, "
+                " updated_at = ? WHERE id = ?",
+                (title, project, new_project_id, now, checklist_id)
             )
 
 
