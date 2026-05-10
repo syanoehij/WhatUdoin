@@ -7,7 +7,7 @@
 - **1차 실행 todo로 동결** (2026-05-09): 마스터 plan rev29 + 다회 외부 검토 사이클을 거쳐 M1a~M1d 실행 + M2 이후 조건부 운영 구조 변경 step이 모두 정합 상태로 확정됐다. 신규 step 추가 사이클은 종결한다.
 - **트랙 단축 결정** (2026-05-09): M1a 완료 후 외부 검토 2차 사이클을 거쳐 M1b~M1d의 실제 실행 경로를 **M1-ULTRA**(사내 소수 사용자 기준)로 낮췄다. 단축 근거는 아래 "단축 배경" 참조. 기존 full case 세부 step은 본 문서 하단 "보수 단축안 / 회사 반입 게이트 / 후속 후보" 섹션으로 이동했고, 회사 반입 결정이나 실제 장애 징후 발생 시 끌어올린다. 상세 단축안은 [`성능 개선 단축안(M1b-M1d).md`](성능%20개선%20단축안(M1b-M1d).md) 참조.
 - **추후 변경 원칙**: 본 todo는 마스터 plan §0 "문서 라이프사이클 정책"과 동일하게 동결 상태로 둔다. 새 의견이 들어와도 M1a~M1d 실행을 막는 실재 코드/운영 리스크가 아니면 본문을 더 확장하지 않고, 구현 중 발견 사실 → commit/PR 메시지, 운영 정책/후속 마일스톤 후보 → 마스터 plan §18로 분리한다.
-- **다음 행동**: M4 진입(target-risk override). M4-0 진입 게이트 평가 완료(정량 NO-GO지만 supervisor 패턴 재사용/외부 Ollama 격리/통합 UX 회귀 방지/§12 uvicorn 선결 조건/사용자 명시 요청 사유). 다음은 M4-1 Ollama service 별도 프로세스 + JSON IPC.
+- **다음 행동**: M4-1 완료. ollama_service.py + llm_parser env 분기 + supervisor ollama_service_spec factory + STARTUP_SEQUENCE 9항목. probe 48/48 + phase66 56/56 PASS, phase54~65 회귀 PASS. 다음은 M4-2 통합 UX 유지 + hang 검증.
 
 ## 단축 배경
 
@@ -291,7 +291,7 @@
 | step | 제목 | 모델 | §참조 | exit criteria |
 |------|------|------|-------|---------------|
 | [x] M4-0 | M4 진입 게이트 평가 | Opus | §13 진입 게이트 — Ollama service (M4) | **target-risk override 진입 (2026-05-10)** — 정량 NO-GO(M1c-ULTRA limiter 7접점 + 5분 timeout 후 hang/메모리 누수 미관측)지만 (1) M2/M3 supervisor 패턴 재사용 비용 낮음, (2) 외부 Ollama 자체 격리 가치, (3) M1c-9 통합 UX 회귀 방지, (4) §12 uvicorn limit_concurrency 결정 선결 조건, (5) 사용자 명시 요청. 상세: `성능 개선 진행 결과(M4).md` |
-| [ ] M4-1 | Ollama service 별도 프로세스 + JSON IPC | Opus | §8 적용 내용 — Ollama service 코어 분리 + §13 main → Ollama | `/internal/llm` 단일 채널, 내부 토큰, busy/unavailable 거부 응답 |
+| [x] M4-1 | Ollama service 별도 프로세스 + JSON IPC | Opus | §8 적용 내용 — Ollama service 코어 분리 + §13 main → Ollama | **적용 완료 (2026-05-10)** — `ollama_service.py` 신설(Starlette + /internal/llm token Bearer + loopback IP guard + busy/timeout/connect/5xx 응답 분기 + /healthz 5종 키 + RotatingFileHandler). llm_parser.py에 WHATUDOIN_OLLAMA_SERVICE_URL env 분기(설정 시 IPC, 미설정 시 in-process fallback). supervisor ollama_service_spec factory + 3 protected env + Web API에 OLLAMA_SERVICE_URL 자동 주입. STARTUP_SEQUENCE 9항목(scheduler 다음). probe 48/48 + phase66 56/56 PASS, phase54~65 회귀 PASS. 라이브 hang/UX 회귀는 M4-2. 상세: `성능 개선 진행 결과(M4).md` |
 | [ ] M4-2 | M1c-9 통합 UX의 service 분리 후 유지 + 강제 종료/hang 검증 | Sonnet | §8 Ollama 서버 장애 통합 처리 + §17 M4 완료 기준 | M1c-9에서 main app 안에 구현한 통합 UX(`ConnectionError`/timeout/5xx/포화 → "AI 사용 불가")가 Ollama service 분리 후에도 동일하게 동작하는지 회귀(신규 구현 아님). **새로 추가되는 검증** — Ollama service 강제 종료/hang/메모리 누수 시뮬레이션 시 main app 응답성 저하 0, IPC timeout 시 사용자에게 같은 "AI 사용 불가" UX, 트레이가 service 단독 재시작 시 다음 요청부터 정상 응답. admin UI Ollama health 표시는 M1c-9 결과 재사용 |
 | [ ] M4-3 | uvicorn `limit_concurrency` 최종 결정 | Opus | §12 sidecar 도입 여부에 따른 분기 | 측정 결과로 (가) 분기 후보 결정 또는 미적용, SSE service 미적용 명시 |
 | [ ] M4-4 | M4 종료 부하 + exit criteria 점검 | Opus | §17 M4 완료 기준 | hang/강제 종료 시 main app 영향 0, AI 처리 중 일반 API p95 500ms 이하, 트레이 단독 재시작 |
@@ -336,7 +336,7 @@
 | M1-ULTRA 종료 | M1a + M1b-U + M1c-U + M1d 처리 완료 | **완료** | **1/1** | M1-end-U1 lite 기준 6종(a~f) 모두 충족. M1b-U5 closure PASS 반영 완료. M1-ULTRA 사이클 종료 |
 | M2 | target-risk override | **완료** | **21/21** | M2-1~M2-19 모두 적용. M2-20 종료: 정책별 증거 인덱스 20종 + 라이브 supervisor 통합(spawn→healthz→token 3종→stop_all 14/14 PASS) + 50 SSE 부하 10/10 PASS(publish→수신 p95 <0.1ms loopback, /healthz p95 16ms, subscribers 0 복귀). phase54~61 155단언 모두 PASS. **M2 마일스톤 종료** — M3 진입 게이트 평가는 별도 step |
 | M3 | target-risk override | **완료** | **5/5** | M3-1~M3-3 적용 + M3-4 종료: 라이브 supervisor 14/14 + owner 정책 위반 3종 0건 21/21 + 일반 API p95 12.9ms + lock 0건 8/8. phase54~65 회귀 PASS. 운영 코드 변경 0건. **M3 마일스톤 종료** |
-| M4 | target-risk override | M4-1 대기 | **1/5** | M4-0 target-risk override 진입(M2-0/M3-0과 동일 패턴): 정량 NO-GO지만 supervisor 패턴 재사용/외부 Ollama 격리/통합 UX 회귀 방지/uvicorn 선결 조건/명시 요청 사유 |
+| M4 | target-risk override | M4-2 대기 | **2/5** | M4-0 target-risk override 진입. M4-1 ollama_service.py(Starlette + /internal/llm + /healthz + token Bearer + loopback guard) + llm_parser env 분기 + supervisor ollama_service_spec + STARTUP_SEQUENCE 9항목 |
 | M5 후보 | M1c 회귀 측정 | — | 0/4 | M5-0 게이트 평가 포함, 조건부 |
 | M6 후보 | 운영 요구 발생 | — | 0/5 | M6-0 게이트 평가 포함, 조건부 |
 

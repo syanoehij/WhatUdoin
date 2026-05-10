@@ -37,6 +37,13 @@ SCHEDULER_SERVICE_PORT_ENV = "WHATUDOIN_SCHEDULER_PORT"
 SCHEDULER_SERVICE_DEFAULT_PORT = 8766
 SCHEDULER_SERVICE_ENABLE_ENV = "WHATUDOIN_SCHEDULER_SERVICE"
 
+# M4-1: Ollama service 상수
+OLLAMA_SERVICE_NAME = "ollama"
+OLLAMA_SERVICE_BIND_HOST_ENV = "WHATUDOIN_OLLAMA_BIND_HOST"
+OLLAMA_SERVICE_PORT_ENV = "WHATUDOIN_OLLAMA_PORT"
+OLLAMA_SERVICE_URL_ENV = "WHATUDOIN_OLLAMA_SERVICE_URL"
+OLLAMA_SERVICE_DEFAULT_PORT = 8767
+
 CRASH_LOOP_WINDOW_SECONDS = 300
 CRASH_LOOP_MAX_FAILURES = 3
 
@@ -52,11 +59,15 @@ M2_STARTUP_SEQUENCE = (
     "start_web_api_service",
     "start_sse_service",
     "start_scheduler_service",   # M3-2: Scheduler service (5번째, SSE 다음)
+    "start_ollama_service",      # M4-1: Ollama service (6번째, Scheduler 다음)
     "verify_health_and_publish_status",
 )
 
 
-def web_api_internal_service_env(router_host: str = FRONT_ROUTER_LOOPBACK_HOST) -> dict[str, str]:
+def web_api_internal_service_env(
+    router_host: str = FRONT_ROUTER_LOOPBACK_HOST,
+    ollama_port: int = OLLAMA_SERVICE_DEFAULT_PORT,
+) -> dict[str, str]:
     return {
         TRUSTED_PROXY_ENV: router_host,
         WEB_API_BIND_HOST_ENV: FRONT_ROUTER_LOOPBACK_HOST,
@@ -64,6 +75,8 @@ def web_api_internal_service_env(router_host: str = FRONT_ROUTER_LOOPBACK_HOST) 
         # M3-2: supervisor spawn 경로에서는 Scheduler service가 반드시 별도 프로세스로 동작.
         # Web API lifespan이 APScheduler를 시작하지 않도록 분기 신호 주입.
         SCHEDULER_SERVICE_ENABLE_ENV: "1",
+        # M4-1: Ollama service URL — web-api가 외부 Ollama 직접 호출 대신 IPC 위임.
+        OLLAMA_SERVICE_URL_ENV: f"http://127.0.0.1:{ollama_port}/internal/llm",
     }
 
 
@@ -149,6 +162,41 @@ def scheduler_service_spec(
     env[SCHEDULER_SERVICE_BIND_HOST_ENV] = "127.0.0.1"
     env[SCHEDULER_SERVICE_PORT_ENV] = str(port)
     env[SCHEDULER_SERVICE_ENABLE_ENV] = "1"
+    return ServiceSpec(
+        name=name,
+        command=command,
+        env=env,
+        startup_grace_seconds=startup_grace_seconds,
+    )
+
+
+def ollama_service_spec(
+    command: Sequence[str],
+    *,
+    name: str = OLLAMA_SERVICE_NAME,
+    port: int = OLLAMA_SERVICE_DEFAULT_PORT,
+    extra_env: Mapping[str, str] | None = None,
+    startup_grace_seconds: float = 1.0,
+) -> ServiceSpec:
+    """Ollama service 프로세스 spec 팩토리.
+
+    보호 env (extra_env override 차단):
+    - WHATUDOIN_OLLAMA_BIND_HOST: 항상 127.0.0.1 (loopback bind 강제)
+    - WHATUDOIN_OLLAMA_PORT: 지정 포트 강제
+    - WHATUDOIN_INTERNAL_TOKEN: supervisor가 직접 주입
+    """
+    protected = {
+        OLLAMA_SERVICE_BIND_HOST_ENV,
+        OLLAMA_SERVICE_PORT_ENV,
+        INTERNAL_TOKEN_ENV,  # supervisor가 직접 주입 — extra_env override 차단
+    }
+    env = {
+        str(k): str(v)
+        for k, v in (extra_env or {}).items()
+        if str(k) not in protected
+    }
+    env[OLLAMA_SERVICE_BIND_HOST_ENV] = "127.0.0.1"
+    env[OLLAMA_SERVICE_PORT_ENV] = str(port)
     return ServiceSpec(
         name=name,
         command=command,
@@ -534,8 +582,14 @@ __all__ = [
     "ServiceSpec",
     "ServiceState",
     "WhatUdoinSupervisor",
+    "ollama_service_spec",
     "scheduler_service_spec",
     "sse_service_spec",
     "web_api_internal_service_env",
     "web_api_service_spec",
+    "OLLAMA_SERVICE_BIND_HOST_ENV",
+    "OLLAMA_SERVICE_DEFAULT_PORT",
+    "OLLAMA_SERVICE_NAME",
+    "OLLAMA_SERVICE_PORT_ENV",
+    "OLLAMA_SERVICE_URL_ENV",
 ]

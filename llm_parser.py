@@ -99,6 +99,73 @@ class _OllamaLimiter:
             return (self._in_use, self._capacity)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# M4-1: ollama_service IPC 분기
+# ─────────────────────────────────────────────────────────────────────────────
+# WHATUDOIN_OLLAMA_SERVICE_URL 설정 시 → IPC POST /internal/llm 위임.
+#   main app 측 _OllamaLimiter는 사용하지 않음(슬롯은 ollama_service.py 안에서 관리).
+# 미설정 시 → 기존 in-process 동작 100% 유지(M1c-ULTRA limiter 7+1접점 + 직접 외부 호출).
+#
+# 어드민 UI live-update (set_ollama_base_url/timeout/num_ctx): IPC 모드에서는
+# main-side 전역 변수 변경이 실제 Ollama 트래픽에 영향 없음. service는 자신의 env 기준으로 동작.
+# (M4-2에서 admin→service 설정 IPC 추가 예정 시까지 known limitation)
+
+_ollama_service_url: str = os.environ.get("WHATUDOIN_OLLAMA_SERVICE_URL", "").strip()
+
+
+def _call_ollama_service(task: str, prompt: str, **kwargs) -> str:
+    """IPC 모드: POST /internal/llm 호출. 성공 시 generated text 반환.
+
+    실패(busy/timeout/connect/5xx) 시 OllamaUnavailableError raise.
+    Authorization: Bearer 헤더 첨부. raw 토큰 로그 0건.
+    """
+    import requests as _req
+
+    token = os.environ.get("WHATUDOIN_INTERNAL_TOKEN", "").strip()
+    timeout = int(kwargs.get("timeout") or _TIMEOUT)
+
+    body: dict = {"task": task, "prompt": prompt}
+    if "model" in kwargs and kwargs["model"]:
+        body["model"] = kwargs["model"]
+    if "num_ctx" in kwargs and kwargs["num_ctx"]:
+        body["num_ctx"] = int(kwargs["num_ctx"])
+    if "timeout" in kwargs and kwargs["timeout"]:
+        body["timeout"] = int(kwargs["timeout"])
+    if "user_id" in kwargs and kwargs["user_id"]:
+        body["user_id"] = str(kwargs["user_id"])
+
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        resp = _session.post(
+            _ollama_service_url,
+            json=body,
+            headers=headers,
+            timeout=timeout + 5,  # service-side timeout보다 약간 여유
+        )
+        resp.raise_for_status()
+    except _req.Timeout:
+        raise OllamaUnavailableError(reason="timeout")
+    except _req.ConnectionError:
+        raise OllamaUnavailableError(reason="connect")
+    except _req.RequestException as exc:
+        raise OllamaUnavailableError(reason="5xx") from exc
+
+    data = resp.json()
+    if not data.get("ok"):
+        reason = data.get("reason", "5xx")
+        if reason == "busy":
+            slots_raw = data.get("slots", {})
+            used = slots_raw.get("used", 0)
+            max_ = slots_raw.get("max", 0)
+            raise OllamaUnavailableError(reason="busy", slots=(used, max_))
+        raise OllamaUnavailableError(reason=reason)
+
+    return data.get("result", "")
+
+
 _ollama_limiter = _OllamaLimiter(_initial_concurrency())
 
 
@@ -184,6 +251,17 @@ def get_available_models_with_status() -> tuple[list[str], bool]:
     5xx 응답 시 OllamaUnavailableError(reason="5xx") raise.
     그 외 예외(4xx 등)는 기존 동작 유지(False 반환).
     """
+    if _ollama_service_url:
+        # IPC 모드: ollama_service healthz로 연결 확인, 모델 목록은 기본값 반환
+        _svc_healthz = _ollama_service_url.rsplit("/internal/llm", 1)[0] + "/healthz"
+        try:
+            resp = _session.get(_svc_healthz, timeout=5)
+            data = resp.json()
+            connected = data.get("ollama_health") == "ok"
+            return [DEFAULT_MODEL], connected
+        except Exception:
+            return [DEFAULT_MODEL], False
+
     _acquire_or_raise()
     try:
         try:
@@ -264,6 +342,19 @@ JSON:"""
         resp.raise_for_status()
         return validate_and_normalize(_extract_json(resp.json().get("response", "")))
 
+    if _ollama_service_url:
+        raw = _call_ollama_service(
+            "parse_schedule", prompt, model=model, num_ctx=_NUM_CTX, timeout=_TIMEOUT,
+        )
+        result = validate_and_normalize(_extract_json(raw))
+        if not result and len(text) >= 30:
+            retry_prompt = "이전 출력이 JSON 배열이 아니었습니다. 반드시 [ 로 시작해 ] 로 끝나는 JSON 배열만 출력하세요.\n\n" + prompt
+            raw2 = _call_ollama_service(
+                "parse_schedule", retry_prompt, model=model, num_ctx=_NUM_CTX, timeout=_TIMEOUT,
+            )
+            result = validate_and_normalize(_extract_json(raw2))
+        return result
+
     _acquire_or_raise()
     try:
         result = _call({"options": {"temperature": 0.1, "num_ctx": _NUM_CTX}})
@@ -307,6 +398,13 @@ def refine_schedule(text: str, first_pass: list[dict], model: str = DEFAULT_MODE
 {first_pass_json}
 
 --- 최종 검토 결과 JSON ---"""
+
+    if _ollama_service_url:
+        raw = _call_ollama_service(
+            "refine_schedule", prompt, model=model, num_ctx=_NUM_CTX, timeout=_TIMEOUT,
+        )
+        result = validate_and_normalize(_extract_json(raw))
+        return result if result else first_pass
 
     _acquire_or_raise()
     try:
@@ -854,6 +952,11 @@ def generate_weekly_report(
 - 사실이 2개 이상이면 줄을 나눌 것 (`  : 사실1` 다음 줄에 `  : 사실2`).
 - 서두·결론 없이 ## **프로젝트명** 섹션 본문만 출력."""
 
+    if _ollama_service_url:
+        return _call_ollama_service(
+            "weekly_report", prompt, model=model, timeout=180,
+        )
+
     _acquire_or_raise()
     try:
         return _post_generate(model, prompt)
@@ -911,13 +1014,21 @@ def review_all_conflicts(candidates: list[dict], existing: list[dict], model: st
 
 JSON:"""
 
-    response = _session.post(
-        OLLAMA_URL,
-        json={"model": model, "prompt": prompt, "stream": False},
-        timeout=90,
-    )
-    response.raise_for_status()
-    raw = response.json().get("response", "")
+    if _ollama_service_url:
+        try:
+            raw = _call_ollama_service(
+                "review_conflicts", prompt, model=model, timeout=90,
+            )
+        except OllamaUnavailableError:
+            return [{"is_duplicate": False, "reason": "", "existing_title": None}] * len(candidates)
+    else:
+        response = _session.post(
+            OLLAMA_URL,
+            json={"model": model, "prompt": prompt, "stream": False},
+            timeout=90,
+        )
+        response.raise_for_status()
+        raw = response.json().get("response", "")
 
     default = [{"is_duplicate": False, "reason": "", "existing_title": None}] * len(candidates)
     try:
@@ -1013,20 +1124,30 @@ def review_all_conflicts_with_funnel(
 
 JSON:"""
 
-    _acquire_or_raise()
-    try:
+    if _ollama_service_url:
         try:
-            response = _session.post(
-                OLLAMA_URL,
-                json={"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0.0}},
-                timeout=90,
+            raw = _call_ollama_service(
+                "review_conflicts_funnel", prompt, model=model, timeout=90,
             )
-            response.raise_for_status()
-            raw = response.json().get("response", "")
-        except Exception:
+        except OllamaUnavailableError as exc:
+            if exc.reason == "busy":
+                raise  # busy는 상위로 전파 → app.py 503 UX 유지
             return default
-    finally:
-        _ollama_limiter.release()
+    else:
+        _acquire_or_raise()
+        try:
+            try:
+                response = _session.post(
+                    OLLAMA_URL,
+                    json={"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0.0}},
+                    timeout=90,
+                )
+                response.raise_for_status()
+                raw = response.json().get("response", "")
+            except Exception:
+                return default
+        finally:
+            _ollama_limiter.release()
 
     try:
         result_list = _extract_json(raw)
@@ -1114,6 +1235,25 @@ def generate_checklist(text: str, model: str = DEFAULT_MODEL) -> str:
         {"temperature": 0.15, "top_p": 0.7},
         {"temperature": 0.05, "top_p": 0.5},
     ]
+
+    def _post_process(raw: str) -> str:
+        raw = raw.strip()
+        raw = re.sub(r"^```(?:markdown)?\n?", "", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"\n?```\s*$", "", raw)
+        raw = raw.strip()
+        if raw and not re.match(r"^\s*#\s", raw):
+            raw = "# 할 일\n\n" + raw
+        return raw
+
+    if _ollama_service_url:
+        raw = _call_ollama_service(
+            "checklist", prompt, model=model, timeout=120,
+        )
+        raw = _post_process(raw)
+        if raw:
+            return raw
+        raise RuntimeError("AI 체크리스트 생성 실패")
+
     _acquire_or_raise()
     try:
         for attempt in range(3):
@@ -1125,14 +1265,7 @@ def generate_checklist(text: str, model: str = DEFAULT_MODEL) -> str:
                     timeout=120,
                 )
                 resp.raise_for_status()
-                raw = resp.json().get("response", "").strip()
-                # 코드펜스 strip
-                raw = re.sub(r"^```(?:markdown)?\n?", "", raw, flags=re.IGNORECASE)
-                raw = re.sub(r"\n?```\s*$", "", raw)
-                raw = raw.strip()
-                # 첫 줄이 # 제목이 아니면 prefix 추가
-                if raw and not re.match(r"^\s*#\s", raw):
-                    raw = "# 할 일\n\n" + raw
+                raw = _post_process(resp.json().get("response", ""))
                 if raw:
                     return raw
                 logger.warning("generate_checklist: 빈 응답 (시도 %d), 재시도", attempt + 1)
@@ -1146,7 +1279,52 @@ def generate_checklist(text: str, model: str = DEFAULT_MODEL) -> str:
 
 
 def generate_event_checklist_items(events: list[dict], model: str = DEFAULT_MODEL) -> list[dict]:
-    """이벤트 목록 → 체크리스트 항목 생성. 내용 있으면 AI가 세부 항목 분류."""
+    """이벤트 목록 → 체크리스트 항목 생성. 내용 있으면 AI가 세부 항목 분류.
+
+    IPC 모드 참고: 1건당 1 IPC 호출(서비스 측 슬롯 N회 acquire/release). 기존 in-process 모드의
+    "1슬롯 일괄 점유" 불변식은 IPC 모드에서는 유지되지 않는다. M4-2에서 batch IPC 검토 예정.
+    """
+    def _build_prompt(title: str, description: str) -> str:
+        return f"""다음 일정의 내용을 읽고 실행 가능한 세부 할 일 목록을 추출하라.
+일정: {title}
+내용:
+{description}
+
+규칙:
+- 한 줄에 하나씩, 순수 텍스트만 출력 (기호/번호 없이)
+- 최대 5개
+- 구체적 행동 중심으로 표현
+- 분류 불가하거나 내용이 단순하면 빈 줄만 출력
+
+출력:"""
+
+    def _parse_lines(raw: str) -> list[str]:
+        lines = [
+            l.strip().lstrip("-•*").lstrip("0123456789.").strip()
+            for l in raw.split("\n") if l.strip()
+        ]
+        return [l for l in lines if l][:5]
+
+    if _ollama_service_url:
+        results = []
+        for event in events:
+            title = (event.get("title") or "").strip()
+            description = (event.get("description") or "").strip()
+            if not description:
+                results.append({"event_id": event["id"], "title": title, "sub_items": []})
+                continue
+            prompt = _build_prompt(title, description)
+            sub_items = []
+            try:
+                raw = _call_ollama_service(
+                    "event_checklist_items", prompt, model=model, timeout=60,
+                )
+                sub_items = _parse_lines(raw)
+            except Exception as exc:
+                logger.warning("generate_event_checklist_items IPC event=%s: %s", event["id"], exc)
+            results.append({"event_id": event["id"], "title": title, "sub_items": sub_items})
+        return results
+
     # 외부 Ollama 호출이 events 수만큼 일어나지만, 사용자 요청 1건 = limiter 슬롯 1개로 처리.
     # 슬롯이 길게 점유되는 것은 의도된 동작(연속 호출을 한 슬롯에 묶음).
     _acquire_or_raise()
@@ -1160,18 +1338,7 @@ def generate_event_checklist_items(events: list[dict], model: str = DEFAULT_MODE
                 results.append({"event_id": event["id"], "title": title, "sub_items": []})
                 continue
 
-            prompt = f"""다음 일정의 내용을 읽고 실행 가능한 세부 할 일 목록을 추출하라.
-일정: {title}
-내용:
-{description}
-
-규칙:
-- 한 줄에 하나씩, 순수 텍스트만 출력 (기호/번호 없이)
-- 최대 5개
-- 구체적 행동 중심으로 표현
-- 분류 불가하거나 내용이 단순하면 빈 줄만 출력
-
-출력:"""
+            prompt = _build_prompt(title, description)
 
             sub_items = []
             try:
@@ -1183,11 +1350,7 @@ def generate_event_checklist_items(events: list[dict], model: str = DEFAULT_MODE
                 )
                 resp.raise_for_status()
                 raw = resp.json().get("response", "").strip()
-                lines = [
-                    l.strip().lstrip("-•*").lstrip("0123456789.").strip()
-                    for l in raw.split("\n") if l.strip()
-                ]
-                sub_items = [l for l in lines if l][:5]
+                sub_items = _parse_lines(raw)
             except Exception as exc:
                 logger.warning("generate_event_checklist_items event=%s: %s", event["id"], exc)
 
