@@ -1394,7 +1394,9 @@ async def login(request: Request, response: Response):
     db.record_ip(user["id"], auth.get_client_ip(request))
     response.set_cookie(
         auth.SESSION_COOKIE, session_id,
-        httponly=True, samesite="lax", secure=True, max_age=86400 * 30,
+        httponly=True, samesite="lax",
+        secure=(request.url.scheme == "https"),
+        max_age=86400 * 30,
     )
     return {"name": user["name"], "role": user["role"], "team_id": user["team_id"]}
 
@@ -1421,7 +1423,11 @@ def logout(request: Request, response: Response):
     session_id = request.cookies.get(auth.SESSION_COOKIE)
     if session_id:
         db.delete_session(session_id)
-    response.delete_cookie(auth.SESSION_COOKIE, httponly=True, samesite="lax", secure=True)
+    response.delete_cookie(
+        auth.SESSION_COOKIE,
+        httponly=True, samesite="lax",
+        secure=(request.url.scheme == "https"),
+    )
     return {"ok": True}
 
 
@@ -1456,7 +1462,9 @@ async def admin_login(request: Request, response: Response):
     db.record_ip(user["id"], auth.get_client_ip(request))
     response.set_cookie(
         auth.SESSION_COOKIE, session_id,
-        httponly=True, samesite="lax", secure=True, max_age=300,
+        httponly=True, samesite="lax",
+        secure=(request.url.scheme == "https"),
+        max_age=300,
     )
     return {"ok": True}
 
