@@ -37,6 +37,11 @@ from mcp_server import mcp, mount_mcp, verify_bearer_token, _mcp_user
 
 scheduler = AsyncIOScheduler()
 
+# M3-2: Scheduler service 분기
+# 설정 시 → Web API lifespan은 APScheduler 시작/job 등록/finalize 즉시호출 skip
+# 미설정 → 단일 프로세스 fallback, 기존 동작 그대로
+_scheduler_service_enabled = bool(os.environ.get("WHATUDOIN_SCHEDULER_SERVICE"))
+
 # ── 경로 해석 ─────────────────────────────────────────────
 # PyInstaller 번들: WHATUDOIN_BASE_DIR = sys._MEIPASS (읽기전용 자원)
 #                   WHATUDOIN_RUN_DIR  = exe 옆 디렉토리 (쓰기 가능)
@@ -81,7 +86,6 @@ async def lifespan(app: FastAPI):
             logging.getLogger("whatudoin").warning(
                 "ollama_concurrency DB 설정 파싱 실패: %r (env/기본값 유지)", saved_concurrency,
             )
-    db.finalize_expired_done()  # 서버 시작 시 만료된 done 일정 즉시 처리
     # ── M3-1 startup maintenance 단일 owner 표 (§11) ──────────────────────────
     # 작업                           | owner
     # finalize_expired_done          | scheduler (cron + startup) 단독
@@ -97,32 +101,39 @@ async def lifespan(app: FastAPI):
     # 실행하지 않도록 사전에 박은 정책이다. 단일 owner 위반은 회귀로 본다.
     # 권위 있는 원본: maintenance_owners.MAINTENANCE_JOB_OWNERS
     # ──────────────────────────────────────────────────────────────────────────
-    if not scheduler.running:
-        # APScheduler: 1분마다 15분 후 일정 알람 체크
-        scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)
-        # APScheduler: 매일 새벽 3시 DB 백업
-        scheduler.add_job(
-            lambda: backup.run_backup(db.DB_PATH, _RUN_DIR),
-            "cron", hour=3, minute=0,
-            id="daily-db-backup", replace_existing=True,
-        )
-        # APScheduler: 매일 새벽 3시 5분 done 7일 경과 일정 자동 완료 처리
-        scheduler.add_job(db.finalize_expired_done, "cron", hour=3, minute=5)
-        # APScheduler: 매일 새벽 3시 10분 오래된 백업 파일 정리 (90일 보관)
-        scheduler.add_job(
-            lambda: backup.cleanup_old_backups(_RUN_DIR),
-            "cron", hour=3, minute=10,
-            id="daily-backup-cleanup", replace_existing=True,
-        )
-        # APScheduler: 매일 새벽 3시 20분 휴지통 90일 초과 항목 정리
-        scheduler.add_job(db.cleanup_old_trash, "cron", hour=3, minute=20)
-        # APScheduler: 매일 새벽 3시 30분 고아 이미지 파일 정리 (05:00 이후 중단, 다음날 이어서)
-        scheduler.add_job(
-            lambda: backup.cleanup_orphan_images(_RUN_DIR, db),
-            "cron", hour=3, minute=30,
-            id="daily-orphan-image-cleanup", replace_existing=True,
-        )
-        scheduler.start()
+    if _scheduler_service_enabled:
+        # Scheduler service 프로세스가 APScheduler를 단독 소유.
+        # Web API lifespan은 scheduler 시작/job 등록/finalize 즉시호출 모두 skip.
+        pass
+    else:
+        # 단일 프로세스 fallback — 기존 동작 그대로 (M3 service 미사용 환경).
+        db.finalize_expired_done()  # 서버 시작 시 만료된 done 일정 즉시 처리
+        if not scheduler.running:
+            # APScheduler: 1분마다 15분 후 일정 알람 체크
+            scheduler.add_job(db.check_upcoming_event_alarms, "interval", minutes=1)
+            # APScheduler: 매일 새벽 3시 DB 백업
+            scheduler.add_job(
+                lambda: backup.run_backup(db.DB_PATH, _RUN_DIR),
+                "cron", hour=3, minute=0,
+                id="daily-db-backup", replace_existing=True,
+            )
+            # APScheduler: 매일 새벽 3시 5분 done 7일 경과 일정 자동 완료 처리
+            scheduler.add_job(db.finalize_expired_done, "cron", hour=3, minute=5)
+            # APScheduler: 매일 새벽 3시 10분 오래된 백업 파일 정리 (90일 보관)
+            scheduler.add_job(
+                lambda: backup.cleanup_old_backups(_RUN_DIR),
+                "cron", hour=3, minute=10,
+                id="daily-backup-cleanup", replace_existing=True,
+            )
+            # APScheduler: 매일 새벽 3시 20분 휴지통 90일 초과 항목 정리
+            scheduler.add_job(db.cleanup_old_trash, "cron", hour=3, minute=20)
+            # APScheduler: 매일 새벽 3시 30분 고아 이미지 파일 정리 (05:00 이후 중단, 다음날 이어서)
+            scheduler.add_job(
+                lambda: backup.cleanup_orphan_images(_RUN_DIR, db),
+                "cron", hour=3, minute=30,
+                id="daily-orphan-image-cleanup", replace_existing=True,
+            )
+            scheduler.start()
     yield
     if scheduler.running:
         scheduler.shutdown(wait=False)

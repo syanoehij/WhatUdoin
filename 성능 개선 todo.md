@@ -7,7 +7,7 @@
 - **1차 실행 todo로 동결** (2026-05-09): 마스터 plan rev29 + 다회 외부 검토 사이클을 거쳐 M1a~M1d 실행 + M2 이후 조건부 운영 구조 변경 step이 모두 정합 상태로 확정됐다. 신규 step 추가 사이클은 종결한다.
 - **트랙 단축 결정** (2026-05-09): M1a 완료 후 외부 검토 2차 사이클을 거쳐 M1b~M1d의 실제 실행 경로를 **M1-ULTRA**(사내 소수 사용자 기준)로 낮췄다. 단축 근거는 아래 "단축 배경" 참조. 기존 full case 세부 step은 본 문서 하단 "보수 단축안 / 회사 반입 게이트 / 후속 후보" 섹션으로 이동했고, 회사 반입 결정이나 실제 장애 징후 발생 시 끌어올린다. 상세 단축안은 [`성능 개선 단축안(M1b-M1d).md`](성능%20개선%20단축안(M1b-M1d).md) 참조.
 - **추후 변경 원칙**: 본 todo는 마스터 plan §0 "문서 라이프사이클 정책"과 동일하게 동결 상태로 둔다. 새 의견이 들어와도 M1a~M1d 실행을 막는 실재 코드/운영 리스크가 아니면 본문을 더 확장하지 않고, 구현 중 발견 사실 → commit/PR 메시지, 운영 정책/후속 마일스톤 후보 → 마스터 plan §18로 분리한다.
-- **다음 행동**: M3-1 완료. `maintenance_owners.py`에 7개 job owner dict 박음, app.py 주석에 owner 표 추가. finalize_expired_done이 lifespan + APScheduler 동거(M3-2 제거 대상). probe 31/31 + phase62 30/30 PASS, phase54~61 회귀 PASS. 운영 변경 0건. 다음은 M3-2 APScheduler 별도 프로세스 이전.
+- **다음 행동**: M3-2 완료. `scheduler_service.py` Starlette + APScheduler 신설(cron 6종 + startup finalize + healthz + graceful shutdown), app.py env 분기로 fallback 보존, supervisor scheduler_service_spec factory + Web API에 SCHEDULER_SERVICE=1 자동 주입. probe 35/35 + phase63 38/38 PASS, phase54~62 회귀 PASS. 다음은 M3-3 healthcheck/로그/graceful shutdown 검증.
 
 ## 단축 배경
 
@@ -280,7 +280,7 @@
 |------|------|------|-------|---------------|
 | [x] M3-0 | M3 진입 게이트 평가 | Opus | §13 진입 게이트 — Scheduler service (M3) | **target-risk override 진입 (2026-05-10)** — 정량 NO-GO(M1a-7 lock 0건 + multi-worker 거부)지만 (1) M2 supervisor 골격 재사용 비용 낮음, (2) §11 startup maintenance owner 정책 코드화 가치, (3) 야간 정리 + Web API 동거 장애 영향 격리, (4) 사용자 명시 요청. 상세: `성능 개선 진행 결과(M3).md` |
 | [x] M3-1 | startup maintenance 단일 owner 표 확정 | Opus | §11 startup maintenance 작업의 단일 소유자 | **확정/코드화 (2026-05-10)** — `maintenance_owners.py` 신설(7개 job 키 dict: finalize_expired_done / cleanup_old_trash / check_upcoming_event_alarms / run_backup_startup_safetynet[web_api_lifespan] / run_backup_nightly[scheduler] / cleanup_old_backups / cleanup_orphan_images). app.py에 owner 표 주석 추가. 현재 동거 상태 식별 — finalize_expired_done만 lifespan + APScheduler 동거(M3-2 분리 대상), run_backup은 startup_safetynet vs nightly 의도된 분리. probe 31/31 + phase62 30/30 PASS, phase54~61 회귀 PASS. 운영 동작 변경 0건. 상세: `성능 개선 진행 결과(M3).md` |
-| [ ] M3-2 | APScheduler 별도 프로세스 이전 | Opus | §16 M3 1번 + §13 Scheduler service | 별도 spawn, main app lifespan에서 `scheduler.start()` 제거, IMMEDIATE 헬퍼 사용 |
+| [x] M3-2 | APScheduler 별도 프로세스 이전 | Opus | §16 M3 1번 + §13 Scheduler service | **적용 완료 (2026-05-10)** — `scheduler_service.py` 신설(Starlette + APScheduler + cron 6종 + startup finalize_expired_done + healthz + graceful shutdown, 127.0.0.1:8766). app.py에 `WHATUDOIN_SCHEDULER_SERVICE` env 분기(설정 시 lifespan scheduler 시작/add_job/finalize_expired_done 모두 skip, 미설정 시 fallback 유지). supervisor `scheduler_service_spec()` factory + 4개 protected env. Web API service env에 SCHEDULER_SERVICE=1 자동 주입. probe 35/35 + phase63 38/38 PASS, phase54~62 회귀 PASS. 라이브 supervisor spawn은 M3-3/M3-4. 상세: `성능 개선 진행 결과(M3).md` |
 | [ ] M3-3 | healthcheck/로그/graceful shutdown 검증 | Sonnet | §13 watchdog + §14 graceful shutdown | `/healthz`, 단독 로그 파일 회전, shutdown 순서 |
 | [ ] M3-4 | M3 종료 부하 + exit criteria 점검 | Opus | §17 M3 완료 기준 | 예약 작업 중복 실행 0건. **single-owner 정책 위반 3종 증거** — Web API service + Scheduler service 동시 기동 상태에서 (a) 중복 history row 0건, (b) 중복 알림 0건, (c) 백업 파일 동시 쓰기 0건이 각각 별도 측정/로그로 확인됨. 야간 정리 작업 또는 수동 실행 중 `database is locked` 0건, 일반 API p95 500ms 이하. job lock 메커니즘이 적용된 경우 owner 정책의 보조 수단으로만 동작(lock만으로 owner 미지정 작업 통과 0건) |
 
@@ -335,7 +335,7 @@
 | M1d (조건부) | M1c-ULTRA 완료 | **완료 (skip)** | **1/1** + 조건부 0/1 | M1d-S1 skip 종료(MCP 병목 미관측), M1d-S3 미진입. 회사 반입 게이트 시 재평가 |
 | M1-ULTRA 종료 | M1a + M1b-U + M1c-U + M1d 처리 완료 | **완료** | **1/1** | M1-end-U1 lite 기준 6종(a~f) 모두 충족. M1b-U5 closure PASS 반영 완료. M1-ULTRA 사이클 종료 |
 | M2 | target-risk override | **완료** | **21/21** | M2-1~M2-19 모두 적용. M2-20 종료: 정책별 증거 인덱스 20종 + 라이브 supervisor 통합(spawn→healthz→token 3종→stop_all 14/14 PASS) + 50 SSE 부하 10/10 PASS(publish→수신 p95 <0.1ms loopback, /healthz p95 16ms, subscribers 0 복귀). phase54~61 155단언 모두 PASS. **M2 마일스톤 종료** — M3 진입 게이트 평가는 별도 step |
-| M3 | target-risk override | M3-2 대기 | **2/5** | M3-0 target-risk override 진입. M3-1 maintenance_owners.py 7개 job 키 owner 표 확정/코드화 — finalize_expired_done만 lifespan/scheduler 동거(M3-2 제거 대상), run_backup은 startup_safetynet/nightly 의도된 분리 |
+| M3 | target-risk override | M3-3 대기 | **3/5** | M3-0 target-risk override 진입. M3-1 maintenance_owners.py owner 표 확정. M3-2 scheduler_service.py 신설(env 분기로 fallback 보존, supervisor scheduler_service_spec factory + 4 protected env, Web API에 SCHEDULER_SERVICE=1 자동 주입) |
 | M4 | §13 진입 게이트 통과 | — | 0/5 | M4-0 게이트 평가 포함 |
 | M5 후보 | M1c 회귀 측정 | — | 0/4 | M5-0 게이트 평가 포함, 조건부 |
 | M6 후보 | 운영 요구 발생 | — | 0/5 | M6-0 게이트 평가 포함, 조건부 |

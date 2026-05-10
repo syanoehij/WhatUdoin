@@ -30,6 +30,13 @@ SSE_SERVICE_PUBLISH_URL_ENV = "WHATUDOIN_SSE_PUBLISH_URL"
 SSE_SERVICE_URL_ENV = "WHATUDOIN_SSE_SERVICE_URL"
 SSE_SERVICE_DEFAULT_PORT = 8765
 
+# M3-2: Scheduler service 상수
+SCHEDULER_SERVICE_NAME = "scheduler"
+SCHEDULER_SERVICE_BIND_HOST_ENV = "WHATUDOIN_SCHEDULER_BIND_HOST"
+SCHEDULER_SERVICE_PORT_ENV = "WHATUDOIN_SCHEDULER_PORT"
+SCHEDULER_SERVICE_DEFAULT_PORT = 8766
+SCHEDULER_SERVICE_ENABLE_ENV = "WHATUDOIN_SCHEDULER_SERVICE"
+
 CRASH_LOOP_WINDOW_SECONDS = 300
 CRASH_LOOP_MAX_FAILURES = 3
 
@@ -40,6 +47,7 @@ M2_STARTUP_SEQUENCE = (
     "start_front_router_listener",
     "start_web_api_service",
     "start_sse_service",
+    "start_scheduler_service",   # M3-2: Scheduler service (5번째, SSE 다음)
     "verify_health_and_publish_status",
 )
 
@@ -49,6 +57,9 @@ def web_api_internal_service_env(router_host: str = FRONT_ROUTER_LOOPBACK_HOST) 
         TRUSTED_PROXY_ENV: router_host,
         WEB_API_BIND_HOST_ENV: FRONT_ROUTER_LOOPBACK_HOST,
         WEB_API_INTERNAL_ONLY_ENV: "1",
+        # M3-2: supervisor spawn 경로에서는 Scheduler service가 반드시 별도 프로세스로 동작.
+        # Web API lifespan이 APScheduler를 시작하지 않도록 분기 신호 주입.
+        SCHEDULER_SERVICE_ENABLE_ENV: "1",
     }
 
 
@@ -96,6 +107,44 @@ def sse_service_spec(
     }
     env[SSE_SERVICE_BIND_HOST_ENV] = "127.0.0.1"
     env[SSE_SERVICE_PORT_ENV] = str(port)
+    return ServiceSpec(
+        name=name,
+        command=command,
+        env=env,
+        startup_grace_seconds=startup_grace_seconds,
+    )
+
+
+def scheduler_service_spec(
+    command: Sequence[str],
+    *,
+    name: str = SCHEDULER_SERVICE_NAME,
+    port: int = SCHEDULER_SERVICE_DEFAULT_PORT,
+    extra_env: Mapping[str, str] | None = None,
+    startup_grace_seconds: float = 1.0,
+) -> ServiceSpec:
+    """Scheduler service 프로세스 spec 팩토리.
+
+    보호 env (extra_env override 차단):
+    - WHATUDOIN_SCHEDULER_BIND_HOST: 항상 127.0.0.1 (loopback bind 강제)
+    - WHATUDOIN_SCHEDULER_PORT: 지정 포트 강제
+    - WHATUDOIN_SCHEDULER_SERVICE: 항상 1 (scheduler 단독 모드 강제)
+    - WHATUDOIN_INTERNAL_TOKEN: supervisor가 직접 주입
+    """
+    protected = {
+        SCHEDULER_SERVICE_BIND_HOST_ENV,
+        SCHEDULER_SERVICE_PORT_ENV,
+        SCHEDULER_SERVICE_ENABLE_ENV,
+        INTERNAL_TOKEN_ENV,  # supervisor가 직접 주입 — extra_env override 차단
+    }
+    env = {
+        str(k): str(v)
+        for k, v in (extra_env or {}).items()
+        if str(k) not in protected
+    }
+    env[SCHEDULER_SERVICE_BIND_HOST_ENV] = "127.0.0.1"
+    env[SCHEDULER_SERVICE_PORT_ENV] = str(port)
+    env[SCHEDULER_SERVICE_ENABLE_ENV] = "1"
     return ServiceSpec(
         name=name,
         command=command,
@@ -451,6 +500,11 @@ __all__ = [
     "INTERNAL_TOKEN_ENV",
     "INTERNAL_TOKEN_FILE_ENV",
     "M2_STARTUP_SEQUENCE",
+    "SCHEDULER_SERVICE_BIND_HOST_ENV",
+    "SCHEDULER_SERVICE_DEFAULT_PORT",
+    "SCHEDULER_SERVICE_ENABLE_ENV",
+    "SCHEDULER_SERVICE_NAME",
+    "SCHEDULER_SERVICE_PORT_ENV",
     "SERVICE_NAME_ENV",
     "SSE_SERVICE_BIND_HOST_ENV",
     "SSE_SERVICE_DEFAULT_PORT",
@@ -466,6 +520,7 @@ __all__ = [
     "ServiceSpec",
     "ServiceState",
     "WhatUdoinSupervisor",
+    "scheduler_service_spec",
     "sse_service_spec",
     "web_api_internal_service_env",
     "web_api_service_spec",
