@@ -30,3 +30,7 @@ _workspace/
 .claude/workspaces/
 .codex/workspaces/
 .vscode/launch.json
+# Supervisor 런타임 로그
+logs/
+# 루트 임시 산출물
+_tmp_*.txt
