@@ -239,6 +239,7 @@ if __name__ == "__main__":
     # 기존 fallback 단일 프로세스 동작 100% 유지(VSCode 디버그/일상 운영 영향 0).
     #   분리 1단계: WHATUDOIN_ENABLE_SCHEDULER_SIDECAR=1 → Scheduler service
     #   분리 2단계: WHATUDOIN_ENABLE_MEDIA_SIDECAR=1     → Media service
+    #   분리 3단계: WHATUDOIN_ENABLE_OLLAMA_SIDECAR=1    → Ollama service
     _supervisor_instance = None
     _scheduler_sidecar_enabled = (
         os.environ.get("WHATUDOIN_ENABLE_SCHEDULER_SIDECAR", "").strip() == "1"
@@ -246,8 +247,11 @@ if __name__ == "__main__":
     _media_sidecar_enabled = (
         os.environ.get("WHATUDOIN_ENABLE_MEDIA_SIDECAR", "").strip() == "1"
     )
+    _ollama_sidecar_enabled = (
+        os.environ.get("WHATUDOIN_ENABLE_OLLAMA_SIDECAR", "").strip() == "1"
+    )
 
-    if _scheduler_sidecar_enabled or _media_sidecar_enabled:
+    if _scheduler_sidecar_enabled or _media_sidecar_enabled or _ollama_sidecar_enabled:
         from supervisor import WhatUdoinSupervisor
         _supervisor_instance = WhatUdoinSupervisor(run_dir=_run_dir())
         _supervisor_instance.ensure_internal_token()
@@ -274,6 +278,19 @@ if __name__ == "__main__":
         _media_url = f"http://127.0.0.1:{MEDIA_SERVICE_DEFAULT_PORT}/internal/process"
         os.environ[MEDIA_SERVICE_URL_ENV] = _media_url
         print(f"  [sidecar] media service: pid={_media_state.pid} status={_media_state.status} url={_media_url}")
+
+    if _ollama_sidecar_enabled:
+        from supervisor import (
+            ollama_service_spec, OLLAMA_SERVICE_URL_ENV, OLLAMA_SERVICE_DEFAULT_PORT,
+        )
+        _ollama_spec = ollama_service_spec(
+            command=[sys.executable, str(Path(_base_dir()) / "ollama_service.py")],
+        )
+        _ollama_state = _supervisor_instance.start_service(_ollama_spec)
+        # llm_parser가 IPC 모드로 분기하도록 URL 자동 주입
+        _ollama_url = f"http://127.0.0.1:{OLLAMA_SERVICE_DEFAULT_PORT}/internal/llm"
+        os.environ[OLLAMA_SERVICE_URL_ENV] = _ollama_url
+        print(f"  [sidecar] ollama service: pid={_ollama_state.pid} status={_ollama_state.status} url={_ollama_url}")
 
     import uvicorn
     from app import app as fastapi_app  # noqa: E402

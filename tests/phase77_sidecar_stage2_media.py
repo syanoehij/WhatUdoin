@@ -69,9 +69,15 @@ def _check_main_grep() -> dict:
         and 'os.environ.get("WHATUDOIN_ENABLE_MEDIA_SIDECAR"' in src
     )
 
-    # supervisor 인스턴스 공유 — scheduler 또는 media 활성화 시 한 번만 생성
+    # supervisor 인스턴스 공유 — scheduler/media 어느 한쪽 활성화 시 한 번만 생성.
+    # 후속 단계(3단계 ollama 등)에서 같은 if 라인에 추가될 수 있으므로 두 변수가
+    # 함께 있는 if 라인이 존재하면 통과로 본다.
+    import re
+    shared_if_pattern = re.compile(
+        r"if\s+[^\n]*_scheduler_sidecar_enabled[^\n]*_media_sidecar_enabled[^\n]*:"
+    )
     checks["supervisor_shared_construction"] = (
-        "if _scheduler_sidecar_enabled or _media_sidecar_enabled:" in src
+        bool(shared_if_pattern.search(src))
         and "_supervisor_instance = WhatUdoinSupervisor(run_dir=_run_dir())" in src
     )
 
