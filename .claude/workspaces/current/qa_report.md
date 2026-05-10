@@ -1,167 +1,90 @@
-## QA 보고서 — 팀 기능 그룹 A #1 (DB 마이그레이션 인프라)
+# QA 보고서 — 팀 기능 그룹 A #2
 
-본 사이클은 백엔드 인프라만 추가하고 라우트·UI 변경이 없으므로 Playwright E2E는 비대상.
-사용자 지시한 (a) verify_phase_infra.py 재실행, (b) 운영 DB 복사본 회귀 smoke,
-(c) Phase 실패 주입 검증 3종을 핀포인트로 수행한다.
+본 사이클은 사양상 import-time 검증 + 합성 DB 검증 위주 (Playwright 미사용 — VSCode 디버깅 모드 + 핀포인트가 마이그레이션·헬퍼 단위 동작이므로). 운영 DB는 건드리지 않고 tempdir에 합성 DB를 만들어 검증.
 
-서버 재시작 필요 없음 — 모든 검증은 임시 디렉토리에서 import-time으로 수행.
-
-### 검증 환경
+## 실행 환경
 - Python: `D:\Program Files\Python\Python312\python.exe`
-- 작업 디렉토리: `D:\Github\WhatUdoin`
-- 운영 DB 보호: 모든 검증은 `tempfile.mkdtemp()`로 격리된 임시 디렉토리에서 수행.
-  운영 `whatudoin.db`는 (b)에서 `shutil.copy2`로 사본만 사용, 원본 무수정.
+- 실행 명령:
+  ```
+  set PYTHONIOENCODING=utf-8
+  python .claude/workspaces/current/scripts/verify_phase_migrations.py
+  python .claude/workspaces/current/scripts/verify_auth_helpers.py
+  ```
+- 두 스크립트 모두 `WHATUDOIN_RUN_DIR`을 임시 디렉토리로 지정해 운영 DB와 격리.
+- 서버 재시작 불필요 (라우트 호출부 미변경, import-time 검증).
 
----
+## 통과
 
-### (a) verify_phase_infra.py 재실행 — 통과 ✅
+### Phase 마이그레이션 (verify_phase_migrations.py — RESULT: ALL PASS)
 
-```
-"D:\Program Files\Python\Python312\python.exe" .claude/workspaces/current/scripts/verify_phase_infra.py
-```
+**T1. 빈 DB로 init_db()** (17 checks)
+- PHASES 마커 3개 모두 기록 (`team_phase_1_columns_v1`, `team_phase_2_backfill_v1`, `team_phase_4_indexes_v1`)
+- admin/관리팀 시드에 `name_norm` 미리 채워짐 → Phase 2가 진정으로 노옵 (user_teams 빈 집합)
+- 신규 테이블 `user_teams`, `team_menu_settings` 존재
+- 신규 컬럼 9개 모두 존재: `users.{name_norm, password_hash}`, `teams.{name_norm, deleted_at}`, `projects.name_norm`, `events.project_id`, `checklists.project_id`, `notifications.team_id`, `team_notices.team_id`
+- Phase 4 인덱스 2개 (`idx_user_teams_user_team`, `idx_team_menu_settings`) 생성
+- 본 사이클 범위 외 UNIQUE 인덱스(users.name_norm, teams.name_norm, projects(team_id, name_norm))는 미생성 — #5/#7 책임 보존
 
-**결과**: ALL PASS: 8/8
+**T2. 합성 구 DB → init_db()** (12 checks)
+- 합성 구 DB 조건: projects 테이블에 `name TEXT NOT NULL UNIQUE` 제약 + admin 1명 + 5명 editor (3명 team_id NOT NULL) + user_teams 미존재 + name_norm 미존재
+- `projects.id` 보존 (rebuild 전후 [1,2,3] 일치)
+- `projects` name→id 매핑 보존 (Alpha=1, Beta=2, Gamma=3)
+- `sqlite_master.sql`에서 `name TEXT NOT NULL UNIQUE` 제거 확인
+- `sqlite_sequence(projects).seq == 3` (= 이전 MAX(id))
+- row count 일치 (3 → 3)
+- `user_teams` row 수 = 3 (= count(`users WHERE team_id IS NOT NULL AND role != 'admin'`))
+- admin은 user_teams에 row 없음
+- 모든 `projects.name_norm == normalize_name(name)` (alpha/beta/gamma)
+- `users.role = 'editor'` 행 0건 (모두 'member'로 전환)
+- `users.role = 'member'` 5건
+- `users.name_norm` 모두 채워짐, `teams.name_norm` 모두 채워짐
 
-stdout 전문:
+**T3. 두 번째 init_db() (마커 존재 — 노옵)** (2 checks)
+- 백업 파일 추가 없음 (pending phase 0건이므로 `_run_phase_migrations` 즉시 반환)
+- `user_teams` row 변화 없음
 
-```
-[case 1] OK: empty DB, no phases → no backup, no error
-[WhatUdoin][migration] pre-migration backup: C:\Users\Lumen\AppData\Local\Temp\wud_phase_test_1zo3augk\backupDB\whatudoin-migrate-20260510T215748230739.db
-[WhatUdoin][migration] phase 'demo_phase_1' OK
-[case 2] OK: marker persists, phase not re-run, no extra backup
-[WhatUdoin][migration] pre-migration backup: C:\Users\Lumen\AppData\Local\Temp\wud_phase_test_q29w9rmp\backupDB\whatudoin-migrate-20260510T215748262090.db
-[WhatUdoin][migration] phase 'phase_failing' FAILED: RuntimeError('intentional failure for test')
-[case 3] OK: phase failed → RuntimeError, marker not set, DDL rolled back, backup exists
-[WhatUdoin][migration] pre-migration backup: ...whatudoin-migrate-20260510T215748280122.db
-[WhatUdoin][migration] phase 'idem_phase' OK
-[WhatUdoin][migration] pre-migration backup: ...whatudoin-migrate-20260510T215748309597.db
-[WhatUdoin][migration] phase 'idem_phase' OK
-[case 4] OK: marker deletion → phase safely re-runs (idempotent)
-[case 5] OK: warnings dedup works (2 entries after 3 appends with 1 dup)
-[case 6] OK: normalize_name handles NFC + casefold + None
-[WhatUdoin][migration] pre-migration backup: ...whatudoin-migrate-20260510T215748344155.db
-[WhatUdoin][migration] preflight conflict: fake users.name_norm collision: 'alice' vs 'Alice'
-[case 7] OK: preflight conflict → startup refused + warning persisted
-[WhatUdoin][migration] pre-migration backup: ...whatudoin-migrate-20260510T215748370698.db
-[WhatUdoin][migration] phase 'noop_only' OK
-[case 8] OK: empty _PREFLIGHT_CHECKS passes through
+**T4. 마커 강제 삭제 → 재실행 (idempotency)** (6 checks)
+- `DELETE FROM settings WHERE key LIKE 'migration_phase:team_phase_%'` 후 init_db() 재호출
+- `projects` row count 동일 (needs_rebuild 가드 — `sqlite_master.sql`에 `name UNIQUE`가 이미 사라졌으므로 재구성 미트리거)
+- `projects.id` 동일
+- `user_teams` row 중복 없음 (`WHERE NOT EXISTS` 가드 작동)
+- `users.role='member'` 수 동일 (`WHERE role='editor'` 가드 작동 — 0건이므로 재실행 시 노옵)
+- `users.name_norm` NULL 없음 (`WHERE name_norm IS NULL` 가드 작동)
+- 마커 3개 재생성
 
-ALL PASS: 8/8
-```
+### 권한 헬퍼 (verify_auth_helpers.py — RESULT: ALL PASS, 28 checks)
+- member (alice / team 1): `is_member`, `user_team_ids={1}`, `user_can_access_team` 정확, `is_team_admin(1)` False
+- admin (글로벌): `user_team_ids` 빈 집합, `user_can_access_team(any)` True, `is_team_admin(any)` True (슈퍼유저), `admin_team_scope` None
+- team admin (bob / team 2): `is_team_admin(2)` True, 다른 팀(1)은 False, 글로벌 admin 아님
+- team member (carol / team 2): `is_team_admin(2)` False
+- `require_work_team_access`: 정상 통과 / 권한 없으면 `HTTPException(status=403)`
+- `resolve_work_team`: 우선순위 (explicit_id → 쿠키 → admin은 None → user_teams 대표 팀) 모두 정확
+- 기존 헬퍼 호환: `is_editor` 위임 작동, `can_edit_event`이 새 `user_can_access_team` 위임 작동, admin 슈퍼유저 우회 작동
 
-**case → exit criteria 매핑 재확인**:
+## 실패
 
-| case | exit criterion | 결과 |
-|------|----------------|------|
-| 1 | 빈 DB + PHASES=[] → 백업 0개, RuntimeError 없음 | PASS |
-| 2 | 재시작 시 마커 그대로, phase 미재실행, 백업 추가 없음 | PASS |
-| 3 | phase 실패 → RuntimeError + 마커 미기록 + DDL 롤백 + 백업 존재 | PASS |
-| 4 | 마커 강제 삭제 후 재실행 idempotent | PASS |
-| 5 | 경고 누적 dedup (3 append → 2 entries) | PASS |
-| 6 | normalize_name NFC + casefold + None | PASS |
-| 7 | preflight 충돌 → 서버 시작 거부 + 경고 영속화 | PASS |
-| 8 | _PREFLIGHT_CHECKS=[] → 정상 통과 | PASS |
+없음.
 
-**stdout 로그 사양 적합성**:
-- `[WhatUdoin][migration] pre-migration backup: {path}` — 백업 1회 명확
-- `[WhatUdoin][migration] phase {name!r} OK` — 성공 명확
-- `[WhatUdoin][migration] phase {name!r} FAILED: {exc!r}` — 실패한 phase 이름 + 원인 명확 (사양서 exit criterion #3 만족)
-- `[WhatUdoin][migration] preflight conflict: {msg}` — preflight 충돌 메시지 명확
+## 회귀 확인
 
----
+코드 리뷰 단계에서 발견·수정된 결함 3건 (모두 본 검증 스크립트가 잡았음):
 
-### (b) 운영 DB 복사본 회귀 smoke test — 통과 ✅
+1. **시드 INSERT의 `name_norm` 누락** — 빈 DB Phase 2 노옵 보장을 위해 `INSERT INTO teams/users` 시드에 `name_norm` 컬럼 + `normalize_name()` 적용. (advisor 권고 (1a) 채택)
+2. **`projects` CREATE에서 누락 컬럼** — 후행 코드(line 263 `UPDATE projects SET deleted_at = ...`)가 _migrate가 ALTER하기 전에 실행되어 빈 DB에서 OperationalError. CREATE에 `is_active, memo, is_private, deleted_at, deleted_by, team_id, is_hidden, owner_id` 흡수.
+3. **`sqlite_sequence` ON CONFLICT 무효** — `sqlite_sequence`는 PRIMARY KEY/UNIQUE 제약이 없는 시스템 테이블이라 ON CONFLICT 절 사용 불가. UPDATE-or-INSERT 패턴으로 교체.
+4. **`checklists` CREATE 순서** — 인덱스 CREATE(line ~360)와 UPDATE(line ~245)가 checklists 테이블 정의(line ~470 executescript) 이전에 실행되던 pre-existing 결함. checklists CREATE를 line ~115 (checklist_histories 다음)로 끌어올림. 후행 executescript는 `IF NOT EXISTS`라 노옵 (checklist_locks만 실제 생성).
 
-운영 DB(`whatudoin.db`)를 임시 디렉토리로 복사 후 PHASES=[]·_PREFLIGHT_CHECKS=[]
-상태에서 init_db()가 진정한 no-op인지 검증.
+## 본 사이클 범위 외 — 후속 인계
+- `users.name_norm` UNIQUE 인덱스 (#7)
+- `teams.name_norm` UNIQUE 인덱스 (#7/#5)
+- `projects(team_id, name_norm)` UNIQUE 인덱스 (#5)
+- `events.project_id` / `checklists.project_id` / `notifications.team_id` / `team_notices.team_id` 데이터 백필 (#4, #5)
+- `password_hash` 변환 (#7)
+- `_PREFLIGHT_CHECKS` 추가 등록 (각 사이클의 새 UNIQUE에 맞춰)
+- 라우트 호출부 권한 헬퍼 전환 (#16)
+- `work_team_id` 쿠키 set/clear UI (#15)
 
-스크립트: `.claude/workspaces/current/scripts/smoke_prod_db_noop.py` (신규)
-
-```
-"D:\Program Files\Python\Python312\python.exe" .claude/workspaces/current/scripts/smoke_prod_db_noop.py
-```
-
-stdout:
-
-```
-[SMOKE] init_db() succeeded: True
-[SMOKE] migration backups created: []
-[SMOKE] new settings keys: []
-[SMOKE] deleted settings keys: []
-[SMOKE] migration-related new keys: []
-[SMOKE] PHASES = []
-[SMOKE] _PREFLIGHT_CHECKS = []
-
-[SMOKE] PASS: PHASES=[] truly no-op against production DB copy
-```
-
-**검증 항목**:
-- [x] init_db() RuntimeError 없이 정상 종료
-- [x] backupDB/whatudoin-migrate-*.db 파일 0개 (PHASES=[]면 백업 안 떠야 함 → 만족)
-- [x] settings 테이블에 `migration_phase:*` / `team_migration_warnings` 키 미생성
-- [x] 기존 settings 키 손상·삭제 0개 (PRE/POST 비교)
-- [x] PHASES, _PREFLIGHT_CHECKS 모듈 전역 상태가 빈 리스트 유지 (다른 테스트가 오염시키지 않음)
-
-→ **본 #1 인프라가 운영 DB에서 진정한 no-op임이 확인됨**. 실제 서버를 재시작해도 PHASES=[]이므로 무동작이다.
-
----
-
-### (c) Phase 실패 주입 검증 — 통과 ✅
-
-사용자 요청: "가짜 phase 1개를 PHASES에 등록하고 일부러 raise → 트랜잭션 롤백 + 서버 시작 거부 + stdout 로그가 사양 exit criteria를 만족하는지"
-
-이는 verify_phase_infra.py의 case 3로 정확히 커버되어 (a)에서 함께 검증됨.
-
-**case 3 stdout (재인용)**:
-```
-[WhatUdoin][migration] pre-migration backup: ...whatudoin-migrate-20260510T215748262090.db
-[WhatUdoin][migration] phase 'phase_failing' FAILED: RuntimeError('intentional failure for test')
-[case 3] OK: phase failed → RuntimeError, marker not set, DDL rolled back, backup exists
-```
-
-**case 3 코드 검증 항목** (verify_phase_infra.py L87~123):
-- [x] init_db()가 RuntimeError raise (서버 시작 거부 = uvicorn boot 실패)
-- [x] RuntimeError 메시지에 `'phase_failing'` 포함 (어느 phase 실패인지 명확)
-- [x] 백업 파일은 1개 생성됨 (실패 *전*에 미리 떴어야 함 → 데이터 보호)
-- [x] phase 마커 미기록 (`SELECT FROM settings WHERE key = 'migration_phase:phase_failing'` → None)
-- [x] phase 본문의 `CREATE TABLE _will_be_rolled_back`이 sqlite_master에 없음 → **DDL 롤백 검증** (advisor 권고가 정확히 반영되었음을 의미)
-
-**사양서 exit criterion #3 매핑**:
-> 인위적 phase 실패 주입 시 트랜잭션 롤백 + 서버 시작 거부 + stdout에 어느 phase에서 실패했는지 명확
-
-→ 3가지 모두 만족.
-
----
-
-### 회귀 확인
-
-본 사이클은 라우트/UI 변경 없음 → Playwright phase1~phase4 회귀 테스트 비대상.
-운영 DB 복사본에 대한 init_db() smoke가 회귀를 대신한다 — (b)에서 PASS 확인.
-
----
-
-### 산출물
-
-- `.claude/workspaces/current/scripts/verify_phase_infra.py` (기존, 8 case 모두 PASS)
-- `.claude/workspaces/current/scripts/smoke_prod_db_noop.py` (qa 신규 추가, prod DB no-op 검증)
-- 본 보고서: `.claude/workspaces/current/qa_report.md`
-
-### 서버 재시작 요청
-
-**요청 없음**. 본 사이클은 PHASES=[]이므로 실 서버 재시작 시 phase 인프라가 처음 가동되더라도 무동작 (smoke test로 확인 완료). 사용자가 서버를 재시작해도 동작 변화 없음.
-
-다만 **#2 이후 사이클에서 실제 phase 본문을 등록**하면, 그 사이클의 qa는 import-time 검증과 함께 실 서버 재시작도 사용자에게 요청해야 한다 (phase 인프라가 실 부트 경로를 처음 거치게 되므로).
-
----
-
-### 최종 판정
-
-**통과** (3/3 검증 항목 모두 PASS, 차단 없음, 회귀 없음).
-
-사양서 exit criteria 6개 모두 검증 완료:
-1. 빈 DB + phase 0개 → 인프라만 정상, 서버 시작 OK (case 1, smoke)
-2. 재시작 시 마커 그대로, phase 미재실행 (case 2)
-3. Phase 실패 주입 → 트랜잭션 롤백 + 서버 시작 거부 + stdout 명확 (case 3)
-4. 백업 파일이 정해진 명명, 미적용 마이그 있을 때만 생성 (case 1 + case 2)
-5. preflight 골격 호출, 검사 함수 0개여도 정상 통과 (case 8)
-6. 마커 강제 삭제 후 재실행 안전 (case 4)
+## 행동 결정 (#16/#3 reviewer 인계)
+- `is_team_admin(global_admin, any_team)` = True 채택 — 사양 §S4는 명시 안 했으나 슈퍼유저 정책 일관성. #16 라우트 호출부 전환 시 의도 검증 권장.
+- `resolve_work_team` 대표 팀 = `min(user_team_ids)` — 결정성 정렬. #15에서 명시 선호 팀 컬럼이 도입되면 교체.
+- `user_team_ids`의 예외 fallback (`users.team_id` legacy) — 마이그레이션 전 호출 등 예외 상황. 정상 가동 후엔 도달하지 않음.

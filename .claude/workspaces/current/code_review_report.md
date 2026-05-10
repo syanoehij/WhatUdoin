@@ -1,85 +1,76 @@
-## 코드 리뷰 보고서 — 팀 기능 그룹 A #1 (DB 마이그레이션 인프라)
+# 코드 리뷰 보고서 — 팀 기능 그룹 A #2
 
-### 리뷰 대상 파일
-- `backup.py` — `run_migration_backup()` 신규 (L27~40)
-- `database.py` — Phase 인프라 섹션 (L631~812), `_run_phase_migrations()` 호출 추가 (L498~501)
-- `.claude/workspaces/current/scripts/verify_phase_infra.py` — 검증 스크립트 (8 case)
+## 리뷰 대상 파일
+- `database.py` (init_db CREATE 갱신: events/teams/users/projects/notifications/team_notices/checklists + user_teams/team_menu_settings 신규, line 30~496 일부; phase 본문 등록 line 775~1015)
+- `auth.py` (전체)
 
-### 사양서 exit criteria 정합성
+## 차단(Blocking)
+- 없음 (1건이 발견되어 리뷰 단계에서 즉시 수정 후 재검증 통과 — 아래 §수정 이력 참조)
 
-| 사양서 exit criterion | 코드 위치 | 검증 case | 정합성 |
-|----------------------|----------|-----------|--------|
-| 빈 DB + phase 0개 → 인프라만 정상, 서버 시작 OK | `_run_phase_migrations` L758~760 (early return) | case 1 | OK |
-| 재시작 시 마커 그대로 → phase 미재실행 | `_is_phase_done` L649~656, `_pending_phases` L669~678 | case 2 | OK |
-| Phase 실패 주입 → 트랜잭션 롤백 + 서버 시작 거부 + stdout 어느 phase 실패 명확 | L797~812 (manual BEGIN/ROLLBACK + RuntimeError + `phase {name!r} FAILED` 로그) | case 3 | OK |
-| 백업 파일이 정해진 명명, 미적용 마이그 있을 때만 1회 | `run_migration_backup` (`whatudoin-migrate-{ts}.db`) + L762~770 | case 1(0개) + case 2(1개) | OK |
-| preflight 골격 호출, 검사 함수 0개여도 통과 | L772~787 + L732~744 | case 8 | OK |
-| 마커 강제 삭제 후 재실행 안전 | (idempotent body 가정) | case 4 | OK |
+## 경고(Warning)
+1. `auth.py:is_team_admin` — 글로벌 admin(`users.role == 'admin'`)도 모든 팀에 대해 True를 반환하도록 구현했다. 사양서 §S4는 단순히 "user_teams.role == 'admin'" 시그니처만 명시했고 글로벌 admin 처리를 명시하지 않았다. 슈퍼유저 정책과 정합성을 위한 의도적 결정. **#16 라우트 호출부 전환 시 의도 확인 필요.**
+2. `auth.py:user_team_ids` — DB 조회 실패(`Exception`) 시 `users.team_id` legacy fallback. 마이그레이션 직전 호출 등 예외 상황 대비. 정상 가동 후엔 도달하지 않아야 함.
+3. `auth.py:resolve_work_team` — 사용자의 대표 팀을 `min(user_team_ids)` 결정성 정렬로 선택. 사양은 "대표 팀 fallback"만 명시 — 후속 사이클(#15 UI 통합)에서 명시 선호 팀 컬럼이 추가될 수 있음.
 
-### advisor 권고 반영 검증
+## 통과
+- [x] **트랜잭션 안전성**: phase body 안에서 `conn.commit()` 호출 없음. 호출자 (`_run_phase_migrations`)가 BEGIN IMMEDIATE/COMMIT 관리.
+- [x] **DDL in WAL**: `_phase_1`의 `DROP TABLE projects` + `ALTER … RENAME`이 BEGIN IMMEDIATE 안에서 실행됨. WAL 모드(`_ensure_wal_mode`)가 init_db 시작 시 보장되므로 DDL이 트랜잭션 안에서 안전하게 롤백 가능.
+- [x] **idempotency 가드**:
+  - `_phase_1`: 모든 ALTER가 `_column_set()` 체크. `CREATE TABLE IF NOT EXISTS`. `projects` 재구성은 `sqlite_master.sql`에 `name TEXT NOT NULL UNIQUE`가 남아 있을 때만 트리거 — 재구성 후엔 sql에서 사라지므로 마커 강제 삭제 후 재실행에도 노옵.
+  - `_phase_2`: `WHERE name_norm IS NULL`, `WHERE role = 'editor'`, `WHERE NOT EXISTS` 가드.
+  - `_phase_4`: `CREATE UNIQUE INDEX IF NOT EXISTS`.
+- [x] **SQL 파라미터화**: 모든 동적 값이 `?` 바인딩. f-string은 신뢰 가능한 컬럼명/테이블명 매크로(`_PROJECTS_REBUILD_COLUMNS`)에만 사용.
+- [x] **projects.id 보존**: 명시 컬럼 INSERT + `sqlite_sequence` 갱신. row count 일치 검증 후 raise.
+- [x] **명시 컬럼 목록 (15개)**: `_PROJECTS_REBUILD_COLUMNS`가 사양서 §주의사항 컬럼 목록과 일치 (id, team_id, name, name_norm, color, start_date, end_date, is_active, is_private, is_hidden, owner_id, memo, deleted_at, deleted_by, created_at).
+- [x] **본 사이클 범위 준수**: `users.name_norm` UNIQUE / `teams.name_norm` UNIQUE / `projects(team_id, name_norm)` UNIQUE 모두 미생성 (각각 #7, #5 책임). `_PREFLIGHT_CHECKS` 추가 등록 없음.
+- [x] **권한 헬퍼 위임**: `is_editor` → `is_member` 위임. `can_edit_*`의 팀 비교가 `user_can_access_team` 사용. 시그니처는 모두 유지 — 라우트 호출부(`app.py:_require_editor`) 변경 없음.
+- [x] **빈 DB 노옵**: 시드 INSERT (admin, 관리팀)에 `name_norm` 포함하도록 수정 완료 → Phase 2가 빈 DB에서 진정으로 노옵.
 
-| 권고 | 코드 위치 | 반영 여부 |
-|------|----------|-----------|
-| Phase 트랜잭션 격리 — `isolation_level=None` + 수동 `BEGIN IMMEDIATE`/`COMMIT`/`ROLLBACK` | L799~808 | OK. 코드베이스 전역 `get_conn()` 시맨틱 미변경(러너 안의 conn에만 적용) — surgical 원칙 준수. |
-| 마커 기록을 phase 본문과 동일 트랜잭션 | `_mark_phase_done(conn, name)` L659~666 + L804 | OK. `set_setting()`이 별도 conn 여는 함정 회피. |
-| 경고 누적 race-safe + 중복 방지 | `_append_team_migration_warning` L693~729 | OK. read→list 검증→`(category, message)` dedup→write 모두 호출자 conn 안. |
-| 백업 실패 시 마이그레이션 진행 거부 | L767~770 | OK. `RuntimeError` raise. |
-| preflight 충돌 시 경고 commit 후 raise | L776~787 (with 블록 종료 후 raise) | OK. case 7에서 settings 영속화 확인. |
+## 수정 이력 (리뷰 + QA 단계에서 발견 → 즉시 수정)
 
-### 트랜잭션 매개체 정합성 검토 (핵심)
+### Issue #1 — 빈 DB에서 Phase 2가 노옵이 아니었음
+- 발견: 시드 INSERT가 `name_norm` 없이 admin 사용자를 만들어, 빈 DB로 init_db() 호출 시 Phase 2가 1건 UPDATE 실행.
+- 사양 exit criteria: "PHASES 본문은 빈 데이터에 대해 노옵으로 끝나야 함."
+- 수정: `database.py` 시드 INSERT 두 곳에 `name_norm` 컬럼 + `normalize_name()` 적용.
 
-`get_conn()` 컨텍스트 매니저는 `yield conn` 후 `conn.commit()`을 호출한다(L823). phase 러너에서 `isolation_level=None` + 수동 트랜잭션 사용 시 두 경로 모두 안전한지 검증:
+### Issue #2 — projects CREATE에서 누락 컬럼
+- 발견: 빈 DB로 init_db() 실행 중 line 263의 `UPDATE projects SET deleted_at = ...`가 `OperationalError: no such column: deleted_at` 발생. _migrate(projects, [..., deleted_at])가 line 273에 있어 *후행* 호출이라 컬럼이 없는 상태에서 UPDATE가 먼저 실행됨.
+- 진단: pre-existing 결함이지만 사양 T1 ("빈 DB로 init_db() → 모든 테이블이 최신 스키마") 통과 필수.
+- 수정: projects CREATE에 `is_active, memo, is_private, deleted_at, deleted_by, team_id, is_hidden, owner_id` 흡수. _migrate 호출은 그대로 두어 기존 DB의 누락 컬럼 보강은 유지.
 
-- **정상 경로**: `body OK` → `_mark_phase_done` → `conn.execute("COMMIT")` → with 정상 종료 → `conn.commit()` 호출. `isolation_level=None`이고 활성 트랜잭션이 없는 상태에서 `commit()`은 no-op (Python sqlite3 documented behavior). **안전**.
-- **실패 경로**: `body raise` → `conn.execute("ROLLBACK")` → `raise` → with 블록이 예외 전파로 종료, `yield` 다음 줄(`conn.commit()`)은 **실행되지 않음** (contextmanager는 finally만 실행). ROLLBACK이 commit으로 무효화되지 않음. **안전**.
+### Issue #3 — `sqlite_sequence` ON CONFLICT 무효
+- 발견: T2 합성 구 DB에서 phase 1이 `OperationalError: ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint` 발생. 내가 작성한 `INSERT INTO sqlite_sequence … ON CONFLICT(name) DO UPDATE` 코드 결함 — `sqlite_sequence`는 시스템 테이블이라 UNIQUE 제약이 없음.
+- 수정: UPDATE-or-INSERT 패턴 (`SELECT 1 → UPDATE / INSERT`)으로 교체. SQLite는 AUTOINCREMENT INSERT가 한 번도 발생하지 않은 테이블에는 sqlite_sequence row가 없을 수 있어 두 분기 모두 필요.
 
-이는 advisor 권고가 코드에 정확히 반영되었음을 의미한다.
+### Issue #4 — checklists CREATE 순서 (pre-existing)
+- 발견: 빈 DB에서 line 357 `CREATE INDEX … ON checklists(...)` 실행 시 `no such table: main.checklists`. checklists는 line 470 부근의 `executescript`에서 생성되는데, 인덱스 CREATE와 일부 UPDATE가 더 이른 위치에서 호출됨.
+- 진단: pre-existing 결함이지만 T1 통과 필수.
+- 수정: checklists CREATE를 line ~115 (checklist_histories 직후)로 분리·이동. 후행 executescript는 `CREATE TABLE IF NOT EXISTS`라 노옵으로 끝남 (checklist_locks만 실제 생성).
 
-### 차단(Blocking) 결함
+재검증: `verify_phase_migrations.py` (T1~T4 모두 ALL PASS, 37 checks) + `verify_auth_helpers.py` (28 checks ALL PASS).
 
-없음.
+## 최종 판정
+**통과** — 차단 결함 없음, QA 진행 가능. 경고 3건은 후속 사이클(#15, #16) 인계 사항으로 기록.
 
-### 경고(Warning) 결함
+## QA 인계 — 핀포인트 검증 케이스 (필수)
+QA는 다음 4개 시나리오 모두 검증해야 한다:
 
-없음.
+- **T1. 빈 DB**: `init_db()` → 시드 admin/관리팀 생성, PHASES 마커 3개 기록, Phase 2가 노옵(추가 user_teams row 없음, name_norm 모두 미리 채워짐).
+- **T2. 합성 구 DB**: `name UNIQUE`가 있는 projects + `editor` role 사용자(team_id 있음) + `user_teams` 미존재 → init_db() →
+  - projects.id 보존 (rebuild 전후 비교)
+  - `sqlite_master.sql`에서 `UNIQUE` on name 사라짐
+  - `sqlite_sequence.seq(projects)` == 이전 MAX(id)
+  - row count(projects) 일치
+  - `user_teams` row 수 == count(`users WHERE team_id IS NOT NULL AND role != 'admin'`) — admin 제외
+  - 모든 `projects.name_norm == normalize_name(name)`
+  - `users.role = 'editor'` 행 수 == 0
+  - `users.name_norm IS NOT NULL` 모든 행
+- **T3. 두 번째 init_db()**: 마커 존재 → phase 본문 미실행 (백업 추가 없음, user_teams 추가 없음).
+- **T4. 마커 강제 삭제 후 재실행**: `DELETE FROM settings WHERE key LIKE 'migration_phase:team_phase_%'` → init_db() →
+  - 데이터 손상 없음 (counts 동일, user_teams 중복 없음, projects rebuild 가드 발동 없음 — sqlite_master.sql에 UNIQUE가 이미 사라졌으므로 needs_rebuild=False)
+  - 모든 `name_norm` NULL 없음.
 
-### 인지(Acknowledged) — 본 사이클 범위 외 사전 조건
-
-다음 두 가지는 backend가 "범위 외"로 명시했고 본 #1 인프라와 무관하지만, 다음 사이클에서 누락되지 않도록 명시 기록:
-
-1. **`database.py:254` — `projects.deleted_at` 빈 DB 첫 시작 OperationalError**
-   - `_migrate(projects, ...)` 호출(L261)보다 먼저 L254에서 `projects.deleted_at`이 참조됨.
-   - 빈 DB로 처음 `init_db()`를 돌리면 OperationalError. 운영 DB가 이미 있는 환경에서는 무문제이고 본 #1 인프라(init_db 종료 후 호출)와 무관하다.
-   - 검증 스크립트는 운영 DB(`whatudoin.db`)를 임시 디렉토리로 복사해서 회피.
-   - **권고**: 다음 사이클(#2 이후)이 빈 DB 부트스트랩을 다룰 때 함께 수정.
-
-2. **`database.py:165, 367` — `settings` CREATE TABLE 정의 중복**
-   - 두 곳에서 `CREATE TABLE IF NOT EXISTS settings (...)`가 동일하게 선언.
-   - 동작상 무해(IF NOT EXISTS) 하지만 향후 settings 스키마 변경 시 두 곳을 동시 수정해야 하는 함정.
-   - **권고**: 본 사이클은 손대지 않음. 별도 정리 사이클에서 한 곳으로 통합.
-
-### 추가 검토 메모 (advisor 지적사항)
-
-1. **백업 retention 정합성**: `whatudoin-migrate-*.db`는 `cleanup_old_backups`의 glob `whatudoin-*.db`(backup.py:47)에 매칭되어 90일 후 삭제됨. 그 시점에 phase 마커는 `settings` 테이블에 영구 보존되므로 "이 phase가 적용된 적이 있다"는 사실은 유지된다. 백업 파일은 시점 데이터 복구용, 마커가 영구 기록 — **의도적이고 정합한 설계**.
-
-2. **Phase body의 idempotency 요구**: 본 사이클은 "마커 강제 삭제 후 재실행 안전"을 case 4로 검증했으나, 이는 `_phase_idempotent` 본문이 `CREATE TABLE IF NOT EXISTS`로 작성되었기 때문에 성립한다. 사양서가 이미 "Phase 1 = 컬럼·테이블 추가 (idempotent)"를 요구하므로 모순 없으나, **#2 이후 phase 작성자가 idempotency를 깰 수 있는 SQL(예: `ALTER TABLE ADD COLUMN` 무조건 실행, `INSERT` without conflict resolution)을 쓰지 않도록** PHASES 등록 패턴 docstring 또는 review 시점 강제가 필요.
-
-3. **다중 프로세스 race**: 본 앱은 단일 FastAPI 프로세스 운영이라 `_pending_phases` 검사~phase body 실행 사이에 다른 프로세스가 동일 phase를 돌릴 여지가 없다. 만약 향후 멀티프로세스/HA 구성이 도입되면 phase body의 `BEGIN IMMEDIATE`로는 부족하므로 별도 advisory lock 또는 phase 마커의 race-safe upsert가 필요. **현 시점 unblocking 사항 아님**.
-
-### 통과 항목 (체크리스트)
-
-- [x] DB 스키마 변경: `_migrate` 패턴과 충돌 없음 (Phase 인프라는 상위 layer로 분리, _migrate 자체 수정 없음)
-- [x] 새 컬럼 추가: 본 사이클에서 컬럼 추가 없음 (인프라만)
-- [x] 하위호환 유지: 기존 컬럼·테이블 변경 없음
-- [x] 파일 경로: 백업은 `_RUN_DIR / "backupDB"` (기존 `_backup_dir` 재사용) — 정합
-- [x] `get_conn()` 사용: 정상 (정상/실패 경로 모두 분석 완료)
-- [x] SQL 파라미터화: 모든 신규 쿼리 `?` placeholder 사용 (L652~654, L662~666, L699~702, L725~729)
-- [x] f-string SQL 직접 삽입 없음
-- [x] 백업 실패 시 마이그레이션 거부 (데이터 보호)
-- [x] stdout 로그 prefix 통일 (`[WhatUdoin][migration]`)
-
-### 최종 판정
-
-**통과** (차단 결함 없음, 경고 없음, 사전 조건 2건 인지 기록).
-
-QA 진행 가능.
+## 권한 헬퍼 단위 검증 (QA 작성 필요)
+- member: `is_member`=True, `is_admin`=False, `user_team_ids`=approved 팀 set, `user_can_access_team(my_team)`=True, `is_team_admin(my_team)`=False
+- admin: `is_member`=True, `is_admin`=True, `user_team_ids`=빈 집합, `user_can_access_team(any_team)`=True, `is_team_admin(any_team)`=True
+- team_admin: `user_teams.role='admin'` 추가 row → `is_team_admin(that_team)`=True, 다른 팀에는 False

@@ -61,14 +61,14 @@
 📖 섹션 3 (스키마), 섹션 13 (Phase 1~2), 섹션 16 (권한 헬퍼)
 **의존: ← #1**
 
-- [ ] **마이그레이션 (Phase 1: 컬럼·테이블 추가 + 프로젝트 테이블 재구성)**
-  - [ ] `users.name_norm`, `users.password_hash` 추가
-  - [ ] `teams.deleted_at`, `teams.name_norm` 추가
-  - [ ] `projects.name_norm` 추가
-  - [ ] `events.project_id`, `checklists.project_id` 추가
-  - [ ] `notifications.team_id` 추가
-  - [ ] `team_notices.team_id` 추가 (NULL 허용 — 팀별 공지 전환용, `#15-3`에서 라우트도 같이 전환)
-  - [ ] `user_teams` 테이블 신규 생성 — 컬럼/기본값/제약 명세:
+- [x] **마이그레이션 (Phase 1: 컬럼·테이블 추가 + 프로젝트 테이블 재구성)** — `team_phase_1_columns_v1`로 등록
+  - [x] `users.name_norm`, `users.password_hash` 추가 (백필/UNIQUE는 #7)
+  - [x] `teams.deleted_at`, `teams.name_norm` 추가 (`name UNIQUE`는 유지, name_norm UNIQUE 전환은 #7)
+  - [x] `projects.name_norm` 추가
+  - [x] `events.project_id`, `checklists.project_id` 추가 (백필은 #5)
+  - [x] `notifications.team_id` 추가 (백필은 #4)
+  - [x] `team_notices.team_id` 추가 (NULL 허용 — 팀별 공지 전환용, `#15-3`에서 라우트도 같이 전환)
+  - [x] `user_teams` 테이블 신규 생성 — 컬럼/기본값/제약 명세:
     - `user_id INTEGER NOT NULL`
     - `team_id INTEGER NOT NULL`
     - `team_role TEXT NOT NULL DEFAULT 'member'` (값: `member` / `admin`)
@@ -78,29 +78,29 @@
     - 상태 전이: 신청 = `pending` row insert/update, 수락 = `approved` + `joined_at = CURRENT_TIMESTAMP`, 거절·추방 = `rejected`, 재신청 = 같은 row를 `pending`으로 갱신(`joined_at`은 재수락 시 갱신)
     - 기존 단일 팀 이관 row(Phase 2): `team_role='member'` + `join_status='approved'` + `joined_at = users.created_at`
     - `(user_id, team_id)` UNIQUE 인덱스는 Phase 4에서 생성
-  - [ ] `team_menu_settings` 테이블 신규 생성 — 컬럼/기본값/제약 명세:
+  - [x] `team_menu_settings` 테이블 신규 생성 — 컬럼/기본값/제약 명세:
     - `team_id INTEGER NOT NULL`
     - `menu_key TEXT NOT NULL` (값: `kanban` / `gantt` / `doc` / `check` / `calendar`)
     - `is_public_visible INTEGER NOT NULL DEFAULT 1` (1=공개 포털 진입 허용, 0=차단)
     - 기본값 시드(`#19`에서 적용): `calendar`만 0, 나머지 1
     - `(team_id, menu_key)` UNIQUE 인덱스는 Phase 4에서 생성
-  - [ ] **`projects` 테이블 재구성** — `projects.name UNIQUE` 제거 (Phase 2 백필 중 같은 이름 프로젝트를 다른 팀에 자동 생성해야 하므로 UNIQUE를 먼저 풀어둔다). 테이블 재생성 시 **`projects.id` 보존**: `INSERT INTO new_projects (id, team_id, name, name_norm, color, start_date, end_date, is_active, is_private, is_hidden, owner_id, memo, deleted_at, deleted_by, created_at) SELECT id, team_id, name, NULL, color, start_date, end_date, is_active, is_private, is_hidden, owner_id, memo, deleted_at, deleted_by, created_at FROM projects` 형태로 **명시적 컬럼 목록**으로 복사 (`SELECT *`는 `name_norm` 추가와 컬럼 개수 불일치로 위험). `name_norm`은 Phase 2 백필에서 채움. 이렇게 하면 `events.project_id`/`checklists.project_id`/`project_members.project_id`/`project_milestones.project_id`/`*.trash_project_id` 매핑 재작업 불필요. `(team_id, name_norm)` UNIQUE 인덱스는 Phase 4에서 생성.
-  - [ ] 재생성 후 row count 일치 검증 + `sqlite_sequence` 갱신
-- [ ] **마이그레이션 (Phase 2: 일부 백필)**
-  - [ ] `users.name_norm` ← `normalize_name(users.name)`
-  - [ ] `users.role`: `editor` → `member` 일괄 갱신 (admin 유지)
-  - [ ] `users.team_id` → `user_teams` approved row 이관 (admin 제외, `joined_at = users.created_at`)
-- [ ] **마이그레이션 (Phase 4: 제약·인덱스)**
-  - [ ] `CREATE UNIQUE INDEX idx_user_teams_user_team ON user_teams(user_id, team_id)` — 재신청은 row 추가가 아니라 같은 row 갱신 보장
-  - [ ] `CREATE UNIQUE INDEX idx_team_menu_settings ON team_menu_settings(team_id, menu_key)` — 팀별 메뉴키 중복 차단
-- [ ] **구현 (권한 헬퍼)**
-  - [ ] 신규 헬퍼: `is_member`, `is_admin`, `user_team_ids`, `user_can_access_team`, `is_team_admin`, `require_work_team_access`, `resolve_work_team`, `admin_team_scope`
-  - [ ] 기존 `auth.is_editor` / `_require_editor` / `can_edit_*`를 유지하되 내부 구현을 새 헬퍼로 위임 (호환 단계)
-  - [ ] member·admin 경로 분리, admin은 `require_work_team_access`로 `team_id` 검증
-- [ ] **테스트**
-  - [ ] 마이그레이션 후 `user_teams` row 수 = (기존 비-admin + team_id NOT NULL) 사용자 수
-  - [ ] admin은 `user_teams` row 없음 확인
-  - [ ] 권한 헬퍼 단위 테스트 (member/admin/team-admin 케이스)
+  - [x] **`projects` 테이블 재구성** — `projects.name UNIQUE` 제거 (Phase 2 백필 중 같은 이름 프로젝트를 다른 팀에 자동 생성해야 하므로 UNIQUE를 먼저 풀어둔다). 테이블 재생성 시 **`projects.id` 보존**: `INSERT INTO new_projects (id, team_id, name, name_norm, color, start_date, end_date, is_active, is_private, is_hidden, owner_id, memo, deleted_at, deleted_by, created_at) SELECT id, team_id, name, NULL, color, start_date, end_date, is_active, is_private, is_hidden, owner_id, memo, deleted_at, deleted_by, created_at FROM projects` 형태로 **명시적 컬럼 목록**으로 복사 (`SELECT *`는 `name_norm` 추가와 컬럼 개수 불일치로 위험). `name_norm`은 Phase 2 백필에서 채움. 이렇게 하면 `events.project_id`/`checklists.project_id`/`project_members.project_id`/`project_milestones.project_id`/`*.trash_project_id` 매핑 재작업 불필요. `(team_id, name_norm)` UNIQUE 인덱스는 Phase 4에서 생성.
+  - [x] 재생성 후 row count 일치 검증 + `sqlite_sequence` 갱신 (`UPDATE … OR INSERT` 패턴, ON CONFLICT는 sqlite_sequence에 무효라 회피)
+- [x] **마이그레이션 (Phase 2: 일부 백필)** — `team_phase_2_backfill_v1`로 등록
+  - [x] `users.name_norm` ← `normalize_name(users.name)` (`teams.name_norm`도 동일 phase에서 백필)
+  - [x] `users.role`: `editor` → `member` 일괄 갱신 (admin 유지, `WHERE role='editor'` 가드)
+  - [x] `users.team_id` → `user_teams` approved row 이관 (admin 제외, `joined_at = users.created_at`, `WHERE NOT EXISTS` 가드)
+- [x] **마이그레이션 (Phase 4: 제약·인덱스)** — `team_phase_4_indexes_v1`로 등록 (#2 범위만)
+  - [x] `CREATE UNIQUE INDEX idx_user_teams_user_team ON user_teams(user_id, team_id)` — 재신청은 row 추가가 아니라 같은 row 갱신 보장
+  - [x] `CREATE UNIQUE INDEX idx_team_menu_settings ON team_menu_settings(team_id, menu_key)` — 팀별 메뉴키 중복 차단
+- [x] **구현 (권한 헬퍼)**
+  - [x] 신규 헬퍼: `is_member`, `is_admin`, `user_team_ids`, `user_can_access_team`, `is_team_admin`, `require_work_team_access`, `resolve_work_team`, `admin_team_scope` (`auth.py`)
+  - [x] 기존 `auth.is_editor` / `_require_editor` / `can_edit_*`를 유지하되 내부 구현을 새 헬퍼로 위임 (호환 단계)
+  - [ ] member·admin 경로 분리, admin은 `require_work_team_access`로 `team_id` 검증 — 헬퍼는 추가됨, 라우트 호출부 적용은 #16 책임
+- [x] **테스트**
+  - [x] 마이그레이션 후 `user_teams` row 수 = (기존 비-admin + team_id NOT NULL) 사용자 수 (`verify_phase_migrations.py` T2 PASS)
+  - [x] admin은 `user_teams` row 없음 확인 (T2 PASS)
+  - [x] 권한 헬퍼 단위 테스트 (member/admin/team-admin 케이스) — `verify_auth_helpers.py` 28 checks PASS
 
 ### #3. 시스템 관리자(admin) 분리 + 관리팀 시드 처리
 
@@ -687,4 +687,5 @@
 
 | 날짜 | 항목 | 핵심 결과 | 산출물 |
 |------|------|-----------|--------|
-| 2026-05-10 | #1 DB 마이그레이션 인프라 | `PHASES`/`_PREFLIGHT_CHECKS` 확장 포인트 + 자동 백업(`whatudoin-migrate-*.db`, 90일 retention 공유) + `BEGIN IMMEDIATE` 수동 트랜잭션 + 마커·경고·`normalize_name` 헬퍼. PHASES 본문 SQL은 추가하지 않음 (#2 이후 책임). 검증 8/8 PASS + 운영 DB 복사본 no-op smoke PASS + 사전 조건 2건(`database.py:254` 빈 DB OperationalError, settings 테이블 정의 중복) 인지. | `backup.py:28-42`, `database.py:498-501,631-811`, `.claude/workspaces/`(다음 사이클 시작 시 `archive/`로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_phase_infra.py`, `scripts/smoke_prod_db_noop.py` |
+| 2026-05-10 | #1 DB 마이그레이션 인프라 | `PHASES`/`_PREFLIGHT_CHECKS` 확장 포인트 + 자동 백업(`whatudoin-migrate-*.db`, 90일 retention 공유) + `BEGIN IMMEDIATE` 수동 트랜잭션 + 마커·경고·`normalize_name` 헬퍼. PHASES 본문 SQL은 추가하지 않음 (#2 이후 책임). 검증 8/8 PASS + 운영 DB 복사본 no-op smoke PASS + 사전 조건 2건(`database.py:254` 빈 DB OperationalError, settings 테이블 정의 중복) 인지. | `backup.py:28-42`, `database.py:498-501,631-811`. archive: `archive/TeamA_001_DBInfra_20260510_220510/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_phase_infra.py, scripts/smoke_prod_db_noop.py}` |
+| 2026-05-10 | #2 user_teams + name_norm + 권한 헬퍼 | Phase 1 본문(`team_phase_1_columns_v1`): 9개 컬럼 추가, `user_teams`/`team_menu_settings` 신규, projects 재구성(`name UNIQUE` 제거 + name_norm 추가, id 보존, `_PROJECTS_REBUILD_COLUMNS` 명시 15개). Phase 2 본문(`team_phase_2_backfill_v1`): users.name_norm·teams.name_norm·role:editor→member·user_teams 이관(admin 제외). Phase 4 본문(`team_phase_4_indexes_v1`): user_teams/team_menu_settings UNIQUE 2건. auth.py 신규 헬퍼 7개 + 기존 4개 위임. 사후 수정 4건(시드 name_norm, projects CREATE 컬럼 흡수, sqlite_sequence ON CONFLICT 무효 회피, checklists CREATE 순서). 사전 조건 #1(`database.py:254`) 함께 해결. T1~T4 37 checks + 권한 헬퍼 28 checks ALL PASS. | `database.py`, `auth.py`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_phase_migrations.py`, `scripts/verify_auth_helpers.py` |

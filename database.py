@@ -27,12 +27,14 @@ _WAL_MODE_LOCK = threading.Lock()
 def init_db():
     with get_conn() as conn:
         # ── events ──
+        # 팀 기능 그룹 A #2: project_id 컬럼 추가 (NULL 유지, 백필은 #5 책임).
         conn.execute("""
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 team_id INTEGER,
                 project TEXT,
+                project_id INTEGER,
                 description TEXT,
                 location TEXT,
                 assignee TEXT,
@@ -48,19 +50,26 @@ def init_db():
             )
         """)
         # ── teams ──
+        # 팀 기능 그룹 A #2: name_norm(NFC+casefold), deleted_at(소프트 삭제) 추가.
+        # name UNIQUE는 #5/#7 후속 사이클에서 name_norm UNIQUE로 대체될 예정 — 현 단계에서는 유지.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS teams (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
+                name_norm TEXT,
+                deleted_at TEXT DEFAULT NULL,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
         # ── users ──
+        # 팀 기능 그룹 A #2: name_norm, password_hash 컬럼 추가(컬럼만 — 백필/UNIQUE는 후속 사이클).
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
+                name_norm TEXT,
                 password TEXT NOT NULL DEFAULT '',
+                password_hash TEXT,
                 role TEXT DEFAULT 'editor',
                 team_id INTEGER,
                 is_active INTEGER DEFAULT 1,
@@ -112,14 +121,54 @@ def init_db():
                 edited_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # ── checklists ──
+        # 팀 기능 그룹 A #2: 후행 코드(line ~245의 UPDATE checklists)와 인덱스
+        # (line ~360의 CREATE INDEX … ON checklists)가 빈 DB에서도 깨지지 않도록
+        # checklists CREATE를 위로 끌어올렸다. 본 정의는 후행 executescript의
+        # checklists 정의와 동기화되어야 하며, 후행은 CREATE TABLE IF NOT EXISTS
+        # 라 노옵으로 끝난다 (checklist_locks만 실제 생성).
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS checklists (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                project    TEXT NOT NULL DEFAULT '',
+                project_id INTEGER,
+                title      TEXT NOT NULL,
+                content    TEXT NOT NULL DEFAULT '',
+                created_by TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                is_public  INTEGER NOT NULL DEFAULT 0,
+                is_locked  INTEGER NOT NULL DEFAULT 0,
+                deleted_at TEXT DEFAULT NULL,
+                deleted_by TEXT DEFAULT NULL,
+                team_id    INTEGER DEFAULT NULL,
+                is_active  INTEGER DEFAULT 1,
+                attachments TEXT DEFAULT '[]',
+                trash_project_id INTEGER NULL
+            )
+        """)
         # ── projects ──
+        # 팀 기능 그룹 A #2: 빈 DB 신규 생성 시 name UNIQUE 제거 + name_norm 추가.
+        # 기존 DB의 name UNIQUE 제거는 phase 1 본문에서 테이블 재구성으로 처리.
+        # projects(team_id, name_norm) UNIQUE는 #5 후속 사이클 책임 — 본 사이클에서는 미생성.
+        # 추가: 후행 _migrate가 ALTER로 더하던 컬럼들을 CREATE에 흡수해, 빈 DB에서도
+        # 후행 UPDATE 문(line 263 deleted_at 백필 등)이 컬럼 미존재로 실패하지 않도록 한다.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS projects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                name_norm TEXT,
                 color TEXT,
                 start_date TEXT,
                 end_date TEXT,
+                is_active INTEGER DEFAULT 1,
+                memo TEXT,
+                is_private INTEGER DEFAULT 0,
+                deleted_at TEXT DEFAULT NULL,
+                deleted_by TEXT DEFAULT NULL,
+                team_id INTEGER,
+                is_hidden INTEGER DEFAULT 0,
+                owner_id INTEGER,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -370,24 +419,52 @@ def init_db():
             )
         """)
         # ── team_notices ──
+        # 팀 기능 그룹 A #2: team_id 추가 (NULL=전체 공지로 해석, 백필은 #4 책임).
         conn.execute("""
             CREATE TABLE IF NOT EXISTS team_notices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_id INTEGER,
                 content TEXT NOT NULL DEFAULT '',
                 created_by TEXT NOT NULL,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
         # ── notifications ──
+        # 팀 기능 그룹 A #2: team_id 추가 (NULL=비-팀 컨텍스트, 백필은 #4 책임).
         conn.execute("""
             CREATE TABLE IF NOT EXISTS notifications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_name TEXT NOT NULL,
+                team_id INTEGER,
                 type TEXT NOT NULL,
                 message TEXT NOT NULL,
                 event_id INTEGER,
                 is_read INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # ── user_teams ── (팀 기능 그룹 A #2 신규)
+        # 멀티-팀 멤버십. admin은 전 팀 슈퍼유저 정책이라 row 없음.
+        # status: 'pending' | 'approved' (#8 가입 흐름에서 사용).
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_teams (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                team_id INTEGER NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                status TEXT NOT NULL DEFAULT 'approved',
+                joined_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # ── team_menu_settings ── (팀 기능 그룹 A #2 신규)
+        # 팀별 메뉴 표시 토글. 기본값 시드는 #19 책임.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS team_menu_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_id INTEGER NOT NULL,
+                menu_key TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
@@ -398,10 +475,12 @@ def init_db():
                 locked_at  TEXT NOT NULL
             )
         """)
+        # 팀 기능 그룹 A #2: project_id 컬럼 추가 (NULL 유지, 백필은 #5 책임).
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS checklists (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 project    TEXT NOT NULL DEFAULT '',
+                project_id INTEGER,
                 title      TEXT NOT NULL,
                 content    TEXT NOT NULL DEFAULT '',
                 created_by TEXT NOT NULL DEFAULT '',
@@ -485,13 +564,20 @@ def init_db():
 
         # ── 시드 데이터 ──
         if not conn.execute("SELECT 1 FROM teams LIMIT 1").fetchone():
-            conn.execute("INSERT INTO teams (name) VALUES ('관리팀')")
+            # 팀 기능 그룹 A #2: 시드 INSERT에 name_norm 포함 → Phase 2 노옵 보장.
+            conn.execute(
+                "INSERT INTO teams (name, name_norm) VALUES (?, ?)",
+                ("관리팀", normalize_name("관리팀")),
+            )
         if not conn.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone():
             team_id = conn.execute("SELECT id FROM teams LIMIT 1").fetchone()[0]
             init_pw = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))
+            # 팀 기능 그룹 A #2: 시드 INSERT에 name_norm 포함 → Phase 2 본문이 빈 DB에서
+            # 진정으로 노옵으로 끝나도록 (사양 exit criteria 충족).
             conn.execute(
-                "INSERT INTO users (name, password, role, team_id, is_active) VALUES (?,?,'admin',?,1)",
-                ("admin", init_pw, team_id)
+                "INSERT INTO users (name, name_norm, password, role, team_id, is_active) "
+                "VALUES (?,?,?,'admin',?,1)",
+                ("admin", normalize_name("admin"), init_pw, team_id)
             )
             print(f"[WhatUdoin] 초기 관리자 비밀번호: {init_pw}  (최초 1회만 표시, 즉시 변경 권장)")
 
@@ -727,6 +813,270 @@ def _append_team_migration_warning(conn, category: str, message: str) -> None:
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (_TEAM_MIGRATION_WARNINGS_KEY, payload),
     )
+
+
+# ── 팀 기능 그룹 A #2 — phase 본문 등록 ─────────────────────────
+# 위 PHASES / _PREFLIGHT_CHECKS 인프라(#1) 위에 phase 1·2·4 본문을 등록한다.
+# 각 본문은 호출자가 BEGIN IMMEDIATE 트랜잭션으로 감싸 호출하므로 conn.commit() 호출 금지.
+# idempotency 가드(WHERE NULL/INSERT OR IGNORE)는 마커 강제 삭제 후 재실행에 대비한 추가 안전망.
+
+# projects 테이블 재구성 시 보존할 명시적 컬럼 목록 (사양서 §주의사항 마지막).
+# id 보존 필수 — events.project_id 등의 FK 참조 회피.
+_PROJECTS_REBUILD_COLUMNS = [
+    "id",
+    "team_id",
+    "name",
+    "name_norm",
+    "color",
+    "start_date",
+    "end_date",
+    "is_active",
+    "is_private",
+    "is_hidden",
+    "owner_id",
+    "memo",
+    "deleted_at",
+    "deleted_by",
+    "created_at",
+]
+
+
+def _column_set(conn, table: str) -> set:
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def _phase_1_team_columns(conn):
+    """Phase 1: 컬럼/테이블 추가 + projects 테이블 재구성.
+
+    빈 DB에서는 init_db()의 CREATE TABLE이 최신 스키마를 만들고,
+    이 본문은 모든 ALTER가 idempotent guard를 통해 노옵으로 끝난다.
+    기존 DB에서는 누락 컬럼·테이블을 따라잡고, projects의 name UNIQUE를 제거한다.
+    """
+    # 1. users 컬럼 추가 (name_norm, password_hash)
+    users_cols = _column_set(conn, "users")
+    if "name_norm" not in users_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN name_norm TEXT")
+    if "password_hash" not in users_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
+
+    # 2. teams 컬럼 추가 (deleted_at, name_norm)
+    teams_cols = _column_set(conn, "teams")
+    if "deleted_at" not in teams_cols:
+        conn.execute("ALTER TABLE teams ADD COLUMN deleted_at TEXT DEFAULT NULL")
+    if "name_norm" not in teams_cols:
+        conn.execute("ALTER TABLE teams ADD COLUMN name_norm TEXT")
+
+    # 3. events.project_id, checklists.project_id 추가
+    if _table_exists(conn, "events"):
+        if "project_id" not in _column_set(conn, "events"):
+            conn.execute("ALTER TABLE events ADD COLUMN project_id INTEGER")
+    if _table_exists(conn, "checklists"):
+        if "project_id" not in _column_set(conn, "checklists"):
+            conn.execute("ALTER TABLE checklists ADD COLUMN project_id INTEGER")
+
+    # 4. notifications.team_id, team_notices.team_id 추가
+    if _table_exists(conn, "notifications"):
+        if "team_id" not in _column_set(conn, "notifications"):
+            conn.execute("ALTER TABLE notifications ADD COLUMN team_id INTEGER")
+    if _table_exists(conn, "team_notices"):
+        if "team_id" not in _column_set(conn, "team_notices"):
+            conn.execute("ALTER TABLE team_notices ADD COLUMN team_id INTEGER")
+
+    # 5. user_teams, team_menu_settings 테이블 생성
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_teams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            team_id INTEGER NOT NULL,
+            role TEXT NOT NULL DEFAULT 'member',
+            status TEXT NOT NULL DEFAULT 'approved',
+            joined_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS team_menu_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            team_id INTEGER NOT NULL,
+            menu_key TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # 6. projects 테이블 재구성 — name UNIQUE 제거 + name_norm 추가 + id 보존.
+    #    SQLite는 컬럼 제약 변경에 ALTER 미지원 → 새 테이블 만들고 INSERT … SELECT.
+    #    sqlite_master.sql에 'name TEXT NOT NULL UNIQUE'가 남아 있을 때만 재구성.
+    if _table_exists(conn, "projects"):
+        sql_row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'"
+        ).fetchone()
+        existing_sql = (sql_row[0] if sql_row else "") or ""
+        # UNIQUE가 'name' 컬럼 정의에 붙어 있는 경우만 재구성 (느슨한 정규화 매칭).
+        normalized = " ".join(existing_sql.split()).lower()
+        needs_rebuild = "name text not null unique" in normalized
+
+        if needs_rebuild:
+            existing_cols = _column_set(conn, "projects")
+            # 백업: 재구성에 필요한 모든 컬럼이 실제 존재해야 한다(없으면 NULL로 채움).
+            select_exprs = []
+            for col in _PROJECTS_REBUILD_COLUMNS:
+                if col == "name_norm":
+                    # 재구성과 동시에 name_norm 채움 (사양서 주의사항: 같은 phase에서 채워도 됨)
+                    # NFC+casefold는 SQL로 표현 불가 → 일단 NULL 삽입 후 Python 백필.
+                    select_exprs.append("NULL AS name_norm")
+                elif col in existing_cols:
+                    select_exprs.append(col)
+                else:
+                    select_exprs.append(f"NULL AS {col}")
+
+            old_count = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+            old_max_id_row = conn.execute("SELECT COALESCE(MAX(id), 0) FROM projects").fetchone()
+            old_max_id = old_max_id_row[0] if old_max_id_row else 0
+
+            conn.execute("DROP TABLE IF EXISTS projects_new")
+            conn.execute("""
+                CREATE TABLE projects_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team_id INTEGER,
+                    name TEXT NOT NULL,
+                    name_norm TEXT,
+                    color TEXT,
+                    start_date TEXT,
+                    end_date TEXT,
+                    is_active INTEGER DEFAULT 1,
+                    is_private INTEGER DEFAULT 0,
+                    is_hidden INTEGER DEFAULT 0,
+                    owner_id INTEGER,
+                    memo TEXT,
+                    deleted_at TEXT DEFAULT NULL,
+                    deleted_by TEXT DEFAULT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cols_csv = ", ".join(_PROJECTS_REBUILD_COLUMNS)
+            select_csv = ", ".join(select_exprs)
+            conn.execute(
+                f"INSERT INTO projects_new ({cols_csv}) SELECT {select_csv} FROM projects"
+            )
+
+            new_count = conn.execute("SELECT COUNT(*) FROM projects_new").fetchone()[0]
+            if new_count != old_count:
+                raise RuntimeError(
+                    f"projects rebuild row count mismatch: old={old_count} new={new_count}"
+                )
+
+            conn.execute("DROP TABLE projects")
+            conn.execute("ALTER TABLE projects_new RENAME TO projects")
+
+            # AUTOINCREMENT seq 보존 (id 재발급 방지).
+            # sqlite_sequence는 PRIMARY KEY/UNIQUE 제약이 없는 시스템 테이블이라
+            # ON CONFLICT 절을 쓸 수 없다 — UPDATE-or-INSERT로 처리.
+            seq_exists = conn.execute(
+                "SELECT 1 FROM sqlite_sequence WHERE name = 'projects'"
+            ).fetchone()
+            if seq_exists:
+                conn.execute(
+                    "UPDATE sqlite_sequence SET seq = ? WHERE name = 'projects'",
+                    (old_max_id,),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO sqlite_sequence (name, seq) VALUES ('projects', ?)",
+                    (old_max_id,),
+                )
+
+            # 재구성 직후 같은 phase에서 name_norm 채움 (Python 정규화 사용).
+            rows = conn.execute("SELECT id, name FROM projects WHERE name_norm IS NULL").fetchall()
+            for row in rows:
+                conn.execute(
+                    "UPDATE projects SET name_norm = ? WHERE id = ?",
+                    (normalize_name(row["name"] if isinstance(row, sqlite3.Row) else row[1]),
+                     row["id"] if isinstance(row, sqlite3.Row) else row[0]),
+                )
+
+
+PHASES.append(("team_phase_1_columns_v1", _phase_1_team_columns))
+
+
+def _phase_2_team_backfill(conn):
+    """Phase 2: name_norm/role/user_teams 백필.
+
+    가드:
+      - name_norm: WHERE name_norm IS NULL
+      - role: WHERE role = 'editor'
+      - user_teams: INSERT OR IGNORE + UNIQUE(user_id, team_id) 인덱스 의존 (Phase 4에서 생성)
+        → 인덱스가 아직 없을 수 있으므로 WHERE NOT EXISTS 가드 병행.
+    """
+    # 1. users.name_norm 백필 (admin 포함)
+    rows = conn.execute(
+        "SELECT id, name FROM users WHERE name_norm IS NULL"
+    ).fetchall()
+    for row in rows:
+        uid = row["id"] if isinstance(row, sqlite3.Row) else row[0]
+        nm = row["name"] if isinstance(row, sqlite3.Row) else row[1]
+        conn.execute(
+            "UPDATE users SET name_norm = ? WHERE id = ?",
+            (normalize_name(nm), uid),
+        )
+
+    # teams.name_norm도 같이 백필 (phase 1에서 컬럼만 추가, 백필은 #2 범위로 묶음)
+    if _table_exists(conn, "teams"):
+        team_cols = _column_set(conn, "teams")
+        if "name_norm" in team_cols:
+            t_rows = conn.execute(
+                "SELECT id, name FROM teams WHERE name_norm IS NULL"
+            ).fetchall()
+            for row in t_rows:
+                tid = row["id"] if isinstance(row, sqlite3.Row) else row[0]
+                tn = row["name"] if isinstance(row, sqlite3.Row) else row[1]
+                conn.execute(
+                    "UPDATE teams SET name_norm = ? WHERE id = ?",
+                    (normalize_name(tn), tid),
+                )
+
+    # 2. users.role: 'editor' → 'member' 일괄 갱신 (admin 유지)
+    conn.execute(
+        "UPDATE users SET role = 'member' WHERE role = 'editor'"
+    )
+
+    # 3. user_teams 백필: team_id NOT NULL AND role != 'admin' 사용자
+    #    INSERT … SELECT … WHERE NOT EXISTS로 idempotent.
+    conn.execute("""
+        INSERT INTO user_teams (user_id, team_id, role, status, joined_at)
+        SELECT u.id, u.team_id, 'member', 'approved', u.created_at
+          FROM users u
+         WHERE u.team_id IS NOT NULL
+           AND u.role != 'admin'
+           AND NOT EXISTS (
+               SELECT 1 FROM user_teams ut
+                WHERE ut.user_id = u.id AND ut.team_id = u.team_id
+           )
+    """)
+
+
+PHASES.append(("team_phase_2_backfill_v1", _phase_2_team_backfill))
+
+
+def _phase_4_team_indexes(conn):
+    """Phase 4: 본 사이클 범위의 UNIQUE 인덱스 2개만 생성.
+
+    - idx_user_teams_user_team: user_teams(user_id, team_id) UNIQUE
+    - idx_team_menu_settings:    team_menu_settings(team_id, menu_key) UNIQUE
+
+    users.name_norm UNIQUE / teams.name_norm UNIQUE / projects(team_id, name_norm) UNIQUE는
+    각각 #7/#5 후속 사이클 책임이므로 본 사이클에서 만들지 않는다.
+    """
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_teams_user_team "
+        "ON user_teams(user_id, team_id)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_team_menu_settings "
+        "ON team_menu_settings(team_id, menu_key)"
+    )
+
+
+PHASES.append(("team_phase_4_indexes_v1", _phase_4_team_indexes))
 
 
 def _run_preflight_checks(conn) -> list:
