@@ -1,0 +1,7 @@
+INFO:     127.0.0.1:51804 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51805 - "POST /internal/process HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51806 - "POST /internal/process HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51807 - "POST /internal/process HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51808 - "POST /internal/process HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:51809 - "POST /internal/process HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:50586 - "GET /healthz HTTP/1.1" 200 OK

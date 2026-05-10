@@ -1,0 +1,31 @@
+Adding job tentatively -- it will be properly scheduled when the scheduler starts
+Adding job tentatively -- it will be properly scheduled when the scheduler starts
+Adding job tentatively -- it will be properly scheduled when the scheduler starts
+Adding job tentatively -- it will be properly scheduled when the scheduler starts
+Adding job tentatively -- it will be properly scheduled when the scheduler starts
+Adding job tentatively -- it will be properly scheduled when the scheduler starts
+Added job "check_upcoming_event_alarms" to job store "default"
+Added job "lifespan.<locals>.<lambda>" to job store "default"
+Added job "finalize_expired_done" to job store "default"
+Added job "lifespan.<locals>.<lambda>" to job store "default"
+Added job "cleanup_old_trash" to job store "default"
+Added job "lifespan.<locals>.<lambda>" to job store "default"
+Scheduler started
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "D:\Program Files\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "D:\Program Files\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] 현재 연결은 원격 호스트에 의해 강제로 끊겼습니다
+Running job "check_upcoming_event_alarms (trigger: interval[0:01:00], next run at: 2026-05-09 19:39:32 KST)" (scheduled at 2026-05-09 19:39:32.265387+09:00)
+Job "check_upcoming_event_alarms (trigger: interval[0:01:00], next run at: 2026-05-09 19:40:32 KST)" executed successfully
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "D:\Program Files\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "D:\Program Files\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] 현재 연결은 원격 호스트에 의해 강제로 끊겼습니다

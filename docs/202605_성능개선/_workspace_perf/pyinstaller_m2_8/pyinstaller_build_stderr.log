@@ -1,0 +1,70 @@
+152 INFO: PyInstaller: 6.19.0, contrib hooks: 2026.4
+153 INFO: Python: 3.12.9
+209 INFO: Platform: Windows-11-10.0.26200-SP0
+209 INFO: Python environment: D:\Program Files\Python\Python312
+210 INFO: wrote D:\Github\WhatUdoin\_workspace\perf\pyinstaller_m2_8\spec\M2RespawnProbe.spec
+223 INFO: Module search paths (PYTHONPATH):
+['D:\\Github\\WhatUdoin',
+ 'D:\\Program Files\\Python\\Python312\\python312.zip',
+ 'D:\\Program Files\\Python\\Python312\\DLLs',
+ 'D:\\Program Files\\Python\\Python312\\Lib',
+ 'D:\\Program Files\\Python\\Python312',
+ 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages',
+ 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages\\win32',
+ 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages\\win32\\lib',
+ 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages\\Pythonwin',
+ 'D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8']
+1912 INFO: checking Analysis
+1912 INFO: Building Analysis because Analysis-00.toc is non existent
+1913 INFO: Looking for Python shared library...
+1913 INFO: Using Python shared library: D:\Program Files\Python\Python312\python312.dll
+1913 INFO: Running Analysis Analysis-00.toc
+1913 INFO: Target bytecode optimization level: 0
+1913 INFO: Initializing module dependency graph...
+1914 INFO: Initializing module graph hook caches...
+1971 INFO: Analyzing modules for base_library.zip ...
+2828 INFO: Processing standard module hook 'hook-encodings.py' from 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+6260 INFO: Processing standard module hook 'hook-pickle.py' from 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+8532 INFO: Processing standard module hook 'hook-heapq.py' from 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+10964 INFO: Caching module dependency graph...
+11022 INFO: Analyzing D:\Github\WhatUdoin\_workspace\perf\pyinstaller_m2_8\m2_respawn_entry.py
+11316 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+11747 INFO: Processing standard module hook 'hook-xml.py' from 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+12286 INFO: Processing standard module hook 'hook-_ctypes.py' from 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+12360 INFO: Processing module hooks (post-graph stage)...
+12755 INFO: Performing binary vs. data reclassification (1 entries)
+12756 INFO: Looking for ctypes DLLs
+12760 INFO: Analyzing run-time hooks ...
+12762 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+12775 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+12787 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'D:\\Program Files\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+12800 INFO: Creating base_library.zip...
+12818 INFO: Looking for dynamic libraries
+12990 INFO: Extra DLL search directories (AddDllDirectory): []
+12990 INFO: Extra DLL search directories (PATH): []
+13165 INFO: Warnings written to D:\Github\WhatUdoin\_workspace\perf\pyinstaller_m2_8\build\M2RespawnProbe\warn-M2RespawnProbe.txt
+13183 INFO: Graph cross-reference written to D:\Github\WhatUdoin\_workspace\perf\pyinstaller_m2_8\build\M2RespawnProbe\xref-M2RespawnProbe.html
+13240 INFO: checking PYZ
+13240 INFO: Building PYZ because PYZ-00.toc is non existent
+13240 INFO: Building PYZ (ZlibArchive) D:\Github\WhatUdoin\_workspace\perf\pyinstaller_m2_8\build\M2RespawnProbe\PYZ-00.pyz
+13444 INFO: Building PYZ (ZlibArchive) D:\Github\WhatUdoin\_workspace\perf\pyinstaller_m2_8\build\M2RespawnProbe\PYZ-00.pyz completed successfully.
+13452 INFO: checking PKG
+13452 INFO: Building PKG because PKG-00.toc is non existent
+13452 INFO: Building PKG (CArchive) M2RespawnProbe.pkg
+13507 INFO: Building PKG (CArchive) M2RespawnProbe.pkg completed successfully.
+13508 INFO: Bootloader D:\Program Files\Python\Python312\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\run.exe
+13508 INFO: checking EXE
+13508 INFO: Building EXE because EXE-00.toc is non existent
+13508 INFO: Building EXE from EXE-00.toc
+13508 INFO: Copying bootloader EXE to D:\Github\WhatUdoin\_workspace\perf\pyinstaller_m2_8\build\M2RespawnProbe\M2RespawnProbe.exe
+13621 INFO: Copying icon to EXE
+13684 INFO: Copying 0 resources to EXE
+13685 INFO: Embedding manifest in EXE
+13738 INFO: Appending PKG archive to EXE
+13817 INFO: Fixing EXE headers
+14094 INFO: Building EXE from EXE-00.toc completed successfully.
+14095 INFO: checking COLLECT
+14095 INFO: Building COLLECT because COLLECT-00.toc is non existent
+14096 INFO: Building COLLECT COLLECT-00.toc
+14231 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+14231 INFO: Build complete! The results are available in: D:\Github\WhatUdoin\_workspace\perf\pyinstaller_m2_8\dist

@@ -1,0 +1,7 @@
+{
+  "prosemirror-visible": "OK",
+  "mermaid": "SKIP(no-mermaid-data)",
+  "katex": "SKIP(no-katex-data)",
+  "highlight": "SKIP(no-code-data)",
+  "image": "SKIP(no-image-data)"
+}

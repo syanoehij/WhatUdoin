@@ -1,0 +1,93 @@
+{
+  "run_dir": "D:\\Github\\WhatUdoin\\_workspace\\perf\\baseline_2026-05-09\\m2_0_002210",
+  "created_at": "2026-05-10T00:23:50",
+  "snapshot_sha256": "a681609d56bd87e6f19bcb61d0112ab6731dbcac5614fea279f2cd33cf646f65",
+  "host": "https://localhost:8443",
+  "durations": {
+    "api_duration_s": 30.0,
+    "restart_api_duration_s": 30.0,
+    "api_concurrency": 10,
+    "sse_clients": 50,
+    "restart_gap_s": 2.0
+  },
+  "server_ready_ms": {
+    "initial": 3446.3,
+    "restart": 1923.4
+  },
+  "api": {
+    "baseline_no_sse": {
+      "scenario": "baseline_no_sse",
+      "duration_s": 30.0,
+      "concurrency": 10,
+      "request_count": 3391,
+      "failure_count": 0,
+      "p50_ms": 35.4,
+      "p95_ms": 89.8,
+      "p99_ms": 121.3,
+      "min_ms": 6.2,
+      "max_ms": 417.9,
+      "rps": 113.03
+    },
+    "with_50_sse": {
+      "scenario": "with_50_sse",
+      "duration_s": 30.0,
+      "concurrency": 10,
+      "request_count": 3466,
+      "failure_count": 0,
+      "p50_ms": 34.3,
+      "p95_ms": 89.3,
+      "p99_ms": 116.7,
+      "min_ms": 6.0,
+      "max_ms": 422.8,
+      "rps": 115.53
+    },
+    "restart_reconnect_window": {
+      "scenario": "restart_reconnect_window",
+      "duration_s": 30.0,
+      "concurrency": 10,
+      "request_count": 3494,
+      "failure_count": 0,
+      "p50_ms": 33.0,
+      "p95_ms": 88.3,
+      "p99_ms": 117.9,
+      "min_ms": 4.9,
+      "max_ms": 524.1,
+      "rps": 116.47
+    }
+  },
+  "sse": {
+    "initial_connect_ms": 619.1,
+    "initial": {
+      "requested": 50,
+      "connected_initial": 50,
+      "connected_after_marker": 50,
+      "total_reconnect_count": 50,
+      "total_connect_failures": 100,
+      "total_lines": 200,
+      "last_errors": [
+        "ConnectError: All connection attempts failed"
+      ]
+    },
+    "restart_reconnect_ms_to_95_percent": 216.4,
+    "restart": {
+      "requested": 50,
+      "connected_initial": 50,
+      "connected_after_marker": 50,
+      "total_reconnect_count": 50,
+      "total_connect_failures": 100,
+      "total_lines": 200,
+      "last_errors": [
+        "ConnectError: All connection attempts failed"
+      ]
+    }
+  },
+  "verdict": "NO-GO",
+  "reasons": [
+    "no measurable p95 regression under query/SSE/restart probes"
+  ],
+  "limits": [
+    "single PC measurement; server and probe share CPU/network",
+    "query pressure only; upload pressure was not part of this M2-0 probe",
+    "SSE publish latency is approximated by connection/reconnect behavior; broker has no server timestamp"
+  ]
+}

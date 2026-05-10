@@ -1,0 +1,79 @@
+{
+  "label": "pre_policy",
+  "marker": "m2_http_20260510_004316",
+  "expect": "allowed",
+  "passed": false,
+  "rows": [
+    {
+      "name": "/api/events",
+      "method": "POST",
+      "path": "/api/events",
+      "status_code": 200,
+      "outcome": "allowed",
+      "body": "{\"id\":2912}",
+      "elapsed_ms": 10.2
+    },
+    {
+      "name": "/api/doc/183",
+      "method": "PUT",
+      "path": "/api/doc/183",
+      "status_code": 200,
+      "outcome": "allowed",
+      "body": "{\"ok\":true}",
+      "elapsed_ms": 14.4
+    },
+    {
+      "name": "/api/checklists",
+      "method": "POST",
+      "path": "/api/checklists",
+      "status_code": 200,
+      "outcome": "allowed",
+      "body": "{\"id\":69}",
+      "elapsed_ms": 7.9
+    },
+    {
+      "name": "POST /api/upload/image",
+      "method": "POST",
+      "path": "/api/upload/image",
+      "status_code": 400,
+      "outcome": "other",
+      "body": "{\"detail\":\"유효하지 않은 이미지 파일입니다.\"}",
+      "elapsed_ms": 88.3
+    },
+    {
+      "name": "POST /api/upload/attachment",
+      "method": "POST",
+      "path": "/api/upload/attachment",
+      "status_code": 200,
+      "outcome": "allowed",
+      "body": "{\"name\":\"m2_4.txt\",\"url\":\"/uploads/meetings/2026/05/20471fa558884b8daa15f3605d21b480.txt\",\"size\":15,\"uploaded_at\":\"260510_0043\"}",
+      "elapsed_ms": 5.7
+    },
+    {
+      "name": "GET /api/events",
+      "method": "GET",
+      "path": "/api/events",
+      "status_code": 200,
+      "outcome": "allowed",
+      "body": "[{\"id\":6,\"title\":\"신규 기능 개발\",\"start\":\"2026-04-10T03:00\",\"end\":\"2026-04-10T04:00\",\"allDay\":false,\"classNames\":[\"ev-schedule\"],\"extendedProps\":{\"project\":null,\"description\":\"123\",\"...",
+      "elapsed_ms": 14.2
+    }
+  ],
+  "cleanup": {
+    "rows": {
+      "events": 1,
+      "checklist_histories": 0,
+      "checklists": 1,
+      "meeting_histories": 1,
+      "meeting_locks": 0,
+      "meetings": 1,
+      "sessions": 0,
+      "user_ips": 1,
+      "users": 1
+    },
+    "files": [
+      "meetings\\2026\\05\\20471fa558884b8daa15f3605d21b480.txt"
+    ],
+    "port_8000_open_after_stop": false
+  }
+}

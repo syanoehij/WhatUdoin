@@ -1,0 +1,243 @@
+
+Running 11 tests using 1 worker
+
+[1A[2K[1/11] tests\perf_m1a11.spec.js:193:3 › M1a-11 — 홈(/): viewer 비경로 자산 0건 › 홈 페이지 로드 시 wu-editor 자산 다운로드 0건
+[1A[2Ktests\perf_m1a11.spec.js:193:3 › M1a-11 — 홈(/): viewer 비경로 자산 0건 › 홈 페이지 로드 시 wu-editor 자산 다운로드 0건
+
+========= M1a-11 결과 저장 완료 =========
+
+[1A[2K출력 경로: D:\Github\WhatUdoin\_workspace\perf\baseline_2026-05-09\m1a11_results
+
+[1A[2K자산 다운로드: {}
+
+[1A[2K4단계 타이밍: {}
+
+[1A[2Kviewer 회귀: {}
+
+[1A[2K  1) tests\perf_m1a11.spec.js:193:3 › M1a-11 — 홈(/): viewer 비경로 자산 0건 › 홈 페이지 로드 시 wu-editor 자산 다운로드 0건 
+
+    Error: 홈 페이지에서 mermaid-bundle 다운로드 없어야 함
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m0[39m
+    Received: [31m1[39m
+
+      201 |     // 자산 다운로드 확인
+      202 |     expect(downloads['wu-editor'].length, '홈 페이지에서 wu-editor.js 다운로드 없어야 함').toBe(0);
+    > 203 |     expect(downloads['mermaid'].length,   '홈 페이지에서 mermaid-bundle 다운로드 없어야 함').toBe(0);
+          |                                                                                ^
+      204 |     expect(downloads['tiptap'].length,    '홈 페이지에서 tiptap-bundle 다운로드 없어야 함').toBe(0);
+      205 |
+      206 |     _downloadCounts['home'] = {
+        at D:\Github\WhatUdoin\tests\perf_m1a11.spec.js:203:80
+
+    Error Context: test-results\perf_m1a11-M1a-11-—-홈-view-733f6-지-로드-시-wu-editor-자산-다운로드-0건\error-context.md
+
+    Error Context: test-results\perf_m1a11-M1a-11-—-홈-view-733f6-지-로드-시-wu-editor-자산-다운로드-0건\error-context.md
+
+
+[1A[2K[2/11] tests\perf_m1a11.spec.js:221:3 › M1a-11 — /check 목록 모드: 자산 다운로드 0건 › 체크리스트 목록 로드 직후 자산 다운로드 0건
+[1A[2Ktests\perf_m1a11.spec.js:221:3 › M1a-11 — /check 목록 모드: 자산 다운로드 0건 › 체크리스트 목록 로드 직후 자산 다운로드 0건
+/check 목록 자산 다운로드: {"wu-editor":0,"mermaid":0,"tiptap":0,"highlight":0,"mode":"list"}
+
+[1A[2K[3/11] tests\perf_m1a11.spec.js:254:3 › M1a-11 — /check 상세 진입: 4단계 측정 › 첫 상세 진입 — 자산 1회 다운로드 + 4단계 타이밍
+[1A[2Ktests\perf_m1a11.spec.js:254:3 › M1a-11 — /check 상세 진입: 4단계 측정 › 첫 상세 진입 — 자산 1회 다운로드 + 4단계 타이밍
+check 상세 첫 진입 4단계: {
+  "page": "/check-detail-first",
+  "stage1_download_ms": 6,
+  "stage1_wu_editor_start": 2744,
+  "stage1_wu_editor_response_end": 2750,
+  "stage2_wu_assets_ready": true,
+  "stage2_note": "WuAssets.isReady() 폴링 기준 — parse/eval 완료 여부 (상세 ms 측정 불가)",
+  "stage3_create_start_ms": 2755,
+  "stage3_create_end_ms": 2855,
+  "stage3_create_duration_ms": 101,
+  "stage4_prosemirror_visible_ms": 2856,
+  "stage4_total_from_nav_start_ms": 2856,
+  "all_resource_entries": {
+    "highlight": {
+      "startTime": 1449,
+      "responseEnd": 1458,
+      "downloadMs": 8,
+      "transferSize": 122027
+    },
+    "tiptap": {
+      "startTime": 1451,
+      "responseEnd": 1472,
+      "downloadMs": 21,
+      "transferSize": 1251113
+    },
+    "mermaid": {
+      "startTime": 1451,
+      "responseEnd": 1483,
+      "downloadMs": 32,
+      "transferSize": 2935731
+    },
+    "wu-editor": {
+      "startTime": 2744,
+      "responseEnd": 2750,
+      "downloadMs": 6,
+      "transferSize": 157499
+    }
+  },
+  "download_counts_first": {
+    "wu-editor": 1,
+    "mermaid": 1,
+    "tiptap": 1,
+    "highlight": 1
+  }
+}
+
+[1A[2K[4/11] tests\perf_m1a11.spec.js:340:3 › M1a-11 — /check 상세 진입: 4단계 측정 › 두 번째 상세 진입 — 추가 다운로드 0건 (WuAssets 캐시 검증)
+[1A[2Ktests\perf_m1a11.spec.js:340:3 › M1a-11 — /check 상세 진입: 4단계 측정 › 두 번째 상세 진입 — 추가 다운로드 0건 (WuAssets 캐시 검증)
+두 번째 진입 추가 다운로드 delta: {"wu-editor":0,"mermaid":0,"tiptap":0,"highlight":0}
+
+[1A[2K[5/11] tests\perf_m1a11.spec.js:411:3 › M1a-11 — /project-manage: viewer 자산 1회 › 프로젝트 관리 페이지 — 공지 viewer 활성화 시 자산 1회 다운로드
+[1A[2Ktests\perf_m1a11.spec.js:411:3 › M1a-11 — /project-manage: viewer 자산 1회 › 프로젝트 관리 페이지 — 공지 viewer 활성화 시 자산 1회 다운로드
+/project-manage 자산: {"wu-editor":1,"mermaid":1,"tiptap":1,"highlight":1,"mode":"viewer-activated"}
+
+[1A[2K[6/11] tests\perf_m1a11.spec.js:481:3 › M1a-11 — /trash: viewer 자산 1회 › 휴지통 페이지 — 항목 활성화 시 viewer 자산 1회 다운로드
+[1A[2Ktests\perf_m1a11.spec.js:481:3 › M1a-11 — /trash: viewer 자산 1회 › 휴지통 페이지 — 항목 활성화 시 viewer 자산 1회 다운로드
+/trash 자산: {"wu-editor":1,"mermaid":1,"tiptap":1,"highlight":1,"mode":"item-activated"}
+
+[1A[2K[7/11] tests\perf_m1a11.spec.js:566:3 › M1a-11 — viewer 회귀 검증 › viewer 회귀: ProseMirror 컨테이너 렌더링
+[1A[2Ktests\perf_m1a11.spec.js:566:3 › M1a-11 — viewer 회귀 검증 › viewer 회귀: ProseMirror 컨테이너 렌더링
+ProseMirror 회귀: OK
+
+[1A[2K[8/11] tests\perf_m1a11.spec.js:577:3 › M1a-11 — viewer 회귀 검증 › viewer 회귀: Mermaid 다이어그램 (데이터 있을 때만)
+[1A[2Ktests\perf_m1a11.spec.js:577:3 › M1a-11 — viewer 회귀 검증 › viewer 회귀: Mermaid 다이어그램 (데이터 있을 때만)
+Mermaid 회귀: SKIP(no-mermaid-data)
+
+[1A[2K[9/11] tests\perf_m1a11.spec.js:600:3 › M1a-11 — viewer 회귀 검증 › viewer 회귀: KaTeX 수식 (데이터 있을 때만)
+[1A[2Ktests\perf_m1a11.spec.js:600:3 › M1a-11 — viewer 회귀 검증 › viewer 회귀: KaTeX 수식 (데이터 있을 때만)
+KaTeX 회귀: SKIP(no-katex-data)
+
+[1A[2K[10/11] tests\perf_m1a11.spec.js:617:3 › M1a-11 — viewer 회귀 검증 › viewer 회귀: 코드 블록 syntax highlight (데이터 있을 때만)
+[1A[2Ktests\perf_m1a11.spec.js:617:3 › M1a-11 — viewer 회귀 검증 › viewer 회귀: 코드 블록 syntax highlight (데이터 있을 때만)
+Highlight 회귀: SKIP(no-code-data)
+
+[1A[2K[11/11] tests\perf_m1a11.spec.js:638:3 › M1a-11 — viewer 회귀 검증 › viewer 회귀: 이미지 정상 로드 (데이터 있을 때만)
+[1A[2Ktests\perf_m1a11.spec.js:638:3 › M1a-11 — viewer 회귀 검증 › viewer 회귀: 이미지 정상 로드 (데이터 있을 때만)
+이미지 회귀: SKIP(no-image-data)
+
+[1A[2K
+========= M1a-11 결과 저장 완료 =========
+
+[1A[2K출력 경로: D:\Github\WhatUdoin\_workspace\perf\baseline_2026-05-09\m1a11_results
+
+[1A[2K자산 다운로드: {
+  "check-list": {
+    "wu-editor": 0,
+    "mermaid": 0,
+    "tiptap": 0,
+    "highlight": 0,
+    "mode": "list"
+  },
+  "check-detail-first": {
+    "wu-editor": 1,
+    "mermaid": 1,
+    "tiptap": 1,
+    "highlight": 1
+  },
+  "check-detail-second-delta": {
+    "wu-editor": 0,
+    "mermaid": 0,
+    "tiptap": 0,
+    "highlight": 0
+  },
+  "check-detail-second-total": {
+    "wu-editor": 1,
+    "mermaid": 1,
+    "tiptap": 1,
+    "highlight": 1
+  },
+  "project-manage": {
+    "wu-editor": 1,
+    "mermaid": 1,
+    "tiptap": 1,
+    "highlight": 1,
+    "mode": "viewer-activated"
+  },
+  "trash": {
+    "wu-editor": 1,
+    "mermaid": 1,
+    "tiptap": 1,
+    "highlight": 1,
+    "mode": "item-activated"
+  }
+}
+
+[1A[2K4단계 타이밍: {
+  "check-detail-first": {
+    "page": "/check-detail-first",
+    "stage1_download_ms": 6,
+    "stage1_wu_editor_start": 2744,
+    "stage1_wu_editor_response_end": 2750,
+    "stage2_wu_assets_ready": true,
+    "stage2_note": "WuAssets.isReady() 폴링 기준 — parse/eval 완료 여부 (상세 ms 측정 불가)",
+    "stage3_create_start_ms": 2755,
+    "stage3_create_end_ms": 2855,
+    "stage3_create_duration_ms": 101,
+    "stage4_prosemirror_visible_ms": 2856,
+    "stage4_total_from_nav_start_ms": 2856,
+    "all_resource_entries": {
+      "highlight": {
+        "startTime": 1449,
+        "responseEnd": 1458,
+        "downloadMs": 8,
+        "transferSize": 122027
+      },
+      "tiptap": {
+        "startTime": 1451,
+        "responseEnd": 1472,
+        "downloadMs": 21,
+        "transferSize": 1251113
+      },
+      "mermaid": {
+        "startTime": 1451,
+        "responseEnd": 1483,
+        "downloadMs": 32,
+        "transferSize": 2935731
+      },
+      "wu-editor": {
+        "startTime": 2744,
+        "responseEnd": 2750,
+        "downloadMs": 6,
+        "transferSize": 157499
+      }
+    },
+    "download_counts_first": {
+      "wu-editor": 1,
+      "mermaid": 1,
+      "tiptap": 1,
+      "highlight": 1
+    }
+  },
+  "project-manage": {
+    "page": "/project-manage",
+    "stage1_download_ms": 5,
+    "stage2_wu_assets_ready": true,
+    "stage3_create_duration_ms": 247,
+    "stage4_prosemirror_visible_ms": 5019
+  },
+  "trash": {
+    "page": "/trash",
+    "stage1_download_ms": 6,
+    "stage2_wu_assets_ready": true,
+    "stage3_create_duration_ms": 467,
+    "stage4_prosemirror_visible_ms": 5460
+  }
+}
+
+[1A[2Kviewer 회귀: {
+  "prosemirror-visible": "OK",
+  "mermaid": "SKIP(no-mermaid-data)",
+  "katex": "SKIP(no-katex-data)",
+  "highlight": "SKIP(no-code-data)",
+  "image": "SKIP(no-image-data)"
+}
+
+[1A[2K  1 failed
+    tests\perf_m1a11.spec.js:193:3 › M1a-11 — 홈(/): viewer 비경로 자산 0건 › 홈 페이지 로드 시 wu-editor 자산 다운로드 0건 
+  10 passed (51.1s)

@@ -1,0 +1,7 @@
+[cleanup] DB 경로: D:\Github\WhatUdoin\whatudoin.db
+[cleanup] sessions 삭제: 50행
+[cleanup] events 삭제: 432행
+[cleanup] users 삭제: 50행
+[cleanup] teams 삭제: 1행
+[cleanup] session_cookies.json 삭제: D:\Github\WhatUdoin\_workspace\perf\fixtures\session_cookies.json
+[cleanup] 완료. 운영 데이터 오염 없음.

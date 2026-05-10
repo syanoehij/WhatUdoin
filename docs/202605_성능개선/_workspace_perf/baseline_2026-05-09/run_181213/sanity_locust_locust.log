@@ -1,0 +1,21 @@
+[2026-05-09 18:12:19,687] DESKTOP-5C9ONHH/INFO/locust.main: Starting Locust 2.43.4
+[2026-05-09 18:12:19,689] DESKTOP-5C9ONHH/INFO/locust.main: Run time limit set to 30 seconds
+[2026-05-09 18:12:19,690] DESKTOP-5C9ONHH/INFO/locust.runners: Ramping to 1 users at a rate of 1.00 per second
+[2026-05-09 18:12:19,691] DESKTOP-5C9ONHH/INFO/locust.runners: All users spawned: {"MultiTabUser": 0, "SingleTabUser": 1} (1 total users)
+[2026-05-09 18:12:19,692] DESKTOP-5C9ONHH/ERROR/locust.user.users: session_cookies.json 없음: D:\Github\WhatUdoin\_workspace\fixtures\session_cookies.json
+  M1a-2 seed_users.py를 먼저 실행하세요.
+Traceback (most recent call last):
+  File "D:\Program Files\Python\Python312\Lib\site-packages\locust\user\users.py", line 161, in run
+    self.on_start()
+  File "D:\Github\WhatUdoin\_workspace\perf\locust\locustfile.py", line 146, in on_start
+    session_id, self._username = assign_vu_cookie()
+                                 ^^^^^^^^^^^^^^^^^^
+  File "D:\Github\WhatUdoin\_workspace\perf\locust\_cookie_loader.py", line 61, in assign_vu_cookie
+    _load_cookies()
+  File "D:\Github\WhatUdoin\_workspace\perf\locust\_cookie_loader.py", line 40, in _load_cookies
+    raise FileNotFoundError(
+FileNotFoundError: session_cookies.json 없음: D:\Github\WhatUdoin\_workspace\fixtures\session_cookies.json
+  M1a-2 seed_users.py를 먼저 실행하세요.
+
+[2026-05-09 18:12:49,098] DESKTOP-5C9ONHH/INFO/locust.main: --run-time limit reached, shutting down
+[2026-05-09 18:12:49,154] DESKTOP-5C9ONHH/INFO/locust.main: Shutting down (exit code 0)

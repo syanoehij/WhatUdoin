@@ -1,0 +1,5 @@
+Method,Name,Error,Occurrences
+GET,/api/checklists/1/lock,HTTPError('404 Client Error: Not Found for url: /api/checklists/1/lock'),26
+POST,/api/ai/parse [POST],HTTPError('503 Server Error: Service Unavailable for url: /api/ai/parse [POST]'),131
+POST,/api/upload/image [POST],HTTPError('400 Client Error: Bad Request for url: /api/upload/image [POST]'),232
+PUT,/api/doc/{id}/lock [PUT heartbeat],HTTPError('404 Client Error: Not Found for url: /api/doc/{id}/lock [PUT heartbeat]'),26

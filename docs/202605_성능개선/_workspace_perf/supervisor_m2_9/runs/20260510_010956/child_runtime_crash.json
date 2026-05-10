@@ -1,0 +1,15 @@
+{
+  "mode": "runtime_crash",
+  "pid": 39152,
+  "service_name": "runtime-crash",
+  "token_env_present": true,
+  "token_file": "D:\\Github\\WhatUdoin\\_workspace\\perf\\supervisor_m2_9\\runs\\20260510_010956\\runtime\\internal_token",
+  "token_matches_file": true,
+  "argv": [
+    "D:\\Github\\WhatUdoin\\_workspace\\perf\\supervisor_m2_9\\m2_9_child_service.py",
+    "--mode",
+    "runtime_crash",
+    "--run-dir",
+    "D:\\Github\\WhatUdoin\\_workspace\\perf\\supervisor_m2_9\\runs\\20260510_010956"
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "label": "pre_policy",
+  "marker": "m2_http_20260510_004355",
+  "expect": "allowed",
+  "passed": true,
+  "rows": [
+    {
+      "name": "/api/events",
+      "method": "POST",
+      "path": "/api/events",
+      "status_code": 200,
+      "outcome": "allowed",
+      "body": "{\"id\":2913}",
+      "elapsed_ms": 28.1
+    },
+    {
+      "name": "/api/doc/184",
+      "method": "PUT",
+      "path": "/api/doc/184",
+      "status_code": 200,
+      "outcome": "allowed",
+      "body": "{\"ok\":true}",
+      "elapsed_ms": 19.4
+    },
+    {
+      "name": "/api/checklists",
+      "method": "POST",
+      "path": "/api/checklists",
+      "status_code": 200,
+      "outcome": "allowed",
+      "body": "{\"id\":70}",
+      "elapsed_ms": 10.7
+    },
+    {
+      "name": "POST /api/upload/image",
+      "method": "POST",
+      "path": "/api/upload/image",
+      "status_code": 200,
+      "outcome": "allowed",
+      "body": "{\"url\":\"/uploads/meetings/2026/05/7ce2f86caf444a51ac4a68147a646749.png\"}",
+      "elapsed_ms": 35.8
+    },
+    {
+      "name": "POST /api/upload/attachment",
+      "method": "POST",
+      "path": "/api/upload/attachment",
+      "status_code": 200,
+      "outcome": "allowed",
+      "body": "{\"name\":\"m2_4.txt\",\"url\":\"/uploads/meetings/2026/05/93cfc88f813a4ca8ad84ea888a41f491.txt\",\"size\":15,\"uploaded_at\":\"260510_0043\"}",
+      "elapsed_ms": 5.9
+    },
+    {
+      "name": "GET /api/events",
+      "method": "GET",
+      "path": "/api/events",
+      "status_code": 200,
+      "outcome": "allowed",
+      "body": "[{\"id\":6,\"title\":\"신규 기능 개발\",\"start\":\"2026-04-10T03:00\",\"end\":\"2026-04-10T04:00\",\"allDay\":false,\"classNames\":[\"ev-schedule\"],\"extendedProps\":{\"project\":null,\"description\":\"123\",\"...",
+      "elapsed_ms": 13.0
+    }
+  ],
+  "cleanup": {
+    "rows": {
+      "events": 1,
+      "checklist_histories": 0,
+      "checklists": 1,
+      "meeting_histories": 1,
+      "meeting_locks": 0,
+      "meetings": 1,
+      "sessions": 0,
+      "user_ips": 1,
+      "users": 1
+    },
+    "files": [
+      "meetings\\2026\\05\\7ce2f86caf444a51ac4a68147a646749.png",
+      "meetings\\2026\\05\\93cfc88f813a4ca8ad84ea888a41f491.txt"
+    ],
+    "port_8000_open_after_stop": false
+  }
+}

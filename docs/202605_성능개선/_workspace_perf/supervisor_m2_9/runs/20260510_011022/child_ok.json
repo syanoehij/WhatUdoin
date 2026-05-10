@@ -1,0 +1,15 @@
+{
+  "mode": "ok",
+  "pid": 23244,
+  "service_name": "web-api",
+  "token_env_present": true,
+  "token_file": "D:\\Github\\WhatUdoin\\_workspace\\perf\\supervisor_m2_9\\runs\\20260510_011022\\runtime\\internal_token",
+  "token_matches_file": true,
+  "argv": [
+    "D:\\Github\\WhatUdoin\\_workspace\\perf\\supervisor_m2_9\\m2_9_child_service.py",
+    "--mode",
+    "ok",
+    "--run-dir",
+    "D:\\Github\\WhatUdoin\\_workspace\\perf\\supervisor_m2_9\\runs\\20260510_011022"
+  ]
+}

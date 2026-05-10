@@ -1,0 +1,4 @@
+scenario,duration_s,concurrency,request_count,failure_count,p50_ms,p95_ms,p99_ms,min_ms,max_ms,rps
+baseline_no_sse,30.0,10,3391,0,35.4,89.8,121.3,6.2,417.9,113.03
+with_50_sse,30.0,10,3466,0,34.3,89.3,116.7,6.0,422.8,115.53
+restart_reconnect_window,30.0,10,3494,0,33.0,88.3,117.9,4.9,524.1,116.47

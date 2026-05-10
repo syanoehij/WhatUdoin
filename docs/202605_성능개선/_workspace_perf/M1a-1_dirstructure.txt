@@ -1,0 +1,19 @@
+# M1a-1 디렉터리 골격 증거 (2026-05-09)
+# 명령: find _workspace/perf -type f -o -type d | sort
+
+_workspace/perf
+_workspace/perf/baseline_2026-05-09
+_workspace/perf/baseline_2026-05-09/.gitkeep
+_workspace/perf/fixtures
+_workspace/perf/fixtures/.gitkeep
+_workspace/perf/locust
+_workspace/perf/locust/.gitkeep
+_workspace/perf/scripts
+_workspace/perf/scripts/.gitkeep
+
+# requirements-dev.txt (repo root):
+#   locust  ← 운영 requirements.txt와 분리, 회사 반입 패키지에서 제외
+
+# 운영 코드 변경 검증 (2026-05-09):
+#   git diff --stat -- app.py database.py auth.py llm_parser.py crypto.py backup.py main.py mcp_server.py broker.py text_utils.py permissions.py templates/ static/
+#   → 0 files changed (M1a-1은 인프라 골격만, 운영 코드 변경 0).

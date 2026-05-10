@@ -1,0 +1,41 @@
+{
+  "check-list": {
+    "wu-editor": 0,
+    "mermaid": 0,
+    "tiptap": 0,
+    "highlight": 0,
+    "mode": "list"
+  },
+  "check-detail-first": {
+    "wu-editor": 1,
+    "mermaid": 1,
+    "tiptap": 1,
+    "highlight": 1
+  },
+  "check-detail-second-delta": {
+    "wu-editor": 0,
+    "mermaid": 0,
+    "tiptap": 0,
+    "highlight": 0
+  },
+  "check-detail-second-total": {
+    "wu-editor": 1,
+    "mermaid": 1,
+    "tiptap": 1,
+    "highlight": 1
+  },
+  "project-manage": {
+    "wu-editor": 1,
+    "mermaid": 1,
+    "tiptap": 1,
+    "highlight": 1,
+    "mode": "viewer-activated"
+  },
+  "trash": {
+    "wu-editor": 1,
+    "mermaid": 1,
+    "tiptap": 1,
+    "highlight": 1,
+    "mode": "item-activated"
+  }
+}

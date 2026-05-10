@@ -1,0 +1,49 @@
+{
+  "passed": true,
+  "rows": [
+    {
+      "name": "remote redirect",
+      "url": "http://127.0.0.1:8000/remote",
+      "status_code": 307,
+      "passed": true,
+      "evidence": "location=/avr"
+    },
+    {
+      "name": "session login denied",
+      "url": "http://127.0.0.1:8000/avr",
+      "status_code": 403,
+      "passed": true,
+      "evidence": "{\"detail\":\"AVR 접근 권한이 없습니다.\"}"
+    },
+    {
+      "name": "ip whitelist avr page",
+      "url": "http://127.0.0.1:8000/avr",
+      "status_code": 200,
+      "passed": true,
+      "evidence": "viewer_url_present=True"
+    },
+    {
+      "name": "frame-src csp",
+      "url": "http://127.0.0.1:8000/avr",
+      "status_code": 200,
+      "passed": true,
+      "evidence": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; frame-src http://127.0.0.1:51050; frame-ancestors 'none'"
+    },
+    {
+      "name": "https plain-http avr redirect",
+      "url": "https://127.0.0.1:8443/avr",
+      "status_code": 307,
+      "passed": true,
+      "evidence": "location=http://127.0.0.1:8000/avr"
+    }
+  ],
+  "cleanup": {
+    "rows": {
+      "users": 1,
+      "user_ips": 1,
+      "sessions": 1
+    },
+    "port_8000_open_after_stop": false,
+    "port_8443_open_after_stop": false
+  }
+}

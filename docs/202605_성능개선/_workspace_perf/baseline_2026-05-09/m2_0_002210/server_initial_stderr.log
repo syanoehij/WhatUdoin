@@ -1,0 +1,15 @@
+Adding job tentatively -- it will be properly scheduled when the scheduler starts
+Adding job tentatively -- it will be properly scheduled when the scheduler starts
+Adding job tentatively -- it will be properly scheduled when the scheduler starts
+Adding job tentatively -- it will be properly scheduled when the scheduler starts
+Adding job tentatively -- it will be properly scheduled when the scheduler starts
+Adding job tentatively -- it will be properly scheduled when the scheduler starts
+Added job "check_upcoming_event_alarms" to job store "default"
+Added job "lifespan.<locals>.<lambda>" to job store "default"
+Added job "finalize_expired_done" to job store "default"
+Added job "lifespan.<locals>.<lambda>" to job store "default"
+Added job "cleanup_old_trash" to job store "default"
+Added job "lifespan.<locals>.<lambda>" to job store "default"
+Scheduler started
+Running job "check_upcoming_event_alarms (trigger: interval[0:01:00], next run at: 2026-05-10 00:23:14 KST)" (scheduled at 2026-05-10 00:23:14.417151+09:00)
+Job "check_upcoming_event_alarms (trigger: interval[0:01:00], next run at: 2026-05-10 00:24:14 KST)" executed successfully

@@ -1,0 +1,16 @@
+[INFO] 쿠키 계정: 50개, 요청 연결: 50개
+[INFO] 65s 동안 50개 연결 유지 시작...
+[PROGRESS] 연결 중: 50/50, 남은 시간: 35s
+[PROGRESS] 연결 중: 50/50, 남은 시간: 5s
+[PROGRESS] 연결 중: 50/50, 남은 시간: 0s
+
+[결과 요약]
+  (a) 연결 유지 성공률: 50/50 = 100.0%
+      끊김 발생: 0건, 재연결 합계: 0건
+  (b) inter-arrival 평균: 27117.1ms, p95: 27172.0ms
+      [한계] broker.py server-side timestamp 없음. 대부분 ~25s(ping 주기) 간격.
+      실제 이벤트 latency는 M1c-10 QueueFull 카운터 도입 후 정확 측정 가능.
+  (c) QueueFull 추정: 0건 (클라이언트 측 검출 불가. M1c-10 이후 서버 카운터로 대체)
+
+[DONE] CSV: D:\Github\WhatUdoin\_workspace\perf\baseline_2026-05-09\run_175104\sse_keepalive_175732.csv
+[DONE] MD:  D:\Github\WhatUdoin\_workspace\perf\baseline_2026-05-09\run_175104\sse_keepalive_175732.md

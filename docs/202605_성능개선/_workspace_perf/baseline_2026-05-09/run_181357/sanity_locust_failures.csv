@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences
+GET,[warmup] cookie check,HTTPError('403 Client Error: Forbidden for url: [warmup] cookie check'),1

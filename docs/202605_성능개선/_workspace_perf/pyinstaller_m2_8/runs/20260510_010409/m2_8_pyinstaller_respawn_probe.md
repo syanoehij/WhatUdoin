@@ -1,0 +1,73 @@
+# M2-8 PyInstaller respawn probe
+
+- verdict: PASS
+- exe: `D:\Github\WhatUdoin\_workspace\perf\pyinstaller_m2_8\dist\M2RespawnProbe\M2RespawnProbe.exe`
+- dist_dir: `D:\Github\WhatUdoin\_workspace\perf\pyinstaller_m2_8\dist\M2RespawnProbe`
+- run_dir: `D:\Github\WhatUdoin\_workspace\perf\pyinstaller_m2_8\runs\20260510_010409`
+
+| check | result |
+|---|---|
+| parent_frozen | True |
+| child_frozen | True |
+| child_service_arg | True |
+| child_uses_same_executable | True |
+| freeze_support_called | True |
+| child_graceful_exit | True |
+
+## Result
+
+```json
+{
+  "passed": true,
+  "build_returncode": 0,
+  "run_returncode": 0,
+  "exe": "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\dist\\M2RespawnProbe\\M2RespawnProbe.exe",
+  "dist_dir": "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\dist\\M2RespawnProbe",
+  "run_dir": "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\runs\\20260510_010409",
+  "result": {
+    "passed": true,
+    "checks": {
+      "parent_frozen": true,
+      "child_frozen": true,
+      "child_service_arg": true,
+      "child_uses_same_executable": true,
+      "freeze_support_called": true,
+      "child_graceful_exit": true
+    },
+    "parent": {
+      "frozen": true,
+      "executable": "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\dist\\M2RespawnProbe\\M2RespawnProbe.exe",
+      "argv": [
+        "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\dist\\M2RespawnProbe\\M2RespawnProbe.exe",
+        "--run-dir",
+        "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\runs\\20260510_010409"
+      ],
+      "child_cmd": [
+        "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\dist\\M2RespawnProbe\\M2RespawnProbe.exe",
+        "--service=echo",
+        "--run-dir",
+        "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\runs\\20260510_010409"
+      ]
+    },
+    "service_ready": {
+      "mode": "service",
+      "service": "echo",
+      "frozen": true,
+      "executable": "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\dist\\M2RespawnProbe\\M2RespawnProbe.exe",
+      "argv": [
+        "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\dist\\M2RespawnProbe\\M2RespawnProbe.exe",
+        "--service=echo",
+        "--run-dir",
+        "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\runs\\20260510_010409"
+      ],
+      "freeze_support_called": true
+    },
+    "service_exit": {
+      "graceful": true,
+      "frozen": true,
+      "executable": "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\dist\\M2RespawnProbe\\M2RespawnProbe.exe"
+    },
+    "child_returncode": 0
+  }
+}
+```

@@ -1,0 +1,5 @@
+# M1a baseline 측정 결과 저장 디렉터리.
+# - VU 단계별 p95/p99/database is locked/RSS/CPU 결과
+# - SSE 분리 스크립트 측정값
+# - §5-1 lazy-load 4단계 측정값
+# - M1a-3에서 db_snapshot/ 하위에 whatudoin.db 세트 보관

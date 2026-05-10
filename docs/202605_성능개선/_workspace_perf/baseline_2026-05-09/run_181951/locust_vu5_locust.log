@@ -1,0 +1,6 @@
+[2026-05-09 18:21:34,229] DESKTOP-5C9ONHH/INFO/locust.main: Starting Locust 2.43.4
+[2026-05-09 18:21:34,230] DESKTOP-5C9ONHH/INFO/locust.main: Run time limit set to 60 seconds
+[2026-05-09 18:21:34,231] DESKTOP-5C9ONHH/INFO/locust.runners: Ramping to 5 users at a rate of 5.00 per second
+[2026-05-09 18:21:34,232] DESKTOP-5C9ONHH/INFO/locust.runners: All users spawned: {"MultiTabUser": 1, "SingleTabUser": 4} (5 total users)
+[2026-05-09 18:22:33,810] DESKTOP-5C9ONHH/INFO/locust.main: --run-time limit reached, shutting down
+[2026-05-09 18:22:33,868] DESKTOP-5C9ONHH/INFO/locust.main: Shutting down (exit code 1)

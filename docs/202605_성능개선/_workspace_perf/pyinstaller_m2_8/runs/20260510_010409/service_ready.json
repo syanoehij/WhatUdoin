@@ -1,0 +1,13 @@
+{
+  "mode": "service",
+  "service": "echo",
+  "frozen": true,
+  "executable": "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\dist\\M2RespawnProbe\\M2RespawnProbe.exe",
+  "argv": [
+    "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\dist\\M2RespawnProbe\\M2RespawnProbe.exe",
+    "--service=echo",
+    "--run-dir",
+    "D:\\Github\\WhatUdoin\\_workspace\\perf\\pyinstaller_m2_8\\runs\\20260510_010409"
+  ],
+  "freeze_support_called": true
+}

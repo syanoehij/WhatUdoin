@@ -43,6 +43,23 @@ phase54 ~ phase79 회귀 잠금 — 누적 700+ 단언 모두 PASS.
 
 > **주의**: 본 폴더의 `tests/`는 **참고용 사본**이다. 실제 회귀 suite는 프로젝트 루트의 `tests/phase54~79_*.py`이며, 이 사본을 수정해도 회귀 검증에 영향 없음. 사본은 사이클 시점의 단언 내용 보존용.
 
+### 4. 측정 자료 (`_workspace_perf/` 서브폴더)
+
+사이클 동안 사용된 모든 measurement/probe 자료. 36MB, 530+ 파일:
+
+| 항목 | 수 | 위치 |
+|------|---|------|
+| probe 스크립트 (`*.py`) | 53 | `_workspace_perf/scripts/` |
+| 측정 결과 markdown (`*.md`) | 94 | 각 `runs/<UTC>/*.md` |
+| locust 시나리오 + fixtures | — | `_workspace_perf/locust/`, `_workspace_perf/fixtures/` |
+| baseline raw (csv/log/json) | 105+208+24 | `_workspace_perf/baseline_2026-05-09/run_*/` 등 |
+| 라이브 통합 결과 | — | `m2_20_live/`, `m3_4_live/`, `m4_4_live/`, `m5_3_live/`, `m4_2_ollama_lifecycle/`, `m4_4_hang_p95/`, `m2_4b_full_routing/` |
+| 단계별 probe 결과 | — | `m2_*`/`m3_4_live`/`m4_*`/`m5_*`/`csrf_host_m2_14`/`https_probe_m2_15`/`limiter_m2_12`/`trusted_proxy_m2_13`/`front_router_m2_10/11`/`sse_broker_m2_16`/`pyinstaller_m2_8`/`supervisor_m2_9` |
+
+**보안 정리**: 복사 시 다음을 자동 제거 — `internal_token` (12개, supervisor 발급 토큰) / `*.db` 파일 (13개 baseline DB snapshot) / `*.pid` (9개) / `credentials.json` / `*.pem`. 모두 비밀 또는 운영 데이터.
+
+후속 작업 시 baseline 비교 또는 회사 반입 측정 증거로 사용. 다만 실제 회귀 측정은 재실행이 더 정확하고, 본 자료는 시점 보존용.
+
 ---
 
 ## 변경 규모

@@ -1,0 +1,8 @@
+[seed] DB 경로: D:\Github\WhatUdoin\whatudoin.db
+[seed] 비밀번호: WuPerfTest!2026
+[seed] 세션 유효기간: 7일
+[seed] team 'test_perf_team' id=13
+[seed] 사용자: 기존 0개, 신규 INSERT 50개, 합계 50개
+[seed] 세션 50개 INSERT, expires_at=2026-05-16 12:06:23
+[seed] session_cookies.json 기록: D:\Github\WhatUdoin\_workspace\perf\fixtures\session_cookies.json
+[seed] 완료. 다음 단계: 서버 시작 → 부하 측정 → 서버 종료 → cleanup.py 실행

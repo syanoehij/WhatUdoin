@@ -1,0 +1,601 @@
+{
+  "config": {
+    "configFile": "D:\\Github\\WhatUdoin\\playwright.config.js",
+    "rootDir": "D:/Github/WhatUdoin/tests",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "D:/Github/WhatUdoin/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "D:/Github/WhatUdoin/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.59.1",
+    "workers": 12,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "perf_m1a11.spec.js",
+      "file": "perf_m1a11.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "M1a-11 — 홈(/): viewer 비경로 자산 0건",
+          "file": "perf_m1a11.spec.js",
+          "line": 192,
+          "column": 6,
+          "specs": [
+            {
+              "title": "홈 페이지 로드 시 wu-editor 자산 다운로드 0건",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 3707,
+                      "error": {
+                        "message": "Error: 홈 페이지에서 mermaid-bundle 다운로드 없어야 함\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                        "stack": "Error: 홈 페이지에서 mermaid-bundle 다운로드 없어야 함\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at D:\\Github\\WhatUdoin\\tests\\perf_m1a11.spec.js:203:80",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\perf_m1a11.spec.js",
+                          "column": 80,
+                          "line": 203
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 201 |\u001b[39m     \u001b[90m// 자산 다운로드 확인\u001b[39m\n \u001b[90m 202 |\u001b[39m     expect(downloads[\u001b[32m'wu-editor'\u001b[39m]\u001b[33m.\u001b[39mlength\u001b[33m,\u001b[39m \u001b[32m'홈 페이지에서 wu-editor.js 다운로드 없어야 함'\u001b[39m)\u001b[33m.\u001b[39mtoBe(\u001b[35m0\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 203 |\u001b[39m     expect(downloads[\u001b[32m'mermaid'\u001b[39m]\u001b[33m.\u001b[39mlength\u001b[33m,\u001b[39m   \u001b[32m'홈 페이지에서 mermaid-bundle 다운로드 없어야 함'\u001b[39m)\u001b[33m.\u001b[39mtoBe(\u001b[35m0\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                                                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 204 |\u001b[39m     expect(downloads[\u001b[32m'tiptap'\u001b[39m]\u001b[33m.\u001b[39mlength\u001b[33m,\u001b[39m    \u001b[32m'홈 페이지에서 tiptap-bundle 다운로드 없어야 함'\u001b[39m)\u001b[33m.\u001b[39mtoBe(\u001b[35m0\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 205 |\u001b[39m\n \u001b[90m 206 |\u001b[39m     _downloadCounts[\u001b[32m'home'\u001b[39m] \u001b[33m=\u001b[39m {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\perf_m1a11.spec.js",
+                            "column": 80,
+                            "line": 203
+                          },
+                          "message": "Error: 홈 페이지에서 mermaid-bundle 다운로드 없어야 함\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  201 |     // 자산 다운로드 확인\n  202 |     expect(downloads['wu-editor'].length, '홈 페이지에서 wu-editor.js 다운로드 없어야 함').toBe(0);\n> 203 |     expect(downloads['mermaid'].length,   '홈 페이지에서 mermaid-bundle 다운로드 없어야 함').toBe(0);\n      |                                                                                ^\n  204 |     expect(downloads['tiptap'].length,    '홈 페이지에서 tiptap-bundle 다운로드 없어야 함').toBe(0);\n  205 |\n  206 |     _downloadCounts['home'] = {\n    at D:\\Github\\WhatUdoin\\tests\\perf_m1a11.spec.js:203:80"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "\n========= M1a-11 결과 저장 완료 =========\n"
+                        },
+                        {
+                          "text": "출력 경로: D:\\Github\\WhatUdoin\\_workspace\\perf\\baseline_2026-05-09\\m1a11_results\n"
+                        },
+                        {
+                          "text": "자산 다운로드: {}\n"
+                        },
+                        {
+                          "text": "4단계 타이밍: {}\n"
+                        },
+                        {
+                          "text": "viewer 회귀: {}\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:38:37.569Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\perf_m1a11-M1a-11-—-홈-view-733f6-지-로드-시-wu-editor-자산-다운로드-0건\\error-context.md"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\perf_m1a11-M1a-11-—-홈-view-733f6-지-로드-시-wu-editor-자산-다운로드-0건\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\perf_m1a11.spec.js",
+                        "column": 80,
+                        "line": 203
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "80068a0efebacea93982-1281a6a22d502a360817",
+              "file": "perf_m1a11.spec.js",
+              "line": 193,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "M1a-11 — /check 목록 모드: 자산 다운로드 0건",
+          "file": "perf_m1a11.spec.js",
+          "line": 220,
+          "column": 6,
+          "specs": [
+            {
+              "title": "체크리스트 목록 로드 직후 자산 다운로드 0건",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2095,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "/check 목록 자산 다운로드: {\"wu-editor\":0,\"mermaid\":0,\"tiptap\":0,\"highlight\":0,\"mode\":\"list\"}\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:38:42.338Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "80068a0efebacea93982-45511d7de4e396da9b6a",
+              "file": "perf_m1a11.spec.js",
+              "line": 221,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "M1a-11 — /check 상세 진입: 4단계 측정",
+          "file": "perf_m1a11.spec.js",
+          "line": 253,
+          "column": 6,
+          "specs": [
+            {
+              "title": "첫 상세 진입 — 자산 1회 다운로드 + 4단계 타이밍",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3557,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "check 상세 첫 진입 4단계: {\n  \"page\": \"/check-detail-first\",\n  \"stage1_download_ms\": 6,\n  \"stage1_wu_editor_start\": 2744,\n  \"stage1_wu_editor_response_end\": 2750,\n  \"stage2_wu_assets_ready\": true,\n  \"stage2_note\": \"WuAssets.isReady() 폴링 기준 — parse/eval 완료 여부 (상세 ms 측정 불가)\",\n  \"stage3_create_start_ms\": 2755,\n  \"stage3_create_end_ms\": 2855,\n  \"stage3_create_duration_ms\": 101,\n  \"stage4_prosemirror_visible_ms\": 2856,\n  \"stage4_total_from_nav_start_ms\": 2856,\n  \"all_resource_entries\": {\n    \"highlight\": {\n      \"startTime\": 1449,\n      \"responseEnd\": 1458,\n      \"downloadMs\": 8,\n      \"transferSize\": 122027\n    },\n    \"tiptap\": {\n      \"startTime\": 1451,\n      \"responseEnd\": 1472,\n      \"downloadMs\": 21,\n      \"transferSize\": 1251113\n    },\n    \"mermaid\": {\n      \"startTime\": 1451,\n      \"responseEnd\": 1483,\n      \"downloadMs\": 32,\n      \"transferSize\": 2935731\n    },\n    \"wu-editor\": {\n      \"startTime\": 2744,\n      \"responseEnd\": 2750,\n      \"downloadMs\": 6,\n      \"transferSize\": 157499\n    }\n  },\n  \"download_counts_first\": {\n    \"wu-editor\": 1,\n    \"mermaid\": 1,\n    \"tiptap\": 1,\n    \"highlight\": 1\n  }\n}\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:38:44.712Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "80068a0efebacea93982-b511099dd2141b0db96b",
+              "file": "perf_m1a11.spec.js",
+              "line": 254,
+              "column": 3
+            },
+            {
+              "title": "두 번째 상세 진입 — 추가 다운로드 0건 (WuAssets 캐시 검증)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4769,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "두 번째 진입 추가 다운로드 delta: {\"wu-editor\":0,\"mermaid\":0,\"tiptap\":0,\"highlight\":0}\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:38:48.285Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "80068a0efebacea93982-4e3601fb276943365fcb",
+              "file": "perf_m1a11.spec.js",
+              "line": 340,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "M1a-11 — /project-manage: viewer 자산 1회",
+          "file": "perf_m1a11.spec.js",
+          "line": 410,
+          "column": 6,
+          "specs": [
+            {
+              "title": "프로젝트 관리 페이지 — 공지 viewer 활성화 시 자산 1회 다운로드",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 6043,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "/project-manage 자산: {\"wu-editor\":1,\"mermaid\":1,\"tiptap\":1,\"highlight\":1,\"mode\":\"viewer-activated\"}\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:38:53.066Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "80068a0efebacea93982-d4694cd424eb5bc3b35b",
+              "file": "perf_m1a11.spec.js",
+              "line": 411,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "M1a-11 — /trash: viewer 자산 1회",
+          "file": "perf_m1a11.spec.js",
+          "line": 480,
+          "column": 6,
+          "specs": [
+            {
+              "title": "휴지통 페이지 — 항목 활성화 시 viewer 자산 1회 다운로드",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 6659,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "/trash 자산: {\"wu-editor\":1,\"mermaid\":1,\"tiptap\":1,\"highlight\":1,\"mode\":\"item-activated\"}\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:38:59.120Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "80068a0efebacea93982-52c0117d77ffd84f8cdb",
+              "file": "perf_m1a11.spec.js",
+              "line": 481,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "M1a-11 — viewer 회귀 검증",
+          "file": "perf_m1a11.spec.js",
+          "line": 544,
+          "column": 6,
+          "specs": [
+            {
+              "title": "viewer 회귀: ProseMirror 컨테이너 렌더링",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4392,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "ProseMirror 회귀: OK\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:05.797Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "80068a0efebacea93982-7adb94a8fc907a042fa3",
+              "file": "perf_m1a11.spec.js",
+              "line": 566,
+              "column": 3
+            },
+            {
+              "title": "viewer 회귀: Mermaid 다이어그램 (데이터 있을 때만)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4149,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "Mermaid 회귀: SKIP(no-mermaid-data)\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:10.208Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "80068a0efebacea93982-4f992b27062ed7d0f8d5",
+              "file": "perf_m1a11.spec.js",
+              "line": 577,
+              "column": 3
+            },
+            {
+              "title": "viewer 회귀: KaTeX 수식 (데이터 있을 때만)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4383,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "KaTeX 회귀: SKIP(no-katex-data)\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:14.371Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "80068a0efebacea93982-a690809311b6d2728a6f",
+              "file": "perf_m1a11.spec.js",
+              "line": 600,
+              "column": 3
+            },
+            {
+              "title": "viewer 회귀: 코드 블록 syntax highlight (데이터 있을 때만)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4545,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "Highlight 회귀: SKIP(no-code-data)\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:18.767Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "80068a0efebacea93982-dfe9835019092db127f4",
+              "file": "perf_m1a11.spec.js",
+              "line": 617,
+              "column": 3
+            },
+            {
+              "title": "viewer 회귀: 이미지 정상 로드 (데이터 있을 때만)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4519,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "이미지 회귀: SKIP(no-image-data)\n"
+                        },
+                        {
+                          "text": "\n========= M1a-11 결과 저장 완료 =========\n"
+                        },
+                        {
+                          "text": "출력 경로: D:\\Github\\WhatUdoin\\_workspace\\perf\\baseline_2026-05-09\\m1a11_results\n"
+                        },
+                        {
+                          "text": "자산 다운로드: {\n  \"check-list\": {\n    \"wu-editor\": 0,\n    \"mermaid\": 0,\n    \"tiptap\": 0,\n    \"highlight\": 0,\n    \"mode\": \"list\"\n  },\n  \"check-detail-first\": {\n    \"wu-editor\": 1,\n    \"mermaid\": 1,\n    \"tiptap\": 1,\n    \"highlight\": 1\n  },\n  \"check-detail-second-delta\": {\n    \"wu-editor\": 0,\n    \"mermaid\": 0,\n    \"tiptap\": 0,\n    \"highlight\": 0\n  },\n  \"check-detail-second-total\": {\n    \"wu-editor\": 1,\n    \"mermaid\": 1,\n    \"tiptap\": 1,\n    \"highlight\": 1\n  },\n  \"project-manage\": {\n    \"wu-editor\": 1,\n    \"mermaid\": 1,\n    \"tiptap\": 1,\n    \"highlight\": 1,\n    \"mode\": \"viewer-activated\"\n  },\n  \"trash\": {\n    \"wu-editor\": 1,\n    \"mermaid\": 1,\n    \"tiptap\": 1,\n    \"highlight\": 1,\n    \"mode\": \"item-activated\"\n  }\n}\n"
+                        },
+                        {
+                          "text": "4단계 타이밍: {\n  \"check-detail-first\": {\n    \"page\": \"/check-detail-first\",\n    \"stage1_download_ms\": 6,\n    \"stage1_wu_editor_start\": 2744,\n    \"stage1_wu_editor_response_end\": 2750,\n    \"stage2_wu_assets_ready\": true,\n    \"stage2_note\": \"WuAssets.isReady() 폴링 기준 — parse/eval 완료 여부 (상세 ms 측정 불가)\",\n    \"stage3_create_start_ms\": 2755,\n    \"stage3_create_end_ms\": 2855,\n    \"stage3_create_duration_ms\": 101,\n    \"stage4_prosemirror_visible_ms\": 2856,\n    \"stage4_total_from_nav_start_ms\": 2856,\n    \"all_resource_entries\": {\n      \"highlight\": {\n        \"startTime\": 1449,\n        \"responseEnd\": 1458,\n        \"downloadMs\": 8,\n        \"transferSize\": 122027\n      },\n      \"tiptap\": {\n        \"startTime\": 1451,\n        \"responseEnd\": 1472,\n        \"downloadMs\": 21,\n        \"transferSize\": 1251113\n      },\n      \"mermaid\": {\n        \"startTime\": 1451,\n        \"responseEnd\": 1483,\n        \"downloadMs\": 32,\n        \"transferSize\": 2935731\n      },\n      \"wu-editor\": {\n        \"startTime\": 2744,\n        \"responseEnd\": 2750,\n        \"downloadMs\": 6,\n        \"transferSize\": 157499\n      }\n    },\n    \"download_counts_first\": {\n      \"wu-editor\": 1,\n      \"mermaid\": 1,\n      \"tiptap\": 1,\n      \"highlight\": 1\n    }\n  },\n  \"project-manage\": {\n    \"page\": \"/project-manage\",\n    \"stage1_download_ms\": 5,\n    \"stage2_wu_assets_ready\": true,\n    \"stage3_create_duration_ms\": 247,\n    \"stage4_prosemirror_visible_ms\": 5019\n  },\n  \"trash\": {\n    \"page\": \"/trash\",\n    \"stage1_download_ms\": 6,\n    \"stage2_wu_assets_ready\": true,\n    \"stage3_create_duration_ms\": 467,\n    \"stage4_prosemirror_visible_ms\": 5460\n  }\n}\n"
+                        },
+                        {
+                          "text": "viewer 회귀: {\n  \"prosemirror-visible\": \"OK\",\n  \"mermaid\": \"SKIP(no-mermaid-data)\",\n  \"katex\": \"SKIP(no-katex-data)\",\n  \"highlight\": \"SKIP(no-code-data)\",\n  \"image\": \"SKIP(no-image-data)\"\n}\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:23.327Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "80068a0efebacea93982-d5cf0c04796a25f5262c",
+              "file": "perf_m1a11.spec.js",
+              "line": 638,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-05-09T10:38:36.958Z",
+    "duration": 51112.43,
+    "expected": 10,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

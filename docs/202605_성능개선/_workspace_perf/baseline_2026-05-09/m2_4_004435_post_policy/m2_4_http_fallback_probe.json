@@ -1,0 +1,77 @@
+{
+  "label": "post_policy",
+  "marker": "m2_http_20260510_004435",
+  "expect": "blocked",
+  "passed": true,
+  "rows": [
+    {
+      "name": "/api/events",
+      "method": "POST",
+      "path": "/api/events",
+      "status_code": 403,
+      "outcome": "blocked",
+      "body": "{\"detail\": \"HTTP fallback에서는 쓰기 요청이 차단됩니다. HTTPS로 접속하세요.\"}",
+      "elapsed_ms": 24.3
+    },
+    {
+      "name": "/api/doc/185",
+      "method": "PUT",
+      "path": "/api/doc/185",
+      "status_code": 403,
+      "outcome": "blocked",
+      "body": "{\"detail\": \"HTTP fallback에서는 쓰기 요청이 차단됩니다. HTTPS로 접속하세요.\"}",
+      "elapsed_ms": 0.8
+    },
+    {
+      "name": "/api/checklists",
+      "method": "POST",
+      "path": "/api/checklists",
+      "status_code": 403,
+      "outcome": "blocked",
+      "body": "{\"detail\": \"HTTP fallback에서는 쓰기 요청이 차단됩니다. HTTPS로 접속하세요.\"}",
+      "elapsed_ms": 0.7
+    },
+    {
+      "name": "POST /api/upload/image",
+      "method": "POST",
+      "path": "/api/upload/image",
+      "status_code": 403,
+      "outcome": "blocked",
+      "body": "{\"detail\": \"HTTP fallback에서는 쓰기 요청이 차단됩니다. HTTPS로 접속하세요.\"}",
+      "elapsed_ms": 1.2
+    },
+    {
+      "name": "POST /api/upload/attachment",
+      "method": "POST",
+      "path": "/api/upload/attachment",
+      "status_code": 403,
+      "outcome": "blocked",
+      "body": "{\"detail\": \"HTTP fallback에서는 쓰기 요청이 차단됩니다. HTTPS로 접속하세요.\"}",
+      "elapsed_ms": 0.7
+    },
+    {
+      "name": "GET /api/events",
+      "method": "GET",
+      "path": "/api/events",
+      "status_code": 200,
+      "outcome": "allowed",
+      "body": "[{\"id\":6,\"title\":\"신규 기능 개발\",\"start\":\"2026-04-10T03:00\",\"end\":\"2026-04-10T04:00\",\"allDay\":false,\"classNames\":[\"ev-schedule\"],\"extendedProps\":{\"project\":null,\"description\":\"123\",\"...",
+      "elapsed_ms": 11.1
+    }
+  ],
+  "cleanup": {
+    "rows": {
+      "events": 0,
+      "checklist_histories": 0,
+      "checklists": 0,
+      "meeting_histories": 0,
+      "meeting_locks": 0,
+      "meetings": 1,
+      "sessions": 0,
+      "user_ips": 1,
+      "users": 1
+    },
+    "files": [],
+    "port_8000_open_after_stop": false
+  }
+}

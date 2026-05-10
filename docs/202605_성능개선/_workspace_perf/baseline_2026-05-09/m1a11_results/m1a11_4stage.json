@@ -1,0 +1,61 @@
+{
+  "check-detail-first": {
+    "page": "/check-detail-first",
+    "stage1_download_ms": 6,
+    "stage1_wu_editor_start": 2744,
+    "stage1_wu_editor_response_end": 2750,
+    "stage2_wu_assets_ready": true,
+    "stage2_note": "WuAssets.isReady() 폴링 기준 — parse/eval 완료 여부 (상세 ms 측정 불가)",
+    "stage3_create_start_ms": 2755,
+    "stage3_create_end_ms": 2855,
+    "stage3_create_duration_ms": 101,
+    "stage4_prosemirror_visible_ms": 2856,
+    "stage4_total_from_nav_start_ms": 2856,
+    "all_resource_entries": {
+      "highlight": {
+        "startTime": 1449,
+        "responseEnd": 1458,
+        "downloadMs": 8,
+        "transferSize": 122027
+      },
+      "tiptap": {
+        "startTime": 1451,
+        "responseEnd": 1472,
+        "downloadMs": 21,
+        "transferSize": 1251113
+      },
+      "mermaid": {
+        "startTime": 1451,
+        "responseEnd": 1483,
+        "downloadMs": 32,
+        "transferSize": 2935731
+      },
+      "wu-editor": {
+        "startTime": 2744,
+        "responseEnd": 2750,
+        "downloadMs": 6,
+        "transferSize": 157499
+      }
+    },
+    "download_counts_first": {
+      "wu-editor": 1,
+      "mermaid": 1,
+      "tiptap": 1,
+      "highlight": 1
+    }
+  },
+  "project-manage": {
+    "page": "/project-manage",
+    "stage1_download_ms": 5,
+    "stage2_wu_assets_ready": true,
+    "stage3_create_duration_ms": 247,
+    "stage4_prosemirror_visible_ms": 5019
+  },
+  "trash": {
+    "page": "/trash",
+    "stage1_download_ms": 6,
+    "stage2_wu_assets_ready": true,
+    "stage3_create_duration_ms": 467,
+    "stage4_prosemirror_visible_ms": 5460
+  }
+}

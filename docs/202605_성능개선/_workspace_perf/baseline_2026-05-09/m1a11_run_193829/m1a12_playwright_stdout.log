@@ -1,0 +1,759 @@
+
+Running 50 tests using 11 workers
+
+[1A[2K[1/50] tests\phase33_doc_linebreak.spec.js:130:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 1. saveDoc() — 연속 빈줄 N개 → <br> 블록 N개로 직렬화
+[1A[2K[2/50] tests\phase33_pinpoint_all.spec.js:39:3 › Phase 33 [A1] — 비로그인 홈 리디렉션 › 비로그인 GET "/" → 303, Location: /kanban
+[1A[2K[3/50] tests\phase34_tiptap_migration.spec.js:99:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 1) /doc/{personal_id} — #editor-container 에 .ProseMirror 렌더, toastui-editor-* DOM 부재
+[1A[2K[4/50] tests\phase37_asset_cache.spec.js:82:3 › Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드 › 1) /calendar, /kanban — tiptap-bundle.min.js / wu-editor.js 네트워크 요청 부재
+[1A[2K[5/50] tests\phase33_toc_resizer.spec.js:149:3 › Phase 33 — ToC 패널 폭 확대 + 드래그 리사이저 › 1. 목차 패널 기본 폭 320px 이상 (CSS 기본값)
+[1A[2K[6/50] tests\phase33_dark_theme_codeblock.spec.js:150:3 › Phase 33 — 다크 테마 코드블록 가시성 › 1. 코드블록 pre 배경이 다크에서 #161b22 (vendor #f4f7f8 누수 없음)
+[1A[2K[7/50] tests\phase38_doc_image_resize.spec.js:48:1 › viewer applies Obsidian image widths and keeps table cell images rendered
+[1A[2K[8/50] tests\phase52_check_load_perf.spec.js:45:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 1) API 경계: 목록 응답에 content 없음 / 단건 응답에 content 있음
+[1A[2Ktests\phase33_pinpoint_all.spec.js:39:3 › Phase 33 [A1] — 비로그인 홈 리디렉션 › 비로그인 GET "/" → 303, Location: /kanban
+[A1] status=200, location=undefined
+
+[1A[2K[9/50] tests\phase53_paste_table_check_hit.spec.js:69:3 › Phase 53 — 표 붙여넣기 + 뷰어 체크박스 히트 범위 › BUG-1/2 (a) wu-editor.js: paste 핸들러에 <table> 가드가 image 루프보다 먼저
+[1A[2K  1) tests\phase33_pinpoint_all.spec.js:39:3 › Phase 33 [A1] — 비로그인 홈 리디렉션 › 비로그인 GET "/" → 303, Location: /kanban 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m303[39m
+    Received: [31m200[39m
+
+      47 |     const headers = res.headers();
+      48 |     console.log(`[A1] status=${status}, location=${headers['location']}`);
+    > 49 |     expect(status).toBe(303);
+         |                    ^
+      50 |     expect(headers['location']).toBe('/kanban');
+      51 |     await ctx.dispose();
+      52 |   });
+        at D:\Github\WhatUdoin\tests\phase33_pinpoint_all.spec.js:49:20
+
+    Error Context: test-results\phase33_pinpoint_all-Phase-865f8-인-GET-→-303-Location-kanban\error-context.md
+
+
+[1A[2K[10/50] tests\phase37_stage2_static_cache.spec.js:96:3 › Phase 37 — 2단계: 정적 자산 추가 최적화 › 1) /static/ 응답에 Cache-Control — ?v= 있으면 immutable, 없으면 max-age=3600
+[1A[2K[11/50] tests\phase37_stage3_static_cleanup.spec.js:69:3 › Phase 37 — 3단계: 정적 파일 정리 + lifespan + DB 인덱스 (핀포인트) › T1) toastui 잔여 자산 직접 GET → 404, 페이지 로드 시 요청도 없음
+[1A[2Ktests\phase53_paste_table_check_hit.spec.js:69:3 › Phase 53 — 표 붙여넣기 + 뷰어 체크박스 히트 범위 › BUG-1/2 (a) wu-editor.js: paste 핸들러에 <table> 가드가 image 루프보다 먼저
+[BUG-1/2 a] paste@2828, tableGuard@2832, imageLoop@2836
+
+[1A[2K[12/50] tests\phase53_paste_table_check_hit.spec.js:115:3 › Phase 53 — 표 붙여넣기 + 뷰어 체크박스 히트 범위 › BUG-1/2 (b) 합성 paste(table HTML) → /api/upload/image 미호출 + defaultPrevented=false
+[1A[2K[13/50] tests\phase33_pinpoint_all.spec.js:55:3 › Phase 33 [A1] — 비로그인 홈 리디렉션 › 로그인 GET "/" → 200 + home.html 렌더 (회귀)
+[1A[2Ktests\phase33_pinpoint_all.spec.js:55:3 › Phase 33 [A1] — 비로그인 홈 리디렉션 › 로그인 GET "/" → 200 + home.html 렌더 (회귀)
+[A1-regression] status=200
+
+[1A[2K[14/50] tests\phase33_pinpoint_all.spec.js:76:3 › Phase 33 [A2] — 간트 바 title 속성 제거 › .gantt-bar 모두 title 속성 없음, 툴바 버튼은 유지
+[1A[2Ktests\phase52_check_load_perf.spec.js:45:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 1) API 경계: 목록 응답에 content 없음 / 단건 응답에 content 있음
+[1-a] /api/checklists status=200, count=7
+
+[1A[2K[1-a] sample item keys: created_at, created_by, id, is_active, is_done_project, is_locked, is_public, project, title, updated_at
+
+[1A[2K[1-b] /api/checklists/63 status=200
+
+[1A[2K[1-b] single item keys: attachments, content, created_at, created_by, deleted_at, deleted_by, id, is_active, is_locked, is_public, project, team_id, title, trash_project_id, updated_at
+
+[1A[2K[15/50] tests\phase52_check_load_perf.spec.js:107:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 2) 에디터 번들 lazy load — 초기 미로드, 첫 클릭 후 로드
+[1A[2K  2) tests\phase37_stage3_static_cleanup.spec.js:69:3 › Phase 37 — 3단계: 정적 파일 정리 + lifespan + DB 인덱스 (핀포인트) › T1) toastui 잔여 자산 직접 GET → 404, 페이지 로드 시 요청도 없음 
+
+    Error: apiRequestContext.get: connect ECONNREFUSED ::1:8000
+    Call log:
+    [2m  - → GET http://localhost:8000/static/lib/toastui-editor.min.css[22m
+    [2m    - user-agent: Playwright/1.59.1 (x64; windows 10.0) node/24.14[22m
+    [2m    - accept: */*[22m
+    [2m    - accept-encoding: gzip,deflate,br[22m
+
+        at apiRequestContext.get: connect ECONNREFUSED ::1:8000
+        at D:\Github\WhatUdoin\tests\phase37_stage3_static_cleanup.spec.js:73:35
+
+    Error Context: test-results\phase37_stage3_static_clea-4981b-접-GET-→-404-페이지-로드-시-요청도-없음\error-context.md
+
+
+[1A[2K  3) tests\phase38_doc_image_resize.spec.js:48:1 › viewer applies Obsidian image widths and keeps table cell images rendered 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoEqual[2m([22m[32mexpected[39m[2m) // deep equality[22m
+
+    [32m- Expected  - 2[39m
+    [31m+ Received  + 2[39m
+
+    [2m  Array [[22m
+    [2m    Object {[22m
+    [32m-     "maxWidth": "none",[39m
+    [31m+     "maxWidth": "",[39m
+    [2m      "parentCell": false,[22m
+    [2m      "width": "320px",[22m
+    [2m    },[22m
+    [2m    Object {[22m
+    [32m-     "maxWidth": "none",[39m
+    [31m+     "maxWidth": "",[39m
+    [2m      "parentCell": true,[22m
+    [2m      "width": "180px",[22m
+    [2m    },[22m
+    [2m  ][22m
+
+      69 |   );
+      70 |
+    > 71 |   expect(widths).toEqual([
+         |                  ^
+      72 |     { width: '320px', maxWidth: 'none', parentCell: false },
+      73 |     { width: '180px', maxWidth: 'none', parentCell: true },
+      74 |   ]);
+        at D:\Github\WhatUdoin\tests\phase38_doc_image_resize.spec.js:71:18
+
+    Error Context: test-results\phase38_doc_image_resize-v-f126c--table-cell-images-rendered\error-context.md
+
+
+[1A[2Ktests\phase53_paste_table_check_hit.spec.js:115:3 › Phase 53 — 표 붙여넣기 + 뷰어 체크박스 히트 범위 › BUG-1/2 (b) 합성 paste(table HTML) → /api/upload/image 미호출 + defaultPrevented=false
+[BUG-1/2 b] table HTML paste — defaultPrevented=false, uploads=0
+
+[1A[2K[BUG-1/2 b 회귀] image-only paste — defaultPrevented=true, uploads=1
+
+[1A[2K  4) tests\phase33_doc_linebreak.spec.js:130:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 1. saveDoc() — 연속 빈줄 N개 → <br> 블록 N개로 직렬화 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/
+    Call log:
+    [2m  - navigating to "http://localhost:8000/", waiting until "load"[22m
+
+
+      30 | /* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */
+      31 | async function login(page) {
+    > 32 |   await page.goto(BASE);
+         |              ^
+      33 |   await page.waitForLoadState('networkidle');
+      34 |   // 이미 로그인되었으면 스킵
+      35 |   const already = await page.evaluate(
+        at login (D:\Github\WhatUdoin\tests\phase33_doc_linebreak.spec.js:32:14)
+        at D:\Github\WhatUdoin\tests\phase33_doc_linebreak.spec.js:115:11
+
+    Error Context: test-results\phase33_doc_linebreak-Phas-a1342--—-연속-빈줄-N개-→-br-블록-N개로-직렬화\error-context.md
+
+
+[1A[2K[16/50] tests\phase53_paste_table_check_hit.spec.js:214:3 › Phase 53 — 표 붙여넣기 + 뷰어 체크박스 히트 범위 › BUG-3 (a) check.html: attachCheckboxHandlers 에 closest 가드 + <p> 텍스트 우측 계산 분기 존재
+[1A[2K[17/50] tests\phase53_paste_table_check_hit.spec.js:260:3 › Phase 53 — 표 붙여넣기 + 뷰어 체크박스 히트 범위 › BUG-3 (b) 영역별 클릭 — 빈 여백 전부 차단, 텍스트/체크박스 토글 정상
+[1A[2Ktests\phase52_check_load_perf.spec.js:107:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 2) 에디터 번들 lazy load — 초기 미로드, 첫 클릭 후 로드
+[2-a] before click: {"tiptap":0,"mermaid":0,"wuEditor":0,"hljs":0,"cssWu":0}
+
+[1A[2K[2-b] opening checklist id=63
+
+[1A[2K[18/50] tests\phase37_stage3_static_cleanup.spec.js:105:3 › Phase 37 — 3단계: 정적 파일 정리 + lifespan + DB 인덱스 (핀포인트) › T2) /, /calendar, /check 정상 로드 + 핵심 런타임 객체 존재
+[1A[2K  5) tests\phase34_tiptap_migration.spec.js:99:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 1) /doc/{personal_id} — #editor-container 에 .ProseMirror 렌더, toastui-editor-* DOM 부재 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      31 |
+      32 | async function loginEditor(page) {
+    > 33 |   await page.goto(BASE + '/login');
+         |              ^
+      34 |   await page.waitForLoadState('domcontentloaded');
+      35 |   const pwInput = page.locator('input[type="password"]').first();
+      36 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase34_tiptap_migration.spec.js:33:14)
+        at D:\Github\WhatUdoin\tests\phase34_tiptap_migration.spec.js:93:11
+
+    Error Context: test-results\phase34_tiptap_migration-P-ed057-r-렌더-toastui-editor--DOM-부재\error-context.md
+
+
+[1A[2Ktests\phase53_paste_table_check_hit.spec.js:260:3 › Phase 53 — 표 붙여넣기 + 뷰어 체크박스 히트 범위 › BUG-3 (b) 영역별 클릭 — 빈 여백 전부 차단, 텍스트/체크박스 토글 정상
+[BUG-3 b] fixture id=68
+
+[1A[2K  6) tests\phase37_asset_cache.spec.js:82:3 › Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드 › 1) /calendar, /kanban — tiptap-bundle.min.js / wu-editor.js 네트워크 요청 부재 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      29 |
+      30 | async function loginEditor(page) {
+    > 31 |   await page.goto(BASE + '/login');
+         |              ^
+      32 |   await page.waitForLoadState('domcontentloaded');
+      33 |   const pwInput = page.locator('input[type="password"]').first();
+      34 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase37_asset_cache.spec.js:31:14)
+        at D:\Github\WhatUdoin\tests\phase37_asset_cache.spec.js:76:11
+
+    Error Context: test-results\phase37_asset_cache-Phase--6394d--js-wu-editor-js-네트워크-요청-부재\error-context.md
+
+
+[1A[2K[19/50] tests\phase38_doc_image_resize.spec.js:77:1 › title extraction removes markdown escapes from saved H1 text
+[1A[2K  7) tests\phase37_stage2_static_cache.spec.js:96:3 › Phase 37 — 2단계: 정적 자산 추가 최적화 › 1) /static/ 응답에 Cache-Control — ?v= 있으면 immutable, 없으면 max-age=3600 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      25 |
+      26 | async function loginEditor(page) {
+    > 27 |   await page.goto(BASE + '/login');
+         |              ^
+      28 |   await page.waitForLoadState('domcontentloaded');
+      29 |   const pwInput = page.locator('input[type="password"]').first();
+      30 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase37_stage2_static_cache.spec.js:27:14)
+        at D:\Github\WhatUdoin\tests\phase37_stage2_static_cache.spec.js:90:11
+
+    Error Context: test-results\phase37_stage2_static_cach-41bce--immutable-없으면-max-age-3600\error-context.md
+
+
+[1A[2Ktests\phase33_pinpoint_all.spec.js:76:3 › Phase 33 [A2] — 간트 바 title 속성 제거 › .gantt-bar 모두 title 속성 없음, 툴바 버튼은 유지
+[A2] gantt-bar count: 3
+
+[1A[2K[A2] bars with title: 0 / 3
+
+[1A[2K[A2] buttons with title attr: 7
+
+[1A[2Ktests\phase52_check_load_perf.spec.js:107:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 2) 에디터 번들 lazy load — 초기 미로드, 첫 클릭 후 로드
+[2-b] after click: {"tiptap":1,"mermaid":1,"wuEditor":1,"hljs":1,"cssWu":1}
+
+[1A[2K[20/50] tests\phase33_pinpoint_all.spec.js:118:3 › Phase 33 [B1] — 칸반 미연결 overdue 미적용 › kanban_status === null & 기한초과 일정에 .overdue 클래스 부재
+[1A[2K[21/50] tests\phase52_check_load_perf.spec.js:161:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 3) /check 페이지 정상 렌더 + 항목 클릭 시 뷰어 표시
+[1A[2K  8) tests\phase33_toc_resizer.spec.js:149:3 › Phase 33 — ToC 패널 폭 확대 + 드래그 리사이저 › 1. 목차 패널 기본 폭 320px 이상 (CSS 기본값) 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/
+    Call log:
+    [2m  - navigating to "http://localhost:8000/", waiting until "domcontentloaded"[22m
+
+
+      105 |     const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
+      106 |     const page = await ctx.newPage();
+    > 107 |     await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+          |                ^
+      108 |     docId = await createPersonalDoc(
+      109 |       page,
+      110 |       'phase33_toc_resizer',
+        at D:\Github\WhatUdoin\tests\phase33_toc_resizer.spec.js:107:16
+
+    Error Context: test-results\phase33_toc_resizer-Phase--712f4-차-패널-기본-폭-320px-이상-CSS-기본값-\error-context.md
+
+    Error Context: test-results\phase33_toc_resizer-Phase--712f4-차-패널-기본-폭-320px-이상-CSS-기본값-\error-context.md
+
+
+[1A[2K[22/50] tests\phase33_toc_resizer.spec.js:176:3 › Phase 33 — ToC 패널 폭 확대 + 드래그 리사이저 › 2. 리사이저 표시/숨김 — toc-open 클래스 연동
+[1A[2K[23/50] tests\phase33_toc_resizer.spec.js:221:3 › Phase 33 — ToC 패널 폭 확대 + 드래그 리사이저 › 3. 드래그로 폭 조절 + 180~600px 클램프
+[1A[2K[24/50] tests\phase33_toc_resizer.spec.js:301:3 › Phase 33 — ToC 패널 폭 확대 + 드래그 리사이저 › 4. 목차 들여쓰기 축소 (lv1=8, lv2=18, lv3=26)
+[1A[2K[25/50] tests\phase33_doc_linebreak.spec.js:185:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 2. 라운드트립 — 저장 → 새로고침 → 재저장 시 <br> 개수 누적·축소 없음
+[1A[2K  9) tests\phase33_dark_theme_codeblock.spec.js:150:3 › Phase 33 — 다크 테마 코드블록 가시성 › 1. 코드블록 pre 배경이 다크에서 #161b22 (vendor #f4f7f8 누수 없음) 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/
+    Call log:
+    [2m  - navigating to "http://localhost:8000/", waiting until "domcontentloaded"[22m
+
+
+      125 |     const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
+      126 |     const page = await ctx.newPage();
+    > 127 |     await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+          |                ^
+      128 |     docId = await createPersonalDoc(page, 'phase33_dark_theme_codeblock', SEED_MD);
+      129 |     expect(docId).toBeTruthy();
+      130 |     await ctx.close();
+        at D:\Github\WhatUdoin\tests\phase33_dark_theme_codeblock.spec.js:127:16
+
+    Error Context: test-results\phase33_dark_theme_codeblo-4445c-161b22-vendor-f4f7f8-누수-없음-\error-context.md
+
+    Error Context: test-results\phase33_dark_theme_codeblo-4445c-161b22-vendor-f4f7f8-누수-없음-\error-context.md
+
+
+[1A[2K[26/50] tests\phase33_dark_theme_codeblock.spec.js:175:3 › Phase 33 — 다크 테마 코드블록 가시성 › 2. 코드블록 pre code 배경 transparent + 텍스트 #e6edf3
+[1A[2K[27/50] tests\phase33_dark_theme_codeblock.spec.js:200:3 › Phase 33 — 다크 테마 코드블록 가시성 › 3. 인라인 code 칩 vs pre code 배경 specificity 분기
+[1A[2K[28/50] tests\phase33_dark_theme_codeblock.spec.js:239:3 › Phase 33 — 다크 테마 코드블록 가시성 › 4. .markdown-body pre/pre code 다크 테마 cascade 적용
+[1A[2K[29/50] tests\phase33_dark_theme_codeblock.spec.js:287:3 › Phase 33 — 다크 테마 코드블록 가시성 › 5. 라이트 테마에서 pre 배경이 다크 색(#161b22) 아님 (회귀 방지)
+[1A[2Ktests\phase33_pinpoint_all.spec.js:118:3 › Phase 33 [B1] — 칸반 미연결 overdue 미적용 › kanban_status === null & 기한초과 일정에 .overdue 클래스 부재
+[B1] unlinked+overdue: 13, linked+overdue: 5
+
+[1A[2Ktests\phase53_paste_table_check_hit.spec.js:260:3 › Phase 53 — 표 붙여넣기 + 뷰어 체크박스 히트 범위 › BUG-3 (b) 영역별 클릭 — 빈 여백 전부 차단, 텍스트/체크박스 토글 정상
+[BUG-3 b] li info: {
+  "bound": "1",
+  "checked": "false",
+  "li": {
+    "x": 655.359375,
+    "y": 199.1875,
+    "w": 576.640625,
+    "h": 25.015625,
+    "right": 1232
+  },
+  "label": {
+    "x": 655.359375,
+    "y": 202.1875,
+    "width": 15,
+    "height": 15,
+    "top": 202.1875,
+    "right": 670.359375,
+    "bottom": 217.1875,
+    "left": 655.359375
+  },
+  "p": {
+    "x": 676.359375,
+    "y": 199.1875,
+    "width": 555.640625,
+    "height": 25.015625,
+    "top": 199.1875,
+    "right": 1232,
+    "bottom": 224.203125,
+    "left": 676.359375
+  },
+  "input": {
+    "x": 655.359375,
+    "y": 202.1875,
+    "width": 15,
+    "height": 15,
+    "top": 202.1875,
+    "right": 670.359375,
+    "bottom": 217.1875,
+    "left": 655.359375
+  }
+}
+
+[1A[2K[BUG-3 b1] LI gap click @(673.4, 211.7)
+
+[1A[2K[BUG-3 b1] elementFromPoint: {"tag":"li","guarded":false}
+
+[1A[2K[30/50] tests\phase34_tiptap_migration.spec.js:134:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 2) eid: 링크가 든 doc 저장 후 재로드 시 .ProseMirror 안에 a[href^="eid:"] 렌더
+[1A[2K[31/50] tests\phase37_asset_cache.spec.js:121:3 › Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드 › 2) /check — tiptap-bundle.min.js 로드 + window.WUEditor 실행 가능
+[1A[2K[32/50] tests\phase37_stage2_static_cache.spec.js:155:3 › Phase 37 — 2단계: 정적 자산 추가 최적화 › 2) /, /check, /kanban — fullcalendar.min.js 네트워크 요청 부재
+[1A[2K[33/50] tests\phase38_doc_image_resize.spec.js:90:1 › legacy escaped image urls load and serialize without backslash escapes
+[1A[2K[BUG-3 b1] gap click 후 PATCH 0회
+
+[1A[2K[BUG-3 b2] <p> 우측 빈영역 click @(1227.0, 211.7)
+
+[1A[2K[BUG-3 b2] elementFromPoint: {"tag":"p"}
+
+[1A[2K[BUG-3 b2] textRight=775.2 ↔ clickX=1227.0 (gap=451.8)
+
+[1A[2K[BUG-3 b2] <p> 우측 click 후 PATCH 0회
+
+[1A[2K[BUG-3 b3] li 우측 끝 click @(1227.0, 211.7)
+
+[1A[2Ktests\phase33_pinpoint_all.spec.js:118:3 › Phase 33 [B1] — 칸반 미연결 overdue 미적용 › kanban_status === null & 기한초과 일정에 .overdue 클래스 부재
+[B1] rendered .gantt-bar count: 3
+
+[1A[2K[B1] unlinked bars matched: 1, violations: 0
+
+[1A[2Ktests\phase52_check_load_perf.spec.js:161:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 3) /check 페이지 정상 렌더 + 항목 클릭 시 뷰어 표시
+[3] right-header visible=true
+
+[1A[2K[34/50] tests\phase33_pinpoint_all.spec.js:199:3 › Phase 33 [B1] — 칸반 미연결 overdue 미적용 › 회귀 — 칸반 연결+기한초과 일정은 .overdue 유지
+[1A[2K[35/50] tests\phase52_check_load_perf.spec.js:196:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 4) 검색 — title 토큰 입력 시 목록이 필터링됨
+[1A[2Ktests\phase53_paste_table_check_hit.spec.js:260:3 › Phase 53 — 표 붙여넣기 + 뷰어 체크박스 히트 범위 › BUG-3 (b) 영역별 클릭 — 빈 여백 전부 차단, 텍스트/체크박스 토글 정상
+[BUG-3 b3] li 우측 끝 click 후 PATCH 0회
+
+[1A[2K[BUG-3 b4] text click @(696.4, 211.2)
+
+[1A[2K[BUG-3 b4] PATCH status=200, 누적 1회
+
+[1A[2K[36/50] tests\phase38_doc_image_resize.spec.js:117:1 › table cells that start with task lists serialize as an HTML table
+[1A[2K  10) tests\phase37_stage3_static_cleanup.spec.js:105:3 › Phase 37 — 3단계: 정적 파일 정리 + lifespan + DB 인덱스 (핀포인트) › T2) /, /calendar, /check 정상 로드 + 핵심 런타임 객체 존재 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/
+    Call log:
+    [2m  - navigating to "http://localhost:8000/", waiting until "load"[22m
+
+
+      108 |     // T2-A. /  (home)
+      109 |     {
+    > 110 |       const resp = await page.goto(BASE + '/', { waitUntil: 'load' });
+          |                               ^
+      111 |       expect(resp, 'home 응답 객체가 있어야 함').toBeTruthy();
+      112 |       expect(resp.status(), 'home 페이지가 200 응답이어야 함').toBeLessThan(400);
+      113 |       // 페이지가 비어있지 않은지 — 최소 <body> 가 있는지 (자동 로그인이 안 되면 /login 으로 리다이렉트되므로 status<400 + body 있음으로 충분)
+        at D:\Github\WhatUdoin\tests\phase37_stage3_static_cleanup.spec.js:110:31
+
+    Error Context: test-results\phase37_stage3_static_clea-e4f5c-ar-check-정상-로드-핵심-런타임-객체-존재\error-context.md
+
+
+[1A[2K[BUG-3 b5] PATCH status=200, 누적 PATCH 1회
+
+[1A[2K[BUG-3 종합] gap=차단 / pRight=차단 / liRight=차단 / text=토글 / checkbox=토글
+
+[1A[2K[BUG-3 b] cleanup DELETE /api/checklists/68 → 200
+
+[1A[2Ktests\phase52_check_load_perf.spec.js:196:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 4) 검색 — title 토큰 입력 시 목록이 필터링됨
+[4] _allChecklists total=8
+
+[1A[2K[4] chosen token="hit"
+
+[1A[2K[4] rendered items before search=8
+
+[1A[2K[4] rendered items after search="hit"=0
+
+[1A[2K  11) tests\phase33_doc_linebreak.spec.js:185:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 2. 라운드트립 — 저장 → 새로고침 → 재저장 시 <br> 개수 누적·축소 없음 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/
+    Call log:
+    [2m  - navigating to "http://localhost:8000/", waiting until "load"[22m
+
+
+      30 | /* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */
+      31 | async function login(page) {
+    > 32 |   await page.goto(BASE);
+         |              ^
+      33 |   await page.waitForLoadState('networkidle');
+      34 |   // 이미 로그인되었으면 스킵
+      35 |   const already = await page.evaluate(
+        at login (D:\Github\WhatUdoin\tests\phase33_doc_linebreak.spec.js:32:14)
+        at D:\Github\WhatUdoin\tests\phase33_doc_linebreak.spec.js:115:11
+
+    Error Context: test-results\phase33_doc_linebreak-Phas-eda50-새로고침-→-재저장-시-br-개수-누적·축소-없음\error-context.md
+
+
+[1A[2K[37/50] tests\phase37_stage3_static_cleanup.spec.js:157:3 › Phase 37 — 3단계: 정적 파일 정리 + lifespan + DB 인덱스 (핀포인트) › T3) 서버 부팅 정상 — health 라우트 또는 home 응답 < 400
+[1A[2K  12) tests\phase52_check_load_perf.spec.js:196:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 4) 검색 — title 토큰 입력 시 목록이 필터링됨 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeGreaterThan[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: > [32m0[39m
+    Received:   [31m0[39m
+
+      239 |
+      240 |     // 토큰이 실제 title에 있으므로 결과는 ≥1, 그리고 ≤ 검색 전 (필터링 효과)
+    > 241 |     expect(afterCount).toBeGreaterThan(0);
+          |                        ^
+      242 |     expect(afterCount).toBeLessThanOrEqual(beforeCount);
+      243 |
+      244 |     // 표시된 항목들 모두 토큰 매치 검증 (title/project/created_by 중 하나)
+        at D:\Github\WhatUdoin\tests\phase52_check_load_perf.spec.js:241:24
+
+    Error Context: test-results\phase52_check_load_perf-Ph-e0d82-검색-—-title-토큰-입력-시-목록이-필터링됨\error-context.md
+
+
+[1A[2K  13) tests\phase37_stage3_static_cleanup.spec.js:157:3 › Phase 37 — 3단계: 정적 파일 정리 + lifespan + DB 인덱스 (핀포인트) › T3) 서버 부팅 정상 — health 라우트 또는 home 응답 < 400 
+
+    Error: apiRequestContext.get: connect ECONNREFUSED ::1:8000
+    Call log:
+    [2m  - → GET http://localhost:8000/[22m
+    [2m    - user-agent: Playwright/1.59.1 (x64; windows 10.0) node/24.14[22m
+    [2m    - accept: */*[22m
+    [2m    - accept-encoding: gzip,deflate,br[22m
+
+        at apiRequestContext.get: connect ECONNREFUSED ::1:8000
+        at D:\Github\WhatUdoin\tests\phase37_stage3_static_cleanup.spec.js:161:32
+
+    Error Context: test-results\phase37_stage3_static_clea-1ca10-—-health-라우트-또는-home-응답-400\error-context.md
+
+
+[1A[2K[38/50] tests\phase38_doc_image_resize.spec.js:147:1 › plain paragraph-only tables still serialize as GFM tables
+[1A[2K[39/50] tests\phase33_doc_linebreak.spec.js:248:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 3. <br> 태그 직접 입력 → 저장 + 뷰어 렌더
+[1A[2K[40/50] tests\phase52_check_load_perf.spec.js:267:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 5) 사이드바 — get_all_projects_meta 결과가 사이드바에 렌더됨
+[1A[2K  14) tests\phase34_tiptap_migration.spec.js:134:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 2) eid: 링크가 든 doc 저장 후 재로드 시 .ProseMirror 안에 a[href^="eid:"] 렌더 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      31 |
+      32 | async function loginEditor(page) {
+    > 33 |   await page.goto(BASE + '/login');
+         |              ^
+      34 |   await page.waitForLoadState('domcontentloaded');
+      35 |   const pwInput = page.locator('input[type="password"]').first();
+      36 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase34_tiptap_migration.spec.js:33:14)
+        at D:\Github\WhatUdoin\tests\phase34_tiptap_migration.spec.js:93:11
+
+    Error Context: test-results\phase34_tiptap_migration-P-a7a45-roseMirror-안에-a-href-eid-렌더\error-context.md
+
+
+[1A[2K  15) tests\phase37_asset_cache.spec.js:121:3 › Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드 › 2) /check — tiptap-bundle.min.js 로드 + window.WUEditor 실행 가능 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      29 |
+      30 | async function loginEditor(page) {
+    > 31 |   await page.goto(BASE + '/login');
+         |              ^
+      32 |   await page.waitForLoadState('domcontentloaded');
+      33 |   const pwInput = page.locator('input[type="password"]').first();
+      34 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase37_asset_cache.spec.js:31:14)
+        at D:\Github\WhatUdoin\tests\phase37_asset_cache.spec.js:76:11
+
+    Error Context: test-results\phase37_asset_cache-Phase--c3c89-js-로드-window-WUEditor-실행-가능\error-context.md
+
+
+[1A[2K  16) tests\phase37_stage2_static_cache.spec.js:155:3 › Phase 37 — 2단계: 정적 자산 추가 최적화 › 2) /, /check, /kanban — fullcalendar.min.js 네트워크 요청 부재 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      25 |
+      26 | async function loginEditor(page) {
+    > 27 |   await page.goto(BASE + '/login');
+         |              ^
+      28 |   await page.waitForLoadState('domcontentloaded');
+      29 |   const pwInput = page.locator('input[type="password"]').first();
+      30 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase37_stage2_static_cache.spec.js:27:14)
+        at D:\Github\WhatUdoin\tests\phase37_stage2_static_cache.spec.js:90:11
+
+    Error Context: test-results\phase37_stage2_static_cach-92647-lcalendar-min-js-네트워크-요청-부재\error-context.md
+
+
+[1A[2Ktests\phase33_pinpoint_all.spec.js:199:3 › Phase 33 [B1] — 칸반 미연결 overdue 미적용 › 회귀 — 칸반 연결+기한초과 일정은 .overdue 유지
+[B1-regression] rendered .gantt-bar count: 3
+
+[1A[2K[B1-regression] linked overdue hit: 2, overdue class ok: 2 / expected 5
+
+[1A[2K[41/50] tests\phase33_pinpoint_all.spec.js:292:3 › Phase 33 [B2] — 주말 간트 열 폭 축소 › .gantt-header-unit.is-weekend 의 폭이 평일의 약 0.55배
+[1A[2K[42/50] tests\phase34_tiptap_migration.spec.js:188:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 3) /check/{id}/edit — Tiptap(.ProseMirror) 렌더, toastui DOM 부재
+[1A[2K[43/50] tests\phase37_asset_cache.spec.js:157:3 › Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드 › 3) style.css ?v= 값이 두 번 방문에서 동일 + hex 형식
+[1A[2Ktests\phase52_check_load_perf.spec.js:267:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 5) 사이드바 — get_all_projects_meta 결과가 사이드바에 렌더됨
+[5] ALL_PROJECTS active=3, ALL_DONE_PROJECTS=2
+
+[1A[2K[5] sample project: name="FW개발", color=true, is_private=true
+
+[1A[2K[5] sidebar .ck-proj-dyn count=4, samples: ["미지정","FW개발","WhatUDoin","비공개 프로젝트"]
+
+[1A[2K[5] ALL_PROJECTS not in sidebar (orphan logic OK if 미지정만): []
+
+[1A[2K[44/50] tests\phase37_stage2_static_cache.spec.js:184:3 › Phase 37 — 2단계: 정적 자산 추가 최적화 › 3) /calendar — fullcalendar.min.js + asset_v 쿼리 + FullCalendar.Calendar 초기화 정상
+[1A[2Ktests\phase33_pinpoint_all.spec.js:292:3 › Phase 33 [B2] — 주말 간트 열 폭 축소 › .gantt-header-unit.is-weekend 의 폭이 평일의 약 0.55배
+[B2] gantt-header-unit count: 21
+
+[1A[2K[B2] first 8 units: [6(수) w=53.8 weekend=false] [7(목) w=53.8 weekend=false] [8(금) w=53.8 weekend=false] [9(토) w=29.6 weekend=true] [10(일) w=29.6 weekend=true] [11(W20) w=53.8 weekend=false] [12(화) w=53.8 weekend=false] [13(수) w=53.8 weekend=false]
+
+[1A[2K[B2] avgWeekday=53.81, avgWeekend=29.59, ratio=0.550
+
+[1A[2K  17) tests\phase33_doc_linebreak.spec.js:248:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 3. <br> 태그 직접 입력 → 저장 + 뷰어 렌더 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/
+    Call log:
+    [2m  - navigating to "http://localhost:8000/", waiting until "load"[22m
+
+
+      30 | /* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */
+      31 | async function login(page) {
+    > 32 |   await page.goto(BASE);
+         |              ^
+      33 |   await page.waitForLoadState('networkidle');
+      34 |   // 이미 로그인되었으면 스킵
+      35 |   const already = await page.evaluate(
+        at login (D:\Github\WhatUdoin\tests\phase33_doc_linebreak.spec.js:32:14)
+        at D:\Github\WhatUdoin\tests\phase33_doc_linebreak.spec.js:115:11
+
+    Error Context: test-results\phase33_doc_linebreak-Phas-b0cc9-유지-3-br-태그-직접-입력-→-저장-뷰어-렌더\error-context.md
+
+
+[1A[2K[45/50] tests\phase33_doc_linebreak.spec.js:306:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 4. 휴지통 뷰어 — <br> 포함 문서 sanitizer 통과
+[1A[2K  18) tests\phase37_asset_cache.spec.js:157:3 › Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드 › 3) style.css ?v= 값이 두 번 방문에서 동일 + hex 형식 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      29 |
+      30 | async function loginEditor(page) {
+    > 31 |   await page.goto(BASE + '/login');
+         |              ^
+      32 |   await page.waitForLoadState('domcontentloaded');
+      33 |   const pwInput = page.locator('input[type="password"]').first();
+      34 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase37_asset_cache.spec.js:31:14)
+        at D:\Github\WhatUdoin\tests\phase37_asset_cache.spec.js:76:11
+
+    Error Context: test-results\phase37_asset_cache-Phase--3d4fe-css-v-값이-두-번-방문에서-동일-hex-형식\error-context.md
+
+
+[1A[2K  19) tests\phase34_tiptap_migration.spec.js:188:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 3) /check/{id}/edit — Tiptap(.ProseMirror) 렌더, toastui DOM 부재 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      31 |
+      32 | async function loginEditor(page) {
+    > 33 |   await page.goto(BASE + '/login');
+         |              ^
+      34 |   await page.waitForLoadState('domcontentloaded');
+      35 |   const pwInput = page.locator('input[type="password"]').first();
+      36 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase34_tiptap_migration.spec.js:33:14)
+        at D:\Github\WhatUdoin\tests\phase34_tiptap_migration.spec.js:93:11
+
+    Error Context: test-results\phase34_tiptap_migration-P-07868-oseMirror-렌더-toastui-DOM-부재\error-context.md
+
+
+[1A[2K  20) tests\phase37_stage2_static_cache.spec.js:184:3 › Phase 37 — 2단계: 정적 자산 추가 최적화 › 3) /calendar — fullcalendar.min.js + asset_v 쿼리 + FullCalendar.Calendar 초기화 정상 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      25 |
+      26 | async function loginEditor(page) {
+    > 27 |   await page.goto(BASE + '/login');
+         |              ^
+      28 |   await page.waitForLoadState('domcontentloaded');
+      29 |   const pwInput = page.locator('input[type="password"]').first();
+      30 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase37_stage2_static_cache.spec.js:27:14)
+        at D:\Github\WhatUdoin\tests\phase37_stage2_static_cache.spec.js:90:11
+
+    Error Context: test-results\phase37_stage2_static_cach-5e860-ullCalendar-Calendar-초기화-정상\error-context.md
+
+
+[1A[2K[46/50] tests\phase37_asset_cache.spec.js:208:3 › Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드 › 4) /kanban 에서 체크 바인딩 이벤트 상세 → ensureWUEditorAssets() 동적 로드 + .ProseMirror 렌더
+[1A[2K[47/50] tests\phase34_tiptap_migration.spec.js:214:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 4) /check, /notice, / 에서 toastui.Editor 라이브러리 여전히 로드 (회귀 방지)
+[1A[2K[48/50] tests\phase37_stage2_static_cache.spec.js:228:3 › Phase 37 — 2단계: 정적 자산 추가 최적화 › 4) /check — 6개 자산 모두 ?v= 쿼리 포함 로드 + WUEditor 정상 동작
+[1A[2K  21) tests\phase33_doc_linebreak.spec.js:306:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 4. 휴지통 뷰어 — <br> 포함 문서 sanitizer 통과 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/
+    Call log:
+    [2m  - navigating to "http://localhost:8000/", waiting until "load"[22m
+
+
+      30 | /* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */
+      31 | async function login(page) {
+    > 32 |   await page.goto(BASE);
+         |              ^
+      33 |   await page.waitForLoadState('networkidle');
+      34 |   // 이미 로그인되었으면 스킵
+      35 |   const already = await page.evaluate(
+        at login (D:\Github\WhatUdoin\tests\phase33_doc_linebreak.spec.js:32:14)
+        at D:\Github\WhatUdoin\tests\phase33_doc_linebreak.spec.js:115:11
+
+    Error Context: test-results\phase33_doc_linebreak-Phas-8c688--뷰어-—-br-포함-문서-sanitizer-통과\error-context.md
+
+
+[1A[2K[49/50] tests\phase33_doc_linebreak.spec.js:355:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 5. 빈 단락 가시성 — .markdown-body p / .toastui-editor-contents p min-height
+[1A[2K  22) tests\phase37_asset_cache.spec.js:208:3 › Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드 › 4) /kanban 에서 체크 바인딩 이벤트 상세 → ensureWUEditorAssets() 동적 로드 + .ProseMirror 렌더 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      29 |
+      30 | async function loginEditor(page) {
+    > 31 |   await page.goto(BASE + '/login');
+         |              ^
+      32 |   await page.waitForLoadState('domcontentloaded');
+      33 |   const pwInput = page.locator('input[type="password"]').first();
+      34 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase37_asset_cache.spec.js:31:14)
+        at D:\Github\WhatUdoin\tests\phase37_asset_cache.spec.js:76:11
+
+    Error Context: test-results\phase37_asset_cache-Phase--1be36-Assets-동적-로드-ProseMirror-렌더\error-context.md
+
+
+[1A[2K  23) tests\phase34_tiptap_migration.spec.js:214:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 4) /check, /notice, / 에서 toastui.Editor 라이브러리 여전히 로드 (회귀 방지) 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      31 |
+      32 | async function loginEditor(page) {
+    > 33 |   await page.goto(BASE + '/login');
+         |              ^
+      34 |   await page.waitForLoadState('domcontentloaded');
+      35 |   const pwInput = page.locator('input[type="password"]').first();
+      36 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase34_tiptap_migration.spec.js:33:14)
+        at D:\Github\WhatUdoin\tests\phase34_tiptap_migration.spec.js:93:11
+
+    Error Context: test-results\phase34_tiptap_migration-P-b329c--Editor-라이브러리-여전히-로드-회귀-방지-\error-context.md
+
+
+[1A[2K  24) tests\phase37_stage2_static_cache.spec.js:228:3 › Phase 37 — 2단계: 정적 자산 추가 최적화 › 4) /check — 6개 자산 모두 ?v= 쿼리 포함 로드 + WUEditor 정상 동작 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      25 |
+      26 | async function loginEditor(page) {
+    > 27 |   await page.goto(BASE + '/login');
+         |              ^
+      28 |   await page.waitForLoadState('domcontentloaded');
+      29 |   const pwInput = page.locator('input[type="password"]').first();
+      30 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase37_stage2_static_cache.spec.js:27:14)
+        at D:\Github\WhatUdoin\tests\phase37_stage2_static_cache.spec.js:90:11
+
+    Error Context: test-results\phase37_stage2_static_cach-235bc-두-v-쿼리-포함-로드-WUEditor-정상-동작\error-context.md
+
+
+[1A[2K[50/50] tests\phase34_tiptap_migration.spec.js:234:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 5) doc 편집 후 60초 내 자동저장 PUT 요청 발생
+[1A[2K  25) tests\phase33_doc_linebreak.spec.js:355:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 5. 빈 단락 가시성 — .markdown-body p / .toastui-editor-contents p min-height 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/
+    Call log:
+    [2m  - navigating to "http://localhost:8000/", waiting until "load"[22m
+
+
+      30 | /* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */
+      31 | async function login(page) {
+    > 32 |   await page.goto(BASE);
+         |              ^
+      33 |   await page.waitForLoadState('networkidle');
+      34 |   // 이미 로그인되었으면 스킵
+      35 |   const already = await page.evaluate(
+        at login (D:\Github\WhatUdoin\tests\phase33_doc_linebreak.spec.js:32:14)
+        at D:\Github\WhatUdoin\tests\phase33_doc_linebreak.spec.js:115:11
+
+    Error Context: test-results\phase33_doc_linebreak-Phas-5ccb6-ditor-contents-p-min-height\error-context.md
+
+
+[1A[2K  26) tests\phase34_tiptap_migration.spec.js:234:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 5) doc 편집 후 60초 내 자동저장 PUT 요청 발생 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login
+    Call log:
+    [2m  - navigating to "http://localhost:8000/login", waiting until "load"[22m
+
+
+      31 |
+      32 | async function loginEditor(page) {
+    > 33 |   await page.goto(BASE + '/login');
+         |              ^
+      34 |   await page.waitForLoadState('domcontentloaded');
+      35 |   const pwInput = page.locator('input[type="password"]').first();
+      36 |   if (await pwInput.isVisible().catch(() => false)) {
+        at loginEditor (D:\Github\WhatUdoin\tests\phase34_tiptap_migration.spec.js:33:14)
+        at D:\Github\WhatUdoin\tests\phase34_tiptap_migration.spec.js:93:11
+
+    Error Context: test-results\phase34_tiptap_migration-P-3e3c5-c-편집-후-60초-내-자동저장-PUT-요청-발생\error-context.md
+
+
+[1A[2K  26 failed
+    tests\phase33_dark_theme_codeblock.spec.js:150:3 › Phase 33 — 다크 테마 코드블록 가시성 › 1. 코드블록 pre 배경이 다크에서 #161b22 (vendor #f4f7f8 누수 없음) 
+    tests\phase33_doc_linebreak.spec.js:130:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 1. saveDoc() — 연속 빈줄 N개 → <br> 블록 N개로 직렬화 
+    tests\phase33_doc_linebreak.spec.js:185:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 2. 라운드트립 — 저장 → 새로고침 → 재저장 시 <br> 개수 누적·축소 없음 
+    tests\phase33_doc_linebreak.spec.js:248:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 3. <br> 태그 직접 입력 → 저장 + 뷰어 렌더 
+    tests\phase33_doc_linebreak.spec.js:306:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 4. 휴지통 뷰어 — <br> 포함 문서 sanitizer 통과 
+    tests\phase33_doc_linebreak.spec.js:355:3 › Phase 33 — 문서 편집기 줄내림(<br>) 유지 › 5. 빈 단락 가시성 — .markdown-body p / .toastui-editor-contents p min-height 
+    tests\phase33_pinpoint_all.spec.js:39:3 › Phase 33 [A1] — 비로그인 홈 리디렉션 › 비로그인 GET "/" → 303, Location: /kanban 
+    tests\phase33_toc_resizer.spec.js:149:3 › Phase 33 — ToC 패널 폭 확대 + 드래그 리사이저 › 1. 목차 패널 기본 폭 320px 이상 (CSS 기본값) 
+    tests\phase34_tiptap_migration.spec.js:99:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 1) /doc/{personal_id} — #editor-container 에 .ProseMirror 렌더, toastui-editor-* DOM 부재 
+    tests\phase34_tiptap_migration.spec.js:134:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 2) eid: 링크가 든 doc 저장 후 재로드 시 .ProseMirror 안에 a[href^="eid:"] 렌더 
+    tests\phase34_tiptap_migration.spec.js:188:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 3) /check/{id}/edit — Tiptap(.ProseMirror) 렌더, toastui DOM 부재 
+    tests\phase34_tiptap_migration.spec.js:214:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 4) /check, /notice, / 에서 toastui.Editor 라이브러리 여전히 로드 (회귀 방지) 
+    tests\phase34_tiptap_migration.spec.js:234:3 › Phase 34 — Tiptap 마이그레이션 회귀 검증 › 5) doc 편집 후 60초 내 자동저장 PUT 요청 발생 
+    tests\phase37_asset_cache.spec.js:82:3 › Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드 › 1) /calendar, /kanban — tiptap-bundle.min.js / wu-editor.js 네트워크 요청 부재 
+    tests\phase37_asset_cache.spec.js:121:3 › Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드 › 2) /check — tiptap-bundle.min.js 로드 + window.WUEditor 실행 가능 
+    tests\phase37_asset_cache.spec.js:157:3 › Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드 › 3) style.css ?v= 값이 두 번 방문에서 동일 + hex 형식 
+    tests\phase37_asset_cache.spec.js:208:3 › Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드 › 4) /kanban 에서 체크 바인딩 이벤트 상세 → ensureWUEditorAssets() 동적 로드 + .ProseMirror 렌더 
+    tests\phase37_stage2_static_cache.spec.js:96:3 › Phase 37 — 2단계: 정적 자산 추가 최적화 › 1) /static/ 응답에 Cache-Control — ?v= 있으면 immutable, 없으면 max-age=3600 
+    tests\phase37_stage2_static_cache.spec.js:155:3 › Phase 37 — 2단계: 정적 자산 추가 최적화 › 2) /, /check, /kanban — fullcalendar.min.js 네트워크 요청 부재 
+    tests\phase37_stage2_static_cache.spec.js:184:3 › Phase 37 — 2단계: 정적 자산 추가 최적화 › 3) /calendar — fullcalendar.min.js + asset_v 쿼리 + FullCalendar.Calendar 초기화 정상 
+    tests\phase37_stage2_static_cache.spec.js:228:3 › Phase 37 — 2단계: 정적 자산 추가 최적화 › 4) /check — 6개 자산 모두 ?v= 쿼리 포함 로드 + WUEditor 정상 동작 
+    tests\phase37_stage3_static_cleanup.spec.js:69:3 › Phase 37 — 3단계: 정적 파일 정리 + lifespan + DB 인덱스 (핀포인트) › T1) toastui 잔여 자산 직접 GET → 404, 페이지 로드 시 요청도 없음 
+    tests\phase37_stage3_static_cleanup.spec.js:105:3 › Phase 37 — 3단계: 정적 파일 정리 + lifespan + DB 인덱스 (핀포인트) › T2) /, /calendar, /check 정상 로드 + 핵심 런타임 객체 존재 
+    tests\phase37_stage3_static_cleanup.spec.js:157:3 › Phase 37 — 3단계: 정적 파일 정리 + lifespan + DB 인덱스 (핀포인트) › T3) 서버 부팅 정상 — health 라우트 또는 home 응답 < 400 
+    tests\phase38_doc_image_resize.spec.js:48:1 › viewer applies Obsidian image widths and keeps table cell images rendered 
+    tests\phase52_check_load_perf.spec.js:196:3 › Phase 52 — 체크 페이지 로딩 성능 개선 › 4) 검색 — title 토큰 입력 시 목록이 필터링됨 
+  7 did not run
+  17 passed (29.8s)

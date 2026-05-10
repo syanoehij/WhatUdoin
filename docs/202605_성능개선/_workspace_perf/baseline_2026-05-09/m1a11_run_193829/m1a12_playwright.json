@@ -1,0 +1,2912 @@
+{
+  "config": {
+    "configFile": "D:\\Github\\WhatUdoin\\playwright.config.js",
+    "rootDir": "D:/Github/WhatUdoin/tests",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 11
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "D:/Github/WhatUdoin/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 11
+        },
+        "id": "",
+        "name": "",
+        "testDir": "D:/Github/WhatUdoin/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.59.1",
+    "workers": 12,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "phase33_dark_theme_codeblock.spec.js",
+      "file": "phase33_dark_theme_codeblock.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Phase 33 — 다크 테마 코드블록 가시성",
+          "file": "phase33_dark_theme_codeblock.spec.js",
+          "line": 120,
+          "column": 6,
+          "specs": [
+            {
+              "title": "1. 코드블록 pre 배경이 다크에서 #161b22 (vendor #f4f7f8 누수 없음)",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 1,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at D:\\Github\\WhatUdoin\\tests\\phase33_dark_theme_codeblock.spec.js:127:16",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase33_dark_theme_codeblock.spec.js",
+                          "column": 16,
+                          "line": 127
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 125 |\u001b[39m     \u001b[36mconst\u001b[39m ctx \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m browser\u001b[33m.\u001b[39mnewContext({ ignoreHTTPSErrors\u001b[33m:\u001b[39m \u001b[36mtrue\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m 126 |\u001b[39m     \u001b[36mconst\u001b[39m page \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m ctx\u001b[33m.\u001b[39mnewPage()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 127 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 128 |\u001b[39m     docId \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m createPersonalDoc(page\u001b[33m,\u001b[39m \u001b[32m'phase33_dark_theme_codeblock'\u001b[39m\u001b[33m,\u001b[39m \u001b[33mSEED_MD\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 129 |\u001b[39m     expect(docId)\u001b[33m.\u001b[39mtoBeTruthy()\u001b[33m;\u001b[39m\n \u001b[90m 130 |\u001b[39m     \u001b[36mawait\u001b[39m ctx\u001b[33m.\u001b[39mclose()\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase33_dark_theme_codeblock.spec.js",
+                            "column": 16,
+                            "line": 127
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  125 |     const ctx = await browser.newContext({ ignoreHTTPSErrors: true });\n  126 |     const page = await ctx.newPage();\n> 127 |     await page.goto(BASE, { waitUntil: 'domcontentloaded' });\n      |                ^\n  128 |     docId = await createPersonalDoc(page, 'phase33_dark_theme_codeblock', SEED_MD);\n  129 |     expect(docId).toBeTruthy();\n  130 |     await ctx.close();\n    at D:\\Github\\WhatUdoin\\tests\\phase33_dark_theme_codeblock.spec.js:127:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:31.290Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase33_dark_theme_codeblo-4445c-161b22-vendor-f4f7f8-누수-없음-\\error-context.md"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase33_dark_theme_codeblo-4445c-161b22-vendor-f4f7f8-누수-없음-\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase33_dark_theme_codeblock.spec.js",
+                        "column": 16,
+                        "line": 127
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "ec4d01c6c5d234a535c7-5f20bf1f97907a978219",
+              "file": "phase33_dark_theme_codeblock.spec.js",
+              "line": 150,
+              "column": 3
+            },
+            {
+              "title": "2. 코드블록 pre code 배경 transparent + 텍스트 #e6edf3",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:39.389Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "ec4d01c6c5d234a535c7-0676edef34c1acdc6a42",
+              "file": "phase33_dark_theme_codeblock.spec.js",
+              "line": 175,
+              "column": 3
+            },
+            {
+              "title": "3. 인라인 code 칩 vs pre code 배경 specificity 분기",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:39.389Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "ec4d01c6c5d234a535c7-abe6e2f8e067b3df415a",
+              "file": "phase33_dark_theme_codeblock.spec.js",
+              "line": 200,
+              "column": 3
+            },
+            {
+              "title": "4. .markdown-body pre/pre code 다크 테마 cascade 적용",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:39.389Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "ec4d01c6c5d234a535c7-2bc3b79c988c5c01867c",
+              "file": "phase33_dark_theme_codeblock.spec.js",
+              "line": 239,
+              "column": 3
+            },
+            {
+              "title": "5. 라이트 테마에서 pre 배경이 다크 색(#161b22) 아님 (회귀 방지)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:39.389Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "ec4d01c6c5d234a535c7-361bb0a3f6ce8b9bd65d",
+              "file": "phase33_dark_theme_codeblock.spec.js",
+              "line": 287,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "phase33_doc_linebreak.spec.js",
+      "file": "phase33_doc_linebreak.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Phase 33 — 문서 편집기 줄내림(<br>) 유지",
+          "file": "phase33_doc_linebreak.spec.js",
+          "line": 111,
+          "column": 6,
+          "specs": [
+            {
+              "title": "1. saveDoc() — 연속 빈줄 N개 → <br> 블록 N개로 직렬화",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "failed",
+                      "duration": 4326,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n\n    at login (D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:32:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:115:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m \u001b[90m/* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */\u001b[39m\n \u001b[90m 31 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m login(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'networkidle'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[90m// 이미 로그인되었으면 스킵\u001b[39m\n \u001b[90m 35 |\u001b[39m   \u001b[36mconst\u001b[39m already \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mevaluate(\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n\n\n  30 | /* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */\n  31 | async function login(page) {\n> 32 |   await page.goto(BASE);\n     |              ^\n  33 |   await page.waitForLoadState('networkidle');\n  34 |   // 이미 로그인되었으면 스킵\n  35 |   const already = await page.evaluate(\n    at login (D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:32:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:115:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:31.214Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase33_doc_linebreak-Phas-a1342--—-연속-빈줄-N개-→-br-블록-N개로-직렬화\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                        "column": 14,
+                        "line": 32
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "7c58de04e2460c0bc1cc-b30048b7749fc3c13a3f",
+              "file": "phase33_doc_linebreak.spec.js",
+              "line": 130,
+              "column": 3
+            },
+            {
+              "title": "2. 라운드트립 — 저장 → 새로고침 → 재저장 시 <br> 개수 누적·축소 없음",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 14,
+                      "parallelIndex": 1,
+                      "status": "failed",
+                      "duration": 3639,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n\n    at login (D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:32:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:115:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m \u001b[90m/* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */\u001b[39m\n \u001b[90m 31 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m login(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'networkidle'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[90m// 이미 로그인되었으면 스킵\u001b[39m\n \u001b[90m 35 |\u001b[39m   \u001b[36mconst\u001b[39m already \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mevaluate(\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n\n\n  30 | /* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */\n  31 | async function login(page) {\n> 32 |   await page.goto(BASE);\n     |              ^\n  33 |   await page.waitForLoadState('networkidle');\n  34 |   // 이미 로그인되었으면 스킵\n  35 |   const already = await page.evaluate(\n    at login (D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:32:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:115:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:38.992Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase33_doc_linebreak-Phas-eda50-새로고침-→-재저장-시-br-개수-누적·축소-없음\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                        "column": 14,
+                        "line": 32
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "7c58de04e2460c0bc1cc-732fcabe59806ea54b1d",
+              "file": "phase33_doc_linebreak.spec.js",
+              "line": 185,
+              "column": 3
+            },
+            {
+              "title": "3. <br> 태그 직접 입력 → 저장 + 뷰어 렌더",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 19,
+                      "parallelIndex": 1,
+                      "status": "failed",
+                      "duration": 3269,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n\n    at login (D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:32:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:115:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m \u001b[90m/* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */\u001b[39m\n \u001b[90m 31 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m login(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'networkidle'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[90m// 이미 로그인되었으면 스킵\u001b[39m\n \u001b[90m 35 |\u001b[39m   \u001b[36mconst\u001b[39m already \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mevaluate(\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n\n\n  30 | /* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */\n  31 | async function login(page) {\n> 32 |   await page.goto(BASE);\n     |              ^\n  33 |   await page.waitForLoadState('networkidle');\n  34 |   // 이미 로그인되었으면 스킵\n  35 |   const already = await page.evaluate(\n    at login (D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:32:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:115:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:44.720Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase33_doc_linebreak-Phas-b0cc9-유지-3-br-태그-직접-입력-→-저장-뷰어-렌더\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                        "column": 14,
+                        "line": 32
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "7c58de04e2460c0bc1cc-660d060f6f2805d62455",
+              "file": "phase33_doc_linebreak.spec.js",
+              "line": 248,
+              "column": 3
+            },
+            {
+              "title": "4. 휴지통 뷰어 — <br> 포함 문서 sanitizer 통과",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 24,
+                      "parallelIndex": 1,
+                      "status": "failed",
+                      "duration": 2873,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n\n    at login (D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:32:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:115:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m \u001b[90m/* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */\u001b[39m\n \u001b[90m 31 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m login(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'networkidle'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[90m// 이미 로그인되었으면 스킵\u001b[39m\n \u001b[90m 35 |\u001b[39m   \u001b[36mconst\u001b[39m already \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mevaluate(\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n\n\n  30 | /* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */\n  31 | async function login(page) {\n> 32 |   await page.goto(BASE);\n     |              ^\n  33 |   await page.waitForLoadState('networkidle');\n  34 |   // 이미 로그인되었으면 스킵\n  35 |   const already = await page.evaluate(\n    at login (D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:32:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:115:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:49.578Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase33_doc_linebreak-Phas-8c688--뷰어-—-br-포함-문서-sanitizer-통과\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                        "column": 14,
+                        "line": 32
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "7c58de04e2460c0bc1cc-f710b627068b0431aa3b",
+              "file": "phase33_doc_linebreak.spec.js",
+              "line": 306,
+              "column": 3
+            },
+            {
+              "title": "5. 빈 단락 가시성 — .markdown-body p / .toastui-editor-contents p min-height",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 28,
+                      "parallelIndex": 1,
+                      "status": "failed",
+                      "duration": 2766,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n\n    at login (D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:32:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:115:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                          "column": 14,
+                          "line": 32
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 30 |\u001b[39m \u001b[90m/* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */\u001b[39m\n \u001b[90m 31 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m login(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 33 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'networkidle'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[90m// 이미 로그인되었으면 스킵\u001b[39m\n \u001b[90m 35 |\u001b[39m   \u001b[36mconst\u001b[39m already \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mevaluate(\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                            "column": 14,
+                            "line": 32
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n\n\n  30 | /* ── 어드민 로그인 — IP 화이트리스트 / 폼 로그인 둘 다 대응 ─────── */\n  31 | async function login(page) {\n> 32 |   await page.goto(BASE);\n     |              ^\n  33 |   await page.waitForLoadState('networkidle');\n  34 |   // 이미 로그인되었으면 스킵\n  35 |   const already = await page.evaluate(\n    at login (D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:32:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js:115:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:53.728Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase33_doc_linebreak-Phas-5ccb6-ditor-contents-p-min-height\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase33_doc_linebreak.spec.js",
+                        "column": 14,
+                        "line": 32
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "7c58de04e2460c0bc1cc-e13bcca0a85f99f4c2b0",
+              "file": "phase33_doc_linebreak.spec.js",
+              "line": 355,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "phase33_pinpoint_all.spec.js",
+      "file": "phase33_pinpoint_all.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Phase 33 [A1] — 비로그인 홈 리디렉션",
+          "file": "phase33_pinpoint_all.spec.js",
+          "line": 38,
+          "column": 6,
+          "specs": [
+            {
+              "title": "비로그인 GET \"/\" → 303, Location: /kanban",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 2,
+                      "status": "failed",
+                      "duration": 110,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m303\u001b[39m\nReceived: \u001b[31m200\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m303\u001b[39m\nReceived: \u001b[31m200\u001b[39m\n    at D:\\Github\\WhatUdoin\\tests\\phase33_pinpoint_all.spec.js:49:20",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase33_pinpoint_all.spec.js",
+                          "column": 20,
+                          "line": 49
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 47 |\u001b[39m     \u001b[36mconst\u001b[39m headers \u001b[33m=\u001b[39m res\u001b[33m.\u001b[39mheaders()\u001b[33m;\u001b[39m\n \u001b[90m 48 |\u001b[39m     console\u001b[33m.\u001b[39mlog(\u001b[32m`[A1] status=${status}, location=${headers['location']}`\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 49 |\u001b[39m     expect(status)\u001b[33m.\u001b[39mtoBe(\u001b[35m303\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                    \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 50 |\u001b[39m     expect(headers[\u001b[32m'location'\u001b[39m])\u001b[33m.\u001b[39mtoBe(\u001b[32m'/kanban'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 51 |\u001b[39m     \u001b[36mawait\u001b[39m ctx\u001b[33m.\u001b[39mdispose()\u001b[33m;\u001b[39m\n \u001b[90m 52 |\u001b[39m   })\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase33_pinpoint_all.spec.js",
+                            "column": 20,
+                            "line": 49
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m303\u001b[39m\nReceived: \u001b[31m200\u001b[39m\n\n  47 |     const headers = res.headers();\n  48 |     console.log(`[A1] status=${status}, location=${headers['location']}`);\n> 49 |     expect(status).toBe(303);\n     |                    ^\n  50 |     expect(headers['location']).toBe('/kanban');\n  51 |     await ctx.dispose();\n  52 |   });\n    at D:\\Github\\WhatUdoin\\tests\\phase33_pinpoint_all.spec.js:49:20"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "[A1] status=200, location=undefined\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:31.242Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase33_pinpoint_all-Phase-865f8-인-GET-→-303-Location-kanban\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase33_pinpoint_all.spec.js",
+                        "column": 20,
+                        "line": 49
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "4faac55183cb0c3de046-4467f16149f602c21cc4",
+              "file": "phase33_pinpoint_all.spec.js",
+              "line": 39,
+              "column": 3
+            },
+            {
+              "title": "로그인 GET \"/\" → 200 + home.html 렌더 (회귀)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 71,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[A1-regression] status=200\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:33.593Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "4faac55183cb0c3de046-44d4212dfd324a33356e",
+              "file": "phase33_pinpoint_all.spec.js",
+              "line": 55,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Phase 33 [A2] — 간트 바 title 속성 제거",
+          "file": "phase33_pinpoint_all.spec.js",
+          "line": 75,
+          "column": 6,
+          "specs": [
+            {
+              "title": ".gantt-bar 모두 title 속성 없음, 툴바 버튼은 유지",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 3632,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[A2] gantt-bar count: 3\n"
+                        },
+                        {
+                          "text": "[A2] bars with title: 0 / 3\n"
+                        },
+                        {
+                          "text": "[A2] buttons with title attr: 7\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:33.683Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "4faac55183cb0c3de046-ace816f174ba4cfdba3e",
+              "file": "phase33_pinpoint_all.spec.js",
+              "line": 76,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Phase 33 [B1] — 칸반 미연결 overdue 미적용",
+          "file": "phase33_pinpoint_all.spec.js",
+          "line": 117,
+          "column": 6,
+          "specs": [
+            {
+              "title": "kanban_status === null & 기한초과 일정에 .overdue 클래스 부재",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 3469,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[B1] unlinked+overdue: 13, linked+overdue: 5\n"
+                        },
+                        {
+                          "text": "[B1] rendered .gantt-bar count: 3\n"
+                        },
+                        {
+                          "text": "[B1] unlinked bars matched: 1, violations: 0\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:38.578Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "4faac55183cb0c3de046-70ee948be60e33a8c554",
+              "file": "phase33_pinpoint_all.spec.js",
+              "line": 118,
+              "column": 3
+            },
+            {
+              "title": "회귀 — 칸반 연결+기한초과 일정은 .overdue 유지",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 3845,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[B1-regression] rendered .gantt-bar count: 3\n"
+                        },
+                        {
+                          "text": "[B1-regression] linked overdue hit: 2, overdue class ok: 2 / expected 5\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:42.091Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "4faac55183cb0c3de046-2c7b71360dbdb95eee70",
+              "file": "phase33_pinpoint_all.spec.js",
+              "line": 199,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Phase 33 [B2] — 주말 간트 열 폭 축소",
+          "file": "phase33_pinpoint_all.spec.js",
+          "line": 291,
+          "column": 6,
+          "specs": [
+            {
+              "title": ".gantt-header-unit.is-weekend 의 폭이 평일의 약 0.55배",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 2366,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[B2] gantt-header-unit count: 21\n"
+                        },
+                        {
+                          "text": "[B2] first 8 units: [6(수) w=53.8 weekend=false] [7(목) w=53.8 weekend=false] [8(금) w=53.8 weekend=false] [9(토) w=29.6 weekend=true] [10(일) w=29.6 weekend=true] [11(W20) w=53.8 weekend=false] [12(화) w=53.8 weekend=false] [13(수) w=53.8 weekend=false]\n"
+                        },
+                        {
+                          "text": "[B2] avgWeekday=53.81, avgWeekend=29.59, ratio=0.550\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:45.970Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "4faac55183cb0c3de046-d62fa4e15262bcdc8faf",
+              "file": "phase33_pinpoint_all.spec.js",
+              "line": 292,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "phase33_toc_resizer.spec.js",
+      "file": "phase33_toc_resizer.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Phase 33 — ToC 패널 폭 확대 + 드래그 리사이저",
+          "file": "phase33_toc_resizer.spec.js",
+          "line": 100,
+          "column": 6,
+          "specs": [
+            {
+              "title": "1. 목차 패널 기본 폭 320px 이상 (CSS 기본값)",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "failed",
+                      "duration": 1,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n    at D:\\Github\\WhatUdoin\\tests\\phase33_toc_resizer.spec.js:107:16",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase33_toc_resizer.spec.js",
+                          "column": 16,
+                          "line": 107
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 105 |\u001b[39m     \u001b[36mconst\u001b[39m ctx \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m browser\u001b[33m.\u001b[39mnewContext({ ignoreHTTPSErrors\u001b[33m:\u001b[39m \u001b[36mtrue\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m 106 |\u001b[39m     \u001b[36mconst\u001b[39m page \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m ctx\u001b[33m.\u001b[39mnewPage()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 107 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'domcontentloaded'\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 108 |\u001b[39m     docId \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m createPersonalDoc(\n \u001b[90m 109 |\u001b[39m       page\u001b[33m,\u001b[39m\n \u001b[90m 110 |\u001b[39m       \u001b[32m'phase33_toc_resizer'\u001b[39m\u001b[33m,\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase33_toc_resizer.spec.js",
+                            "column": 16,
+                            "line": 107
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"domcontentloaded\"\u001b[22m\n\n\n  105 |     const ctx = await browser.newContext({ ignoreHTTPSErrors: true });\n  106 |     const page = await ctx.newPage();\n> 107 |     await page.goto(BASE, { waitUntil: 'domcontentloaded' });\n      |                ^\n  108 |     docId = await createPersonalDoc(\n  109 |       page,\n  110 |       'phase33_toc_resizer',\n    at D:\\Github\\WhatUdoin\\tests\\phase33_toc_resizer.spec.js:107:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:31.287Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase33_toc_resizer-Phase--712f4-차-패널-기본-폭-320px-이상-CSS-기본값-\\error-context.md"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase33_toc_resizer-Phase--712f4-차-패널-기본-폭-320px-이상-CSS-기본값-\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase33_toc_resizer.spec.js",
+                        "column": 16,
+                        "line": 107
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "a5bd5b6ab423046011f7-91ca482c579fcdd09509",
+              "file": "phase33_toc_resizer.spec.js",
+              "line": 149,
+              "column": 3
+            },
+            {
+              "title": "2. 리사이저 표시/숨김 — toc-open 클래스 연동",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:38.751Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "a5bd5b6ab423046011f7-572b1773ee5f3dd37301",
+              "file": "phase33_toc_resizer.spec.js",
+              "line": 176,
+              "column": 3
+            },
+            {
+              "title": "3. 드래그로 폭 조절 + 180~600px 클램프",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:38.751Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "a5bd5b6ab423046011f7-c74e866c559577b4c881",
+              "file": "phase33_toc_resizer.spec.js",
+              "line": 221,
+              "column": 3
+            },
+            {
+              "title": "4. 목차 들여쓰기 축소 (lv1=8, lv2=18, lv3=26)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": -1,
+                      "parallelIndex": -1,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:38.751Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "a5bd5b6ab423046011f7-c6b10c051b153003a133",
+              "file": "phase33_toc_resizer.spec.js",
+              "line": 301,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "phase34_tiptap_migration.spec.js",
+      "file": "phase34_tiptap_migration.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Phase 34 — Tiptap 마이그레이션 회귀 검증",
+          "file": "phase34_tiptap_migration.spec.js",
+          "line": 90,
+          "column": 6,
+          "specs": [
+            {
+              "title": "1) /doc/{personal_id} — #editor-container 에 .ProseMirror 렌더, toastui-editor-* DOM 부재",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
+                      "status": "failed",
+                      "duration": 5386,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:33:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:93:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                          "column": 14,
+                          "line": 33
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 31 |\u001b[39m\n \u001b[90m 32 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 33 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 35 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 36 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                            "column": 14,
+                            "line": 33
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  31 |\n  32 | async function loginEditor(page) {\n> 33 |   await page.goto(BASE + '/login');\n     |              ^\n  34 |   await page.waitForLoadState('domcontentloaded');\n  35 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  36 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:33:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:93:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:31.249Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase34_tiptap_migration-P-ed057-r-렌더-toastui-editor--DOM-부재\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                        "column": 14,
+                        "line": 33
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "da40a4f888afc00d0306-51d90f3adf775f354bc8",
+              "file": "phase34_tiptap_migration.spec.js",
+              "line": 99,
+              "column": 3
+            },
+            {
+              "title": "2) eid: 링크가 든 doc 저장 후 재로드 시 .ProseMirror 안에 a[href^=\"eid:\"] 렌더",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 15,
+                      "parallelIndex": 4,
+                      "status": "failed",
+                      "duration": 3736,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:33:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:93:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                          "column": 14,
+                          "line": 33
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 31 |\u001b[39m\n \u001b[90m 32 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 33 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 35 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 36 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                            "column": 14,
+                            "line": 33
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  31 |\n  32 | async function loginEditor(page) {\n> 33 |   await page.goto(BASE + '/login');\n     |              ^\n  34 |   await page.waitForLoadState('domcontentloaded');\n  35 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  36 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:33:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:93:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:40.317Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase34_tiptap_migration-P-a7a45-roseMirror-안에-a-href-eid-렌더\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                        "column": 14,
+                        "line": 33
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "da40a4f888afc00d0306-febc16170e4421eb263e",
+              "file": "phase34_tiptap_migration.spec.js",
+              "line": 134,
+              "column": 3
+            },
+            {
+              "title": "3) /check/{id}/edit — Tiptap(.ProseMirror) 렌더, toastui DOM 부재",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 21,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 3222,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:33:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:93:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                          "column": 14,
+                          "line": 33
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 31 |\u001b[39m\n \u001b[90m 32 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 33 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 35 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 36 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                            "column": 14,
+                            "line": 33
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  31 |\n  32 | async function loginEditor(page) {\n> 33 |   await page.goto(BASE + '/login');\n     |              ^\n  34 |   await page.waitForLoadState('domcontentloaded');\n  35 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  36 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:33:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:93:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:47.021Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase34_tiptap_migration-P-07868-oseMirror-렌더-toastui-DOM-부재\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                        "column": 14,
+                        "line": 33
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "da40a4f888afc00d0306-3345833e282f5d63d2d5",
+              "file": "phase34_tiptap_migration.spec.js",
+              "line": 188,
+              "column": 3
+            },
+            {
+              "title": "4) /check, /notice, / 에서 toastui.Editor 라이브러리 여전히 로드 (회귀 방지)",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 26,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 2979,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:33:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:93:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                          "column": 14,
+                          "line": 33
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 31 |\u001b[39m\n \u001b[90m 32 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 33 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 35 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 36 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                            "column": 14,
+                            "line": 33
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  31 |\n  32 | async function loginEditor(page) {\n> 33 |   await page.goto(BASE + '/login');\n     |              ^\n  34 |   await page.waitForLoadState('domcontentloaded');\n  35 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  36 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:33:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:93:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:51.794Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase34_tiptap_migration-P-b329c--Editor-라이브러리-여전히-로드-회귀-방지-\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                        "column": 14,
+                        "line": 33
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "da40a4f888afc00d0306-7754e9223df46a498092",
+              "file": "phase34_tiptap_migration.spec.js",
+              "line": 214,
+              "column": 3
+            },
+            {
+              "title": "5) doc 편집 후 60초 내 자동저장 PUT 요청 발생",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 29,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 2676,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:33:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:93:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                          "column": 14,
+                          "line": 33
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 31 |\u001b[39m\n \u001b[90m 32 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 33 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 35 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 36 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                            "column": 14,
+                            "line": 33
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  31 |\n  32 | async function loginEditor(page) {\n> 33 |   await page.goto(BASE + '/login');\n     |              ^\n  34 |   await page.waitForLoadState('domcontentloaded');\n  35 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  36 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:33:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js:93:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:56.021Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase34_tiptap_migration-P-3e3c5-c-편집-후-60초-내-자동저장-PUT-요청-발생\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase34_tiptap_migration.spec.js",
+                        "column": 14,
+                        "line": 33
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "da40a4f888afc00d0306-cbe0627e421c3dbcfd94",
+              "file": "phase34_tiptap_migration.spec.js",
+              "line": 234,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "phase37_asset_cache.spec.js",
+      "file": "phase37_asset_cache.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Phase 37 — 정적 자산 캐시 복구 + WUEditor 조건부 로드",
+          "file": "phase37_asset_cache.spec.js",
+          "line": 73,
+          "column": 6,
+          "specs": [
+            {
+              "title": "1) /calendar, /kanban — tiptap-bundle.min.js / wu-editor.js 네트워크 요청 부재",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "failed",
+                      "duration": 5295,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:31:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:76:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js",
+                          "column": 14,
+                          "line": 31
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 29 |\u001b[39m\n \u001b[90m 30 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 33 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js",
+                            "column": 14,
+                            "line": 31
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  29 |\n  30 | async function loginEditor(page) {\n> 31 |   await page.goto(BASE + '/login');\n     |              ^\n  32 |   await page.waitForLoadState('domcontentloaded');\n  33 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  34 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:31:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:76:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:31.286Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase37_asset_cache-Phase--6394d--js-wu-editor-js-네트워크-요청-부재\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js",
+                        "column": 14,
+                        "line": 31
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "95bcf68df89de2924b8f-9f51cc28c751ef92c8ec",
+              "file": "phase37_asset_cache.spec.js",
+              "line": 82,
+              "column": 3
+            },
+            {
+              "title": "2) /check — tiptap-bundle.min.js 로드 + window.WUEditor 실행 가능",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 16,
+                      "parallelIndex": 5,
+                      "status": "failed",
+                      "duration": 3678,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:31:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:76:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js",
+                          "column": 14,
+                          "line": 31
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 29 |\u001b[39m\n \u001b[90m 30 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 33 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js",
+                            "column": 14,
+                            "line": 31
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  29 |\n  30 | async function loginEditor(page) {\n> 31 |   await page.goto(BASE + '/login');\n     |              ^\n  32 |   await page.waitForLoadState('domcontentloaded');\n  33 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  34 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:31:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:76:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:40.426Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase37_asset_cache-Phase--c3c89-js-로드-window-WUEditor-실행-가능\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js",
+                        "column": 14,
+                        "line": 31
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "95bcf68df89de2924b8f-e3b94c4d843e14fec17c",
+              "file": "phase37_asset_cache.spec.js",
+              "line": 121,
+              "column": 3
+            },
+            {
+              "title": "3) style.css ?v= 값이 두 번 방문에서 동일 + hex 형식",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 22,
+                      "parallelIndex": 4,
+                      "status": "failed",
+                      "duration": 3105,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:31:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:76:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js",
+                          "column": 14,
+                          "line": 31
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 29 |\u001b[39m\n \u001b[90m 30 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 33 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js",
+                            "column": 14,
+                            "line": 31
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  29 |\n  30 | async function loginEditor(page) {\n> 31 |   await page.goto(BASE + '/login');\n     |              ^\n  32 |   await page.waitForLoadState('domcontentloaded');\n  33 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  34 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:31:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:76:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:47.040Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase37_asset_cache-Phase--3d4fe-css-v-값이-두-번-방문에서-동일-hex-형식\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js",
+                        "column": 14,
+                        "line": 31
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "95bcf68df89de2924b8f-ffa7a317cc730674cdbe",
+              "file": "phase37_asset_cache.spec.js",
+              "line": 157,
+              "column": 3
+            },
+            {
+              "title": "4) /kanban 에서 체크 바인딩 이벤트 상세 → ensureWUEditorAssets() 동적 로드 + .ProseMirror 렌더",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 25,
+                      "parallelIndex": 2,
+                      "status": "failed",
+                      "duration": 2847,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:31:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:76:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js",
+                          "column": 14,
+                          "line": 31
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 29 |\u001b[39m\n \u001b[90m 30 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 31 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 32 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 33 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 34 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js",
+                            "column": 14,
+                            "line": 31
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  29 |\n  30 | async function loginEditor(page) {\n> 31 |   await page.goto(BASE + '/login');\n     |              ^\n  32 |   await page.waitForLoadState('domcontentloaded');\n  33 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  34 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:31:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js:76:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:51.654Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase37_asset_cache-Phase--1be36-Assets-동적-로드-ProseMirror-렌더\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase37_asset_cache.spec.js",
+                        "column": 14,
+                        "line": 31
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "95bcf68df89de2924b8f-470fe704a3261366003d",
+              "file": "phase37_asset_cache.spec.js",
+              "line": 208,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "phase37_stage2_static_cache.spec.js",
+      "file": "phase37_stage2_static_cache.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Phase 37 — 2단계: 정적 자산 추가 최적화",
+          "file": "phase37_stage2_static_cache.spec.js",
+          "line": 87,
+          "column": 6,
+          "specs": [
+            {
+              "title": "1) /static/ 응답에 Cache-Control — ?v= 있으면 immutable, 없으면 max-age=3600",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 6,
+                      "status": "failed",
+                      "duration": 5125,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:27:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:90:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js",
+                          "column": 14,
+                          "line": 27
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 25 |\u001b[39m\n \u001b[90m 26 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 27 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 28 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 29 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 30 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js",
+                            "column": 14,
+                            "line": 27
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  25 |\n  26 | async function loginEditor(page) {\n> 27 |   await page.goto(BASE + '/login');\n     |              ^\n  28 |   await page.waitForLoadState('domcontentloaded');\n  29 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  30 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:27:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:90:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:31.431Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase37_stage2_static_cach-41bce--immutable-없으면-max-age-3600\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js",
+                        "column": 14,
+                        "line": 27
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "2884fd4f989f326db2da-87b1a4503f9002074e3a",
+              "file": "phase37_stage2_static_cache.spec.js",
+              "line": 96,
+              "column": 3
+            },
+            {
+              "title": "2) /, /check, /kanban — fullcalendar.min.js 네트워크 요청 부재",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 17,
+                      "parallelIndex": 6,
+                      "status": "failed",
+                      "duration": 3787,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:27:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:90:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js",
+                          "column": 14,
+                          "line": 27
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 25 |\u001b[39m\n \u001b[90m 26 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 27 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 28 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 29 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 30 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js",
+                            "column": 14,
+                            "line": 27
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  25 |\n  26 | async function loginEditor(page) {\n> 27 |   await page.goto(BASE + '/login');\n     |              ^\n  28 |   await page.waitForLoadState('domcontentloaded');\n  29 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  30 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:27:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:90:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:40.497Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase37_stage2_static_cach-92647-lcalendar-min-js-네트워크-요청-부재\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js",
+                        "column": 14,
+                        "line": 27
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "2884fd4f989f326db2da-738711afbe66959c4642",
+              "file": "phase37_stage2_static_cache.spec.js",
+              "line": 155,
+              "column": 3
+            },
+            {
+              "title": "3) /calendar — fullcalendar.min.js + asset_v 쿼리 + FullCalendar.Calendar 초기화 정상",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 5,
+                      "status": "failed",
+                      "duration": 3301,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:27:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:90:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js",
+                          "column": 14,
+                          "line": 27
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 25 |\u001b[39m\n \u001b[90m 26 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 27 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 28 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 29 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 30 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js",
+                            "column": 14,
+                            "line": 27
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  25 |\n  26 | async function loginEditor(page) {\n> 27 |   await page.goto(BASE + '/login');\n     |              ^\n  28 |   await page.waitForLoadState('domcontentloaded');\n  29 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  30 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:27:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:90:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:47.207Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase37_stage2_static_cach-5e860-ullCalendar-Calendar-초기화-정상\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js",
+                        "column": 14,
+                        "line": 27
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "2884fd4f989f326db2da-d9c846f7e3642d62ae98",
+              "file": "phase37_stage2_static_cache.spec.js",
+              "line": 184,
+              "column": 3
+            },
+            {
+              "title": "4) /check — 6개 자산 모두 ?v= 쿼리 포함 로드 + WUEditor 정상 동작",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 27,
+                      "parallelIndex": 3,
+                      "status": "failed",
+                      "duration": 2782,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:27:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:90:11",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js",
+                          "column": 14,
+                          "line": 27
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 25 |\u001b[39m\n \u001b[90m 26 |\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m loginEditor(page) {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 27 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/login'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 28 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForLoadState(\u001b[32m'domcontentloaded'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 29 |\u001b[39m   \u001b[36mconst\u001b[39m pwInput \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input[type=\"password\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n \u001b[90m 30 |\u001b[39m   \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m pwInput\u001b[33m.\u001b[39misVisible()\u001b[33m.\u001b[39m\u001b[36mcatch\u001b[39m(() \u001b[33m=>\u001b[39m \u001b[36mfalse\u001b[39m)) {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js",
+                            "column": 14,
+                            "line": 27
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/login\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/login\", waiting until \"load\"\u001b[22m\n\n\n  25 |\n  26 | async function loginEditor(page) {\n> 27 |   await page.goto(BASE + '/login');\n     |              ^\n  28 |   await page.waitForLoadState('domcontentloaded');\n  29 |   const pwInput = page.locator('input[type=\"password\"]').first();\n  30 |   if (await pwInput.isVisible().catch(() => false)) {\n    at loginEditor (D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:27:14)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js:90:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:52.283Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase37_stage2_static_cach-235bc-두-v-쿼리-포함-로드-WUEditor-정상-동작\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage2_static_cache.spec.js",
+                        "column": 14,
+                        "line": 27
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "2884fd4f989f326db2da-7198209223d518daf8af",
+              "file": "phase37_stage2_static_cache.spec.js",
+              "line": 228,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "phase37_stage3_static_cleanup.spec.js",
+      "file": "phase37_stage3_static_cleanup.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Phase 37 — 3단계: 정적 파일 정리 + lifespan + DB 인덱스 (핀포인트)",
+          "file": "phase37_stage3_static_cleanup.spec.js",
+          "line": 64,
+          "column": 6,
+          "specs": [
+            {
+              "title": "T1) toastui 잔여 자산 직접 GET → 404, 페이지 로드 시 요청도 없음",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 7,
+                      "status": "failed",
+                      "duration": 2892,
+                      "error": {
+                        "message": "Error: apiRequestContext.get: connect ECONNREFUSED ::1:8000\nCall log:\n\u001b[2m  - → GET http://localhost:8000/static/lib/toastui-editor.min.css\u001b[22m\n\u001b[2m    - user-agent: Playwright/1.59.1 (x64; windows 10.0) node/24.14\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n",
+                        "stack": "Error: apiRequestContext.get: connect ECONNREFUSED ::1:8000\nCall log:\n\u001b[2m  - → GET http://localhost:8000/static/lib/toastui-editor.min.css\u001b[22m\n\u001b[2m    - user-agent: Playwright/1.59.1 (x64; windows 10.0) node/24.14\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\n    at apiRequestContext.get: connect ECONNREFUSED ::1:8000\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage3_static_cleanup.spec.js:73:35",
+                        "location": {
+                          "file": "apiRequestContext.get: connect ECONNREFUSED :",
+                          "column": 8000,
+                          "line": 1
+                        }
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "apiRequestContext.get: connect ECONNREFUSED :",
+                            "column": 8000,
+                            "line": 1
+                          },
+                          "message": "Error: apiRequestContext.get: connect ECONNREFUSED ::1:8000\nCall log:\n\u001b[2m  - → GET http://localhost:8000/static/lib/toastui-editor.min.css\u001b[22m\n\u001b[2m    - user-agent: Playwright/1.59.1 (x64; windows 10.0) node/24.14\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\n    at apiRequestContext.get: connect ECONNREFUSED ::1:8000\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage3_static_cleanup.spec.js:73:35"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:31.446Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase37_stage3_static_clea-4981b-접-GET-→-404-페이지-로드-시-요청도-없음\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "apiRequestContext.get: connect ECONNREFUSED :",
+                        "column": 8000,
+                        "line": 1
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c26507e4bcb520b48f46-fc2dd8809dcc98d8cae5",
+              "file": "phase37_stage3_static_cleanup.spec.js",
+              "line": 69,
+              "column": 3
+            },
+            {
+              "title": "T2) /, /calendar, /check 정상 로드 + 핵심 런타임 객체 존재",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 12,
+                      "parallelIndex": 7,
+                      "status": "failed",
+                      "duration": 4118,
+                      "error": {
+                        "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n",
+                        "stack": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage3_static_cleanup.spec.js:110:31",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage3_static_cleanup.spec.js",
+                          "column": 31,
+                          "line": 110
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 108 |\u001b[39m     \u001b[90m// T2-A. /  (home)\u001b[39m\n \u001b[90m 109 |\u001b[39m     {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 110 |\u001b[39m       \u001b[36mconst\u001b[39m resp \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[33mBASE\u001b[39m \u001b[33m+\u001b[39m \u001b[32m'/'\u001b[39m\u001b[33m,\u001b[39m { waitUntil\u001b[33m:\u001b[39m \u001b[32m'load'\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                               \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 111 |\u001b[39m       expect(resp\u001b[33m,\u001b[39m \u001b[32m'home 응답 객체가 있어야 함'\u001b[39m)\u001b[33m.\u001b[39mtoBeTruthy()\u001b[33m;\u001b[39m\n \u001b[90m 112 |\u001b[39m       expect(resp\u001b[33m.\u001b[39mstatus()\u001b[33m,\u001b[39m \u001b[32m'home 페이지가 200 응답이어야 함'\u001b[39m)\u001b[33m.\u001b[39mtoBeLessThan(\u001b[35m400\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 113 |\u001b[39m       \u001b[90m// 페이지가 비어있지 않은지 — 최소 <body> 가 있는지 (자동 로그인이 안 되면 /login 으로 리다이렉트되므로 status<400 + body 있음으로 충분)\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage3_static_cleanup.spec.js",
+                            "column": 31,
+                            "line": 110
+                          },
+                          "message": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8000/\nCall log:\n\u001b[2m  - navigating to \"http://localhost:8000/\", waiting until \"load\"\u001b[22m\n\n\n  108 |     // T2-A. /  (home)\n  109 |     {\n> 110 |       const resp = await page.goto(BASE + '/', { waitUntil: 'load' });\n      |                               ^\n  111 |       expect(resp, 'home 응답 객체가 있어야 함').toBeTruthy();\n  112 |       expect(resp.status(), 'home 페이지가 200 응답이어야 함').toBeLessThan(400);\n  113 |       // 페이지가 비어있지 않은지 — 최소 <body> 가 있는지 (자동 로그인이 안 되면 /login 으로 리다이렉트되므로 status<400 + body 있음으로 충분)\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage3_static_cleanup.spec.js:110:31"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:37.853Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase37_stage3_static_clea-e4f5c-ar-check-정상-로드-핵심-런타임-객체-존재\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase37_stage3_static_cleanup.spec.js",
+                        "column": 31,
+                        "line": 110
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c26507e4bcb520b48f46-660b17c8e4f80dcbc2c0",
+              "file": "phase37_stage3_static_cleanup.spec.js",
+              "line": 105,
+              "column": 3
+            },
+            {
+              "title": "T3) 서버 부팅 정상 — health 라우트 또는 home 응답 < 400",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 15000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 18,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 342,
+                      "error": {
+                        "message": "Error: apiRequestContext.get: connect ECONNREFUSED ::1:8000\nCall log:\n\u001b[2m  - → GET http://localhost:8000/\u001b[22m\n\u001b[2m    - user-agent: Playwright/1.59.1 (x64; windows 10.0) node/24.14\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n",
+                        "stack": "Error: apiRequestContext.get: connect ECONNREFUSED ::1:8000\nCall log:\n\u001b[2m  - → GET http://localhost:8000/\u001b[22m\n\u001b[2m    - user-agent: Playwright/1.59.1 (x64; windows 10.0) node/24.14\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\n    at apiRequestContext.get: connect ECONNREFUSED ::1:8000\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage3_static_cleanup.spec.js:161:32",
+                        "location": {
+                          "file": "apiRequestContext.get: connect ECONNREFUSED :",
+                          "column": 8000,
+                          "line": 1
+                        }
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "apiRequestContext.get: connect ECONNREFUSED :",
+                            "column": 8000,
+                            "line": 1
+                          },
+                          "message": "Error: apiRequestContext.get: connect ECONNREFUSED ::1:8000\nCall log:\n\u001b[2m  - → GET http://localhost:8000/\u001b[22m\n\u001b[2m    - user-agent: Playwright/1.59.1 (x64; windows 10.0) node/24.14\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\n    at apiRequestContext.get: connect ECONNREFUSED ::1:8000\n    at D:\\Github\\WhatUdoin\\tests\\phase37_stage3_static_cleanup.spec.js:161:32"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:44.226Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase37_stage3_static_clea-1ca10-—-health-라우트-또는-home-응답-400\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "apiRequestContext.get: connect ECONNREFUSED :",
+                        "column": 8000,
+                        "line": 1
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "c26507e4bcb520b48f46-b4e100c75ac41d3e4f8b",
+              "file": "phase37_stage3_static_cleanup.spec.js",
+              "line": 157,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "phase38_doc_image_resize.spec.js",
+      "file": "phase38_doc_image_resize.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "viewer applies Obsidian image widths and keeps table cell images rendered",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 8,
+                  "parallelIndex": 8,
+                  "status": "failed",
+                  "duration": 3614,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[2m  Array [\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[32m-     \"maxWidth\": \"none\",\u001b[39m\n\u001b[31m+     \"maxWidth\": \"\",\u001b[39m\n\u001b[2m      \"parentCell\": false,\u001b[22m\n\u001b[2m      \"width\": \"320px\",\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[32m-     \"maxWidth\": \"none\",\u001b[39m\n\u001b[31m+     \"maxWidth\": \"\",\u001b[39m\n\u001b[2m      \"parentCell\": true,\u001b[22m\n\u001b[2m      \"width\": \"180px\",\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m  ]\u001b[22m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[2m  Array [\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[32m-     \"maxWidth\": \"none\",\u001b[39m\n\u001b[31m+     \"maxWidth\": \"\",\u001b[39m\n\u001b[2m      \"parentCell\": false,\u001b[22m\n\u001b[2m      \"width\": \"320px\",\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[32m-     \"maxWidth\": \"none\",\u001b[39m\n\u001b[31m+     \"maxWidth\": \"\",\u001b[39m\n\u001b[2m      \"parentCell\": true,\u001b[22m\n\u001b[2m      \"width\": \"180px\",\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m  ]\u001b[22m\n    at D:\\Github\\WhatUdoin\\tests\\phase38_doc_image_resize.spec.js:71:18",
+                    "location": {
+                      "file": "D:\\Github\\WhatUdoin\\tests\\phase38_doc_image_resize.spec.js",
+                      "column": 18,
+                      "line": 71
+                    },
+                    "snippet": "\u001b[0m \u001b[90m 69 |\u001b[39m   )\u001b[33m;\u001b[39m\n \u001b[90m 70 |\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 71 |\u001b[39m   expect(widths)\u001b[33m.\u001b[39mtoEqual([\n \u001b[90m    |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 72 |\u001b[39m     { width\u001b[33m:\u001b[39m \u001b[32m'320px'\u001b[39m\u001b[33m,\u001b[39m maxWidth\u001b[33m:\u001b[39m \u001b[32m'none'\u001b[39m\u001b[33m,\u001b[39m parentCell\u001b[33m:\u001b[39m \u001b[36mfalse\u001b[39m }\u001b[33m,\u001b[39m\n \u001b[90m 73 |\u001b[39m     { width\u001b[33m:\u001b[39m \u001b[32m'180px'\u001b[39m\u001b[33m,\u001b[39m maxWidth\u001b[33m:\u001b[39m \u001b[32m'none'\u001b[39m\u001b[33m,\u001b[39m parentCell\u001b[33m:\u001b[39m \u001b[36mtrue\u001b[39m }\u001b[33m,\u001b[39m\n \u001b[90m 74 |\u001b[39m   ])\u001b[33m;\u001b[39m\u001b[0m"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase38_doc_image_resize.spec.js",
+                        "column": 18,
+                        "line": 71
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[2m  Array [\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[32m-     \"maxWidth\": \"none\",\u001b[39m\n\u001b[31m+     \"maxWidth\": \"\",\u001b[39m\n\u001b[2m      \"parentCell\": false,\u001b[22m\n\u001b[2m      \"width\": \"320px\",\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[32m-     \"maxWidth\": \"none\",\u001b[39m\n\u001b[31m+     \"maxWidth\": \"\",\u001b[39m\n\u001b[2m      \"parentCell\": true,\u001b[22m\n\u001b[2m      \"width\": \"180px\",\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m  ]\u001b[22m\n\n  69 |   );\n  70 |\n> 71 |   expect(widths).toEqual([\n     |                  ^\n  72 |     { width: '320px', maxWidth: 'none', parentCell: false },\n  73 |     { width: '180px', maxWidth: 'none', parentCell: true },\n  74 |   ]);\n    at D:\\Github\\WhatUdoin\\tests\\phase38_doc_image_resize.spec.js:71:18"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-05-09T10:39:31.295Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "D:\\Github\\WhatUdoin\\test-results\\phase38_doc_image_resize-v-f126c--table-cell-images-rendered\\error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "D:\\Github\\WhatUdoin\\tests\\phase38_doc_image_resize.spec.js",
+                    "column": 18,
+                    "line": 71
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "e92bcb832b05bd5e931b-bcc557324dc127d1ec1a",
+          "file": "phase38_doc_image_resize.spec.js",
+          "line": 48,
+          "column": 1
+        },
+        {
+          "title": "title extraction removes markdown escapes from saved H1 text",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 13,
+                  "parallelIndex": 8,
+                  "status": "passed",
+                  "duration": 1490,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-05-09T10:39:38.185Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "e92bcb832b05bd5e931b-51c5f815261f0cadbae9",
+          "file": "phase38_doc_image_resize.spec.js",
+          "line": 77,
+          "column": 1
+        },
+        {
+          "title": "legacy escaped image urls load and serialize without backslash escapes",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 13,
+                  "parallelIndex": 8,
+                  "status": "passed",
+                  "duration": 2253,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-05-09T10:39:40.517Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "e92bcb832b05bd5e931b-0f732b96b237f075a8d7",
+          "file": "phase38_doc_image_resize.spec.js",
+          "line": 90,
+          "column": 1
+        },
+        {
+          "title": "table cells that start with task lists serialize as an HTML table",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 13,
+                  "parallelIndex": 8,
+                  "status": "passed",
+                  "duration": 1778,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-05-09T10:39:42.801Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "e92bcb832b05bd5e931b-08f169d923aa83edb3b3",
+          "file": "phase38_doc_image_resize.spec.js",
+          "line": 117,
+          "column": 1
+        },
+        {
+          "title": "plain paragraph-only tables still serialize as GFM tables",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 13,
+                  "parallelIndex": 8,
+                  "status": "passed",
+                  "duration": 1499,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-05-09T10:39:44.604Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "e92bcb832b05bd5e931b-fd39d174932d475c915b",
+          "file": "phase38_doc_image_resize.spec.js",
+          "line": 147,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "phase52_check_load_perf.spec.js",
+      "file": "phase52_check_load_perf.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Phase 52 — 체크 페이지 로딩 성능 개선",
+          "file": "phase52_check_load_perf.spec.js",
+          "line": 28,
+          "column": 6,
+          "specs": [
+            {
+              "title": "1) API 경계: 목록 응답에 content 없음 / 단건 응답에 content 있음",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 9,
+                      "status": "passed",
+                      "duration": 3716,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[1-a] /api/checklists status=200, count=7\n"
+                        },
+                        {
+                          "text": "[1-a] sample item keys: created_at, created_by, id, is_active, is_done_project, is_locked, is_public, project, title, updated_at\n"
+                        },
+                        {
+                          "text": "[1-b] /api/checklists/63 status=200\n"
+                        },
+                        {
+                          "text": "[1-b] single item keys: attachments, content, created_at, created_by, deleted_at, deleted_by, id, is_active, is_locked, is_public, project, team_id, title, trash_project_id, updated_at\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:31.351Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "933859c3119fb618235e-e9281be5314823981e96",
+              "file": "phase52_check_load_perf.spec.js",
+              "line": 45,
+              "column": 3
+            },
+            {
+              "title": "2) 에디터 번들 lazy load — 초기 미로드, 첫 클릭 후 로드",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 9,
+                      "status": "passed",
+                      "duration": 2613,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[2-a] before click: {\"tiptap\":0,\"mermaid\":0,\"wuEditor\":0,\"hljs\":0,\"cssWu\":0}\n"
+                        },
+                        {
+                          "text": "[2-b] opening checklist id=63\n"
+                        },
+                        {
+                          "text": "[2-b] after click: {\"tiptap\":1,\"mermaid\":1,\"wuEditor\":1,\"hljs\":1,\"cssWu\":1}\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:35.996Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "933859c3119fb618235e-fe04f81b9c17de9d49fc",
+              "file": "phase52_check_load_perf.spec.js",
+              "line": 107,
+              "column": 3
+            },
+            {
+              "title": "3) /check 페이지 정상 렌더 + 항목 클릭 시 뷰어 표시",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 9,
+                      "status": "passed",
+                      "duration": 3452,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[3] right-header visible=true\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:38.650Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "933859c3119fb618235e-ebfbe113b86bac12e407",
+              "file": "phase52_check_load_perf.spec.js",
+              "line": 161,
+              "column": 3
+            },
+            {
+              "title": "4) 검색 — title 토큰 입력 시 목록이 필터링됨",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 9,
+                      "status": "failed",
+                      "duration": 1781,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m\n    at D:\\Github\\WhatUdoin\\tests\\phase52_check_load_perf.spec.js:241:24",
+                        "location": {
+                          "file": "D:\\Github\\WhatUdoin\\tests\\phase52_check_load_perf.spec.js",
+                          "column": 24,
+                          "line": 241
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 239 |\u001b[39m\n \u001b[90m 240 |\u001b[39m     \u001b[90m// 토큰이 실제 title에 있으므로 결과는 ≥1, 그리고 ≤ 검색 전 (필터링 효과)\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 241 |\u001b[39m     expect(afterCount)\u001b[33m.\u001b[39mtoBeGreaterThan(\u001b[35m0\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                        \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 242 |\u001b[39m     expect(afterCount)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(beforeCount)\u001b[33m;\u001b[39m\n \u001b[90m 243 |\u001b[39m\n \u001b[90m 244 |\u001b[39m     \u001b[90m// 표시된 항목들 모두 토큰 매치 검증 (title/project/created_by 중 하나)\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\Github\\WhatUdoin\\tests\\phase52_check_load_perf.spec.js",
+                            "column": 24,
+                            "line": 241
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m\n\n  239 |\n  240 |     // 토큰이 실제 title에 있으므로 결과는 ≥1, 그리고 ≤ 검색 전 (필터링 효과)\n> 241 |     expect(afterCount).toBeGreaterThan(0);\n      |                        ^\n  242 |     expect(afterCount).toBeLessThanOrEqual(beforeCount);\n  243 |\n  244 |     // 표시된 항목들 모두 토큰 매치 검증 (title/project/created_by 중 하나)\n    at D:\\Github\\WhatUdoin\\tests\\phase52_check_load_perf.spec.js:241:24"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "[4] _allChecklists total=8\n"
+                        },
+                        {
+                          "text": "[4] chosen token=\"hit\"\n"
+                        },
+                        {
+                          "text": "[4] rendered items before search=8\n"
+                        },
+                        {
+                          "text": "[4] rendered items after search=\"hit\"=0\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:42.127Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\Github\\WhatUdoin\\test-results\\phase52_check_load_perf-Ph-e0d82-검색-—-title-토큰-입력-시-목록이-필터링됨\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\Github\\WhatUdoin\\tests\\phase52_check_load_perf.spec.js",
+                        "column": 24,
+                        "line": 241
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "933859c3119fb618235e-24d1b3d33142deef4b42",
+              "file": "phase52_check_load_perf.spec.js",
+              "line": 196,
+              "column": 3
+            },
+            {
+              "title": "5) 사이드바 — get_all_projects_meta 결과가 사이드바에 렌더됨",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 20,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 1467,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[5] ALL_PROJECTS active=3, ALL_DONE_PROJECTS=2\n"
+                        },
+                        {
+                          "text": "[5] sample project: name=\"FW개발\", color=true, is_private=true\n"
+                        },
+                        {
+                          "text": "[5] sidebar .ck-proj-dyn count=4, samples: [\"미지정\",\"FW개발\",\"WhatUDoin\",\"비공개 프로젝트\"]\n"
+                        },
+                        {
+                          "text": "[5] ALL_PROJECTS not in sidebar (orphan logic OK if 미지정만): []\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:45.129Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "933859c3119fb618235e-f3e865a14bdf4cf825b6",
+              "file": "phase52_check_load_perf.spec.js",
+              "line": 267,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "phase53_paste_table_check_hit.spec.js",
+      "file": "phase53_paste_table_check_hit.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Phase 53 — 표 붙여넣기 + 뷰어 체크박스 히트 범위",
+          "file": "phase53_paste_table_check_hit.spec.js",
+          "line": 66,
+          "column": 6,
+          "specs": [
+            {
+              "title": "BUG-1/2 (a) wu-editor.js: paste 핸들러에 <table> 가드가 image 루프보다 먼저",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 10,
+                      "status": "passed",
+                      "duration": 40,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[BUG-1/2 a] paste@2828, tableGuard@2832, imageLoop@2836\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:31.399Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "243d44ee2d1bf017cd48-1d3f28518bc10b956da3",
+              "file": "phase53_paste_table_check_hit.spec.js",
+              "line": 69,
+              "column": 3
+            },
+            {
+              "title": "BUG-1/2 (b) 합성 paste(table HTML) → /api/upload/image 미호출 + defaultPrevented=false",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 10,
+                      "status": "passed",
+                      "duration": 4227,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[BUG-1/2 b] table HTML paste — defaultPrevented=false, uploads=0\n"
+                        },
+                        {
+                          "text": "[BUG-1/2 b 회귀] image-only paste — defaultPrevented=true, uploads=1\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:31.507Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "243d44ee2d1bf017cd48-4e4a3a5b669cd3fae855",
+              "file": "phase53_paste_table_check_hit.spec.js",
+              "line": 115,
+              "column": 3
+            },
+            {
+              "title": "BUG-3 (a) check.html: attachCheckboxHandlers 에 closest 가드 + <p> 텍스트 우측 계산 분기 존재",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 10,
+                      "status": "passed",
+                      "duration": 26,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:36.850Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "243d44ee2d1bf017cd48-695c520c845ce2e175a9",
+              "file": "phase53_paste_table_check_hit.spec.js",
+              "line": 214,
+              "column": 3
+            },
+            {
+              "title": "BUG-3 (b) 영역별 클릭 — 빈 여백 전부 차단, 텍스트/체크박스 토글 정상",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 45000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 10,
+                      "status": "passed",
+                      "duration": 6547,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[BUG-3 b] fixture id=68\n"
+                        },
+                        {
+                          "text": "[BUG-3 b] li info: {\n  \"bound\": \"1\",\n  \"checked\": \"false\",\n  \"li\": {\n    \"x\": 655.359375,\n    \"y\": 199.1875,\n    \"w\": 576.640625,\n    \"h\": 25.015625,\n    \"right\": 1232\n  },\n  \"label\": {\n    \"x\": 655.359375,\n    \"y\": 202.1875,\n    \"width\": 15,\n    \"height\": 15,\n    \"top\": 202.1875,\n    \"right\": 670.359375,\n    \"bottom\": 217.1875,\n    \"left\": 655.359375\n  },\n  \"p\": {\n    \"x\": 676.359375,\n    \"y\": 199.1875,\n    \"width\": 555.640625,\n    \"height\": 25.015625,\n    \"top\": 199.1875,\n    \"right\": 1232,\n    \"bottom\": 224.203125,\n    \"left\": 676.359375\n  },\n  \"input\": {\n    \"x\": 655.359375,\n    \"y\": 202.1875,\n    \"width\": 15,\n    \"height\": 15,\n    \"top\": 202.1875,\n    \"right\": 670.359375,\n    \"bottom\": 217.1875,\n    \"left\": 655.359375\n  }\n}\n"
+                        },
+                        {
+                          "text": "[BUG-3 b1] LI gap click @(673.4, 211.7)\n"
+                        },
+                        {
+                          "text": "[BUG-3 b1] elementFromPoint: {\"tag\":\"li\",\"guarded\":false}\n"
+                        },
+                        {
+                          "text": "[BUG-3 b1] gap click 후 PATCH 0회\n"
+                        },
+                        {
+                          "text": "[BUG-3 b2] <p> 우측 빈영역 click @(1227.0, 211.7)\n"
+                        },
+                        {
+                          "text": "[BUG-3 b2] elementFromPoint: {\"tag\":\"p\"}\n"
+                        },
+                        {
+                          "text": "[BUG-3 b2] textRight=775.2 ↔ clickX=1227.0 (gap=451.8)\n"
+                        },
+                        {
+                          "text": "[BUG-3 b2] <p> 우측 click 후 PATCH 0회\n"
+                        },
+                        {
+                          "text": "[BUG-3 b3] li 우측 끝 click @(1227.0, 211.7)\n"
+                        },
+                        {
+                          "text": "[BUG-3 b3] li 우측 끝 click 후 PATCH 0회\n"
+                        },
+                        {
+                          "text": "[BUG-3 b4] text click @(696.4, 211.2)\n"
+                        },
+                        {
+                          "text": "[BUG-3 b4] PATCH status=200, 누적 1회\n"
+                        },
+                        {
+                          "text": "[BUG-3 b5] PATCH status=200, 누적 PATCH 1회\n"
+                        },
+                        {
+                          "text": "[BUG-3 종합] gap=차단 / pRight=차단 / liRight=차단 / text=토글 / checkbox=토글\n"
+                        },
+                        {
+                          "text": "[BUG-3 b] cleanup DELETE /api/checklists/68 → 200\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-09T10:39:36.909Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "243d44ee2d1bf017cd48-b0723ac5a5e1d875084e",
+              "file": "phase53_paste_table_check_hit.spec.js",
+              "line": 260,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-05-09T10:39:29.358Z",
+    "duration": 29798.019,
+    "expected": 17,
+    "skipped": 7,
+    "unexpected": 26,
+    "flaky": 0
+  }
+}

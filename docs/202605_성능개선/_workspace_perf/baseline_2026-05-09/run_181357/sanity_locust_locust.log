@@ -1,0 +1,14 @@
+[2026-05-09 18:14:03,712] DESKTOP-5C9ONHH/INFO/locust.main: Starting Locust 2.43.4
+[2026-05-09 18:14:03,713] DESKTOP-5C9ONHH/INFO/locust.main: Run time limit set to 30 seconds
+[2026-05-09 18:14:03,714] DESKTOP-5C9ONHH/INFO/locust.runners: Ramping to 1 users at a rate of 1.00 per second
+[2026-05-09 18:14:03,714] DESKTOP-5C9ONHH/INFO/locust.runners: All users spawned: {"MultiTabUser": 0, "SingleTabUser": 1} (1 total users)
+[2026-05-09 18:14:05,790] DESKTOP-5C9ONHH/ERROR/locust.user.users: [test_perf_001] cookie warmup 실패: HTTP 403. seed_users.py 재실행 또는 세션 만료 확인 필요.
+Traceback (most recent call last):
+  File "D:\Program Files\Python\Python312\Lib\site-packages\locust\user\users.py", line 161, in run
+    self.on_start()
+  File "D:\Github\WhatUdoin\_workspace\perf\locust\locustfile.py", line 159, in on_start
+    raise RuntimeError(
+RuntimeError: [test_perf_001] cookie warmup 실패: HTTP 403. seed_users.py 재실행 또는 세션 만료 확인 필요.
+
+[2026-05-09 18:14:33,335] DESKTOP-5C9ONHH/INFO/locust.main: --run-time limit reached, shutting down
+[2026-05-09 18:14:33,388] DESKTOP-5C9ONHH/INFO/locust.main: Shutting down (exit code 1)

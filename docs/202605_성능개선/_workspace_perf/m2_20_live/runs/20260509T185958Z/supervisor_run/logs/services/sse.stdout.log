@@ -1,0 +1,6 @@
+INFO:     127.0.0.1:64220 - "GET /healthz HTTP/1.1" 200 OK
+unauthorized internal publish attempt
+INFO:     127.0.0.1:64221 - "POST /internal/publish HTTP/1.1" 401 Unauthorized
+unauthorized internal publish attempt
+INFO:     127.0.0.1:64222 - "POST /internal/publish HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64223 - "POST /internal/publish HTTP/1.1" 200 OK

@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences
+PUT,/api/events/{id} [PUT],HTTPError('500 Server Error: Internal Server Error for url: /api/events/{id} [PUT]'),1

@@ -1,0 +1,12 @@
+[INFO] snapshot 디렉터리: D:\Github\WhatUdoin\_workspace\perf\baseline_2026-05-09\run_181951\db_snapshot
+[INFO] 복사 중: D:\Github\WhatUdoin\whatudoin.db -> D:\Github\WhatUdoin\_workspace\perf\baseline_2026-05-09\run_181951\db_snapshot\whatudoin.db
+[INFO] 무결성 검증 중: D:\Github\WhatUdoin\_workspace\perf\baseline_2026-05-09\run_181951\db_snapshot\whatudoin.db
+[OK]   무결성 검증 통과 (integrity_check: ok)
+[OK]   snapshot 완료: D:\Github\WhatUdoin\_workspace\perf\baseline_2026-05-09\run_181951\db_snapshot
+
+복원 절차:
+  1. 서버 종료
+  2. python _workspace/perf/scripts/restore_db.py --confirm-overwrite
+     (기본 snapshot 경로: D:\Github\WhatUdoin\_workspace\perf\baseline_2026-05-09\run_181951\db_snapshot)
+  3. 복원 후 서버 시작
+  상세: _workspace/perf/README.md
