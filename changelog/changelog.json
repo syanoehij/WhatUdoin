@@ -1,6 +1,53 @@
 {
   "groups": [
     {
+      "date": "2026-05-10",
+      "phase": "42차 1단계",
+      "phase_class": "phase-1",
+      "entries": [
+        {
+          "icon": "⚡",
+          "title_html": "<span class=\"cl-tag perf\">perf</span> 페이지 로딩 빠르게 — 에디터 대형 번들 lazy-load",
+          "detail_html": "<ul><li>홈·체크·프로젝트 관리·휴지통의 viewer 보조 화면에서 Tiptap·Mermaid·WUEditor 대형 번들이 첫 렌더링 전에 다운로드/parse/eval 모두 발생하던 동작 제거 — 실제 편집기 진입 시점에만 1회 로드</li><li>공통 lazy loader 도입 (CSS/JS 글로벌/의존성/실패 후 재시도/reentrancy 5종 readiness 보장)</li><li>50 VU 부하 p95: <strong>5300ms → 3000ms (약 1.77배 빠름)</strong></li><li>수정 파일: <code>templates/base.html</code>, <code>templates/_wu_editor_assets.html</code>, <code>static/js/wu-asset-loader.js</code>, viewer 보조 페이지들</li></ul>"
+        },
+        {
+          "icon": "🛡️",
+          "title_html": "<span class=\"cl-tag perf\">perf</span> SQLite WAL 모드 — DB 동시성 안정",
+          "detail_html": "<ul><li>WAL(Write-Ahead Logging) 모드 + PRAGMA 5종 적용: <code>timeout=5</code> / <code>busy_timeout=5000</code> / <code>synchronous=NORMAL</code> / <code>cache_size=-8000</code> / <code>temp_store=MEMORY</code></li><li>50 VU 동시 부하에서 <code>database is locked</code> <strong>0건</strong> 유지 — 다중 사용자 동시 작업 시 락 충돌 사실상 제거</li><li>야간 백업/정리 작업과 일반 API 동시 실행 시 응답 지연 안정화</li><li>운영 정책: 기존 DB는 그대로 사용, WAL 파일 자동 생성 — 사용자 동작 변화 없음</li><li>수정 파일: <code>database.py</code> (<code>get_conn()</code>)</li></ul>"
+        },
+        {
+          "icon": "🤖",
+          "title_html": "<span class=\"cl-tag perf\">perf</span> AI 응답 안정성 — Ollama 동시성 가드 + 통합 사용 불가 안내",
+          "detail_html": "<ul><li>외부 Ollama HTTP 호출 7접점(파싱/refinement/체크리스트 생성/주간 보고/conflict review/health/model)에 limiter 일괄 적용 — 슬롯 포화 시 즉시 \"AI 사용 중 (N/N)\" 안내, 큐잉 없음</li><li>관리자 설정에서 동시 처리 슬롯 1~5 선택 + 변경 즉시 반영(사용 중 슬롯 보존)</li><li>busy/timeout/connect/5xx 모두 동일한 \"AI 사용 중\" 또는 \"AI 사용 불가\" UX로 통합 — 내부 로그에서만 사유 구분</li><li>외부 Ollama 서버 hang 시 main app 응답성 영향 측정값: <strong>p95 31.0ms</strong> (기준 500ms 대비 16배 여유) — 이전 단일 프로세스 구조에서 발생하던 threadpool 잠식 위험 사실상 제거</li><li>수정 파일: <code>llm_parser.py</code>, <code>app.py</code>, <code>templates/admin.html</code></li></ul>"
+        },
+        {
+          "icon": "🧩",
+          "title_html": "<span class=\"cl-tag perf\">perf</span> service 분리 인프라 — 토글 한 줄로 외부 의존 격리",
+          "detail_html": "<ul><li>Scheduler / Media / Ollama / SSE+Front Router 네 가지 service를 별도 프로세스로 분리할 수 있는 인프라 신설 — env 토글 한 줄로 활성화/비활성화</li><li>활성화하지 않으면 기존 단일 프로세스 동작 100% 유지 — VSCode 디버그/python main.py 일상 운영 영향 없음</li><li>분리 활성화 시 측정값: 일반 API p95 <strong>12.9ms</strong> (기준 500ms 대비 약 38배 여유), 20MB+10MB 혼합 업로드 진행 중 p95 <strong>78ms</strong> (6배 여유), AI 처리 hang 중 p95 <strong>31ms</strong> (16배 여유)</li><li>50 SSE 연결 + publish→수신 p95 <strong>&lt;0.1ms</strong> (loopback 내부 통신)</li><li>process supervisor가 service crash 1회 자동 재시작 + 5분 3회 임계 시 degraded 격상 — 장애 시 자동 복구</li><li>graceful shutdown — 종료 신호 시 ollama → media → sse → scheduler → web-api → front-router 순서로 정리</li><li>활성화 명령 예: <code>$env:WHATUDOIN_ENABLE_SCHEDULER_SIDECAR=\"1\"; python main.py</code></li><li>신규 파일: <code>sse_service.py</code> · <code>scheduler_service.py</code> · <code>ollama_service.py</code> · <code>media_service.py</code> · <code>supervisor.py</code> · <code>front_router.py</code> · <code>publisher.py</code> · <code>maintenance_owners.py</code> · <code>mcp_command_registry.py</code></li></ul>"
+        },
+        {
+          "icon": "🔒",
+          "title_html": "<span class=\"cl-tag perf\">perf</span> 보안 정책 정비 11종 (운영 안전판)",
+          "detail_html": "<ul><li>외부 위조 헤더(X-Forwarded-For/Host/Proto 등) strip-then-set으로 차단 — IP whitelist 자동 로그인 위조 방지</li><li>SlowAPI rate limiter를 <code>auth.get_client_ip</code>와 같은 trusted-proxy 판정으로 통일 — 50명 동시 접속 시 한 IP로 묶여 전부 429 차단되던 회귀 방지</li><li>TRUSTED_PROXY + 외부 직접 접근 차단 한 세트 — Web API internal-only mode에서 비신뢰 source의 헤더 위조 무시</li><li>CSRF Host 보존 + Origin 위조 시 403 — 라우터 경유 unsafe POST/PUT/DELETE 모두 정상 통과 보존</li><li>HTTPS probe middleware scheme 보존 — 라우터 뒤 페이지 navigate가 인증서 안내 페이지로 잘못 가던 회귀 방지</li><li>외부 canonical URL 정책 — <code>/settings/mcp</code> 안내 URL이 사용자 접속 scheme(HTTP/HTTPS)에 맞춰 분기</li><li>SSE proxy 6종 조건 잠금 — buffering 비활성/compression 미적용/idle timeout/disconnect 전파/header 통과/외부 internal 차단</li><li>HSTS · AVR · HTTP fallback 정책 명시 결정 + 회귀 테스트로 잠금</li><li>수정 파일: <code>app.py</code>, <code>auth.py</code>, <code>front_router.py</code>, <code>supervisor.py</code></li></ul>"
+        },
+        {
+          "icon": "🐛",
+          "title_html": "<span class=\"cl-tag fix\">fix</span> HTTP 로그인 회복 — 사내망 운영 모델 보존",
+          "detail_html": "<ul><li>중간에 도입했던 \"HTTP 8000 unsafe write 차단\" 정책이 의도와 충돌해 HTTP 접속 사용자가 로그인부터 막히던 회귀 발견 → <strong>HTTP/HTTPS 기능 동등, HTTPS는 알람(Notification API) 전용</strong>이라는 원래 운영 모델로 복원</li><li>session cookie의 <code>secure</code> flag을 사용자 접속 scheme에 따라 동적 분기 — HTTP에서도 cookie 정상 저장 → 로그인/메뉴 전환 회복</li><li>MCP HTTP 화이트리스트 추가 — 인증서 미신뢰 PC에서도 MCP Streamable HTTP transport 사용 가능</li><li><code>/settings/mcp</code> 안내 URL이 HTTP 접속자에게 HTTP URL을, HTTPS 접속자에게 HTTPS URL을 표시하도록 분기</li><li>회선 신뢰는 사내 LAN 운영 전제 + strip-then-set forwarded headers + TRUSTED_PROXY 외부 직접 차단 한 세트로 보호</li><li>수정 파일: <code>app.py</code> (<code>_check_csrf</code> 인접 정책 코멘트, <code>set_cookie</code>/<code>delete_cookie</code> 3개 호출, MCP 화이트리스트, settings_mcp 핸들러)</li></ul>"
+        },
+        {
+          "icon": "📊",
+          "title_html": "<span class=\"cl-tag chore\">chore</span> 회귀 테스트 인프라 + 사이클 자료 보존",
+          "detail_html": "<ul><li>회귀 테스트 26개 추가 (phase54~79) — grep + AST + 라이브 단언으로 정책/boundary 잠금. 향후 같은 영역 변경 시 즉시 회귀 검출. 누적 700+ 단언 모두 PASS</li><li>측정 자료 36MB / 530+ 파일을 <code>docs/202605_성능개선/</code>에 보존 — probe 스크립트 53개, 결과 markdown 94개, locust raw 측정값, baseline 1/5/10/25/50 VU 부하 결과</li><li>마일스톤별 진행 결과 문서 8개(M1a/M1b/M1c/M2/M3/M4/M5/M6) + 마스터 plan rev29 + ULTRA 단축안 + 한눈 요약(<code>성능 개선 결과.md</code>) 모두 아카이브</li><li>커밋 안전 정리: supervisor 발급 토큰 12개, baseline DB snapshot 13개, .pid 파일 9개 모두 커밋 전 자동 삭제</li><li>이 파일들은 향후 회사 반입 결정 또는 부하 회귀 측정 시 baseline 비교 자료로 사용</li></ul>"
+        },
+        {
+          "icon": "📈",
+          "title_html": "<span class=\"cl-tag perf\">perf</span> 측정값 — 라이브 검증 결과 (개선 효과)",
+          "detail_html": "<table><thead><tr><th>시나리오</th><th>측정값</th><th>기준</th><th>여유</th></tr></thead><tbody><tr><td>50 VU 부하 <code>database is locked</code></td><td><strong>0건</strong></td><td>0건</td><td>—</td></tr><tr><td>50 VU 부하 p95 (재측정)</td><td><strong>3000ms</strong></td><td>baseline 5300ms</td><td><strong>약 1.77배 빠름</strong></td></tr><tr><td>일반 API p95 (Scheduler 라이브 분리)</td><td><strong>12.9ms</strong></td><td>&lt;500ms</td><td><strong>약 38배 여유</strong></td></tr><tr><td>Ollama hang 중 일반 API p95</td><td><strong>31.0ms</strong></td><td>&lt;500ms</td><td><strong>약 16배 여유</strong></td></tr><tr><td>20MB/10MB 업로드 진행 중 일반 API p95</td><td><strong>78ms</strong></td><td>&lt;500ms</td><td><strong>약 6배 여유</strong></td></tr><tr><td>50 SSE publish→수신 p95</td><td><strong>&lt;0.1ms</strong></td><td>&lt;2000ms</td><td>loopback fan-out</td></tr><tr><td>50 SSE /healthz 동시 GET p95</td><td><strong>16.0ms</strong></td><td>&lt;500ms</td><td><strong>약 31배 여유</strong></td></tr><tr><td>graceful stop_all (4 service)</td><td><strong>2.03s</strong></td><td>&lt;10s</td><td><strong>약 5배 여유</strong></td></tr><tr><td>supervisor 통합 라이브 시나리오</td><td><strong>14/14 PASS</strong></td><td>—</td><td>—</td></tr><tr><td>owner 정책 위반 3종 (라이브)</td><td><strong>0건</strong></td><td>0건</td><td>—</td></tr><tr><td>Media service DB write boundary</td><td><strong>0건</strong> (AST)</td><td>0건</td><td>—</td></tr><tr><td>MCP service SQL write 패턴</td><td><strong>0건</strong> (AST)</td><td>0건</td><td>—</td></tr></tbody></table><p style=\"margin-top:0.5em;\"><em>요약: 외부 의존(Ollama/PIL/디스크 I/O/cron) 격리로 일반 API 응답이 기준 SLA 대비 6~38배 여유. 이전 단일 프로세스 구조에서 발생할 수 있던 hang/메모리 누수가 main app 응답성에 미치는 영향이 사실상 0에 수렴.</em></p>"
+        }
+      ]
+    },
+    {
       "date": "2026-05-08",
       "phase": "41차 1단계",
       "phase_class": "phase-1",
