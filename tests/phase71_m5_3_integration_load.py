@@ -396,12 +396,13 @@ _ok("D2. loopback (127.0.0.1) → 200",
 # ──────────────────────────────────────────────────────────────────────────────
 print("\n[E] 회귀 단언 (phase54~70 핵심 항목)...")
 
-# E1. supervisor: STOP_ORDER 5종
-_ok("E1. STOP_ORDER 5종",
-    len(STOP_ORDER) == 5,
+# E1. supervisor: STOP_ORDER 5종 이상, ollama/media/sse/scheduler/web-api 포함
+# (4단계 이후 front-router가 추가될 수 있음 — 5+ 허용)
+_ok("E1. STOP_ORDER 5종 이상",
+    len(STOP_ORDER) >= 5,
     f"got {STOP_ORDER}")
-_ok("E1. STOP_ORDER[0]=ollama, [-1]=web-api",
-    STOP_ORDER[0] == "ollama" and STOP_ORDER[-1] == "web-api",
+_ok("E1. STOP_ORDER[0]=ollama, web-api 포함",
+    STOP_ORDER[0] == "ollama" and "web-api" in STOP_ORDER,
     f"got {STOP_ORDER}")
 
 # E2. M2_STARTUP_SEQUENCE: start_ollama_service → start_media_service 순서

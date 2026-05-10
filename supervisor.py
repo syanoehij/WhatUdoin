@@ -23,6 +23,16 @@ WEB_API_BIND_HOST_ENV = "WHATUDOIN_BIND_HOST"
 WEB_API_INTERNAL_ONLY_ENV = "WHATUDOIN_WEB_API_INTERNAL_ONLY"
 FRONT_ROUTER_LOOPBACK_HOST = "127.0.0.1"
 WEB_API_SERVICE_NAME = "web-api"
+
+# M6-4B: Front Router service 상수
+FRONT_ROUTER_SERVICE_NAME = "front-router"
+FRONT_ROUTER_BIND_HOST_ENV = "WHATUDOIN_FRONT_ROUTER_BIND_HOST"
+FRONT_ROUTER_HTTP_PORT_ENV = "WHATUDOIN_FRONT_ROUTER_HTTP_PORT"
+FRONT_ROUTER_HTTPS_PORT_ENV = "WHATUDOIN_FRONT_ROUTER_HTTPS_PORT"
+FRONT_ROUTER_CERT_ENV = "WHATUDOIN_FRONT_ROUTER_CERT"
+FRONT_ROUTER_KEY_ENV = "WHATUDOIN_FRONT_ROUTER_KEY"
+WEB_API_INTERNAL_PORT_ENV = "WHATUDOIN_WEB_API_INTERNAL_PORT"
+WEB_API_INTERNAL_DEFAULT_PORT = 8769  # 8000과 충돌 회피
 SSE_SERVICE_NAME = "sse"
 SSE_SERVICE_BIND_HOST_ENV = "WHATUDOIN_BIND_HOST"
 SSE_SERVICE_PORT_ENV = "WHATUDOIN_SSE_SERVICE_PORT"
@@ -60,10 +70,10 @@ WEB_API_INTERNAL_URL_ENV = "WHATUDOIN_WEB_API_INTERNAL_URL"
 CRASH_LOOP_WINDOW_SECONDS = 300
 CRASH_LOOP_MAX_FAILURES = 3
 
-# M3-3/M5-2: graceful shutdown 순서 — 의존 서비스부터 종료
-# Ollama → Media → SSE → Scheduler → Web API
-# Media는 외부 endpoint 미보유라 SSE보다 먼저 stop.
-STOP_ORDER = ("ollama", "media", "sse", "scheduler", "web-api")
+# M3-3/M5-2/M6-4B: graceful shutdown 순서 — 의존 서비스부터 종료
+# Ollama → Media → SSE → Scheduler → Web API → Front Router
+# Front Router가 마지막: 외부 사용자 트래픽을 가장 늦게 끊음.
+STOP_ORDER = ("ollama", "media", "sse", "scheduler", "web-api", "front-router")
 
 M2_STARTUP_SEQUENCE = (
     "resolve_runtime_paths",
@@ -285,6 +295,105 @@ def web_api_service_spec(
         if str(k) not in protected
     }
     env.update(web_api_internal_service_env(router_host))
+    return ServiceSpec(
+        name=name,
+        command=command,
+        env=env,
+        startup_grace_seconds=startup_grace_seconds,
+    )
+
+
+def front_router_service_spec(
+    command: Sequence[str],
+    *,
+    name: str = FRONT_ROUTER_SERVICE_NAME,
+    bind_host: str = "0.0.0.0",
+    http_port: int = 8000,
+    https_port: int = 8443,
+    cert_path: str | None = None,
+    key_path: str | None = None,
+    web_api_url: str,
+    sse_url: str,
+    extra_env: Mapping[str, str] | None = None,
+    startup_grace_seconds: float = 2.0,
+) -> ServiceSpec:
+    """Front Router 프로세스 spec 팩토리 (4-B).
+
+    보호 env (extra_env override 차단):
+    - WHATUDOIN_FRONT_ROUTER_BIND_HOST
+    - WHATUDOIN_FRONT_ROUTER_HTTP_PORT
+    - WHATUDOIN_FRONT_ROUTER_HTTPS_PORT
+    - WHATUDOIN_FRONT_ROUTER_CERT
+    - WHATUDOIN_FRONT_ROUTER_KEY
+    - WHATUDOIN_WEB_API_INTERNAL_URL
+    - WHATUDOIN_SSE_SERVICE_URL_FROM_ROUTER
+    - WHATUDOIN_INTERNAL_TOKEN: supervisor가 직접 주입 — extra_env override 차단
+
+    운영 가이드:
+    - Front Router crash → supervisor crash-loop 차단(M2-17 pattern).
+    - degraded 시 외부 접속 connection refused — fallback: WHATUDOIN_ENABLE_FRONTEND_ROUTING=
+      (공백)으로 재시작하면 기존 fastapi_app 직접 listener로 복귀.
+    """
+    protected = {
+        FRONT_ROUTER_BIND_HOST_ENV,
+        FRONT_ROUTER_HTTP_PORT_ENV,
+        FRONT_ROUTER_HTTPS_PORT_ENV,
+        FRONT_ROUTER_CERT_ENV,
+        FRONT_ROUTER_KEY_ENV,
+        WEB_API_INTERNAL_URL_ENV,
+        "WHATUDOIN_SSE_SERVICE_URL_FROM_ROUTER",
+        INTERNAL_TOKEN_ENV,
+    }
+    env = {
+        str(k): str(v)
+        for k, v in (extra_env or {}).items()
+        if str(k) not in protected
+    }
+    env[FRONT_ROUTER_BIND_HOST_ENV] = bind_host
+    env[FRONT_ROUTER_HTTP_PORT_ENV] = str(http_port)
+    env[FRONT_ROUTER_HTTPS_PORT_ENV] = str(https_port)
+    if cert_path:
+        env[FRONT_ROUTER_CERT_ENV] = cert_path
+    if key_path:
+        env[FRONT_ROUTER_KEY_ENV] = key_path
+    env[WEB_API_INTERNAL_URL_ENV] = web_api_url
+    env["WHATUDOIN_SSE_SERVICE_URL_FROM_ROUTER"] = sse_url
+    return ServiceSpec(
+        name=name,
+        command=command,
+        env=env,
+        startup_grace_seconds=startup_grace_seconds,
+    )
+
+
+def web_api_internal_runtime_spec(
+    command: Sequence[str],
+    *,
+    port: int = WEB_API_INTERNAL_DEFAULT_PORT,
+    name: str = WEB_API_SERVICE_NAME,
+    router_host: str = FRONT_ROUTER_LOOPBACK_HOST,
+    extra_env: Mapping[str, str] | None = None,
+    startup_grace_seconds: float = 1.0,
+) -> ServiceSpec:
+    """Web API를 internal-only loopback port로 spawn하는 spec 팩토리 (4-B).
+
+    supervisor가 Web API를 8769 internal port로 spawn할 때 사용.
+    web_api_service_spec과 동일 보호 env + WEB_API_INTERNAL_PORT 추가.
+    """
+    protected = {
+        TRUSTED_PROXY_ENV,
+        WEB_API_BIND_HOST_ENV,
+        WEB_API_INTERNAL_ONLY_ENV,
+        WEB_API_INTERNAL_PORT_ENV,
+        INTERNAL_TOKEN_ENV,
+    }
+    env = {
+        str(k): str(v)
+        for k, v in (extra_env or {}).items()
+        if str(k) not in protected
+    }
+    env.update(web_api_internal_service_env(router_host))
+    env[WEB_API_INTERNAL_PORT_ENV] = str(port)
     return ServiceSpec(
         name=name,
         command=command,
@@ -660,4 +769,15 @@ __all__ = [
     "MEDIA_SERVICE_STAGING_ROOT_ENV",
     "MEDIA_SERVICE_URL_ENV",
     "media_service_spec",
+    # M6-4B: Front Router service
+    "FRONT_ROUTER_SERVICE_NAME",
+    "FRONT_ROUTER_BIND_HOST_ENV",
+    "FRONT_ROUTER_HTTP_PORT_ENV",
+    "FRONT_ROUTER_HTTPS_PORT_ENV",
+    "FRONT_ROUTER_CERT_ENV",
+    "FRONT_ROUTER_KEY_ENV",
+    "WEB_API_INTERNAL_PORT_ENV",
+    "WEB_API_INTERNAL_DEFAULT_PORT",
+    "front_router_service_spec",
+    "web_api_internal_runtime_spec",
 ]

@@ -237,9 +237,10 @@ if __name__ == "__main__":
     # ── 단계적 sidecar 분리 (env 토글) ─────────────────────────
     # 토글별로 service를 별도 프로세스로 spawn한다. 어떤 토글도 미설정이면
     # 기존 fallback 단일 프로세스 동작 100% 유지(VSCode 디버그/일상 운영 영향 0).
-    #   분리 1단계: WHATUDOIN_ENABLE_SCHEDULER_SIDECAR=1 → Scheduler service
-    #   분리 2단계: WHATUDOIN_ENABLE_MEDIA_SIDECAR=1     → Media service
-    #   분리 3단계: WHATUDOIN_ENABLE_OLLAMA_SIDECAR=1    → Ollama service
+    #   분리 1단계: WHATUDOIN_ENABLE_SCHEDULER_SIDECAR=1  → Scheduler service
+    #   분리 2단계: WHATUDOIN_ENABLE_MEDIA_SIDECAR=1      → Media service
+    #   분리 3단계: WHATUDOIN_ENABLE_OLLAMA_SIDECAR=1     → Ollama service
+    #   분리 4단계: WHATUDOIN_ENABLE_FRONTEND_ROUTING=1   → Front Router + Web API(internal) + SSE
     _supervisor_instance = None
     _scheduler_sidecar_enabled = (
         os.environ.get("WHATUDOIN_ENABLE_SCHEDULER_SIDECAR", "").strip() == "1"
@@ -250,8 +251,11 @@ if __name__ == "__main__":
     _ollama_sidecar_enabled = (
         os.environ.get("WHATUDOIN_ENABLE_OLLAMA_SIDECAR", "").strip() == "1"
     )
+    _frontend_routing_enabled = (
+        os.environ.get("WHATUDOIN_ENABLE_FRONTEND_ROUTING", "").strip() == "1"
+    )
 
-    if _scheduler_sidecar_enabled or _media_sidecar_enabled or _ollama_sidecar_enabled:
+    if _scheduler_sidecar_enabled or _media_sidecar_enabled or _ollama_sidecar_enabled or _frontend_routing_enabled:
         from supervisor import WhatUdoinSupervisor
         _supervisor_instance = WhatUdoinSupervisor(run_dir=_run_dir())
         _supervisor_instance.ensure_internal_token()
@@ -292,38 +296,81 @@ if __name__ == "__main__":
         os.environ[OLLAMA_SERVICE_URL_ENV] = _ollama_url
         print(f"  [sidecar] ollama service: pid={_ollama_state.pid} status={_ollama_state.status} url={_ollama_url}")
 
-    import uvicorn
-    from app import app as fastapi_app  # noqa: E402
-
-    PORT_HTTP  = 8000
-    PORT_HTTPS = 8443
-    bind_host = (os.environ.get("WHATUDOIN_BIND_HOST") or "0.0.0.0").strip() or "0.0.0.0"
-
-    cert_path = os.path.join(_run_dir(), "whatudoin-cert.pem")
-    key_path  = os.path.join(_run_dir(), "whatudoin-key.pem")
-    have_https = os.path.isfile(cert_path) and os.path.isfile(key_path)
-
-    print("=" * 48)
-    print("  WhatUdoin 서버 시작")
-    print(f"  BIND  : {bind_host}")
-    print(f"  HTTP  : http://localhost:{PORT_HTTP}")
-    if have_https:
-        print(f"  HTTPS : https://localhost:{PORT_HTTPS}  (CA 설치 시)")
-    else:
-        print("  HTTPS : 미적용 (whatudoin-cert.pem / whatudoin-key.pem 없음)")
-    print("  종료: 트레이 아이콘 우클릭 → 종료")
-    print("=" * 48)
-
-    http_cfg = uvicorn.Config(
-        fastapi_app, host=bind_host, port=PORT_HTTP, log_level="info"
-    )
-    servers = [uvicorn.Server(http_cfg)]
-    if have_https:
-        https_cfg = uvicorn.Config(
-            fastapi_app, host=bind_host, port=PORT_HTTPS, log_level="info",
-            ssl_certfile=cert_path, ssl_keyfile=key_path,
+    if _frontend_routing_enabled:
+        from supervisor import (
+            sse_service_spec, SSE_SERVICE_DEFAULT_PORT,
+            web_api_internal_runtime_spec, WEB_API_INTERNAL_DEFAULT_PORT, WEB_API_INTERNAL_PORT_ENV,
+            front_router_service_spec, FRONT_ROUTER_SERVICE_NAME,
         )
-        servers.append(uvicorn.Server(https_cfg))
+        # SSE service: internal-only 127.0.0.1:8765
+        _fr_sse_port = SSE_SERVICE_DEFAULT_PORT
+        _fr_sse_spec = sse_service_spec(
+            command=[sys.executable, str(Path(_base_dir()) / "sse_service.py")],
+        )
+        _fr_sse_state = _supervisor_instance.start_service(_fr_sse_spec)
+        print(f"  [4B] sse service: pid={_fr_sse_state.pid} status={_fr_sse_state.status}")
+
+        # Web API: internal-only 127.0.0.1:8769
+        _fr_web_api_port = WEB_API_INTERNAL_DEFAULT_PORT
+        _fr_web_api_spec = web_api_internal_runtime_spec(
+            command=[sys.executable, str(Path(_base_dir()) / "app.py")],
+            port=_fr_web_api_port,
+        )
+        _fr_web_api_state = _supervisor_instance.start_service(_fr_web_api_spec)
+        print(f"  [4B] web-api service: pid={_fr_web_api_state.pid} status={_fr_web_api_state.status} port={_fr_web_api_port}")
+
+        # Front Router: 외부 0.0.0.0:8000/8443, web-api → 8769, sse → 8765
+        _fr_cert = os.path.join(_run_dir(), "whatudoin-cert.pem")
+        _fr_key = os.path.join(_run_dir(), "whatudoin-key.pem")
+        _fr_have_tls = os.path.isfile(_fr_cert) and os.path.isfile(_fr_key)
+        _fr_spec = front_router_service_spec(
+            command=[sys.executable, str(Path(_base_dir()) / "front_router.py")],
+            bind_host="0.0.0.0",
+            http_port=8000,
+            https_port=8443,
+            cert_path=_fr_cert if _fr_have_tls else None,
+            key_path=_fr_key if _fr_have_tls else None,
+            web_api_url=f"http://127.0.0.1:{_fr_web_api_port}",
+            sse_url=f"http://127.0.0.1:{_fr_sse_port}",
+        )
+        _fr_state = _supervisor_instance.start_service(_fr_spec)
+        print(f"  [4B] front-router service: pid={_fr_state.pid} status={_fr_state.status}")
+        print("  [4B] 외부 listener는 front-router가 담당 — main.py 직접 listen 비활성")
+        # main.py 자체는 외부 listener 미가동: servers = [] 로 처리
+        servers: list = []
+    else:
+        import uvicorn
+        from app import app as fastapi_app  # noqa: E402
+
+        PORT_HTTP  = 8000
+        PORT_HTTPS = 8443
+        bind_host = (os.environ.get("WHATUDOIN_BIND_HOST") or "0.0.0.0").strip() or "0.0.0.0"
+
+        cert_path = os.path.join(_run_dir(), "whatudoin-cert.pem")
+        key_path  = os.path.join(_run_dir(), "whatudoin-key.pem")
+        have_https = os.path.isfile(cert_path) and os.path.isfile(key_path)
+
+        print("=" * 48)
+        print("  WhatUdoin 서버 시작")
+        print(f"  BIND  : {bind_host}")
+        print(f"  HTTP  : http://localhost:{PORT_HTTP}")
+        if have_https:
+            print(f"  HTTPS : https://localhost:{PORT_HTTPS}  (CA 설치 시)")
+        else:
+            print("  HTTPS : 미적용 (whatudoin-cert.pem / whatudoin-key.pem 없음)")
+        print("  종료: 트레이 아이콘 우클릭 → 종료")
+        print("=" * 48)
+
+        http_cfg = uvicorn.Config(
+            fastapi_app, host=bind_host, port=PORT_HTTP, log_level="info"
+        )
+        servers = [uvicorn.Server(http_cfg)]
+        if have_https:
+            https_cfg = uvicorn.Config(
+                fastapi_app, host=bind_host, port=PORT_HTTPS, log_level="info",
+                ssl_certfile=cert_path, ssl_keyfile=key_path,
+            )
+            servers.append(uvicorn.Server(https_cfg))
 
     async def _run_all():
         await asyncio.gather(*(s.serve() for s in servers))
@@ -369,9 +416,13 @@ if __name__ == "__main__":
             print(f"  [sidecar] stop_all error: {exc}")
 
     # ── 포트 충돌 오류 처리 ───────────────────────────────────────
+    # _frontend_routing_enabled 시 servers=[] → server_exc는 항상 비어있음
     for e in server_exc:
         if "10048" in str(e) or "address already in use" in str(e).lower():
-            port_str = f"{PORT_HTTP}/{PORT_HTTPS}" if have_https else str(PORT_HTTP)
+            _ph = locals().get("PORT_HTTP", 8000)
+            _ps = locals().get("PORT_HTTPS", 8443)
+            _hs = locals().get("have_https", False)
+            port_str = f"{_ph}/{_ps}" if _hs else str(_ph)
             print()
             print("=" * 48)
             print(f"  [오류] 포트 {port_str}이 이미 사용 중입니다.")

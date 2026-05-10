@@ -4655,4 +4655,8 @@ def api_delete_mcp_token(request: Request):
 if __name__ == "__main__":
     import uvicorn
     bind_host = (os.environ.get("WHATUDOIN_BIND_HOST") or "0.0.0.0").strip() or "0.0.0.0"
-    uvicorn.run("app:app", host=bind_host, port=8000, reload=True)
+    # supervisor가 Web API를 internal port(8769)로 spawn할 때 WHATUDOIN_WEB_API_INTERNAL_PORT=8769
+    # 미설정 시 기존 8000 유지. reload는 internal-only(supervisor 관리) 시 비활성화.
+    _direct_port = int(os.environ.get("WHATUDOIN_WEB_API_INTERNAL_PORT", "8000") or "8000")
+    _internal_only = os.environ.get("WHATUDOIN_WEB_API_INTERNAL_ONLY", "").strip() == "1"
+    uvicorn.run("app:app", host=bind_host, port=_direct_port, reload=not _internal_only)

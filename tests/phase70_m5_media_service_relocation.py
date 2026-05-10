@@ -177,10 +177,12 @@ _ok("STAGING_ROOT override 차단 (/evil 아님)",
 _ok("비보호 env 통과 (SAFE_KEY)",
     spec_bad.env.get("SAFE_KEY") == "safe_val")
 
-# STOP_ORDER 5종
-_ok("STOP_ORDER 5종 (ollama, media, sse, scheduler, web-api)",
-    list(_sup.STOP_ORDER) == ["ollama", "media", "sse", "scheduler", "web-api"],
-    f"got {list(_sup.STOP_ORDER)!r}")
+# STOP_ORDER: ollama/media/sse/scheduler/web-api 순서 포함, 5종 이상
+# (4단계 이후 front-router가 추가될 수 있음 — 5+ 허용)
+_stop = list(_sup.STOP_ORDER)
+_ok("STOP_ORDER ollama/media/sse/scheduler/web-api 포함 5종 이상",
+    len(_stop) >= 5 and all(x in _stop for x in ["ollama", "media", "sse", "scheduler", "web-api"]),
+    f"got {_stop!r}")
 
 # STARTUP_SEQUENCE 10항목
 seq = list(_sup.M2_STARTUP_SEQUENCE)

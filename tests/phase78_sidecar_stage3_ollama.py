@@ -69,9 +69,10 @@ def _check_main_grep() -> dict:
         and 'os.environ.get("WHATUDOIN_ENABLE_OLLAMA_SIDECAR"' in src
     )
 
-    # supervisor 인스턴스 공유 — scheduler/media/ollama 어느 하나 활성화 시 한 번만 생성
+    # supervisor 인스턴스 공유 — scheduler/media/ollama 어느 하나(혹은 4단계도) 활성화 시 한 번만 생성
+    # (4단계 이후 _frontend_routing_enabled도 조건에 추가될 수 있음)
     checks["supervisor_shared_construction_three_way"] = (
-        "if _scheduler_sidecar_enabled or _media_sidecar_enabled or _ollama_sidecar_enabled:" in src
+        "_scheduler_sidecar_enabled or _media_sidecar_enabled or _ollama_sidecar_enabled" in src
     )
 
     # ollama_service_spec import + spawn
