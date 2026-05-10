@@ -24,6 +24,22 @@ def run_backup(db_path: str, run_dir: Path) -> Path:
     return target
 
 
+def run_migration_backup(db_path: str, run_dir: Path) -> Path:
+    """마이그레이션 직전 1회용 백업.
+
+    파일명: whatudoin-migrate-{YYYYMMDDTHHMMSSffffff}.db
+    timestamp suffix(콜론 없는 압축형, microsecond 포함) — Windows 파일명 호환 +
+    같은 초에 두 번 실행되어도 충돌 없음. `cleanup_old_backups`의 glob
+    `whatudoin-*.db`에 매칭되어 90일 retention에 자연 포함된다.
+    """
+    bdir = _backup_dir(run_dir)
+    ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")
+    target = bdir / f"whatudoin-migrate-{ts}.db"
+    with sqlite3.connect(db_path) as src, sqlite3.connect(str(target)) as dst:
+        src.backup(dst)
+    return target
+
+
 def cleanup_old_backups(run_dir: Path):
     """90일 초과 백업 파일 삭제 (APScheduler에서 호출)"""
     bdir = _backup_dir(run_dir)

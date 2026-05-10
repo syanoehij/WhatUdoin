@@ -302,7 +302,32 @@
       "Bash(dir D:\\\\Github\\\\WhatUdoin\\\\*.md /b)",
       "Bash(cd /d D:/Github/WhatUdoin)",
       "Bash(Out-String)",
-      "PowerShell(& \"D:\\\\Program Files\\\\Python\\\\Python312\\\\python.exe\" \"D:\\\\Github\\\\WhatUdoin\\\\fix_corrupt.py\")"
+      "PowerShell(& \"D:\\\\Program Files\\\\Python\\\\Python312\\\\python.exe\" \"D:\\\\Github\\\\WhatUdoin\\\\fix_corrupt.py\")",
+      "Bash(mkdir -p .claude/workspaces/archive)",
+      "Bash(mv .claude/workspaces/current \".claude/workspaces/archive/M1b_$\\(date +%Y%m%d_%H%M%S\\)\")",
+      "Bash(mkdir -p .claude/workspaces/current/00_input)",
+      "Bash(\"D:/Program Files/Python/Python312/python.exe\" -c \"import llm_parser; print\\('llm_parser OK'\\); print\\('limiter snapshot:', llm_parser.get_ollama_concurrency_snapshot\\(\\)\\); print\\('class:', llm_parser.OllamaUnavailableError\\); err = llm_parser.OllamaUnavailableError\\(reason='busy', slots=\\(1, 1\\)\\); print\\('busy msg:', err.message\\); err2 = llm_parser.OllamaUnavailableError\\(reason='timeout'\\); print\\('timeout msg:', err2.message\\)\")",
+      "Bash(\"D:/Program Files/Python/Python312/python.exe\" -c \"import ast; ast.parse\\(open\\('app.py', encoding='utf-8'\\).read\\(\\)\\); print\\('app.py syntax OK'\\)\")",
+      "Bash(WHATUDOIN_OLLAMA_CONCURRENCY=3 \"D:/Program Files/Python/Python312/python.exe\" -c \"import llm_parser; print\\('cap=3:', llm_parser.get_ollama_concurrency_snapshot\\(\\)\\)\")",
+      "Bash(WHATUDOIN_OLLAMA_CONCURRENCY=99 \"D:/Program Files/Python/Python312/python.exe\" -c \"import llm_parser; print\\('clamped:', llm_parser.get_ollama_concurrency_snapshot\\(\\)\\)\")",
+      "Bash(WHATUDOIN_OLLAMA_CONCURRENCY=garbage \"D:/Program Files/Python/Python312/python.exe\" -c \"import llm_parser; print\\('bad input default:', llm_parser.get_ollama_concurrency_snapshot\\(\\)\\)\")",
+      "Bash(PYTHONIOENCODING=utf-8 'D:/Program Files/Python/Python312/python.exe' -c ' *)",
+      "Bash(\"D:\\\\Program Files\\\\Python\\\\Python312\\\\python.exe\" -m py_compile \"D:\\\\Github\\\\WhatUdoin\\\\llm_parser.py\")",
+      "Bash(Start-Process -NoNewWindow -FilePath \"D:\\\\Program Files\\\\Python\\\\Python312\\\\python.exe\" -ArgumentList \"-m\", \"uvicorn\", \"app:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\" -RedirectStandardOutput \".claude\\\\workspaces\\\\current\\\\server.log\" -RedirectStandardError \".claude\\\\workspaces\\\\current\\\\server_err.log\")",
+      "Bash(fuser -k 8000/tcp)",
+      "Bash(pkill -f \"uvicorn app:app\")",
+      "PowerShell(netstat *)",
+      "PowerShell(Get-ChildItem \"D:\\\\Github\\\\WhatUdoin\" -Name | Where-Object { $_ -match \"\\\\.pem$|cert|ssl\" })",
+      "PowerShell($env:PYTHONPATH = \"D:\\\\Github\\\\WhatUdoin\"; Start-Process -FilePath \"D:\\\\Program Files\\\\Python\\\\Python312\\\\python.exe\" -ArgumentList \"-m\",\"uvicorn\",\"app:app\",\"--host\",\"0.0.0.0\",\"--port\",\"8443\",\"--ssl-certfile\",\"D:\\\\Github\\\\WhatUdoin\\\\whatudoin-cert.pem\",\"--ssl-keyfile\",\"D:\\\\Github\\\\WhatUdoin\\\\whatudoin-key.pem\",\"--log-level\",\"warning\" -WorkingDirectory \"D:\\\\Github\\\\WhatUdoin\" -PassThru | Select-Object Id)",
+      "PowerShell(Start-Sleep -Seconds 3; try { $r = Invoke-WebRequest -Uri \"https://localhost:8443/api/notifications/count\" -SkipCertificateCheck -TimeoutSec 5; \"Status: $\\($r.StatusCode\\)\" } catch { \"Error: $_\" })",
+      "PowerShell($python = \"D:\\\\Program Files\\\\Python\\\\Python312\\\\python.exe\"; & $python -c \"import httpx, warnings; warnings.filterwarnings\\('ignore'\\); r=httpx.get\\('https://localhost:8443/api/notifications/count',verify=False,timeout=5\\); print\\(r.status_code\\)\")",
+      "PowerShell(& \"D:\\\\Program Files\\\\Python\\\\Python312\\\\python.exe\" \"D:\\\\Github\\\\WhatUdoin\\\\_workspace\\\\perf\\\\scripts\\\\check_seed.py\")",
+      "PowerShell($env:WHATUDOIN_PERF_FIXTURE = \"allow\"; & \"D:\\\\Program Files\\\\Python\\\\Python312\\\\python.exe\" \"D:\\\\Github\\\\WhatUdoin\\\\_workspace\\\\perf\\\\fixtures\\\\seed_users.py\" 2>&1 | Select-Object -Last 20)",
+      "PowerShell(Tee-Object *)",
+      "PowerShell(Select-String -Path \"D:\\\\Github\\\\WhatUdoin\\\\_workspace\\\\perf\\\\baseline_2026-05-09\\\\m1b_u5_recheck_235324\\\\locust_vu50.log\" -Pattern \"PUT|error|Error|422|500|description\" | Select-Object -First 20 | ForEach-Object { $_.Line })",
+      "PowerShell(Stop-Process *)",
+      "PowerShell($env:WHATUDOIN_PERF_FIXTURE = \"allow\"; & \"D:\\\\Program Files\\\\Python\\\\Python312\\\\python.exe\" \"D:\\\\Github\\\\WhatUdoin\\\\_workspace\\\\perf\\\\fixtures\\\\cleanup.py\" 2>&1 | Select-Object -Last 5)",
+      "PowerShell(git *)"
     ]
   }
 }

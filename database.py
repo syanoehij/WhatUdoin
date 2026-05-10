@@ -495,6 +495,11 @@ def init_db():
             )
             print(f"[WhatUdoin] 초기 관리자 비밀번호: {init_pw}  (최초 1회만 표시, 즉시 변경 권장)")
 
+    # with get_conn() 블록 종료 후, phase 마이그레이션 인프라 진입점.
+    # 본 #1에서는 PHASES가 비어 있어 즉시 반환된다.
+    # #2 이후에서 PHASES/_PREFLIGHT_CHECKS에 phase 본문을 등록하면 자동으로 실행된다.
+    _run_phase_migrations()
+
 
 def _recurrence_dates(rule: str, start_date_str: str, end_limit_str: str | None) -> list:
     """rule에 따라 start_date 이후의 반복 날짜 목록 반환 (start_date 자체 제외)
@@ -621,6 +626,190 @@ def _migrate(conn, table: str, columns: list):
     for col, definition in columns:
         if col not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
+
+
+# ── Phase 마이그레이션 인프라 ─────────────────────────────────────
+# 팀 기능 그룹 A #1. _migrate()보다 상위 layer에서 phase 단위로
+# 백업·마커·트랜잭션·preflight를 묶어 실행한다. 실제 phase 본문 SQL은
+# 본 파일이 아닌 후속 사이클(#2~)에서 PHASES / _PREFLIGHT_CHECKS에 등록한다.
+
+_MIGRATION_LOG_PREFIX = "[WhatUdoin][migration]"
+_PHASE_MARKER_KEY_PREFIX = "migration_phase:"
+_TEAM_MIGRATION_WARNINGS_KEY = "team_migration_warnings"
+
+# (phase_name, body_callable) 목록. body_callable: (conn) -> None.
+# 본 #1에서는 비어 있다. #2 이후에서 실제 phase를 등록한다.
+PHASES: list = []
+
+# preflight 검사 함수 목록. 각 함수: (conn) -> list[str]  (충돌 메시지 목록)
+# 본 #1에서는 비어 있다. Phase 4 UNIQUE 제약 추가 시 검사 함수를 등록한다.
+_PREFLIGHT_CHECKS: list = []
+
+
+def _is_phase_done(conn, name: str) -> bool:
+    """phase 마커 존재 여부. set_setting/get_setting을 거치지 않고
+    호출자의 conn(트랜잭션)을 그대로 사용한다."""
+    row = conn.execute(
+        "SELECT 1 FROM settings WHERE key = ?",
+        (_PHASE_MARKER_KEY_PREFIX + name,),
+    ).fetchone()
+    return bool(row)
+
+
+def _mark_phase_done(conn, name: str) -> None:
+    """phase 마커 기록. 반드시 phase 본문과 동일한 트랜잭션(conn)에서 호출.
+    set_setting()을 쓰면 별도 connection을 열어 본문↔마커 드리프트가 생긴다."""
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (_PHASE_MARKER_KEY_PREFIX + name, datetime.now(timezone.utc).isoformat()),
+    )
+
+
+def _pending_phases() -> list:
+    """아직 마커가 없는 phase만 반환. 별도 read-only connection 사용."""
+    if not PHASES:
+        return []
+    pending = []
+    with get_conn() as conn:
+        for name, body in PHASES:
+            if not _is_phase_done(conn, name):
+                pending.append((name, body))
+    return pending
+
+
+def normalize_name(s: str) -> str:
+    """이름 비교용 정규화. NFC + casefold.
+
+    팀 기능 그룹 A에서 user/team 이름 중복·검색 비교 시 사용 예정.
+    Unicode 합성/대소문자 차이만 흡수한다(공백·특수문자는 보존).
+    """
+    if s is None:
+        return ""
+    import unicodedata
+    return unicodedata.normalize("NFC", str(s)).casefold()
+
+
+def _append_team_migration_warning(conn, category: str, message: str) -> None:
+    """settings.team_migration_warnings(JSON 배열)에 race-safe append.
+
+    호출자의 conn 트랜잭션 안에서 read → append → write를 수행하므로
+    같은 카테고리 중복 메시지를 삽입하지 않는다.
+    """
+    row = conn.execute(
+        "SELECT value FROM settings WHERE key = ?",
+        (_TEAM_MIGRATION_WARNINGS_KEY,),
+    ).fetchone()
+    try:
+        arr = json.loads(row["value"]) if row and row["value"] else []
+        if not isinstance(arr, list):
+            arr = []
+    except (json.JSONDecodeError, TypeError):
+        arr = []
+
+    # 같은 카테고리+메시지 중복 방지
+    for entry in arr:
+        if (
+            isinstance(entry, dict)
+            and entry.get("category") == category
+            and entry.get("message") == message
+        ):
+            return
+
+    arr.append({
+        "category": category,
+        "message": message,
+        "at": datetime.now(timezone.utc).isoformat(),
+    })
+    payload = json.dumps(arr, ensure_ascii=False)
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (_TEAM_MIGRATION_WARNINGS_KEY, payload),
+    )
+
+
+def _run_preflight_checks(conn) -> list:
+    """등록된 모든 preflight 검사를 돌려 충돌 메시지를 모은다.
+    검사 함수가 0개면 빈 리스트 반환(정상 통과)."""
+    conflicts: list = []
+    for check in _PREFLIGHT_CHECKS:
+        try:
+            result = check(conn) or []
+        except Exception as exc:
+            # 검사 자체 실패도 충돌로 본다(서버 시작 거부)
+            result = [f"preflight check {getattr(check, '__name__', check)!r} raised: {exc!r}"]
+        if result:
+            conflicts.extend(result)
+    return conflicts
+
+
+def _run_phase_migrations() -> None:
+    """init_db()의 with get_conn() 블록 종료 직후 호출되는 진입점.
+
+    동작 순서:
+      1. PHASES 중 미적용분(_pending_phases)이 0개면 즉시 반환(백업·preflight 모두 skip).
+      2. 미적용분이 1개라도 있으면 자동 백업 1회.
+      3. preflight 검사 실행 — 충돌 1개 이상이면 경고 누적 후 RuntimeError로 서버 시작 거부.
+      4. 각 pending phase를 독립 connection(자체 트랜잭션)으로 실행.
+         - 본문 성공 시 같은 conn으로 마커 기록 → conn.commit()(get_conn 컨텍스트 매니저 종료).
+         - 본문 실패 시 conn.rollback() → stdout 로그 + RuntimeError 재발생으로 서버 시작 거부.
+    """
+    pending = _pending_phases()
+    if not pending:
+        return
+
+    # 1) 미적용 마이그레이션이 1개라도 있을 때만 백업 1회
+    try:
+        from backup import run_migration_backup
+        backup_path = run_migration_backup(DB_PATH, _RUN_DIR)
+        print(f"{_MIGRATION_LOG_PREFIX} pre-migration backup: {backup_path}")
+    except Exception as exc:
+        # 백업 실패 시 마이그레이션 진행 거부 — 데이터 보호 우선
+        print(f"{_MIGRATION_LOG_PREFIX} backup FAILED, aborting migration: {exc!r}")
+        raise RuntimeError(f"migration backup failed: {exc!r}") from exc
+
+    # 2) preflight 검사 — 충돌 시 경고 누적 후 거부
+    # 여기서는 default isolation_level("")을 그대로 둔다. preflight 자체는 SELECT만 돌고
+    # 경고 누적은 INSERT/UPDATE(DML)이라 implicit BEGIN이 깔끔하게 동작한다. phase 러너에서만
+    # isolation_level=None을 쓰는 것은 거기서만 DDL이 섞이기 때문이다 (asymmetry 의도적).
+    with get_conn() as conn:
+        conflicts = _run_preflight_checks(conn)
+        if conflicts:
+            for msg in conflicts:
+                _append_team_migration_warning(conn, "preflight", msg)
+                print(f"{_MIGRATION_LOG_PREFIX} preflight conflict: {msg}")
+            # conn.commit()은 get_conn 종료 시 자동 — 경고는 영속화하고 종료
+        # conflicts가 있으면 with 블록 종료 후 raise (경고가 먼저 commit 되도록)
+    if conflicts:
+        raise RuntimeError(
+            f"migration preflight failed with {len(conflicts)} conflict(s); see settings.team_migration_warnings"
+        )
+
+    # 3) 각 phase 격리 트랜잭션 실행
+    #
+    # Python sqlite3의 default isolation_level=""는 DDL(CREATE/ALTER/DROP) 직전에
+    # 자동 COMMIT을 호출하여, body가 raise해도 DDL은 이미 영속화되는 함정이 있다.
+    # phase 본문이 DDL+DML 혼합일 때 부분 적용을 막기 위해 isolation_level=None으로
+    # 자동 트랜잭션을 끄고 BEGIN IMMEDIATE/COMMIT/ROLLBACK을 수동으로 관리한다.
+    # 이 변경은 phase 러너 안의 conn에만 적용되며, 코드베이스 전역 get_conn()
+    # 시맨틱은 건드리지 않는다.
+    for name, body in pending:
+        try:
+            with get_conn() as conn:
+                conn.isolation_level = None
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    body(conn)
+                    _mark_phase_done(conn, name)
+                    conn.execute("COMMIT")
+                except Exception:
+                    conn.execute("ROLLBACK")
+                    raise
+            print(f"{_MIGRATION_LOG_PREFIX} phase {name!r} OK")
+        except Exception as exc:
+            print(f"{_MIGRATION_LOG_PREFIX} phase {name!r} FAILED: {exc!r}")
+            raise RuntimeError(f"migration phase {name!r} failed: {exc!r}") from exc
 
 
 @contextmanager

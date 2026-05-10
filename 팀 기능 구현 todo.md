@@ -22,12 +22,12 @@
 
 📖 섹션 13 (실행 절차 + Phase 1~5 + 운영자 체크리스트)
 
-- [ ] **구현**
-  - [ ] `init_db()`에 자동 백업 로직 추가 (미적용 마이그레이션 있을 때만 `whatudoin.db.bak.{ISO8601}` 생성)
-  - [ ] Phase 마커 헬퍼: `is_phase_done(key)`, `mark_phase_done(key)` — `settings` 테이블 사용
-  - [ ] Phase 단위 트랜잭션 래퍼 (실패 시 롤백 + 서버 시작 거부 + stdout 로그)
-  - [ ] 마이그레이션 경고 누적 로그: `settings.team_migration_warnings` JSON 누적
-  - [ ] `normalize_name(s: str) -> str` 헬퍼 (NFC + lower)
+- [x] **구현**
+  - [x] `init_db()`에 자동 백업 로직 추가 (미적용 마이그레이션 있을 때만 `whatudoin.db.bak.{ISO8601}` 생성) — 실제 위치는 `backupDB/whatudoin-migrate-{YYYYMMDDTHHMMSSffffff}.db`로 prefix 공유해 90일 retention 자동 적용 (`backup.py:run_migration_backup`)
+  - [x] Phase 마커 헬퍼: `is_phase_done(key)`, `mark_phase_done(key)` — `settings` 테이블 사용 (호출자 conn 공유로 본문↔마커 동일 트랜잭션)
+  - [x] Phase 단위 트랜잭션 래퍼 (실패 시 롤백 + 서버 시작 거부 + stdout 로그) — `isolation_level=None` + `BEGIN IMMEDIATE` 수동 발행으로 DDL implicit COMMIT 우회
+  - [x] 마이그레이션 경고 누적 로그: `settings.team_migration_warnings` JSON 누적 (race-safe + 같은 (category, message) 쌍 중복 방지)
+  - [x] `normalize_name(s: str) -> str` 헬퍼 (NFC + lower) — `unicodedata.NFC + casefold`
 - [ ] **구현 (단계 내부 idempotency 가드 — destructive 작업 보호)**
   - Phase 마커는 큰 틀의 idempotency만 보장한다. 단계 내부 SQL은 추가로 WHERE 가드를 둬 재실행/부분 실패 후 재진입에도 데이터를 망가뜨리지 않도록 한다.
   - [ ] `users.name_norm` 백필: `WHERE name_norm IS NULL` (이미 채운 row 보호)
@@ -52,8 +52,8 @@
 - [ ] **검증**
   - [ ] 빈 DB에서 첫 시작 → Phase 1~4 마커 모두 기록 확인
   - [ ] 재시작 시 모든 Phase 건너뛰기 확인
-  - [ ] 인위적 실패 주입 시 서버 시작 거부 + 백업 파일로 복구 가능 확인
-  - [ ] preflight 충돌 주입 시 (예: `name_norm` 중복 강제) 서버 시작 거부 + 경고 로그에 충돌 row 명시
+  - [x] 인위적 실패 주입 시 서버 시작 거부 + 백업 파일로 복구 가능 확인 — `verify_phase_infra.py` case 3 PASS
+  - [x] preflight 충돌 주입 시 (예: `name_norm` 중복 강제) 서버 시작 거부 + 경고 로그에 충돌 row 명시 — case 7 PASS
   - [ ] **Phase 마커 강제 삭제 후 재실행 시뮬레이션** — 마커가 없어 단계가 다시 돌아도 단계 내부 WHERE 가드 덕에 비밀번호 hash 재변환·team_id 덮어쓰기·관리팀 rename 중복 등 데이터 망가짐 없음 확인
 
 ### #2. user_teams 모델 + users.role 전환 + name_norm + notifications.team_id
@@ -682,3 +682,9 @@
 - [ ] 그룹 C 완료 (#16~#22) — 관리·통합 기능 끝
 - [ ] 그룹 D 완료 (#23~#24) — 운영 정책 끝
 - [ ] 그룹 E 진입 — Phase 5 호환 컬럼 drop 검토
+
+### 단위 사이클 기록
+
+| 날짜 | 항목 | 핵심 결과 | 산출물 |
+|------|------|-----------|--------|
+| 2026-05-10 | #1 DB 마이그레이션 인프라 | `PHASES`/`_PREFLIGHT_CHECKS` 확장 포인트 + 자동 백업(`whatudoin-migrate-*.db`, 90일 retention 공유) + `BEGIN IMMEDIATE` 수동 트랜잭션 + 마커·경고·`normalize_name` 헬퍼. PHASES 본문 SQL은 추가하지 않음 (#2 이후 책임). 검증 8/8 PASS + 운영 DB 복사본 no-op smoke PASS + 사전 조건 2건(`database.py:254` 빈 DB OperationalError, settings 테이블 정의 중복) 인지. | `backup.py:28-42`, `database.py:498-501,631-811`, `.claude/workspaces/`(다음 사이클 시작 시 `archive/`로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_phase_infra.py`, `scripts/smoke_prod_db_noop.py` |
