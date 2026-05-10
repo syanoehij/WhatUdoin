@@ -10,6 +10,7 @@ import shutil
 import multiprocessing
 import threading
 import ctypes
+from pathlib import Path
 
 # 콘솔 HWND 공유 참조 (트레이·minimize-watcher·close-handler 공유)
 _HWND_REF: list = [0]
@@ -233,6 +234,29 @@ if __name__ == "__main__":
     _ensure_credentials(_run_dir())
     _ensure_admin_guide(_run_dir())
 
+    # ── 단계적 sidecar 분리 (env 토글) ─────────────────────────
+    # 분리 1단계: Scheduler service. WHATUDOIN_ENABLE_SCHEDULER_SIDECAR=1 시
+    # 별도 프로세스로 spawn하고 Web API lifespan에서 APScheduler 시작 분기 skip.
+    # 토글 미설정 시 기존 fallback 동작 유지(VSCode 디버그/일상 운영 영향 0).
+    _supervisor_instance = None
+    _scheduler_sidecar_enabled = (
+        os.environ.get("WHATUDOIN_ENABLE_SCHEDULER_SIDECAR", "").strip() == "1"
+    )
+    if _scheduler_sidecar_enabled:
+        from supervisor import (
+            WhatUdoinSupervisor, scheduler_service_spec,
+            SCHEDULER_SERVICE_ENABLE_ENV,
+        )
+        _supervisor_instance = WhatUdoinSupervisor(run_dir=_run_dir())
+        _supervisor_instance.ensure_internal_token()
+        _scheduler_spec = scheduler_service_spec(
+            command=[sys.executable, str(Path(_base_dir()) / "scheduler_service.py")],
+        )
+        _scheduler_state = _supervisor_instance.start_service(_scheduler_spec)
+        # Web API lifespan이 APScheduler를 시작하지 않도록 분기 신호 주입
+        os.environ[SCHEDULER_SERVICE_ENABLE_ENV] = "1"
+        print(f"  [sidecar] scheduler service: pid={_scheduler_state.pid} status={_scheduler_state.status}")
+
     import uvicorn
     from app import app as fastapi_app  # noqa: E402
 
@@ -300,6 +324,14 @@ if __name__ == "__main__":
     for s in servers:
         s.should_exit = True
     t.join(timeout=5)
+
+    # ── sidecar graceful shutdown ─────────────────────────────────
+    if _supervisor_instance is not None:
+        try:
+            _supervisor_instance.stop_all(timeout=5.0)
+            print("  [sidecar] all services stopped")
+        except Exception as exc:
+            print(f"  [sidecar] stop_all error: {exc}")
 
     # ── 포트 충돌 오류 처리 ───────────────────────────────────────
     for e in server_exc:
