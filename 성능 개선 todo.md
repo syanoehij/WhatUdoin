@@ -7,7 +7,7 @@
 - **1차 실행 todo로 동결** (2026-05-09): 마스터 plan rev29 + 다회 외부 검토 사이클을 거쳐 M1a~M1d 실행 + M2 이후 조건부 운영 구조 변경 step이 모두 정합 상태로 확정됐다. 신규 step 추가 사이클은 종결한다.
 - **트랙 단축 결정** (2026-05-09): M1a 완료 후 외부 검토 2차 사이클을 거쳐 M1b~M1d의 실제 실행 경로를 **M1-ULTRA**(사내 소수 사용자 기준)로 낮췄다. 단축 근거는 아래 "단축 배경" 참조. 기존 full case 세부 step은 본 문서 하단 "보수 단축안 / 회사 반입 게이트 / 후속 후보" 섹션으로 이동했고, 회사 반입 결정이나 실제 장애 징후 발생 시 끌어올린다. 상세 단축안은 [`성능 개선 단축안(M1b-M1d).md`](성능%20개선%20단축안(M1b-M1d).md) 참조.
 - **추후 변경 원칙**: 본 todo는 마스터 plan §0 "문서 라이프사이클 정책"과 동일하게 동결 상태로 둔다. 새 의견이 들어와도 M1a~M1d 실행을 막는 실재 코드/운영 리스크가 아니면 본문을 더 확장하지 않고, 구현 중 발견 사실 → commit/PR 메시지, 운영 정책/후속 마일스톤 후보 → 마스터 plan §18로 분리한다.
-- **다음 행동**: M5-1+M5-2 통합 패키지 완료. media_service.py 신설(Starlette + token + loopback + staging 정규화 + PIL/ext/dimensions + SHA-256, DB write 0) + app.py env 분기 + supervisor media_service_spec + STOP_ORDER 5종 + STARTUP_SEQUENCE 10항목. probe 80/80 + phase70 69/69 PASS, phase54~69 회귀 PASS. 다음은 M5-3 종료 부하(20MB/10MB 혼합 + Media 강제 종료).
+- **다음 행동**: **M5 후보 마일스톤 종료 (2026-05-10)**. M5-0~M5-3 4개 step 완료. M5-3 라이브 Media 통합 29/29 + 부하 thread 중 일반 API p95 78ms 8/8 + 소유권 boundary 18/18 + phase71 45/45. phase54~70 17개 회귀 PASS. 운영 코드 변경 0건. 다음 분기점은 M6 후보(MCP write/edit + DB command service) — MCP write/edit 운영 요구 발생 시 진입.
 
 ## 단축 배경
 
@@ -305,7 +305,7 @@
 | [x] M5-0 | M5 진입 게이트 평가 | Opus | §13 진입 게이트 — Upload/Media service (M5 후보) | **target-risk override 진입 (2026-05-10)** — 정량 NO-GO(M3-4/M4-4 측정값 SLA 큰 여유) but (1) M2/M3/M4 supervisor 패턴 재사용 비용 낮음, (2) Media service DB write 0 보수 설계로 운영 위협 없음, (3) PIL 메모리 spike/디스크 I/O 격리 가치, (4) M2-10 _ProtectedMeetingStaticFiles 정책 보존 가능, (5) 사용자 명시 요청. 상세: `성능 개선 진행 결과(M5).md` |
 | [x] M5-1 | Web API staging 파일 + 내부 IPC 채널 | Opus | §13 main → Upload/Media service 통신 | **적용 완료 (2026-05-10, M5-2와 통합 패키지)** — `_MEDIA_SERVICE_URL` env 캐시 + `STAGING_ROOT = MEETINGS_DIR.parent/"staging"` 정책 + `_call_media_service` IPC 헬퍼(stdlib urllib.request, Bearer, timeout 30s). `/api/upload/image` + `/api/upload/attachment` 핸들러 env 분기 — 설정 시 stream 방식 staging 파일 저장(base64 회피) + IPC + 응답 ok 시 MEETINGS_DIR 이동, 미설정 시 기존 in-process 100% 유지. staging path 정규화로 symlink/`..` 차단. ConnectionError/timeout → M1c-9 통합 UX 일관. 상세: `성능 개선 진행 결과(M5).md` |
 | [x] M5-2 | Media service (저장/검증/썸네일/메타데이터) | Sonnet | §7 M1c 이후 후보 + §13 서비스 책임 표 | **적용 완료 (2026-05-10, M5-1과 통합 패키지)** — `media_service.py` 신설(Starlette + `/internal/process` Bearer + loopback guard + staging path 정규화 + PIL.verify 이중 open + ext whitelist + dimensions + SHA-256 16자, **DB write 0건 grep 단언**). `/healthz` 5종 키. supervisor `media_service_spec()` factory + 4 protected env(bind_host/port/internal_token/staging_root) + extra_env override 차단. `web_api_internal_service_env`에 MEDIA_SERVICE_URL 자동 주입. STOP_ORDER `(ollama, media, sse, scheduler, web-api)` 5종. M2_STARTUP_SEQUENCE 10항목(ollama 다음 media). probe 80/80 + phase70 69/69 PASS, phase54~69 회귀 PASS. 상세: `성능 개선 진행 결과(M5).md` |
-| [ ] M5-3 | M5 종료 부하 + exit criteria 점검 | Opus | §17 M5 후보 완료 기준 | 20MB/10MB 혼합 업로드 중 일반 API p95/RSS/SSE 수신 지연이 M1c 대비 회귀 0, Media 실패/강제 종료 시 Web API/SSE/MCP/LLM 정상 동작. **소유권 증거 3종** — (a) Media service의 SQLite write 0건(grep + 코드 리뷰), (b) Web API가 외부 업로드 endpoint·인증/권한 검사·대상 리소스 검증·DB metadata write·SSE publish/history/audit 후처리를 모두 보유(소유 함수 목록 + 회귀 테스트), (c) Web API가 staging root 밖 경로를 정규화 후 거부하는 경로 정규화 단위 테스트 통과(악성 파일명/`..` 우회/심볼릭 링크 시도 모두 거부). Media service는 외부 노출 없이 내부 토큰으로만 호출됨이 외부 직접 호출 회귀 테스트로 확인됨 |
+| [x] M5-3 | M5 종료 부하 + exit criteria 점검 | Opus | §17 M5 후보 완료 기준 | **M5 종료 (2026-05-10)** — 라이브 Media 통합(spawn → IPC → 강제 종료 → 재시작 회복) 29/29 PASS. 부하(20MB/10MB 혼합 업로드 thread 진행 중 일반 API p95 78ms, SLA 500ms 대비 6× 여유) 8/8 PASS. 소유권 boundary 3종(Media DB write 0 grep + Web API endpoint/권한/DB/SSE/audit owner 함수 목록 + staging 정규화 5종 차단) + 외부 직접 호출 차단 18/18 PASS. phase71 45/45 PASS. phase54~70 17개 회귀 PASS. 운영 코드 변경 0건. M5 종료 게이트 통과. 상세: `성능 개선 진행 결과(M5).md` |
 
 ---
 
@@ -337,7 +337,7 @@
 | M2 | target-risk override | **완료** | **21/21** | M2-1~M2-19 모두 적용. M2-20 종료: 정책별 증거 인덱스 20종 + 라이브 supervisor 통합(spawn→healthz→token 3종→stop_all 14/14 PASS) + 50 SSE 부하 10/10 PASS(publish→수신 p95 <0.1ms loopback, /healthz p95 16ms, subscribers 0 복귀). phase54~61 155단언 모두 PASS. **M2 마일스톤 종료** — M3 진입 게이트 평가는 별도 step |
 | M3 | target-risk override | **완료** | **5/5** | M3-1~M3-3 적용 + M3-4 종료: 라이브 supervisor 14/14 + owner 정책 위반 3종 0건 21/21 + 일반 API p95 12.9ms + lock 0건 8/8. phase54~65 회귀 PASS. 운영 코드 변경 0건. **M3 마일스톤 종료** |
 | M4 | target-risk override | **완료** | **5/5** | M4-0~M4-3 적용 + M4-4 종료: 라이브 4 service 통합 21/21(stop_all 2.03s) + Ollama hang 중 일반 API p95 31.0ms(SLA 500ms 대비 16× 여유) 8/8 + phase69 39/39. phase54~68 회귀 PASS. 운영 코드 변경 0건. **M4 마일스톤 종료** |
-| M5 후보 | target-risk override | M5-3 대기 | **3/4** | M5-0 override. M5-1+M5-2 통합 패키지: media_service.py 신설(Starlette + token + loopback + staging 정규화 + PIL/ext/dimensions + SHA-256, DB write 0) + app.py env 분기 + supervisor media_service_spec + STOP_ORDER 5종 + STARTUP_SEQUENCE 10항목 |
+| M5 후보 | target-risk override | **완료** | **4/4** | M5-0~M5-2 적용 + M5-3 종료: 라이브 Media 통합 29/29 + 부하 thread 중 일반 API p95 78ms 8/8 + 소유권 boundary/외부 차단 18/18 + phase71 45/45. phase54~70 17개 회귀 PASS. 운영 코드 변경 0건. **M5 마일스톤 종료** |
 | M6 후보 | 운영 요구 발생 | — | 0/5 | M6-0 게이트 평가 포함, 조건부 |
 
 ### 보수 단축안 / 회사 반입 게이트 (회사 반입 결정 또는 장애 징후 시 활성화)
