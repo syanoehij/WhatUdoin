@@ -255,20 +255,21 @@
 📖 섹션 6 (자동 로그인 IP 등록), 섹션 10 (IP 관리 범위)
 **의존: ← #7**
 
-- [ ] **구현 (사용자 자체 등록)**
-  - [ ] 설정 화면에 "현재 PC를 자동 로그인 대상으로 등록" 토글
-  - [ ] 토글 ON 시 확인 모달 (보안 안내 문구 포함)
-  - [ ] `/api/me/ip-whitelist` (POST): 클라이언트 IP를 `user_ips`에 `whitelist` 등록
-  - [ ] `/api/me/ip-whitelist` (DELETE): 본인 whitelist 해제
-  - [ ] 충돌 시(다른 사용자가 같은 IP 등록) 409 + 안내
-- [ ] **구현 (admin 관리)**
-  - [ ] `/admin`에서 임의 사용자 IP 이력 조회·whitelist 등록·해제·삭제
-  - [ ] 임의 IP 직접 입력 등록 (사용자 접속 이력 없는 IP도 가능)
-- [ ] **마이그레이션 (Phase 4: 제약)**
-  - [ ] `user_ips` 부분 UNIQUE 인덱스: `type='whitelist'`인 `ip_address` 전역 유일
-- [ ] **검증**
-  - [ ] admin 세션에서 사용자 자체 등록 토글이 안 보임
-  - [ ] 팀 관리자에게 IP 관련 UI/API 노출 안 됨
+- [x] **구현 (사용자 자체 등록)**
+  - [x] 설정 화면에 "현재 PC를 자동 로그인 대상으로 등록" 토글 — `base.html` 사용자 설정 사이드 패널 `#ip-autologin-section`
+  - [x] 토글 ON 시 확인 모달 (보안 안내 문구 포함) — `wuDialog.confirm`, 사양서 §6 문구 그대로
+  - [x] `/api/me/ip-whitelist` (POST): 클라이언트 IP를 `user_ips`에 `whitelist` 등록 (`db.set_user_whitelist_ip`). admin이면 403
+  - [x] `/api/me/ip-whitelist` (DELETE): 본인 whitelist 해제 (`type='history'` 강등, row 보존)
+  - [x] 충돌 시(다른 사용자가 같은 IP 등록) 409 + 안내. (보조: `GET /api/me/ip-whitelist`로 초기 토글 상태·충돌 안내 — todo 명세 외 구현)
+- [x] **구현 (admin 관리)**
+  - [x] `/admin` IP 모달에서 임의 사용자 IP 이력 조회·whitelist 토글·삭제 (`PUT /api/admin/ips/{id}/whitelist` 충돌 409 보강, `DELETE /api/admin/ips/{id}` 추가)
+  - [x] 임의 IP 직접 입력 등록 (`POST /api/admin/users/{id}/ips`, 접속 이력 없는 IP도 가능)
+- [x] **마이그레이션 (Phase 4: 제약)**
+  - [x] `user_ips` 부분 UNIQUE 인덱스: `type='whitelist'`인 `ip_address` 전역 유일 — phase `team_phase_4b_user_ips_whitelist_unique_v1` + preflight `_check_user_ips_whitelist_unique`(충돌 시 abort + `team_migration_warnings`) + `tools/migration_doctor.py` [4] 진단 추가
+- [x] **검증**
+  - [x] admin 세션에서 사용자 자체 등록 토글이 안 보임 — `GET /api/me/ip-whitelist` admin=true → 섹션 숨김 + `POST /api/me/ip-whitelist` 서버 403
+  - [x] 팀 관리자에게 IP 관련 UI/API 노출 안 됨 — IP API는 `_require_admin`(시스템 관리자 전용). 멤버 관리 페이지(#18)에서 팀 관리자 숨김은 #18 책임
+  - 합성 DB + TestClient + 마이그레이션 phase 직접 호출 59 PASS (`scripts/verify_team_a_009.py`). 실서버 브라우저 E2E는 서버 재시작 후 후속.
 
 ### #10. 문서·체크 팀 경계 완성 + 편집·삭제 권한 모델
 
@@ -696,4 +697,5 @@
 | 2026-05-11 | #6 events/checklists.project_id 백필 + 자동 프로젝트 생성 | Phase 본문(`team_phase_6_project_id_backfill_v1`): events/checklists.project_id 매칭 백필(`(team_id, name_norm)`, deleted_at IS NULL 우선) + team_id 있고 매칭 실패 row의 자동 프로젝트 생성(같은 phase 내 캐시로 중복 방지, `(team_id, name_norm)` 부분 UNIQUE와 정합). team_id NULL row는 project_id NULL + `project_id_backfill_no_team` warning. project_milestones/project_members/trash_project_id dangling 검증(발견 시 `project_id_backfill_dangling_trash` warning, 데이터 변경 X). Phase 4 인덱스(`idx_events_project_id`, `idx_checklists_project_id`) 추가. 신규 쓰기 경로: INSERT INTO events/checklists + PATCH /api/events/{id}/project + `update_checklist`(리뷰 1차 차단 결함 패치)에서 project_id 동반 갱신. 읽기 경로 전환은 #10 책임. 17 케이스 PASS. | `database.py`. archive: `archive/TeamA_006_ProjectIdBackfill_20260511_001118/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_project_id_backfill.py}` |
 | 2026-05-11 | #7 비밀번호 hash + 일반 로그인 이름+비밀번호 + name_norm UNIQUE | 신규 `passwords.py` 모듈(hash_password/verify_password). Phase 본문(`team_phase_7_password_hash_v1`): 평문 password → password_hash 일괄 변환(admin 포함, 빈 password 가드), 같은 트랜잭션에서 `password = ''` 처리(NOT NULL 제약 deviation으로 빈 문자열 — 자가 발견 결함 패치). preflight 2건(`_check_users_name_norm_unique`, `_check_teams_name_norm_unique`) → 충돌 시 서버 시작 거부. Phase 4 인덱스: `users.name_norm` 전역 UNIQUE, `teams.name_norm` UNIQUE. 라우트: POST /api/login 이름+비밀번호 + 정규식(`^[A-Za-z0-9가-힣]+$`) + name_norm 매칭 + admin 제외(더미 hash 비교로 timing 차이 최소화), POST /api/me/change-password 새 비밀번호 정책(영문+숫자 동시 포함) + hash 저장, POST /api/admin/login 내부 hash 검증으로 교체(외부 동작 동일). DB 함수 `get_user_by_login` 신규, `get_user_by_credentials` 내부 변경, `reset_user_password` hash 저장. **운영 DB 반영은 서버 재시작 시 phase 자동 적용** — 재시작 전 `users.name_norm`/`teams.name_norm` 충돌 검사 SQL은 qa_report.md 참고. import-time 63 PASS. | `database.py`, `app.py`, `passwords.py`(신규), `templates/base.html`. archive: `archive/TeamA_007_PasswordHash_20260511_004746/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_password_hash.py, scripts/verify_login_routes.py}` |
 | 2026-05-11 | #8 계정 가입과 팀 신청 분리 | `/api/register` 를 pending_users 승인 대기 → 즉시 가입+자동 로그인으로 교체: `db.create_user_account`(name_norm 정규화·`password=''`+`password_hash`·`role='member'`·`team_id=NULL`, 사전 SELECT + IntegrityError 이중 가드), 정규식·비밀번호 정책(#7 헬퍼 재사용), 예약어 차단(`RESERVED_USERNAMES` + `casefold`), set_cookie 자동 세션. 팀 신청 분리: `POST /api/me/team-applications`(`db.apply_to_team` — 임의 팀 pending 1건이라도 있으면 신규 차단, approved 중복 차단, rejected→같은 row pending 갱신·joined_at 보존), `GET/POST /api/teams/{team_id}/applications[/{user_id}/decide]`(`_require_team_admin` = 글로벌 admin 또는 `user_teams.role='admin'`, decide는 화이트리스트+pending row만). `db.list_team_applications`/`decide_team_application`/`get_team_active` 신규. 프론트: register.html(memo 제거·`/` 리다이렉트), base.html 모달 문구. 마이그레이션 phase 변경 없음 → 서버 재시작 불필요. `check_register_duplicate`/`create_pending_user` 데드코드 보존(Phase 5 drop 시 정리). 리뷰 차단 0(경고 2). 합성 DB+TestClient 72 PASS. | `app.py`, `database.py`, `templates/register.html`, `templates/base.html`. workspace(다음 사이클 시작 시 archive로 이동): `00_input/feature_spec.md`, `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_team_a_008.py` |
+| 2026-05-11 | #9 IP 자동 로그인 관리 | `database.py`: `IPWhitelistConflict` 예외 + helper(`find_whitelist_owner`, `get_whitelist_status_for_ip`, `set_user_whitelist_ip`/`admin_set_whitelist_ip`(한 트랜잭션 충돌검사+history 1개 승격 or INSERT, IntegrityError→Conflict), `remove_user_whitelist_ip`(type='history' 강등 row 보존), `delete_ip_row`, `toggle_ip_whitelist` enable 충돌 시 예외). 신규 phase `team_phase_4b_user_ips_whitelist_unique_v1`(#4 데이터 백필 직후 등록): `idx_user_ips_whitelist_unique ON user_ips(ip_address) WHERE type='whitelist'` 부분 UNIQUE. preflight `_check_user_ips_whitelist_unique`(같은 IP 2명+ whitelist → abort + `preflight_user_ips_whitelist` warning, 자동 정리 없음 — phase 5a 식 자동 dedup 미적용). `app.py`: `GET/POST/DELETE /api/me/ip-whitelist`(POST는 admin 403), `POST /api/admin/users/{id}/ips`, `DELETE /api/admin/ips/{id}`, `PUT /api/admin/ips/{id}/whitelist` 충돌 409 보강, `_require_login` 헬퍼. 프론트: `base.html` 사용자 설정 패널 자동 로그인 토글(admin/비로그인 숨김, ON 시 `wuDialog.confirm` 사양서 §6 문구, OFF 즉시 DELETE, 초기 상태 `GET /api/me/ip-whitelist`), `admin.html` IP 모달에 임의 IP 등록 input + row 삭제 버튼 + 409 토스트. `tools/migration_doctor.py` [4] user_ips whitelist 충돌 진단 + 권장 SQL 추가. QA 자가 발견 결함 1건(history 중복 row 일괄 승격 → IntegrityError): MIN(id) 1개만 승격으로 패치. 리뷰 차단 0(경고 2). 합성 DB+TestClient+마이그레이션 phase 직접 호출 59 PASS. **서버 재시작 필요**(phase 4b + 새 라우트). | `database.py`, `app.py`, `templates/base.html`, `templates/admin.html`, `tools/migration_doctor.py`. workspace(다음 사이클 시작 시 archive로 이동): `00_input/feature_spec.md`, `backend_changes.md`, `frontend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_team_a_009.py` |
 | 2026-05-11 | A보강 자동 dedup phase + 운영자 도구 | 회사 운영 DB 첫 실행 안전망. 신규 phase `team_phase_5a_projects_dedup_safe_v1` (#5 앞에 등록): `(team_id, name_norm)` 충돌 그룹 중 events/checklists.project_id, project_members, project_milestones, trash_project_id, 문자열 project 참조 모두 0건인 row만 안전 hard DELETE(모든 row 0 참조면 MIN(id) 1개 살림). unsafe 그룹은 보존 → 이후 #5 preflight 거부 흐름 유지. warning 카테고리 `dedup_projects_auto`. 신규 `tools/migration_doctor.py` + `main.py --doctor` sub-command(콘솔/sidecar/uvicorn 초기화 전 분기): `check`(read-only 진단, projects 안전/unsafe 분류, users/teams.name_norm 충돌+권장 SQL 템플릿), `fix-projects`(dry-run 기본) / `--apply`(자체 백업 후 정리). `WhatUdoin.spec`에 tools 폴더 + hiddenimports 추가. 리뷰 블로커 1건(BEGIN IMMEDIATE 트랜잭션 충돌) + 마이너 1건(GROUP_CONCAT split) 즉시 패치. dedup 7 시나리오 + doctor 5 시나리오 PASS. 운영 DB 사전 진단: 자동 정리 가능 1건만 검출(`team_id=17, name_norm='alpha', ids=[104,105]`), unsafe 0건 → 서버 재시작만으로 phase 5a 자동 흡수. | `database.py`, `tools/migration_doctor.py`(신규), `tools/__init__.py`(신규), `main.py`, `WhatUdoin.spec`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_dedup_phase.py`, `scripts/verify_migration_doctor.py` |

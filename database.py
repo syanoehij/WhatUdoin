@@ -1539,6 +1539,37 @@ def _phase_4_data_backfill(conn):
 PHASES.append(("team_phase_4_data_backfill_v1", _phase_4_data_backfill))
 
 
+# ── 팀 기능 그룹 A #9 — user_ips whitelist 부분 UNIQUE 인덱스 ────────
+# 본 사이클 본문이 수행하는 일:
+#   user_ips(ip_address) 위에 `WHERE type='whitelist'` 부분 UNIQUE 인덱스 생성.
+#   → "1 IP = 1 사용자" 강제. history row는 인덱스 면제(중복 허용 — 접속 이력).
+#
+# 충돌(같은 IP가 2명 이상에게 whitelist)은 본문 진입 전 preflight
+# (`_check_user_ips_whitelist_unique`)가 잡아 서버 시작을 거부한다. Phase 3가 admin
+# whitelist를 history로 강등하므로 여기 도달하는 충돌은 일반 사용자 간 충돌뿐이며,
+# 안전한 자동 선택 기준이 없으므로 자동 정리(phase 5a 같은) 없이 abort + 경고만 한다.
+# 운영자가 `tools/migration_doctor.py` 또는 수동 SQL로 정리한 뒤 재시작한다.
+
+def _phase_4b_user_ips_whitelist_unique(conn):
+    """Phase: user_ips whitelist 부분 UNIQUE 인덱스 등록.
+
+    빈 DB나 두 번째 init_db()에서는 인덱스 노옵(IF NOT EXISTS)으로 끝난다.
+    """
+    if not _table_exists(conn, "user_ips"):
+        return
+    cols = _column_set(conn, "user_ips")
+    if "ip_address" not in cols or "type" not in cols:
+        # 구조적 오류 — 본문 실패로 ROLLBACK.
+        raise RuntimeError("phase 4b: user_ips.ip_address/type column missing")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_ips_whitelist_unique "
+        "ON user_ips(ip_address) WHERE type = 'whitelist'"
+    )
+
+
+PHASES.append(("team_phase_4b_user_ips_whitelist_unique_v1", _phase_4b_user_ips_whitelist_unique))
+
+
 # ── 팀 기능 그룹 A #5a — projects 자동 dedup (안전 그룹만) ────────
 # 본 사이클(보강) 본문이 수행하는 일:
 #   같은 (team_id, name_norm) 그룹에서 "참조 0건 + 빈 row"만 자동 hard DELETE.
@@ -2325,6 +2356,44 @@ def _check_teams_name_norm_unique(conn):
 
 
 _PREFLIGHT_CHECKS.append(_check_teams_name_norm_unique)
+
+
+def _check_user_ips_whitelist_unique(conn):
+    """Preflight: user_ips 의 type='whitelist' ip_address 전역 충돌 검사 (#9).
+
+    같은 ip_address가 2명 이상에게 whitelist면 부분 UNIQUE 인덱스 생성이 실패하므로
+    사전에 막는다. Phase 3가 admin whitelist를 history로 강등한 뒤 실행되므로 여기
+    걸리는 충돌은 일반 사용자 간 충돌이다. 자동 정리 없이 abort — 운영자가 정리한다.
+
+    반환: list[(category, message)] — 카테고리는 'preflight_user_ips_whitelist'.
+    """
+    if not _table_exists(conn, "user_ips"):
+        return []
+    cols = _column_set(conn, "user_ips")
+    if "ip_address" not in cols or "type" not in cols:
+        return []
+
+    rows = conn.execute(
+        "SELECT ip_address, COUNT(*) AS dup, GROUP_CONCAT(user_id) AS uids "
+        "  FROM user_ips "
+        " WHERE type = 'whitelist' "
+        " GROUP BY ip_address "
+        "HAVING COUNT(*) > 1"
+    ).fetchall()
+
+    conflicts: list = []
+    for row in rows:
+        ip = row["ip_address"] if isinstance(row, sqlite3.Row) else row[0]
+        dup = row["dup"] if isinstance(row, sqlite3.Row) else row[1]
+        uids = row["uids"] if isinstance(row, sqlite3.Row) else row[2]
+        conflicts.append((
+            "preflight_user_ips_whitelist",
+            f"user_ips (ip_address={ip!r}) whitelisted to {dup} users uids=[{uids}]",
+        ))
+    return conflicts
+
+
+_PREFLIGHT_CHECKS.append(_check_user_ips_whitelist_unique)
 
 
 def _run_preflight_checks(conn) -> list:
@@ -4528,10 +4597,144 @@ def get_user_ips(user_id: int):
     return [dict(r) for r in rows]
 
 
+class IPWhitelistConflict(Exception):
+    """같은 IP가 이미 다른 사용자에게 whitelist로 등록돼 있을 때.
+
+    라우트 호출부가 409로 매핑한다. 메시지는 진단용이며, 사용자 노출 문구는
+    app.py 쪽에서 별도로 정한다.
+    """
+
+
+def _whitelist_owner_id(conn, ip: str):
+    """해당 IP의 현재 whitelist 소유 user_id (없으면 None). 같은 트랜잭션 안에서 호출."""
+    row = conn.execute(
+        "SELECT user_id FROM user_ips WHERE ip_address = ? AND type = 'whitelist' LIMIT 1",
+        (ip,),
+    ).fetchone()
+    if row is None:
+        return None
+    return row["user_id"] if isinstance(row, sqlite3.Row) else row[0]
+
+
+def find_whitelist_owner(ip: str):
+    """해당 IP를 whitelist로 보유한 user_id. 없으면 None."""
+    with get_conn() as conn:
+        return _whitelist_owner_id(conn, ip)
+
+
+def get_whitelist_status_for_ip(user_id: int, ip: str) -> dict:
+    """설정 패널 초기 상태용.
+
+    반환: {enabled, conflict, conflict_user, ip}
+      - enabled: 현재 user_id가 이 IP를 whitelist로 보유 중
+      - conflict: 다른 사용자가 이 IP를 whitelist로 보유 중
+      - conflict_user: conflict일 때 그 사용자 이름 (아니면 None)
+    """
+    with get_conn() as conn:
+        owner_id = _whitelist_owner_id(conn, ip)
+        if owner_id is None:
+            return {"enabled": False, "conflict": False, "conflict_user": None, "ip": ip}
+        if owner_id == user_id:
+            return {"enabled": True, "conflict": False, "conflict_user": None, "ip": ip}
+        urow = conn.execute("SELECT name FROM users WHERE id = ?", (owner_id,)).fetchone()
+        name = (urow["name"] if isinstance(urow, sqlite3.Row) else urow[0]) if urow else None
+        return {"enabled": False, "conflict": True, "conflict_user": name, "ip": ip}
+
+
+def _set_whitelist_ip_locked(conn, user_id: int, ip: str) -> None:
+    """한 트랜잭션 안에서 user_id에게 ip를 whitelist로 등록.
+
+    - 다른 사용자가 같은 IP를 whitelist로 보유 중이면 IPWhitelistConflict.
+    - 같은 (user_id, ip) history row가 있으면 type='whitelist'로 승격.
+    - 아무 row도 없으면 새 whitelist row INSERT.
+    - 이미 같은 (user_id, ip) whitelist row면 노옵.
+
+    INSERT/UPDATE는 부분 UNIQUE 인덱스(idx_user_ips_whitelist_unique)가 race를
+    최종 방어한다. IntegrityError도 IPWhitelistConflict로 변환한다.
+    """
+    owner_id = _whitelist_owner_id(conn, ip)
+    if owner_id is not None and owner_id != user_id:
+        raise IPWhitelistConflict(f"ip {ip!r} already whitelisted to user {owner_id}")
+    if owner_id == user_id:
+        return  # 이미 본인 whitelist — 노옵
+    try:
+        # 같은 (user_id, ip) history row가 1개라도 있으면 그 중 하나(MIN id)만 승격.
+        # (접속 이력 history는 중복 허용이라 여러 row가 있을 수 있다 — 부분 UNIQUE 인덱스가
+        #  whitelist에만 걸리므로, 전체를 한 번에 승격하면 두 번째 row에서 IntegrityError가 난다.)
+        row = conn.execute(
+            "SELECT MIN(id) AS hid FROM user_ips "
+            "WHERE user_id = ? AND ip_address = ? AND type = 'history'",
+            (user_id, ip),
+        ).fetchone()
+        hid = (row["hid"] if isinstance(row, sqlite3.Row) else row[0]) if row else None
+        if hid is not None:
+            conn.execute("UPDATE user_ips SET type = 'whitelist' WHERE id = ?", (hid,))
+        else:
+            conn.execute(
+                "INSERT INTO user_ips (user_id, ip_address, type) VALUES (?, ?, 'whitelist')",
+                (user_id, ip),
+            )
+    except sqlite3.IntegrityError as exc:
+        raise IPWhitelistConflict(f"ip {ip!r} whitelist conflict: {exc!r}") from exc
+
+
+def set_user_whitelist_ip(user_id: int, ip: str) -> None:
+    """사용자 자체 등록 — 본인 IP를 whitelist로. 충돌 시 IPWhitelistConflict."""
+    with get_conn() as conn:
+        _set_whitelist_ip_locked(conn, user_id, ip)
+
+
+def admin_set_whitelist_ip(target_user_id: int, ip: str) -> None:
+    """admin 직접 등록 — 임의 사용자에게 임의 IP를 whitelist로.
+
+    접속 이력 없는 IP도 새 row로 추가한다. 충돌 시 IPWhitelistConflict.
+    """
+    with get_conn() as conn:
+        _set_whitelist_ip_locked(conn, target_user_id, ip)
+
+
+def remove_user_whitelist_ip(user_id: int, ip: str) -> None:
+    """본인 whitelist 해제 — 해당 (user_id, ip)의 whitelist row를 type='history'로 강등.
+
+    row 삭제하지 않음(접속 이력 보존, 자동 로그인 효력만 제거 — 사양서 §6).
+    """
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE user_ips SET type = 'history' "
+            "WHERE user_id = ? AND ip_address = ? AND type = 'whitelist'",
+            (user_id, ip),
+        )
+
+
+def delete_ip_row(ip_id: int) -> None:
+    """admin — user_ips row 삭제."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM user_ips WHERE id = ?", (ip_id,))
+
+
 def toggle_ip_whitelist(ip_id: int, enable: bool):
+    """admin — 기존 row의 whitelist/history 토글.
+
+    enable=True로 켤 때 그 row의 IP가 이미 다른 사용자에게 whitelist면
+    IPWhitelistConflict (라우트가 409 매핑). enable=False는 항상 허용.
+    """
     new_type = "whitelist" if enable else "history"
     with get_conn() as conn:
-        conn.execute("UPDATE user_ips SET type = ? WHERE id = ?", (new_type, ip_id))
+        row = conn.execute(
+            "SELECT user_id, ip_address FROM user_ips WHERE id = ?", (ip_id,)
+        ).fetchone()
+        if row is None:
+            return
+        uid = row["user_id"] if isinstance(row, sqlite3.Row) else row[0]
+        ip = row["ip_address"] if isinstance(row, sqlite3.Row) else row[1]
+        if enable:
+            owner_id = _whitelist_owner_id(conn, ip)
+            if owner_id is not None and owner_id != uid:
+                raise IPWhitelistConflict(f"ip {ip!r} already whitelisted to user {owner_id}")
+        try:
+            conn.execute("UPDATE user_ips SET type = ? WHERE id = ?", (new_type, ip_id))
+        except sqlite3.IntegrityError as exc:
+            raise IPWhitelistConflict(f"ip {ip!r} whitelist conflict: {exc!r}") from exc
 
 
 # ── Pending Users ────────────────────────────────────────

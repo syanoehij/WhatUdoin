@@ -1,97 +1,81 @@
 # 요청
-'팀 기능 구현 todo.md' 그룹 A의 #8 (계정 가입과 팀 신청 분리) 구현.
+'팀 기능 구현 todo.md' 그룹 A의 #9 (IP 자동 로그인 관리) 진행.
 
 # 분류
-백엔드 수정 (라우트/DB 함수 변경 중심) + 소량 프론트 (register.html 안내 문구·자동 로그인). 실행 모드: 팀 모드(backend → frontend → reviewer → qa). 프론트는 최소(register.html의 success 동작·문구만, 팀 신청 UI는 #12·#14·#18 책임).
+백엔드 + 프론트엔드 수정 (마이그레이션 phase 추가 포함) / backend → reviewer → qa 흐름
 
-# 컨텍스트 (탐색 결과)
-- `passwords.py`: `hash_password`, `verify_password`, `is_valid_user_name`(`^[A-Za-z0-9가-힣]+$`), `is_valid_password_policy`(영문+숫자 동시), `DUMMY_HASH`.
-- `database.py`:
-  - `normalize_name(s)` — NFC+casefold 정규화 (line 771).
-  - `user_teams` 컬럼: `id, user_id, team_id, role, status, joined_at` (created_at 없음). `idx_user_teams_user_team` UNIQUE on `(user_id, team_id)` (phase 4).
-  - `users` 컬럼: name, name_norm, password, password_hash, role, team_id, is_active, ... — password NOT NULL DEFAULT ''.
-  - `check_register_duplicate`(line 4539), `create_pending_user`(4557), `get_pending_users`(4566), `approve_pending_user`(4574), `reject_pending_user`(4591) — pending_users 테이블 기반. **이 사이클은 register 경로에서 pending 쓰기만 제거**, admin 승인 UI/라우트는 그대로 둠 (Phase 5/후속에서 정리).
-  - `create_session(user_id, role="editor")`, `record_ip(user_id, ip)`.
-- `app.py`:
-  - `/api/register` (line 1446): 현재 `check_register_duplicate` → `create_pending_user`. 교체 대상.
-  - `/api/login` (1399 근처): 이미 이름+비밀번호+정규식+name_norm 매칭 (#7).
-  - `/api/me/change-password` (1415).
-  - admin pending 라우트 (1486~1509): `/api/admin/pending`, `.../approve`, `.../reject` — 그대로 둠.
-  - `auth.SESSION_COOKIE`, `auth.get_client_ip`, `auth.get_current_user`, `auth.is_admin`, `auth.is_team_admin`.
-- `templates/register.html`: 가입 폼(이름·비밀번호·메모) + success-box("관리자 승인 후 사용 가능"). #8 후엔 즉시 가입 완료 + 자동 로그인 + `/` 이동으로 바꿔야 함.
-- `templates/base.html`: line 521 `<a href="/register" class="login-link">가입 신청</a>` — 문구 "계정 가입"으로 변경 검토(선택).
+# 권위 명세
+- todo.md "### #9. IP 자동 로그인 관리" 섹션 (L253~271)
+- 계획.md 섹션 6 "IP 자동 로그인 운영 전제" + "자동 로그인 대상 IP 등록 경로" (L315~334)
+- 계획.md 섹션 10 "IP 관리 범위" 표 (L574~597)
 
-# 에이전트별 작업
+# 기존 코드 정합
+- `database.py`: `user_ips(id, user_id, ip_address, type DEFAULT 'history', last_seen)` 테이블 존재. `get_user_by_whitelist_ip`, `record_login_ip`, `get_user_ips`, `toggle_ip_whitelist` 존재. Phase 3가 이미 admin whitelist→history 강등.
+- `auth.py`: `get_client_ip(request)`, `get_current_user` (세션 → whitelist IP, admin이면 None 반환).
+- `app.py`: `GET /api/admin/users/{user_id}/ips`, `PUT /api/admin/ips/{ip_id}/whitelist` 존재. `_require_admin`, `_require_editor`.
+- `templates/base.html`: `#user-settings-panel` 사이드 패널 (메뉴 표시 / 로컬 데이터 초기화 섹션). `CURRENT_USER` JS 객체 (role 포함). `/api/me/change-password` 패턴.
+- `templates/admin.html`: IP 모달(`#ip-modal`), `openIPs`/`toggleWhitelist`.
+- 마이그레이션 phase 패턴: `database.py` `PHASES.append((name, fn))`, 마지막 등록 = `team_phase_4_data_backfill_v1` (L1539). preflight 충돌 검사는 `_phase_5_projects_unique` 패턴 참조 + `team_migration_warnings` 누적.
 
-## backend-dev
-### A. /api/register 신규 흐름 (app.py + database.py)
-1. `database.py`에 신규 함수 `create_user_account(name, password) -> dict | None`:
-   - `name_norm = normalize_name(name)`.
-   - 트랜잭션 안에서 `users(name, name_norm, password, password_hash, role, team_id, is_active)` INSERT. `password=''`(NOT NULL deviation, #7과 동일), `password_hash=passwords.hash_password(password)`, `role='member'`, `team_id=NULL`, `is_active=1`.
-   - `users.name_norm` 전역 UNIQUE 인덱스(#7)와 충돌 시 `sqlite3.IntegrityError` → None 반환 (라우트가 409 매핑) 또는 사전 SELECT로 중복 검사 후 메시지 반환. **권장: 사전 SELECT + IntegrityError 둘 다 가드** (race 안전).
-   - 반환: `{"id": ..., "name": ..., "role": "member", "team_id": None}`.
-2. `app.py` `/api/register` 교체:
-   - body: `{name, password}` (memo는 더 이상 받지 않거나 무시).
-   - `name`/`password` 빈 값 → 400.
-   - `passwords.is_valid_user_name(name)` 위반 → 400 "이름은 영문·숫자·한글만 사용할 수 있습니다."
-   - **예약 사용자명 차단**: `name.casefold()` 또는 `name.lower()` ∈ {`admin`, `system`, `root`, `guest`, `anonymous`} → 400 "사용할 수 없는 이름입니다." (모듈 상수 `RESERVED_USERNAMES` 정의).
-   - `passwords.is_valid_password_policy(password)` 위반 → 400 "비밀번호는 영문과 숫자를 모두 포함해야 합니다."
-   - `db.create_user_account(name, password)` → None이면 409 "이미 사용 중인 이름입니다."
-   - 성공 시 `session_id = db.create_session(user["id"], role="member")` (또는 role 인자 — `create_session`의 admin 분기만 5분, 그 외 30일이므로 "member" 무방), `db.record_ip(user["id"], auth.get_client_ip(request))`, `response.set_cookie(auth.SESSION_COOKIE, session_id, httponly, samesite="lax", secure=(scheme=="https"), max_age=86400*30)`.
-   - 응답: `{"ok": True, "name": user["name"], "role": user["role"], "team_id": user["team_id"]}` (프론트가 `/`로 리다이렉트).
-   - `@limiter.limit("5/minute")` 유지.
-   - **주의**: `register`는 `response: Response` 파라미터가 필요 (현재 시그니처에 없음 — `/api/login`·`/api/admin/login` 패턴 참고하여 추가).
-3. `db.check_register_duplicate` / `db.create_pending_user` 호출부는 `/api/register`에서만 사용 → 호출 제거. **함수 자체는 삭제하지 않음**(다른 곳에서 안 쓰이면 데드코드로 남겨두되 mention만). grep으로 다른 참조 없는지 확인.
+# 핵심 결정사항
+- "1 IP = 1 사용자" 만 강제. "1 사용자 = 1 IP" 는 강제하지 않음 (멀티 PC 허용 — 부분 UNIQUE 인덱스는 `ip_address`에만 걸림). 설정 패널 토글은 "현재 접속 PC의 IP가 내게 whitelist 됐는가" 의미.
+- admin은 자동 로그인 대상 아님 → `POST /api/me/ip-whitelist`는 admin 세션이면 403 (방어). 설정 패널 토글 자체도 admin이면 비노출.
+- 충돌 검사 + INSERT는 한 `get_conn()` 트랜잭션 안에서 — race 방지. IntegrityError 잡아 409.
+- 해제(off)는 row 삭제가 아니라 `type='history'` 강등 (기존 `toggle_ip_whitelist`와 일관, 접속 이력 보존).
+- `record_login_ip`는 건드리지 않음 (history 중복 허용 — 부분 인덱스 `WHERE type='whitelist'` 덕분).
+- 그룹 B/C 후속(#15 쿠키, #18 멤버 관리 IP 숨김)은 건드리지 않음. 새 IP UI/API를 `/settings` 패널과 `/admin` 밖에 추가하지 않는 것이 본 사이클의 #18 관련 유일 의무.
 
-### B. 팀 신청 라우트 (app.py + database.py)
-1. `database.py` 신규 함수:
-   - `apply_to_team(user_id, team_id) -> str`: 반환값 `"created"` | `"updated"` | `"blocked"`.
-     - 트랜잭션 안에서: `SELECT id, status FROM user_teams WHERE user_id=? AND team_id=?`.
-       - 없으면 `INSERT INTO user_teams(user_id, team_id, role, status) VALUES(?,?,'member','pending')` → "created".
-       - 있고 `status='pending'` → "blocked" (이미 신청 중).
-       - 있고 `status='approved'` → "blocked" (이미 멤버) — 라우트가 다른 메시지로 분기 가능하게 status도 반환 고려. 단순화 위해 `apply_to_team`이 `(result, current_status)` 튜플 반환해도 됨.
-       - 있고 `status='rejected'` → `UPDATE user_teams SET status='pending', role='member' WHERE id=?` (joined_at은 건드리지 않음) → "updated".
-     - **추가 가드**: `SELECT 1 FROM user_teams WHERE user_id=? AND status='pending'` (다른 팀에도 pending이 있으면 차단? — 명세는 "pending row가 1개라도 있으면 추가 신청 차단" → **임의 팀에 대한 pending이 있으면 신규 신청 자체 차단**. rejected→pending 갱신은 같은 팀에 한해 허용). 구현: 신규 INSERT 직전에 user의 다른 pending 존재 여부 확인 → 있으면 "blocked".
-     - team_id가 존재하는 팀인지(`teams` 에 있고 `deleted_at IS NULL`) 검증은 라우트에서. (`teams.deleted_at` 컬럼은 #2에서 추가됨.)
-   - `decide_team_application(user_id, team_id, decision: 'approved'|'rejected') -> bool`: 대상 row가 `status='pending'`일 때만 처리. `approved` → `UPDATE ... SET status='approved', joined_at=CURRENT_TIMESTAMP`. `rejected` → `UPDATE ... SET status='rejected'`. 대상 없거나 pending 아니면 False.
-   - (선택) `list_team_applications(team_id) -> list[dict]`: `status='pending'` row + user name join — admin/팀관리자 조회용. 본 사이클 최소 UI 안 만들면 라우트만 노출하고 UI는 #18.
-2. `app.py` 신규 라우트:
-   - `POST /api/me/team-applications`: body `{team_id}`. `user = auth.get_current_user(request)`; 없으면 401. `auth.is_admin(user)`면 400 "관리자는 팀 신청 대상이 아닙니다." team_id 유효성(존재 + deleted_at IS NULL) 검사 → 없으면 404. `db.apply_to_team(...)` 결과: "created"/"updated" → 200 `{"ok": True, "status": "pending"}`; "blocked" → 409 (현재 상태에 따라 "이미 가입 신청 중입니다." / "이미 해당 팀 멤버입니다." / "다른 팀 신청이 처리 대기 중입니다." 중 하나 — `apply_to_team`이 이유를 반환하도록).
-   - `GET /api/admin/teams/{team_id}/applications` (또는 `/api/teams/{team_id}/applications`): `user`가 `auth.is_admin(user)` 또는 `auth.is_team_admin(user, team_id)`여야 함 → 아니면 403. `db.list_team_applications(team_id)` 반환.
-   - `POST /api/admin/teams/{team_id}/applications/{user_id}/decide`: body `{decision}` ∈ {"approve"/"approved", "reject"/"rejected"}. 권한: admin 또는 해당 팀 관리자. `db.decide_team_application(...)` → False면 404/409. 200 `{"ok": True}`.
-   - (라우트 경로명은 기존 컨벤션 보고 결정. `/api/admin/...`은 admin 전용 느낌이라 팀관리자도 쓰는 라우트는 `/api/teams/{team_id}/applications` 류가 더 적절할 수 있음 — backend-dev가 기존 라우트 네이밍 보고 판단.)
-3. `backend_changes.md`에 변경 내용·신규 함수 시그니처·라우트 목록 기록.
+# backend-dev 작업
+## database.py
+1. 새 helper:
+   - `find_whitelist_owner(ip) -> int|None` — 해당 IP의 현재 whitelist 소유 user_id.
+   - `set_user_whitelist_ip(user_id, ip)` — 한 트랜잭션 안에서: 다른 사용자가 같은 IP whitelist면 `ValueError`(또는 전용 예외)로 409 신호. 같은 `(user_id, ip)` history row 있으면 `type='whitelist'`로 승격, 없으면 새 row INSERT (`type='whitelist'`).
+   - `remove_user_whitelist_ip(user_id, ip)` — 해당 사용자의 그 IP whitelist row를 `type='history'`로 강등 (없으면 노옵).
+   - `admin_set_whitelist_ip(target_user_id, ip)` — admin이 임의 IP 직접 등록. 충돌 시 동일 예외. 사용자 접속 이력 없는 새 IP도 새 row INSERT 가능.
+   - `delete_ip_row(ip_id)` — admin이 IP row 삭제.
+   - `get_whitelist_status_for_ip(user_id, ip) -> dict` — `{enabled: bool, conflict: bool, conflict_user: str|None}` (설정 패널 초기 상태용). conflict_user는 이름.
+2. 새 마이그레이션 phase `team_phase_4b_user_ips_whitelist_unique_v1` (L1539 `team_phase_4_data_backfill_v1` 뒤에 등록):
+   - preflight: `type='whitelist'`인 `ip_address` 중 2명 이상에게 걸린 IP 있으면 `team_migration_warnings`에 `user_ips_whitelist_conflict` 카테고리로 기록 + abort (자동 해소 안 함 — `migration_doctor`로 운영자가 처리). preflight 훅 위치는 `_phase_5_projects_unique` 또는 phase 5a 패턴 따를 것. (※ phase 5a처럼 자동 dedup phase를 만들지 말 것 — IP는 안전한 자동 선택 기준이 없으므로 abort + 경고만.)
+   - 본문: `CREATE UNIQUE INDEX IF NOT EXISTS idx_user_ips_whitelist_unique ON user_ips(ip_address) WHERE type='whitelist'` (부분 인덱스). 빈 DB 첫 init_db()에서도 안전 (충돌 0건).
+   - `_table_exists`/`_column_set` 가드.
+3. `_migrate(conn, "user_ips", ...)` 같은 CREATE-흡수도 검토 — 현재 CREATE TABLE에 `WHERE type='whitelist'` 부분 인덱스는 _migrate 대상 아님(컬럼 추가만 처리). phase로 충분.
 
-### 주의
-- `users` INSERT 시 다른 NOT NULL/DEFAULT 컬럼 확인 (현 `approve_pending_user`는 `name, password, role, team_id, is_active`만 지정 → 나머지 DEFAULT로 충분). `name_norm`, `password_hash`만 추가하면 됨.
-- `create_session` role 인자: admin이 아닌 한 만료 30일. 'member' 넘기면 OK.
-- 마이그레이션 phase 본문 추가 불필요 (#8은 런타임 라우트만).
+## app.py
+1. `GET /api/me/ip-whitelist` — `_require_editor` (= 로그인 필요). 현재 클라이언트 IP 기준 `get_whitelist_status_for_ip` 결과 반환. (※ todo.md에 명시 없음 — 구현하되 sub-task 토글에 카운트 안 함.)
+2. `POST /api/me/ip-whitelist` — `_require_editor`. **admin이면 403**. `auth.get_client_ip(request)` IP를 본인에게 whitelist 등록. 충돌 시 409 + detail "이 PC는 다른 사용자의 자동 로그인 대상으로 등록되어 있습니다. 시스템 관리자에게 문의하세요." `{ok: True, ip: "..."}` 반환.
+3. `DELETE /api/me/ip-whitelist` — `_require_editor`. 현재 클라이언트 IP whitelist 해제(history 강등). 확인 모달 없음. `{ok: True}`.
+4. `POST /api/admin/users/{user_id}/ips` — `_require_admin`. body `{ip_address: "..."}`. 임의 IP whitelist 등록. IP 형식 가벼운 검증(빈 문자열·공백 거부; 엄격한 IPv4/v6 파싱은 과함 — 인트라넷). 충돌 시 409. `{ok: True}`.
+5. `DELETE /api/admin/ips/{ip_id}` — `_require_admin`. row 삭제. `{ok: True}`.
+6. 기존 `PUT /api/admin/ips/{ip_id}/whitelist`: `enable=True`로 켤 때 그 row의 IP가 이미 다른 사용자에게 whitelist면 409 (atomic 검사). `enable=False`는 그대로.
 
-## frontend-dev (backend 완료 후)
-- `templates/register.html`:
-  - 폼에서 memo textarea 제거(또는 placeholder만 유지 — backend가 memo를 무시하므로 제거 권장). h2/desc 문구를 "계정 가입" / "이름과 비밀번호로 가입하면 바로 시작할 수 있습니다."로 변경.
-  - submit JS: `/api/register` 응답 `res.ok` 시 → `window.location.href = '/'` (현재의 success-box 표시 대신). 에러 시 기존처럼 `err.detail` 표시.
-  - success-box 블록은 제거하거나 안 쓰이게 처리.
-- `templates/base.html` line 521: `가입 신청` → `계정 가입` (선택, 문구 일관성).
-- 팀 신청 버튼/모달은 만들지 않음 (#12·#14·#18 책임).
-- `frontend_changes.md` 기록.
+# frontend-dev 작업
+## templates/base.html
+- `#user-settings-panel` `.settings-body` 안에 새 섹션 추가: "자동 로그인" — `CURRENT_USER && CURRENT_USER.role !== 'admin'` 일 때만 표시(JS로 toggle). 토글 1개 + hint.
+  - 패널 open 시 `GET /api/me/ip-whitelist` 호출해 토글 초기 상태/충돌 안내 채움.
+  - 토글 ON → 확인 모달 표시. 모달 본문(정확히 계획.md L326): "이 PC의 IP를 자동 로그인 대상으로 등록합니다. 등록 후에는 이 PC에서 로그인 없이 본인 계정으로 자동 진입됩니다. 공용 PC·공유 와이파이·외부 네트워크에서는 보안상 위험하니 본인 전용 PC에서만 사용하세요. 등록 후 다른 PC로 이동했다면 설정에서 즉시 해제하세요." 확인 시 `POST /api/me/ip-whitelist`. 409면 토스트로 detail 표시 + 토글 원복.
+  - 토글 OFF → 모달 없이 즉시 `DELETE /api/me/ip-whitelist`.
+  - 확인 모달은 기존 `wu-dialog.js` / 인라인 modal-overlay 패턴 따를 것.
+## templates/admin.html
+- 기존 IP 모달(`#ip-modal`) 확장:
+  - 상단 또는 하단에 "임의 IP 직접 등록" input + 버튼 — `POST /api/admin/users/{userId}/ips`. 성공 시 목록 새로고침. 409면 토스트.
+  - 각 IP row에 삭제 버튼 — `DELETE /api/admin/ips/{ipId}`. 확인 후 삭제 + 목록 새로고침.
+  - `toggleWhitelist` 켤 때 409 응답이면 토스트 + 체크박스 원복.
 
-## code-reviewer
-- backend_changes.md + frontend_changes.md 읽고 변경 파일 정적 리뷰.
-- 중점: (1) `/api/register`에 `response: Response` 누락 여부, set_cookie 옵션 일관성, (2) 예약어 비교 시 casefold 처리(`Admin`, `ADMIN`), (3) `create_user_account`의 race-safe 처리(IntegrityError 가드), (4) `apply_to_team`의 pending 차단 로직 정확성(다른 팀 pending 존재 시 차단 / 같은 팀 rejected→pending 갱신 / approved 중복 방지), (5) 권한 체크 — team-applications decide 라우트가 admin OR team_admin 둘 다 허용하는지, 외부인 차단, (6) pending_users 쓰기 경로가 register에서 완전히 빠졌는지, (7) rate limit 유지, (8) UNIQUE 인덱스(`idx_user_teams_user_team`)와 INSERT 충돌 가능성.
+# 주의사항
+- 마이그레이션 phase 추가 → 서버 재시작 필요. 최종 요약에 명시.
+- VSCode 디버깅 모드라 서버 자동 재시작 불가 — 실서버 브라우저 E2E는 재시작 후 후속. qa는 import-time + 합성 DB + TestClient 위주 (#8 `scripts/verify_team_a_008.py` 패턴).
+- 라우트 추가 위치: 기존 `/api/admin/users/{user_id}/ips` 근처 (app.py L1756 부근) + `/api/me/...` 그룹 근처.
 
-## qa
-- import-time + 합성 DB 검증 (서버 재시작 불가).
-- 시나리오:
-  1. 예약 사용자명 차단: `admin`, `Admin`, `ADMIN`, `system`, `ROOT` 등 → 400.
-  2. 정규식 위반(`hong gildong` 공백, `a_b` 밑줄, `유저@1`) → 400. 정책 위반(`abcdef` 숫자없음, `123456` 영문없음) → 400.
-  3. 정상 가입 → `users` row 생성(role='member', team_id NULL, name_norm 정규화됨, password_hash 채워짐, password=''), 세션 생성됨, 응답에 ok/name/role/team_id, Set-Cookie 헤더 존재.
-  4. 같은 이름 재가입(대소문자 변형 포함, name_norm 충돌) → 409.
-  5. 가입한 사용자가 `/api/me/team-applications`로 팀 신청 → user_teams pending row 1건. 같은 사용자가 다른 팀에 또 신청 → 409 (pending 차단). 같은 팀에 또 신청 → 409.
-  6. admin이 `decide`로 approve → status='approved', joined_at 채워짐. reject 시나리오: 새 신청 → reject → status='rejected'. 같은 팀 재신청 → row 갱신되어 pending(row 추가 X — count 동일).
-  7. 권한: 외부 사용자가 decide 라우트 호출 → 403. 팀 관리자(`user_teams` role='admin' or is_team_admin 헬퍼 충족)가 자기 팀 decide → 200.
-  8. pending_users 테이블에 register로 인한 신규 row가 생기지 않음을 확인.
-- 서버 재시작 필요 없음(런타임 라우트, 마이그레이션 변경 없음). 실서버 E2E는 사용자 재시작 후 후속 가능 — qa_report에 명시.
-
-# 산출물
-`.claude/workspaces/current/{backend_changes.md, code_review_report.md, qa_report.md}` + `scripts/`(qa 검증 스크립트).
+# qa 작업
+- `scripts/verify_team_a_009.py` 작성·실행 (합성 DB + TestClient). 커버:
+  1. 일반 사용자 자체 등록 200 + DB row `type='whitelist'` 확인
+  2. 다른 사용자가 같은 IP 등록 시도 → 409
+  3. 본인 해제(DELETE) → row `type='history'`, 다시 다른 사용자가 등록 → 200
+  4. admin 세션에서 `POST /api/me/ip-whitelist` → 403
+  5. admin이 임의 IP를 사용자에게 등록 → 200 (접속 이력 없는 IP)
+  6. admin이 IP row 삭제 → 200 + row 사라짐
+  7. `PUT /api/admin/ips/{id}/whitelist` enable로 충돌 시 → 409
+  8. 부분 UNIQUE 인덱스: 같은 IP `history` row 2개는 허용, `whitelist` 2개는 IntegrityError
+  9. preflight: 합성 DB에 충돌 whitelist 2건 심고 마이그레이션 → abort + `team_migration_warnings`에 `user_ips_whitelist_conflict` 기록
+  10. import-time smoke (app import OK, init_db on fresh temp DB OK)
+- 결함 발견 시 backend/frontend 패치 + qa 재검증까지 같은 흐름에서 종료.

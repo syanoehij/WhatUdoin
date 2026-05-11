@@ -1,44 +1,47 @@
-# 코드 리뷰 — 팀 기능 그룹 A #8 (계정 가입과 팀 신청 분리)
+## 코드 리뷰 보고서 — #9 IP 자동 로그인 관리
 
-대상: `app.py`, `database.py`, `templates/register.html`, `templates/base.html`.
-방식: 정적 리뷰 + import-time 검증 + 합성 DB E2E(verify_team_a_008.py 72 PASS).
+### 리뷰 대상 파일
+- `database.py` — IP Management 섹션(신규 helper + `IPWhitelistConflict`), phase `team_phase_4b_user_ips_whitelist_unique_v1`, preflight `_check_user_ips_whitelist_unique`
+- `app.py` — `/api/me/ip-whitelist` GET/POST/DELETE, `/api/admin/users/{user_id}/ips` POST, `/api/admin/ips/{ip_id}` DELETE, `PUT /api/admin/ips/{ip_id}/whitelist` 409 처리, `_require_login` 헬퍼
+- `templates/base.html` — 설정 패널 자동 로그인 섹션 + JS
+- `templates/admin.html` — IP 모달 확장 + JS
 
-## 결론: 통과 (차단 결함 0, 경고 2)
+### 백엔드 체크리스트
+- [x] 새 라우트 권한 체크: `GET /api/me/ip-whitelist` → `_require_login`(401), `POST/DELETE /api/me/ip-whitelist` → `_require_editor` + POST는 admin 403 추가, `POST /api/admin/users/{id}/ips` / `DELETE /api/admin/ips/{id}` → `_require_admin`. ✅
+- [x] 페이지 라우트 `_ctx()`: 본 사이클 신규 페이지 라우트 없음(JSON API만). N/A
+- [x] DB 스키마 변경: 별도 migration 파일 없음. `PHASES.append` 인라인 패턴 + `_table_exists`/`_column_set` 가드. `CREATE UNIQUE INDEX IF NOT EXISTS` idempotent. ✅
+- [x] 새 컬럼 추가 없음 — `user_ips` 기존 테이블에 인덱스만 추가. try/except 중복 방지 N/A
+- [x] 하위호환: 기존 `get_user_by_whitelist_ip`/`record_ip`/`get_user_ips` 시그니처·동작 유지. `toggle_ip_whitelist`는 시그니처 동일, enable=True 충돌 시 예외만 추가(동작 보강). ✅
+- [x] 파일 경로: 본 사이클 경로 상수 사용 없음. N/A
+- [x] Ollama: 무관. N/A
+- [x] `get_conn()` contextmanager: 모든 신규 helper가 `with get_conn() as conn:` 사용. `_set_whitelist_ip_locked`/`_whitelist_owner_id`는 conn 인자 받는 내부 함수(트랜잭션 공유). ✅
+- [x] SQL 파라미터화: 모든 신규 쿼리 `?` 바인딩. f-string 직접 삽입 없음. ✅
+- [x] 충돌 검사 + INSERT가 한 `get_conn()` 트랜잭션 안 — race 시 IntegrityError(부분 인덱스)도 `IPWhitelistConflict`로 변환. ✅
+- [x] preflight: `_phase_5_projects_unique` 패턴 따름. 자동 dedup phase 만들지 않고 abort + `team_migration_warnings`(`preflight_user_ips_whitelist`) — 명세대로. ✅
+- [x] phase 등록 순서: phase 3(admin whitelist→history) 이후 phase 4b 실행 → admin row가 인덱스 충돌을 일으키지 않음. ✅
 
-## 확인 항목
+### 프론트엔드 체크리스트
+- [x] `fetch()` `response.ok` 체크 후 `.json()`: base.html `loadIpAutologinStatus`/`onIpAutologinToggle`, admin.html `toggleWhitelist`/`adminAddIp`/`deleteIpRow` 모두 `res.ok` 분기. ✅
+- [x] 오류 시 `wuToast.error/warning` 사용자 피드백. ✅
+- [x] `{% extends "base.html" %}`: admin.html 유지. base.html은 레이아웃 자체. ✅
+- [x] 라이브러리 조건부 초기화: `wuDialog`/`wuToast`는 base.html이 `wu-dialog.js`로 항상 로드 — 조건부 가드 불필요(기존 관례 일치). ✅
+- [x] 서버사이드 권한: 설정 패널 섹션은 JS로 숨기되 admin 차단은 `POST /api/me/ip-whitelist` 서버 403이 최종 방어. admin IP 등록/삭제는 `_require_admin` 서버 강제. ✅
+- [x] XSS: admin.html `refreshIpList`의 `${ip.ip_address}` / `${ip.last_seen}`는 서버 DB값(접속 IP·타임스탬프). 사용자 자유입력 문자열 아님(접속 IP는 `request.client.host` 또는 admin이 입력한 IP — 후자는 innerHTML에 들어가나 admin 권한자 자신이 입력한 값). base.html `conflict_user`는 사용자 이름인데 `textContent`로 삽입(escape됨). ⚠️ 아래 경고 참조.
+- [x] UI 패턴 일관성: 기존 `switch switch-sm`, `btn-danger-outline`, `wuDialog.confirm`, settings 패널 섹션 구조 재사용. ✅
 
-1. `/api/register` 시그니처에 `response: Response` 추가됨 — 자동 로그인 set_cookie 가능. ✔
-   - set_cookie 옵션(`httponly`, `samesite="lax"`, `secure=(scheme=="https")`, `max_age=86400*30`)이 `/api/login` 과 일치. ✔
-   - `@limiter.limit("5/minute")` 유지. ✔
-2. 예약 사용자명 비교: `name.casefold() in RESERVED_USERNAMES` — `Admin`/`ADMIN`/`Guest` 등 대소문자 변형 모두 차단됨(QA 7케이스 PASS). 한글·터키어 등 비ASCII 예약어는 없으므로 `casefold` 로 충분(과한 정규화 회피). ✔
-3. `create_user_account` race-safe: 사전 `SELECT name_norm` + `sqlite3.IntegrityError` 캐치 이중 가드. `users.name_norm` 전역 UNIQUE 인덱스(#7)와 정합. ✔
-   - INSERT 컬럼: `name, name_norm, password='', password_hash, role='member', team_id=NULL, is_active=1`. 나머지 컬럼은 DEFAULT(`created_at` 등). `approve_pending_user` 의 기존 INSERT 패턴과 동일 수준. ✔
-   - `password=''`(빈 문자열) — `users.password NOT NULL DEFAULT ''` 제약 회피. #7의 `reset_user_password` deviation 과 동일. ✔
-4. `apply_to_team` pending 차단 로직:
-   - "임의 팀 pending 1개라도 있으면 신규 신청 차단" — `other_pending` 조회 후, 이 팀에 row 없음 OR (rejected row를 pending으로 갱신하려는데) 다른 팀 pending 존재 시 `pending_other` 차단. ✔
-   - 이 팀 `approved` → `already_member` 차단(중복 가입 방지). ✔
-   - 이 팀 `pending` → `pending_here` 차단(중복 신청 방지). ✔
-   - 이 팀 `rejected`/기타 + 다른 팀 pending 없음 → 동일 `(user_id, team_id)` row UPDATE(`status='pending', role='member'`, joined_at 미변경) — row 추가 X, `idx_user_teams_user_team` UNIQUE(#2)와 정합. ✔
-   - 멀티팀 멤버(팀 B approved + 팀 A rejected)가 팀 A 재신청 시 `other_pending` 비어 있어 갱신 허용. ✔ (QA "rejected→pending 시 다른 팀 pending 있으면 차단" + Part1 추가 케이스 PASS)
-   - 모두 단일 `with get_conn()` 트랜잭션 안에서 처리 — TOCTOU 최소화. ✔
-5. 권한 게이트:
-   - `POST /api/me/team-applications`: 로그인 필요(401), `auth.is_admin` → 400. ✔
-   - `GET /api/teams/{team_id}/applications`, `POST .../decide`: `_require_team_admin(request, team_id)` → `_check_csrf` + 로그인(401) + `auth.is_team_admin(user, team_id)`(글로벌 admin 또는 `user_teams.role='admin' AND status='approved'`, auth.py:99 확인). 외부인 403, 다른 팀 관리자 403. ✔ (QA: 외부인 403, 팀관리자 자기팀 200/다른팀 403 PASS)
-   - decide 라우트는 path의 team_id 로만 권한 체크 + `decide_team_application` 도 `(user_id, team_id)` 로만 동작 → cross-team 누출 없음. ✔
-6. `decide_team_application` — `decision` 화이트리스트(`approved`/`rejected`)만 처리, 대상 row가 `status='pending'` 일 때만 갱신. 이미 처리됐거나 없는 신청 → False → 라우트 404. ✔
-   - 라우트에서 `decision` 입력을 `str(...).strip().lower()` + `approve/approved/reject/rejected` 매핑 → 비문자 입력에도 500 안 남. ✔
-7. pending_users 쓰기 경로: `/api/register` 에서 `create_pending_user` 호출 제거됨. grep 결과 다른 호출처 없음. QA에서 register 흐름 후 `pending_users` 0건 확인. ✔
-8. `_check_csrf` 사용: 신규 unsafe 라우트(`/api/me/team-applications`, decide) 모두 `_check_csrf` 통과. ✔ (`/api/register` 는 기존에도 csrf 미적용 — 비로그인 진입점이라 기존 정책 유지.)
-9. 프론트:
-   - `register.html`: memo 입력 제거, `/api/register` 응답 `res.ok` 시 `window.location.href='/'`. `res.json().catch(()=>({}))` 로 빈 바디 방어. ✔
-   - `base.html`: 로그인 모달 링크 문구 "가입 신청"→"계정 가입" — 단순 텍스트 변경. ✔
-   - 팀 신청 UI는 만들지 않음(#12·#14·#18 책임) — 명세 부합. ✔
-10. import-time: `python -c "import app"` OK. 신규 라우트 4건(`/api/register`[POST], `/api/me/team-applications`[POST], `/api/teams/{team_id}/applications`[GET], `/api/teams/{team_id}/applications/{user_id}/decide`[POST]) 등록 확인. ✔
+### 경고(Warning) ⚠️
+- `templates/admin.html` `refreshIpList()` — `${ip.ip_address}`를 `innerHTML` 템플릿 문자열에 직접 삽입. 값의 출처는 (1) `request.client.host`(서버가 채운 peer IP — 안전) 또는 (2) admin이 `POST /api/admin/users/{id}/ips`로 직접 입력한 문자열. (2)는 admin 권한자 본인이 자기 화면에서만 보게 되는 self-XSS 수준이고, 기존 `openIPs`도 동일하게 했던 패턴이라 회귀 아님. 운영 규모(<10명, 인트라넷)·권한 경계상 차단 아님. 향후 정리 시 `textContent` 기반 DOM 조립으로 바꾸면 좋음.
+- `app.py` `POST /api/admin/users/{user_id}/ips` — IP 형식 검증이 "빈 문자열·공백만 거부" 수준(엄격한 IPv4/v6 파싱 없음). 사양서가 "임의의 IP 문자열을 직접 입력"이라 명시했고(미리 부여 시나리오), `get_client_ip`도 형식 검증을 하지 않으므로 일관. 차단 아님.
 
-## 경고 (비차단)
+### 통과 ✅
+- DB 스키마: phase/preflight 인프라(`PHASES`/`_PREFLIGHT_CHECKS`) 올바르게 사용, idempotent 가드 완비
+- SQL 파라미터화 전 쿼리 확인
+- 권한 체크: 모든 신규 쓰기 라우트 `_require_editor`/`_require_admin` + admin POST 403
+- 트랜잭션 원자성: 충돌 검사+쓰기 단일 conn, IntegrityError fallback
+- import-time 검증 PASS (`python -c "import database; import app"`), Jinja2 parse PASS
 
-- W1. `database.check_register_duplicate` / `create_pending_user` 는 이제 데드코드(다른 호출처 없음). 의도적으로 보존 — pending_users 테이블 자체가 Phase 5에서 drop 검토 대상이라 그때 함께 정리하는 게 자연스러움. 본 사이클에서 제거하지 않음(범위 밖 surgical-change 원칙).
-- W2. `decide_team_application` 의 `decision` 인자가 라우트 외부(테스트/내부 호출)에서 잘못 들어와도 조용히 `False` 반환 — 라우트는 매핑 후 화이트리스트만 넘기므로 실사용 경로엔 문제 없음. 향후 다른 호출처가 생기면 명시적 예외가 나을 수 있으나 현 단계 과설계 회피.
+### 회귀 검토
+- 이전 사이클(#8) 리포트 대비 회귀 없음. `auth.get_current_user`/`record_ip`/`get_user_by_whitelist_ip` 미변경. `toggle_ip_whitelist` 시그니처 유지.
 
-## QA 결과
-`scripts/verify_team_a_008.py`: 72 PASS / 0 FAIL.
+### 최종 판정
+- **통과** (차단 결함 없음, 경고 2건은 운영 규모·권한 경계상 수용. QA 진행 허용)

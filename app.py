@@ -1430,6 +1430,58 @@ async def change_my_password(request: Request):
     return {"ok": True}
 
 
+# ── IP 자동 로그인 (본인 — 설정 화면) ─────────────────────────────
+_IP_WHITELIST_CONFLICT_MSG = (
+    "이 PC는 다른 사용자의 자동 로그인 대상으로 등록되어 있습니다. 시스템 관리자에게 문의하세요."
+)
+
+
+def _require_login(request: Request):
+    """로그인 필요 (CSRF 검사 없음 — GET 등 안전 메서드용)."""
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    return user
+
+
+@app.get("/api/me/ip-whitelist")
+def get_my_ip_whitelist(request: Request):
+    """현재 접속 PC IP의 본인 whitelist 상태. 설정 패널 초기 토글용.
+
+    admin은 자동 로그인 대상이 아니므로 항상 enabled=false + admin 플래그.
+    """
+    user = _require_login(request)
+    ip = auth.get_client_ip(request)
+    if auth.is_admin(user):
+        return {"enabled": False, "conflict": False, "conflict_user": None, "ip": ip, "admin": True}
+    status = db.get_whitelist_status_for_ip(user["id"], ip)
+    status["admin"] = False
+    return status
+
+
+@app.post("/api/me/ip-whitelist")
+def add_my_ip_whitelist(request: Request):
+    """현재 접속 PC IP를 본인 whitelist로 등록. admin은 403."""
+    user = _require_editor(request)
+    if auth.is_admin(user):
+        raise HTTPException(status_code=403, detail="관리자 계정은 IP 자동 로그인 대상이 아닙니다.")
+    ip = auth.get_client_ip(request)
+    try:
+        db.set_user_whitelist_ip(user["id"], ip)
+    except db.IPWhitelistConflict:
+        raise HTTPException(status_code=409, detail=_IP_WHITELIST_CONFLICT_MSG)
+    return {"ok": True, "ip": ip}
+
+
+@app.delete("/api/me/ip-whitelist")
+def remove_my_ip_whitelist(request: Request):
+    """현재 접속 PC IP의 본인 whitelist 해제 (history 강등). 확인 모달 없음."""
+    user = _require_editor(request)
+    ip = auth.get_client_ip(request)
+    db.remove_user_whitelist_ip(user["id"], ip)
+    return {"ok": True, "ip": ip}
+
+
 @app.post("/api/logout")
 def logout(request: Request, response: Response):
     session_id = request.cookies.get(auth.SESSION_COOKIE)
@@ -1764,7 +1816,33 @@ async def admin_toggle_whitelist(ip_id: int, request: Request):
     _require_admin(request)
     data = await request.json()
     enable = data.get("enable", False)
-    db.toggle_ip_whitelist(ip_id, enable)
+    try:
+        db.toggle_ip_whitelist(ip_id, enable)
+    except db.IPWhitelistConflict:
+        raise HTTPException(status_code=409, detail="이 IP는 이미 다른 사용자의 자동 로그인 대상으로 등록되어 있습니다.")
+    return {"ok": True}
+
+
+@app.post("/api/admin/users/{user_id}/ips")
+async def admin_register_ip(user_id: int, request: Request):
+    """admin — 임의 사용자에게 임의 IP를 whitelist로 직접 등록 (접속 이력 없는 IP도 가능)."""
+    _require_admin(request)
+    data = await request.json()
+    ip = (data.get("ip_address") or "").strip()
+    if not ip:
+        raise HTTPException(status_code=400, detail="IP 주소를 입력하세요.")
+    try:
+        db.admin_set_whitelist_ip(user_id, ip)
+    except db.IPWhitelistConflict:
+        raise HTTPException(status_code=409, detail="이 IP는 이미 다른 사용자의 자동 로그인 대상으로 등록되어 있습니다.")
+    return {"ok": True, "ip": ip}
+
+
+@app.delete("/api/admin/ips/{ip_id}")
+def admin_delete_ip(ip_id: int, request: Request):
+    """admin — user_ips row 삭제."""
+    _require_admin(request)
+    db.delete_ip_row(ip_id)
     return {"ok": True}
 
 

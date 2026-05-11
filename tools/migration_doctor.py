@@ -144,6 +144,52 @@ def _diagnose_users_teams(conn) -> dict:
     return out
 
 
+def _diagnose_user_ips_whitelist(conn) -> list[dict]:
+    """user_ips 의 type='whitelist' ip_address 충돌 진단 (#9).
+
+    같은 IP가 2명 이상에게 whitelist면 부분 UNIQUE 인덱스 생성이 실패한다.
+    자동 정리는 하지 않는다 — 안전한 선택 기준이 없다(운영자가 어느 사용자 IP인지 결정).
+
+    각 dict: {ip_address, user_ids: list[int], names: list[str]}. 테이블/컬럼 없으면 [].
+    """
+    from database import _table_exists, _column_set
+
+    if not _table_exists(conn, "user_ips"):
+        return []
+    cols = _column_set(conn, "user_ips")
+    if "ip_address" not in cols or "type" not in cols:
+        return []
+
+    rows = conn.execute(
+        "SELECT ip_address, GROUP_CONCAT(user_id) AS uids "
+        "  FROM user_ips "
+        " WHERE type = 'whitelist' "
+        " GROUP BY ip_address "
+        "HAVING COUNT(*) > 1 "
+        "ORDER BY ip_address"
+    ).fetchall()
+    out: list[dict] = []
+    for row in rows:
+        ip = row["ip_address"] if isinstance(row, sqlite3.Row) else row[0]
+        uids_str = row["uids"] if isinstance(row, sqlite3.Row) else row[1]
+        uids = sorted(int(x) for x in (uids_str or "").split(",") if x.strip())
+        names: list[str] = []
+        if uids:
+            placeholders = ",".join("?" * len(uids))
+            name_rows = conn.execute(
+                f"SELECT id, name FROM users WHERE id IN ({placeholders})",
+                tuple(uids),
+            ).fetchall()
+            name_by_id = {
+                (r["id"] if isinstance(r, sqlite3.Row) else r[0]):
+                    (r["name"] if isinstance(r, sqlite3.Row) else r[1])
+                for r in name_rows
+            }
+            names = [str(name_by_id.get(uid, "")) for uid in uids]
+        out.append({"ip_address": ip, "user_ids": uids, "names": names})
+    return out
+
+
 # ────────────────────────────────────────────────────────────────
 # 명령어: check (read-only).
 
@@ -230,12 +276,37 @@ def cmd_check(db_path: str) -> int:
                 for pid in c["ids"]:
                     print(f"    UPDATE teams SET name = ?, name_norm = ? WHERE id = {pid};")
 
+        # 4) user_ips whitelist 충돌 (자동 정리 X — #9)
+        ip_conflicts = _diagnose_user_ips_whitelist(conn)
+        print()
+        print(f"[4] user_ips whitelist(ip_address) 충돌: {len(ip_conflicts)}건")
+        if ip_conflicts:
+            rows = []
+            for c in ip_conflicts:
+                rows.append([
+                    c["ip_address"],
+                    str(c["user_ids"]),
+                    ",".join(c["names"]),
+                ])
+            print(_fmt_table(["ip_address", "user_ids", "names"], rows))
+            print("  권장 SQL 템플릿(운영자가 어느 사용자 IP인지 결정 후 실행):")
+            for c in ip_conflicts:
+                # 한 명만 whitelist로 남기고 나머지는 history로 강등(이력 보존). row 삭제도 가능.
+                if len(c["user_ids"]) > 1:
+                    keep = c["user_ids"][0]
+                    print(
+                        f"    UPDATE user_ips SET type='history' "
+                        f"WHERE ip_address = {c['ip_address']!r} AND type='whitelist' AND user_id != {keep};"
+                        f"  -- user_id={keep} 만 자동 로그인 유지"
+                    )
+
         # 종합 결과
         print()
-        if not plans and not ut["users"] and not ut["teams"]:
+        has_any = bool(plans or ut["users"] or ut["teams"] or ip_conflicts)
+        if not has_any:
             print("종합: 이상 없음. 마이그레이션 진입 가능.")
             return 0
-        if unsafe_count or ut["users"] or ut["teams"]:
+        if unsafe_count or ut["users"] or ut["teams"] or ip_conflicts:
             print("종합: 운영자 결정이 필요한 충돌이 있습니다.")
             return 1
         print("종합: 자동 정리 가능한 충돌만 남아 있습니다. fix-projects --apply 권장.")

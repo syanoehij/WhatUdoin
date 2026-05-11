@@ -850,6 +850,21 @@
           </label>
           <p class="settings-hint">끄면 아이콘만 표시됩니다.</p>
         </div>
+        <!-- 섹션: 자동 로그인 (admin 아닌 로그인 사용자만 — JS로 표시) -->
+        <div class="settings-section" id="ip-autologin-section" style="display:none;">
+          <div class="settings-section-title">자동 로그인</div>
+          <label class="settings-row">
+            <span>현재 PC를 자동 로그인 대상으로 등록</span>
+            <label class="switch switch-sm" onclick="event.stopPropagation()">
+              <input type="checkbox" id="ip-autologin-toggle" onchange="onIpAutologinToggle(this.checked)">
+              <span class="slider round"></span>
+            </label>
+          </label>
+          <p class="settings-hint" id="ip-autologin-hint">
+            이 PC에서 로그인 없이 본인 계정으로 자동 진입합니다. 본인 전용 PC에서만 사용하세요.
+          </p>
+        </div>
+
         <!-- 섹션 2: 로컬 저장 데이터 초기화 -->
         <div class="settings-section">
           <div class="settings-section-title">로컬 저장 데이터</div>
@@ -1037,10 +1052,72 @@
     /* ── 사용자 설정 사이드 패널 ── */
     function openUserSettings() {
       document.getElementById('user-settings-overlay').classList.remove('hidden');
+      loadIpAutologinStatus();
     }
     function closeUserSettings(e) {
       if (e && e.target !== document.getElementById('user-settings-overlay')) return;
       document.getElementById('user-settings-overlay').classList.add('hidden');
+    }
+
+    /* ── IP 자동 로그인 (설정 패널) ── */
+    var IP_AUTOLOGIN_WARNING =
+      '이 PC의 IP를 자동 로그인 대상으로 등록합니다. 등록 후에는 이 PC에서 로그인 없이 본인 계정으로 자동 진입됩니다. ' +
+      '공용 PC·공유 와이파이·외부 네트워크에서는 보안상 위험하니 본인 전용 PC에서만 사용하세요. ' +
+      '등록 후 다른 PC로 이동했다면 설정에서 즉시 해제하세요.';
+    async function loadIpAutologinStatus() {
+      var section = document.getElementById('ip-autologin-section');
+      if (!section) return;
+      // admin·비로그인은 섹션 자체를 숨긴다.
+      if (!CURRENT_USER || CURRENT_USER.role === 'admin') { section.style.display = 'none'; return; }
+      try {
+        var res = await fetch('/api/me/ip-whitelist');
+        if (!res.ok) { section.style.display = 'none'; return; }
+        var st = await res.json();
+        if (st.admin) { section.style.display = 'none'; return; }
+        section.style.display = '';
+        var toggle = document.getElementById('ip-autologin-toggle');
+        var hint = document.getElementById('ip-autologin-hint');
+        toggle.checked = !!st.enabled;
+        toggle.disabled = !!st.conflict;
+        if (st.conflict) {
+          hint.textContent = '이 PC는 다른 사용자(' + (st.conflict_user || '알 수 없음') +
+            ')의 자동 로그인 대상으로 등록되어 있습니다. 시스템 관리자에게 문의하세요.';
+        } else {
+          hint.textContent = '이 PC에서 로그인 없이 본인 계정으로 자동 진입합니다. 본인 전용 PC에서만 사용하세요.';
+        }
+      } catch (e) {
+        section.style.display = 'none';
+      }
+    }
+    async function onIpAutologinToggle(checked) {
+      var toggle = document.getElementById('ip-autologin-toggle');
+      if (checked) {
+        var ok = await wuDialog.confirm({
+          title: '자동 로그인 등록',
+          message: IP_AUTOLOGIN_WARNING,
+          okText: '확인', cancelText: '취소', danger: true,
+        });
+        if (!ok) { toggle.checked = false; return; }
+        var res = await fetch('/api/me/ip-whitelist', { method: 'POST' });
+        if (res.ok) {
+          wuToast.success('이 PC가 자동 로그인 대상으로 등록되었습니다.');
+          loadIpAutologinStatus();
+        } else {
+          var err = {};
+          try { err = await res.json(); } catch (e) {}
+          wuToast.error(err.detail || '등록에 실패했습니다.');
+          toggle.checked = false;
+          loadIpAutologinStatus();
+        }
+      } else {
+        var res2 = await fetch('/api/me/ip-whitelist', { method: 'DELETE' });
+        if (res2.ok) {
+          wuToast.success('자동 로그인 등록이 해제되었습니다.');
+        } else {
+          wuToast.error('해제에 실패했습니다.');
+          toggle.checked = true;
+        }
+      }
     }
     function clearLocalStorage() {
       var btn = document.getElementById('clear-storage-btn');

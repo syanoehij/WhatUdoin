@@ -210,6 +210,10 @@
       <h2><span id="ip-modal-name"></span> — IP 관리</h2>
       <button class="icon-btn" onclick="closeIpModal()">✕</button>
     </div>
+    <div class="form-row" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+      <input type="text" id="ip-add-input" placeholder="등록할 IP 주소 (예: 192.168.0.42)" style="flex:1;" />
+      <button class="btn btn-sm btn-primary" onclick="adminAddIp()">whitelist 등록</button>
+    </div>
     <div id="ip-list"></div>
     <div class="modal-actions">
       <div></div>
@@ -483,40 +487,83 @@ async function toggleAvrUser(userId, enabled) {
 }
 
 // ── IP 관리 ──────────────────────────────────────────────
+let _ipModalUserId = null;
 async function openIPs(userId, name) {
+  _ipModalUserId = userId;
   document.getElementById('ip-modal-name').textContent = name;
-  const res = await fetch(`/api/admin/users/${userId}/ips`);
+  document.getElementById('ip-add-input').value = '';
+  await refreshIpList();
+  document.getElementById('ip-modal').classList.remove('hidden');
+}
+async function refreshIpList() {
+  const res = await fetch(`/api/admin/users/${_ipModalUserId}/ips`);
   const ips = await res.json();
   const list = document.getElementById('ip-list');
   if (!ips.length) {
     list.innerHTML = '<p class="empty-msg">접속 기록이 없습니다.</p>';
-  } else {
-    list.innerHTML = ips.map(ip => `
-      <div class="ip-row">
-        <div>
-          <code>${ip.ip_address}</code>
-          <span class="text-muted ml-8">${ip.last_seen?.slice(0, 16) || ''}</span>
-        </div>
+    return;
+  }
+  list.innerHTML = ips.map(ip => `
+    <div class="ip-row">
+      <div>
+        <code>${ip.ip_address}</code>
+        <span class="text-muted ml-8">${ip.last_seen?.slice(0, 16) || ''}</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
         <label class="switch switch-sm">
           <input type="checkbox" ${ip.type === 'whitelist' ? 'checked' : ''}
                  onchange="toggleWhitelist(${ip.id}, this.checked)" />
           <span class="slider"></span>
         </label>
+        <button class="btn btn-sm btn-danger-outline" onclick="deleteIpRow(${ip.id})">삭제</button>
       </div>
-    `).join('');
-  }
-  document.getElementById('ip-modal').classList.remove('hidden');
+    </div>
+  `).join('');
 }
 function closeIpModal(e) {
   if (!e || e.target === document.getElementById('ip-modal'))
     document.getElementById('ip-modal').classList.add('hidden');
 }
 async function toggleWhitelist(ipId, enable) {
-  await fetch(`/api/admin/ips/${ipId}/whitelist`, {
+  const res = await fetch(`/api/admin/ips/${ipId}/whitelist`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enable }),
   });
+  if (!res.ok) {
+    let err = {};
+    try { err = await res.json(); } catch (e) {}
+    wuToast.error(err.detail || 'whitelist 변경에 실패했습니다.');
+    await refreshIpList();
+  }
+}
+async function adminAddIp() {
+  const ip = document.getElementById('ip-add-input').value.trim();
+  if (!ip) { wuToast.warning('IP 주소를 입력하세요.'); return; }
+  const res = await fetch(`/api/admin/users/${_ipModalUserId}/ips`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ip_address: ip }),
+  });
+  if (res.ok) {
+    document.getElementById('ip-add-input').value = '';
+    wuToast.success('IP가 whitelist로 등록되었습니다.');
+    await refreshIpList();
+  } else {
+    let err = {};
+    try { err = await res.json(); } catch (e) {}
+    wuToast.error(err.detail || '등록에 실패했습니다.');
+  }
+}
+async function deleteIpRow(ipId) {
+  const ok = await wuDialog.confirm({
+    title: 'IP 삭제', message: '이 IP 기록을 삭제하시겠습니까?',
+    okText: '삭제', cancelText: '취소', danger: true,
+  });
+  if (!ok) return;
+  const res = await fetch(`/api/admin/ips/${ipId}`, { method: 'DELETE' });
+  if (res.ok) { wuToast.success('삭제되었습니다.'); await refreshIpList(); }
+  else { wuToast.error('삭제에 실패했습니다.'); }
 }
 
 // ── 비밀번호 초기화 ──────────────────────────────────────
