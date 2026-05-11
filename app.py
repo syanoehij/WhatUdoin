@@ -681,18 +681,8 @@ def _require_admin(request: Request):
 
 
 def _can_write_doc(user, doc: dict) -> bool:
-    if not user or not doc:
-        return False
-    if user.get("role") == "admin":
-        return True
-    if not auth.is_editor(user):
-        return False
-    if doc.get("is_team_doc"):
-        doc_team = doc.get("team_id")
-        if doc_team is None:
-            return True
-        return doc_team == user.get("team_id")
-    return doc.get("created_by") == user["id"]
+    """문서 편집·삭제 권한 — auth.can_edit_meeting에 위임 (팀 기능 그룹 A #10)."""
+    return auth.can_edit_meeting(user, doc)
 
 
 # ── 페이지 ──────────────────────────────────────────────
@@ -752,7 +742,7 @@ def project_manage_page(request: Request):
 @app.get("/doc", response_class=HTMLResponse)
 def docs_page(request: Request):
     user = auth.get_current_user(request)
-    docs = db.get_all_meetings(viewer=user)
+    docs = db.get_all_meetings(viewer=user, work_team_ids=(_work_scope(request, user, None) if user else None))
     teams = db.get_all_teams()
     return templates.TemplateResponse(request, "doc_list.html", _ctx(
         request, docs=docs, teams=teams,
@@ -924,7 +914,7 @@ def notice_history_page(request: Request):
 @app.get("/check", response_class=HTMLResponse)
 def check_page(request: Request):
     user = auth.get_current_user(request)
-    all_projs = db.get_all_projects_meta(viewer=user)
+    all_projs = db.get_all_projects_meta(viewer=user, work_team_ids=(_work_scope(request, user, None) if user else None))
     visible = [p for p in all_projs if user or not p.get("is_private", 0)]
     active_projs = [p for p in visible if p.get("is_active", 1)]
     done_projs   = [p for p in visible if not p.get("is_active", 1)]
@@ -937,7 +927,7 @@ def check_new_page(request: Request, proj: str = ""):
     user = auth.get_current_user(request)
     if not user or user.get("role") not in ("editor", "admin"):
         return RedirectResponse("/check")
-    all_projs = db.get_all_projects_with_events(viewer=user)
+    all_projs = db.get_all_projects_with_events(viewer=user, work_team_ids=_work_scope(request, user, None))
     projects = [p for p in all_projs if p.get("is_active", 1) and p.get("name") != "미지정"]
     proj = "" if proj == "미지정" else proj
     return templates.TemplateResponse(
@@ -957,7 +947,7 @@ def check_editor_page(request: Request, checklist_id: int):
         return RedirectResponse("/check")
     if not auth.can_edit_checklist(user, item):
         raise HTTPException(status_code=403, detail="Access denied.")
-    all_projs = db.get_all_projects_with_events(viewer=user)
+    all_projs = db.get_all_projects_with_events(viewer=user, work_team_ids=_work_scope(request, user, None))
     projects = [p for p in all_projs if p.get("is_active", 1) and p.get("name") != "미지정"]
     lock = db.get_checklist_lock(checklist_id)
     locked_by = None
@@ -1003,10 +993,13 @@ def check_history_page(request: Request, checklist_id: int):
 # ── 체크리스트 API ────────────────────────────────────────────
 
 @app.get("/api/checklists")
-def list_checklists(request: Request, project: str = None, active: int = None, include_done: int = 0):
+def list_checklists(request: Request, project: str = None, active: int = None, include_done: int = 0, team_id: int = None):
     viewer = auth.get_current_user(request)
     active_only = None if active is None else bool(active)
-    return db.get_checklists(project=project, viewer=viewer, active_only=active_only, include_done_projects=bool(include_done))
+    # 팀 기능 그룹 A #10: 체크는 현재 작업 팀 기준 (resolve_work_team fallback).
+    work_team_ids = _work_scope(request, viewer, team_id) if viewer else None
+    return db.get_checklists(project=project, viewer=viewer, active_only=active_only,
+                             include_done_projects=bool(include_done), work_team_ids=work_team_ids)
 
 
 @app.post("/api/checklists")
@@ -1030,7 +1023,7 @@ async def create_checklist(request: Request):
         attachments = raw_att
     else:
         attachments = None
-    cid = db.create_checklist(project, title, content, user["name"], is_public=is_public, team_id=user.get("team_id"), attachments=attachments)
+    cid = db.create_checklist(project, title, content, user["name"], is_public=is_public, team_id=auth.resolve_work_team(request, user), attachments=attachments)
     _sse_publish("checks.changed", {"id": cid, "action": "create"})
     return {"id": cid}
 
@@ -1882,36 +1875,87 @@ def resolve_project_color(proj_name: str, proj_colors: dict) -> str:
 
 # ── 이벤트 API ───────────────────────────────────────────
 
-def _filter_events_by_visibility(events: list, user) -> list:
-    """비공개 일정 필터링. user=None이면 is_public=1만, 있으면 같은 팀 or is_public=1."""
+def _filter_events_by_visibility(events: list, user, scope_team_ids=None) -> list:
+    """일정 가시성 필터 — 팀 기능 그룹 A #10.
+
+    scope_team_ids 의미:
+      - admin 사용자(user.role=='admin'): 인자 무관하게 전체 통과 (전 팀 슈퍼유저).
+      - scope_team_ids=None & 비admin: 호출부가 작업 팀을 명시하지 않음 →
+        사용자 소속 팀 전체(user_team_ids)로 fallback. (#15 쿠키 도입 전 안전망)
+      - scope_team_ids=set(): 그 안의 team_id 만 통과. 비어 있으면 팀 자료는 통과 안 함.
+
+    규칙(우선순위):
+      1. 히든 프로젝트 차단 (기존 동작)
+      2. team_id ∈ scope → 통과 (is_public 값 무관, 같은 팀이므로 비공개도 봄)
+      3. team_id IS NULL → 작성자 본인(events.created_by == user.name)만 통과
+      4. is_public == 1 → 통과 (공개 일정 — 비로그인 캘린더도 봄, 기존 동작)
+      5. 그 외 skip
+    """
     if user and user.get("role") == "admin":
         return events
+    if scope_team_ids is None:
+        scope_team_ids = auth.user_team_ids(user) if user else set()
+    # events/checklists.created_by 는 신규 쓰기는 str(user.id), legacy 는 사용자 이름 — 둘 다 인정.
+    author_ids = set()
+    if user:
+        author_ids.add(str(user.get("id")))
+        if user.get("name"):
+            author_ids.add(user.get("name"))
     blocked_hidden = db.get_blocked_hidden_project_names(user)
     result = []
     for e in events:
         proj = e.get("project") or ""
         if proj and proj in blocked_hidden:
             continue
-        pub = e.get("is_public")
         team = e.get("team_id")
-        if pub == 1:
+        if team is not None and team in scope_team_ids:
             result.append(e)
-        elif pub == 0:
-            # 명시적 비공개: 같은 팀 로그인 사용자만
-            if user and team is not None and team == user.get("team_id"):
+            continue
+        if team is None:
+            if author_ids and e.get("created_by") in author_ids:
                 result.append(e)
-        else:
-            # is_public=NULL: 프로젝트 가시성 연동 — 로그인 사용자이면 팀 일치 확인
-            if user and (team is None or team == user.get("team_id")):
-                result.append(e)
+            continue
+        if e.get("is_public") == 1:
+            result.append(e)
     return result
 
 
+def _work_scope(request: Request, user, explicit_id=None):
+    """현재 작업 팀 기준 라우트의 가시성 scope 집합 — 팀 기능 그룹 A #10.
+
+    admin: None 반환 (전 팀 슈퍼유저 — 필터가 무필터 처리).
+    비admin: resolve_work_team(explicit → 쿠키 → 대표 팀 → legacy) 결과 1개 set.
+             단 명시 team_id 가 사용자 소속이 아니면 무시하고 대표 팀으로 fallback
+             (다른 팀 자료 임의 조회 차단 — "서버는 매 요청마다 소속 검증" 원칙).
+             결정 불가(팀 미배정)이면 빈 set → 팀 자료 미노출 (작성자 본인 NULL row 만 보임).
+    #15 에서 쿠키 발급/검증/UI 가 붙으면 자연스럽게 쿠키 기반으로 합쳐진다.
+    """
+    if auth.is_admin(user):
+        return None
+    # 명시 team_id 가 비소속이면 버린다 — resolve_work_team 은 explicit 을 무조건 신뢰하므로 여기서 차단.
+    if explicit_id is not None and not auth.user_can_access_team(user, _safe_int(explicit_id)):
+        explicit_id = None
+    tid = auth.resolve_work_team(request, user, explicit_id=explicit_id)
+    if tid is None:
+        return set()
+    # 쿠키 등 다른 경로로 들어온 team_id 도 소속 검증 (#15 쿠키 검증 합류 전 안전망)
+    if not auth.user_can_access_team(user, tid):
+        return set()
+    return {tid}
+
+
+def _safe_int(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
 @app.get("/api/events")
-def list_events(request: Request):
+def list_events(request: Request, team_id: int = None):
     user = auth.get_current_user(request)
     events = db.get_all_events()
-    events = _filter_events_by_visibility(events, user)
+    events = _filter_events_by_visibility(events, user, _work_scope(request, user, team_id))
     proj_colors = db.get_project_colors()
     # 바인딩된 체크리스트의 title 일괄 조회 (삭제된 체크는 None으로 폴백)
     bound_ids = {e.get("bound_checklist_id") for e in events if e.get("bound_checklist_id")}
@@ -1986,14 +2030,14 @@ def list_events(request: Request):
 
 
 @app.get("/api/events/by-project-range")
-def events_by_project_range(request: Request, project: str, start: str, end: str, include_subtasks: int = 0):
+def events_by_project_range(request: Request, project: str, start: str, end: str, include_subtasks: int = 0, team_id: int = None):
     user = auth.get_current_user(request)
     events = db.get_events_by_project_range(project, start, end, include_subtasks=bool(include_subtasks))
-    return _filter_events_by_visibility(events, user)
+    return _filter_events_by_visibility(events, user, _work_scope(request, user, team_id))
 
 
 @app.get("/api/events/search-parent")
-def search_parent_events(request: Request, project: str = "", q: str = "", exclude_id: str = None):
+def search_parent_events(request: Request, project: str = "", q: str = "", exclude_id: str = None, team_id: int = None):
     """하위 업무 모달의 '상위 업무' 오토컴플릿 전용 검색"""
     user = auth.get_current_user(request)
     with db.get_conn() as conn:
@@ -2010,33 +2054,34 @@ def search_parent_events(request: Request, project: str = "", q: str = "", exclu
             where.append("e.id != ?")
             params.append(exclude_id_int)
         rows = conn.execute(
-            f"SELECT id, title, project, start_datetime, end_datetime, team_id, is_public FROM events e WHERE {' AND '.join(where)} ORDER BY e.start_datetime LIMIT 30",
+            f"SELECT id, title, project, start_datetime, end_datetime, team_id, is_public, created_by FROM events e WHERE {' AND '.join(where)} ORDER BY e.start_datetime LIMIT 30",
             params
         ).fetchall()
     events = [dict(r) for r in rows]
-    events = _filter_events_by_visibility(events, user)
-    # 클라이언트에 team_id/is_public 노출 불필요 — 제거
+    events = _filter_events_by_visibility(events, user, _work_scope(request, user, team_id))
+    # 클라이언트에 team_id/is_public/created_by 노출 불필요 — 제거
     for e in events:
         e.pop("team_id", None)
         e.pop("is_public", None)
+        e.pop("created_by", None)
     return events
 
 
 @app.get("/api/events/{event_id}/subtasks")
-def get_event_subtasks(event_id: int, request: Request):
+def get_event_subtasks(event_id: int, request: Request, team_id: int = None):
     """특정 이벤트의 하위 업무 목록"""
     user = auth.get_current_user(request)
     subtasks = db.get_subtasks(event_id)
-    return _filter_events_by_visibility(subtasks, user)
+    return _filter_events_by_visibility(subtasks, user, _work_scope(request, user, team_id))
 
 
 @app.get("/api/events/{event_id}")
-def get_event(event_id: int, request: Request):
+def get_event(event_id: int, request: Request, team_id: int = None):
     user = auth.get_current_user(request)
     event = db.get_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    if not _filter_events_by_visibility([event], user):
+    if not _filter_events_by_visibility([event], user, _work_scope(request, user, team_id)):
         raise HTTPException(status_code=404, detail="Event not found")
     return event
 
@@ -2097,7 +2142,8 @@ async def create_event(request: Request):
             raise HTTPException(status_code=403, detail="히든 프로젝트에 접근 권한이 없습니다.")
     _assert_assignees_in_hidden_project(proj_name or None, data.get("assignee"))
     data["created_by"] = str(user["id"])
-    data["team_id"] = user.get("team_id")
+    # 팀 기능 그룹 A #10: 신규 일정의 team_id 는 현재 작업 팀 (대표 팀 fallback). 팀 미배정이면 NULL.
+    data["team_id"] = auth.resolve_work_team(request, user)
     event_id = db.create_event(data)
     # 일지·하위 업무는 담당자 알림 없음
     if data.get("event_type") not in ("journal", "subtask"):
@@ -2274,6 +2320,13 @@ async def sse_stream(request: Request):
 @app.get("/api/kanban")
 def get_kanban_events(request: Request, team_id: int = None):
     viewer = auth.get_current_user(request)
+    # 팀 기능 그룹 A #10: 칸반은 현재 작업 팀 기준. team_id 미지정 시 resolve_work_team.
+    # 비admin 사용자가 작업 팀을 결정할 수 없거나(팀 미배정) 비소속 팀이면 빈 목록 — 다른 팀 일정 누출 방지.
+    if not auth.is_admin(viewer):
+        scope = _work_scope(request, viewer, team_id)
+        if not scope:
+            return []
+        team_id = next(iter(scope))
     return db.get_kanban_events(team_id, viewer=viewer)
 
 
@@ -2398,7 +2451,7 @@ async def check_event_conflicts(request: Request):
     user = _require_editor(request)
     data = await request.json()
     candidates = data.get("events", [])
-    team_id = user.get("team_id")
+    team_id = auth.resolve_work_team(request, user)  # 팀 기능 그룹 A #10
     existing = _filter_visible_events(db.get_events_for_conflict_check(team_id), user)
 
     results = []
@@ -2479,7 +2532,7 @@ async def ai_conflict_review(request: Request):
     data = await request.json()
     all_events = data.get("events", [])
     model      = data.get("model", llm_parser.DEFAULT_MODEL)
-    team_id    = user.get("team_id")
+    team_id    = auth.resolve_work_team(request, user)  # 팀 기능 그룹 A #10
 
     if not all_events:
         return {"results": []}
@@ -2548,19 +2601,19 @@ def check_conflicts(request: Request, start: str, end: str = None, team_id: int 
 # ── 프로젝트 ─────────────────────────────────────────────
 
 @app.get("/api/projects")
-def list_projects(request: Request):
+def list_projects(request: Request, team_id: int = None):
     user = auth.get_current_user(request)
-    projects = db.get_unified_project_list(viewer=user)
+    projects = db.get_unified_project_list(viewer=user, work_team_ids=(_work_scope(request, user, team_id) if user else None))
     if not user:
         projects = [p for p in projects if not p.get("is_private")]
     return [p["name"] for p in projects]
 
 
 @app.get("/api/projects-meta")
-def list_projects_meta(request: Request):
+def list_projects_meta(request: Request, team_id: int = None):
     """이벤트 모달 담당자 필터용 — 프로젝트별 is_hidden 플래그 반환."""
     user = auth.get_current_user(request)
-    projects = db.get_unified_project_list(viewer=user)
+    projects = db.get_unified_project_list(viewer=user, work_team_ids=(_work_scope(request, user, team_id) if user else None))
     if not user:
         projects = [p for p in projects if not p.get("is_private") and not p.get("is_hidden")]
     return [{"name": p["name"], "is_hidden": bool(p.get("is_hidden"))} for p in projects]
@@ -2579,7 +2632,14 @@ def hidden_project_assignees(request: Request, project: str):
 def project_timeline(request: Request, team_id: int = None):
     viewer = auth.get_current_user(request)
     proj_colors = db.get_project_colors()
-    teams = db.get_project_timeline(team_id, viewer=viewer)
+    if viewer and not auth.is_admin(viewer):
+        scope = _work_scope(request, viewer, team_id)
+        if not scope:
+            return []
+        team_id = next(iter(scope))
+        teams = db.get_project_timeline(team_id, viewer=viewer)
+    else:
+        teams = db.get_project_timeline(team_id, viewer=viewer)
     for team in teams:
         for project in team.get("projects", []):
             project["color"] = resolve_project_color(project.get("name"), proj_colors)
@@ -2589,12 +2649,12 @@ def project_timeline(request: Request, team_id: int = None):
 # ── 통합 프로젝트 목록 API ──────────────────────────────────
 
 @app.get("/api/project-list")
-def api_project_list(request: Request):
+def api_project_list(request: Request, team_id: int = None):
     """모든 페이지에서 공통으로 사용하는 통합 프로젝트 목록.
     projects 테이블 + events.project + checklists.project 합산, [{name, color, is_active, id}]
     """
     user = _require_editor(request)
-    return db.get_unified_project_list(viewer=user)
+    return db.get_unified_project_list(viewer=user, work_team_ids=_work_scope(request, user, team_id))
 
 
 def _publish_project_changed(name: str | None, action: str, project: dict | None = None):
@@ -2610,9 +2670,9 @@ def _publish_project_changed(name: str | None, action: str, project: dict | None
 # ── 프로젝트 관리 API ────────────────────────────────────
 
 @app.get("/api/manage/projects")
-def manage_list_projects(request: Request):
+def manage_list_projects(request: Request, team_id: int = None):
     user = _require_editor(request)
-    return db.get_all_projects_with_events(viewer=user)
+    return db.get_all_projects_with_events(viewer=user, work_team_ids=_work_scope(request, user, team_id))
 
 
 @app.post("/api/manage/projects")
@@ -3778,10 +3838,10 @@ async def manage_add_event(name: str, request: Request):
         "kanban_status":  None,
         "priority":       "normal",
         "created_by":     str(user["id"]),
-        "team_id":        user.get("team_id"),
+        "team_id":        auth.resolve_work_team(request, user),
     }
     event_id = db.create_event(payload)
-    _sse_publish("events.changed", {"id": event_id, "action": "create", "team_id": user.get("team_id")})
+    _sse_publish("events.changed", {"id": event_id, "action": "create", "team_id": payload["team_id"]})
     return {"id": event_id}
 
 
@@ -3946,9 +4006,9 @@ def api_delete_link(link_id: int, request: Request):
 # ── 문서 API ─────────────────────────────────────────────
 
 @app.get("/api/doc")
-def list_docs(request: Request):
+def list_docs(request: Request, team_id: int = None):
     user = auth.get_current_user(request)
-    return db.get_all_meetings(viewer=user)
+    return db.get_all_meetings(viewer=user, work_team_ids=(_work_scope(request, user, team_id) if user else None))
 
 
 @app.post("/api/doc")
@@ -3974,7 +4034,7 @@ async def create_doc(request: Request):
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
     meeting_id = db.create_meeting(
-        title, content, user.get("team_id"), user["id"],
+        title, content, auth.resolve_work_team(request, user), user["id"],
         meeting_date, is_team_doc, is_public, team_share, attachments
     )
     _sse_publish("docs.changed", {"action": "create", "id": meeting_id})
@@ -4104,11 +4164,11 @@ def get_doc_lock(meeting_id: int, request: Request):
 
 
 @app.get("/api/doc/calendar")
-def docs_calendar(request: Request):
+def docs_calendar(request: Request, team_id: int = None):
     user = auth.get_current_user(request)
     if user is None:
         return []
-    docs = db.get_all_meetings(viewer=user)
+    docs = db.get_all_meetings(viewer=user, work_team_ids=_work_scope(request, user, team_id))
     result = []
     for m in docs:
         is_team_doc = bool(m.get("is_team_doc", 1))
@@ -4430,7 +4490,8 @@ async def ai_confirm(request: Request):
     events     = body.get("events", [])
     meeting_id = body.get("meeting_id")
     force      = bool(body.get("force", False))
-    team_id    = user.get("team_id")
+    # 팀 기능 그룹 A #10: 신규 일정의 team_id 는 현재 작업 팀 (대표 팀 fallback).
+    team_id    = auth.resolve_work_team(request, user)
 
     # 저장 직전 재검사 — force=True가 아닌 경우만
     if not force:
@@ -4590,12 +4651,14 @@ async def ai_weekly_report(request: Request):
     base_date = (body.get("base_date") or _date.today().isoformat()).strip()
     model     = body.get("model", llm_parser.DEFAULT_MODEL)
 
-    # P2-1: 요청된 team_id가 본인 팀이 아니면 본인 팀으로 강제 (admin 제외)
+    # 팀 기능 그룹 A #10: 주간 리포트는 현재 작업 팀 기준. team_id 미지정 시 resolve_work_team fallback.
     requested_team_id = body.get("team_id") or None
     if auth.is_admin(user):
         team_id = requested_team_id
+        scope = None
     else:
-        team_id = user.get("team_id") or None
+        scope = _work_scope(request, user, requested_team_id)
+        team_id = next(iter(scope)) if scope else None
 
     base_dt      = _dt.strptime(base_date, "%Y-%m-%d")
     past_start   = (base_dt - _td(days=7)).strftime("%Y-%m-%d")
@@ -4606,11 +4669,11 @@ async def ai_weekly_report(request: Request):
     # 겹침 쿼리로 변경됐으므로 7일 이전 시작 이벤트도 포함됨
     past_events   = _filter_events_by_visibility(
         db.get_events_by_date_range(past_start, past_end, team_id),
-        user,
+        user, scope,
     )
     future_events = _filter_events_by_visibility(
         db.get_events_by_date_range(future_start, future_end, team_id),
-        user,
+        user, scope,
     )
 
     def _is_today_active(e):

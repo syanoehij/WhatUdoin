@@ -15,7 +15,18 @@ import contextvars
 import hashlib
 
 import database as db
+import auth
 from permissions import _can_read_doc, _can_read_checklist
+
+
+def _mcp_work_team_ids(user) -> set:
+    """팀 기능 그룹 A #10: MCP 호출의 작업 팀 집합.
+
+    MCP 에는 work_team_id 쿠키가 없으므로 사용자 소속 팀 전체를 작업 팀 집합으로 사용한다
+    (= 모든 소속 팀 통합 — todo §10 "모든 소속 팀 통합 라우트"에 준함).
+    NULL·다른 팀 row 차단은 db 함수의 work_team_ids 필터가 보장한다.
+    """
+    return auth.user_team_ids(user)
 
 from mcp.server.fastmcp import FastMCP, Context
 from mcp.server.transport_security import TransportSecuritySettings
@@ -105,7 +116,7 @@ async def list_projects(ctx: Context, include_inactive: bool = False) -> list[di
     if user is None:
         raise PermissionError("인증이 필요합니다.")
     with db.get_conn() as conn:
-        return db.get_projects_for_mcp(conn, include_inactive=include_inactive, viewer=user)
+        return db.get_projects_for_mcp(conn, include_inactive=include_inactive, viewer=user, work_team_ids=_mcp_work_team_ids(user))
 
 
 @mcp.tool()
@@ -136,7 +147,7 @@ async def list_events(
     if user is None:
         raise PermissionError("인증이 필요합니다.")
     with db.get_conn() as conn:
-        return db.get_events_filtered(conn, project=project, start_after=start_after, end_before=end_before, viewer=user)
+        return db.get_events_filtered(conn, project=project, start_after=start_after, end_before=end_before, viewer=user, work_team_ids=_mcp_work_team_ids(user))
 
 
 @mcp.tool()
@@ -153,7 +164,7 @@ async def get_event(ctx: Context, event_id: int) -> dict:
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    result = db.get_event_for_mcp(event_id, viewer=user)
+    result = db.get_event_for_mcp(event_id, viewer=user, work_team_ids=_mcp_work_team_ids(user))
     if result is None:
         return {"error": "not_found", "id": event_id, "reason": "이벤트가 존재하지 않거나 접근 권한이 없습니다."}
     return result
@@ -176,7 +187,7 @@ async def list_documents(ctx: Context) -> list[dict]:
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.get_all_meetings_summary(viewer=user)
+    return db.get_all_meetings_summary(viewer=user, work_team_ids=_mcp_work_team_ids(user))
 
 
 @mcp.tool()
@@ -194,7 +205,7 @@ async def get_document(ctx: Context, doc_id: int) -> dict:
     if user is None:
         raise PermissionError("인증이 필요합니다.")
     doc = db.get_meeting(doc_id)
-    if not doc or not _can_read_doc(user, doc):
+    if not doc or not _can_read_doc(user, doc, work_team_ids=_mcp_work_team_ids(user)):
         return {"error": "not_found", "id": doc_id, "reason": "문서가 존재하지 않거나 접근 권한이 없습니다."}
     return doc
 
@@ -220,7 +231,7 @@ async def list_checklists(ctx: Context, project: str | None = None) -> list[dict
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.get_checklists_summary(project=project, viewer=user)
+    return db.get_checklists_summary(project=project, viewer=user, work_team_ids=_mcp_work_team_ids(user))
 
 
 @mcp.tool()
@@ -238,7 +249,7 @@ async def get_checklist(ctx: Context, checklist_id: int) -> dict:
     if user is None:
         raise PermissionError("인증이 필요합니다.")
     cl = db.get_checklist(checklist_id)
-    if not cl or not _can_read_checklist(user, cl):
+    if not cl or not _can_read_checklist(user, cl, work_team_ids=_mcp_work_team_ids(user)):
         return {"error": "not_found", "id": checklist_id, "reason": "체크리스트가 존재하지 않거나 접근 권한이 없습니다."}
     return cl
 
@@ -284,7 +295,8 @@ async def search_all(
         start_after = (today - timedelta(days=7)).isoformat()
         end_before = (today + timedelta(days=7)).isoformat()
     return db.search_all(query=query, type=type, viewer=user,
-                         start_after=start_after, end_before=end_before)
+                         start_after=start_after, end_before=end_before,
+                         work_team_ids=_mcp_work_team_ids(user))
 
 
 @mcp.tool()
@@ -320,7 +332,7 @@ async def search_events(
         today = datetime.now().date()
         start_after = (today - timedelta(days=7)).isoformat()
         end_before = (today + timedelta(days=7)).isoformat()
-    return db.search_events_mcp(query=query, start_after=start_after, end_before=end_before, viewer=user)
+    return db.search_events_mcp(query=query, start_after=start_after, end_before=end_before, viewer=user, work_team_ids=_mcp_work_team_ids(user))
 
 
 @mcp.tool()
@@ -349,7 +361,7 @@ async def list_kanban(
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.get_kanban_summary(project=project, viewer=user)
+    return db.get_kanban_summary(project=project, viewer=user, work_team_ids=_mcp_work_team_ids(user))
 
 
 @mcp.tool()
@@ -367,7 +379,7 @@ async def get_kanban_item(ctx: Context, event_id: int) -> dict:
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    result = db.get_event_for_mcp(event_id, viewer=user)
+    result = db.get_event_for_mcp(event_id, viewer=user, work_team_ids=_mcp_work_team_ids(user))
     if result is None:
         return {"error": "not_found", "id": event_id, "reason": "칸반 항목이 존재하지 않거나 접근 권한이 없습니다."}
     return result
@@ -400,7 +412,7 @@ async def search_kanban(
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.search_kanban_mcp(query=query, project=project, viewer=user)
+    return db.search_kanban_mcp(query=query, project=project, viewer=user, work_team_ids=_mcp_work_team_ids(user))
 
 
 @mcp.tool()
@@ -424,7 +436,7 @@ async def search_documents(ctx: Context, query: str) -> list[dict]:
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.search_documents_mcp(query=query, viewer=user)
+    return db.search_documents_mcp(query=query, viewer=user, work_team_ids=_mcp_work_team_ids(user))
 
 
 @mcp.tool()
@@ -454,4 +466,4 @@ async def search_checklists(
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.search_checklists_mcp(query=query, project=project, viewer=user)
+    return db.search_checklists_mcp(query=query, project=project, viewer=user, work_team_ids=_mcp_work_team_ids(user))

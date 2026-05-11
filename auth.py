@@ -75,14 +75,25 @@ def user_team_ids(user) -> set:
     try:
         with db.get_conn() as conn:
             rows = conn.execute(
-                "SELECT team_id FROM user_teams WHERE user_id = ? AND status = 'approved'",
+                "SELECT ut.team_id FROM user_teams ut "
+                "JOIN teams t ON t.id = ut.team_id "
+                "WHERE ut.user_id = ? AND ut.status = 'approved' AND t.deleted_at IS NULL",
                 (uid,),
             ).fetchall()
         return {row[0] for row in rows if row[0] is not None}
     except Exception:
         # 마이그레이션 전 호출 등 예외 상황: legacy users.team_id로 fallback
         legacy = user.get("team_id")
-        return {legacy} if legacy else set()
+        if not legacy:
+            return set()
+        try:
+            with db.get_conn() as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM teams WHERE id = ? AND deleted_at IS NULL", (legacy,)
+                ).fetchone()
+            return {legacy} if row else set()
+        except Exception:
+            return {legacy}
 
 
 def user_can_access_team(user, team_id) -> bool:
@@ -233,3 +244,28 @@ def can_edit_project(user, project: dict) -> bool:
     if proj_team is not None:
         return user_can_access_team(user, proj_team)
     return True
+
+
+def can_edit_meeting(user, doc: dict) -> bool:
+    """문서(meetings) 편집·삭제 권한 — 팀 기능 그룹 A #10 (계획서 8-1 혼합 모델).
+
+    - admin: 전역 슈퍼유저로 항상 True (work_team_id 명시 강제는 #16 책임 — 본 사이클 미적용)
+    - is_team_doc=1 (팀 문서): 같은 팀 승인 멤버 누구나. created_by 는 권한 판단에 쓰지 않는다 (§8-1:
+      추방되면 자기가 만든 팀 문서도 편집 불가). team_id NULL 잔존 row(백필 실패)는 작성자 본인만 — 읽기 정책과 정합.
+    - is_team_doc=0 (개인 문서): 작성자 본인(meetings.created_by == user.id)만. team_share=1이라도
+      다른 멤버는 읽기만(섹션 8). 추방·탈퇴 후에도 작성자 본인은 계속 보유.
+    """
+    if not user or not doc:
+        return False
+    if is_admin(user):
+        return True
+    if not is_member(user):
+        return False
+    if doc.get("is_team_doc"):
+        doc_team = doc.get("team_id")
+        if doc_team is None:
+            # 백필 실패 잔존 팀 문서(팀 없음) — 작성자 본인만 (orphan 을 임의 멤버에게 노출하지 않음)
+            return doc.get("created_by") == user.get("id")
+        return user_can_access_team(user, doc_team)
+    # 개인 문서: 작성자 본인만
+    return doc.get("created_by") == user.get("id")

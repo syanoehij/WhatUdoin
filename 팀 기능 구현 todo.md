@@ -133,7 +133,7 @@
     2. 작성자(`created_by` 문자열 → users.name)가 단일 팀(`user_teams.join_status='approved'` 1건)에 소속이면 그 팀
     3. 결정 불가 시 `team_id` NULL 유지 + `team_migration_warnings`에 row id·시도 결과 기록 (마이그레이션은 통과, 서버 시작 거부 X)
   - [x] **임의 "기본 팀" 일괄 배정 금지** — 섞이면 분리 비용이 큼
-  - [ ] NULL 잔존 row의 가시성: 작성자 본인 + admin 슈퍼유저에게만 노출 (가시성 쿼리에 명시) — #10 라우트 적용 책임
+  - [x] NULL 잔존 row의 가시성: 작성자 본인(events/checklists `created_by` str(id)·이름 토큰) + admin 슈퍼유저에게만 노출 — #10에서 `_filter_events_by_visibility`/`_can_read_checklist`/MCP 필터에 적용 완료
   - [x] `meetings.team_id` 백필 규칙 — **정상 경로 + 예외 분기 (계획서 섹션 13)**:
     - **정상 경로 (`is_team_doc=1` 팀 문서)**: 기존 `team_id`가 있으면 유지, 없으면 작성자(`created_by` INTEGER → users.id)의 기존 `users.team_id`로 백필
     - **정상 경로 (`is_team_doc=0` 개인 문서)**: 작성자의 기존 `users.team_id`로 1회 백필 (이후 작업 팀이 바뀌어도 변하지 않음)
@@ -146,7 +146,7 @@
     2. `team_id`가 없고 `owner_id`가 있으면 owner의 기존 `users.team_id` 또는 이관된 대표 팀으로 배정
     3. `events.project` / `checklists.project` 문자열만 있고 대응 프로젝트가 없으면, 해당 항목의 `team_id` 안에 프로젝트 row를 **자동 생성**하고 `project_id` 연결 — **#6 책임** (본 사이클 X)
     4. 위 3단계로도 결정 불가 시 `projects.team_id` NULL 유지 + `team_migration_warnings`에 row id 기록 (마이그레이션 통과, 서버 시작 거부 X — events/checklists의 NULL 잔존 정책과 일관)
-  - [ ] **NULL 잔존 projects 가시성 정책**: `team_id IS NULL` 프로젝트는 `owner_id` 본인 + admin 슈퍼유저에게만 노출. 그 프로젝트에 연결된 events/checklists도 같은 제한 (events/checklists의 NULL 정책과 일관). 일반 팀 화면·공개 포털에는 노출되지 않음. — #10 라우트 적용 책임
+  - [x] **NULL 잔존 projects 가시성 정책**: `team_id IS NULL` 프로젝트는 `owner_id` 본인 + admin 슈퍼유저에게만 노출 — #10에서 `_project_team_filter_sql`(`team_id IN scope OR (team_id IS NULL AND owner_id = viewer.id)`) + orphan 이름도 작업 팀 컨텍스트 events/checklists 것만(`_events_checklists_team_name_set`)으로 적용. 일반 팀 화면 비노출 확인(공개 포털 `/팀이름`은 #13 책임)
   - [x] **문자열 프로젝트명만으로 전역 update를 하지 않는다** (같은 이름 프로젝트가 여러 팀에 생길 수 있음) — 사양서 명시 + 백필이 owner.team_id 기반으로만 동작
 - [x] **마이그레이션 (보조 테이블)**
   - [x] `notifications.team_id` 백필 (`event_id → events.team_id`, 매핑 불가는 NULL = "팀 미상")
@@ -278,38 +278,39 @@
 
 > **#10과 #15의 분리 정책 (사용자 결정)**: #10은 **백엔드 가시성 쿼리 전환만** 담당한다. 작업 팀 결정은 `#2`의 `resolve_work_team(request, user, explicit_id)` 헬퍼 + 명시 `team_id` 파라미터에 의존한다(쿠키 없으면 대표 팀 fallback). **`work_team_id` 쿠키 발급/검증/Set-Cookie, 프로필 메뉴 "팀 변경" UI, 화면별 팀 드롭다운 제거는 #15에서 처리한다.** 따라서 #10 시점에는 프론트가 명시 `team_id`를 보내거나 서버가 대표 팀으로 fallback하도록 두고, #15 도입 후 자연스럽게 쿠키 기반 동작으로 합쳐진다. 이 정책 덕에 #10은 그룹 A에 머무르되 #15에 막히지 않는다.
 
-- [ ] **구현 (가시성 / 조회)**
-  - [ ] `_filter_events_by_visibility`를 `user_teams` 기반으로 교체. 팀 컨텍스트는 **`resolve_work_team` 헬퍼 결과** 사용 (호출부에서 explicit `team_id` 또는 대표 팀 fallback)
-  - [ ] meetings·checklists 가시성 쿼리를 다중 팀 모델로 교체 (동일 헬퍼)
-  - [ ] 개인 문서(`is_team_doc=0`) 가시성 규칙 적용:
+- [x] **구현 (가시성 / 조회)**
+  - [x] `_filter_events_by_visibility`를 `user_teams` 기반으로 교체. 팀 컨텍스트는 **`resolve_work_team` 헬퍼 결과** 사용 (호출부에서 explicit `team_id` 또는 대표 팀 fallback). 시그니처 `(events, user, scope_team_ids=None)`, `_work_scope` 헬퍼 신규
+  - [x] meetings·checklists 가시성 쿼리를 다중 팀 모델로 교체 (동일 헬퍼) — `permissions._can_read_doc/_can_read_checklist`에 `work_team_ids` 인자, `database.get_all_meetings/get_checklists` 등에 `work_team_ids` 인자
+  - [x] 개인 문서(`is_team_doc=0`) 가시성 규칙 적용:
     - 작성자 본인: 항상 노출
     - team_share=1: 같은 팀 멤버 + 현재 작업 팀 일치
     - `team_id IS NULL`: 작성자 본인만
-  - [ ] 체크는 작업 팀 컨텍스트에 의존 (작성자 추방 시 본인도 안 보임)
-  - [ ] 모든 팀 컨텍스트 API는 `team_id` 파라미터를 명시적으로 받을 수 있게 — 쿠키 미존재 시 `resolve_work_team` 대표 팀 fallback 동작 검증 (쿠키/UI 통합은 #15에서)
-- [ ] **구현 (편집·삭제 권한 — 8-1 "팀 공유 자료" 모델)**
-  - [ ] **일정·체크·프로젝트·팀 문서(`is_team_doc=1`)**: 같은 팀 승인 멤버(`user_teams.join_status='approved'` AND `teams.deleted_at IS NULL`) 누구나 편집·삭제 허용. `created_by`는 표시·로그용일 뿐 권한 판단에 쓰지 않는다
-  - [ ] **개인 문서(`is_team_doc=0`)**: **작성자 본인만** 편집·삭제 가능. `team_share=1`은 다른 팀 멤버에게 **읽기만** 허용 (편집·삭제 불가)
-  - [ ] admin은 전역 슈퍼유저로 모든 팀 자료 편집·삭제 가능 (단, `work_team_id` 명시 필수 — `#16`과 일관)
-  - [ ] 일정·체크·프로젝트 작성 폼에 "내 일정/팀 일정" 토글 같은 **개인/팀 구분 UI를 두지 않는다** (문서에만 존재하는 구분)
-  - [ ] 추방·재가입 시 권한 자동 복구 — row의 동결값이 아니라 매 요청마다 `user_teams` 상태로 판단 (개인 문서는 추방과 무관하게 작성자 보유)
-- [ ] **검증 (가시성 — 라우트 전체 열거)**
-  - [ ] 다중 팀 사용자가 작업 팀 전환에 따라 자료가 바뀌는지 확인
-  - [ ] 추방 시나리오 → 재가입 시나리오에서 자료 가시성 자동 복구
-  - [ ] **현재 작업 팀 기준 라우트** (모두 명시 `team_id` + `resolve_work_team` fallback): `/api/events`(캘린더), `/api/kanban`, **간트용 events 조회**(`project.html`이 사용하는 `/api/events?project_id=...` 류), `/api/checklists`, `/api/meetings`, `/api/projects`, **프로젝트 관리 목록/상세/검색** (`/api/manage/projects/...`)
-  - [ ] **모든 소속 팀 통합 라우트** ("내 스케줄" 계열): 통합 일정·체크 조회는 `team_id IN user_team_ids(user)` 기준으로 동작 (현재 작업 팀에 종속되지 않음)
-  - [ ] 각 라우트에서 다른 팀 row가 응답에 섞이지 않는지 통합 테스트
-- [ ] **검증 (편집·삭제 권한)**
-  - [ ] 같은 팀 멤버 A가 만든 일정·체크·팀 문서를 멤버 B가 편집·삭제 가능
-  - [ ] `team_share=1` 개인 문서를 다른 팀 멤버가 읽기만 가능, 편집·삭제 시도 시 403
-  - [ ] 추방된 멤버가 자기 작성 팀 자료에도 접근 불가
-  - [ ] 추방된 멤버도 자기 개인 문서는 계속 편집·삭제 가능
-- [ ] **검증 (NULL team row 노출 안 됨 — 회귀 방지)**
-  - [ ] 테스트 데이터로 `events.team_id IS NULL`, `checklists.team_id IS NULL`, `projects.team_id IS NULL` row 각 1건 삽입
-  - [ ] 다른 팀 멤버 세션으로 모든 목록(`/api/events`, `/api/checklists`, `/api/projects`, 칸반·간트·캘린더), 상세, 검색, MCP `list_*`/`search_*` 호출 — NULL row가 어느 팀 컨텍스트에도 노출되지 않는지 확인
-  - [ ] 작성자 본인(events/checklists) 또는 owner(projects) 세션에서만 노출되는지 확인
-  - [ ] admin 슈퍼유저 세션에서 `/admin` 또는 슈퍼유저 일반 화면 진입 시 노출되는지 확인
-  - [ ] 공개 포털(`/팀이름`)에 NULL row가 절대 노출되지 않는지 확인
+    - (보강) 팀 문서(`is_team_doc=1`)는 작성자 예외 없음 — 추방되면 자기가 만든 팀 문서도 안 보임 (§8-1)
+  - [x] 체크는 작업 팀 컨텍스트에 의존 (작성자 추방 시 본인도 안 보임 — `team_id IS NULL` 잔존 row 만 작성자 예외)
+  - [x] 모든 팀 컨텍스트 API는 `team_id` 파라미터를 명시적으로 받을 수 있게 — 쿠키 미존재 시 `resolve_work_team` 대표 팀 fallback 동작 검증 (쿠키/UI 통합은 #15에서). 비소속 team_id 명시 시 무시하고 대표 팀 fallback
+- [x] **구현 (편집·삭제 권한 — 8-1 "팀 공유 자료" 모델)**
+  - [x] **일정·체크·프로젝트·팀 문서(`is_team_doc=1`)**: 같은 팀 승인 멤버(`user_teams.status='approved'` AND `teams.deleted_at IS NULL`) 누구나 편집·삭제 허용. `created_by`는 표시·로그용일 뿐 권한 판단에 쓰지 않는다 — `auth.can_edit_event/can_edit_checklist/can_edit_project`(이미 위임) + `can_edit_meeting`(신규)
+  - [x] **개인 문서(`is_team_doc=0`)**: **작성자 본인만** 편집·삭제 가능. `team_share=1`은 다른 팀 멤버에게 **읽기만** 허용 (편집·삭제 불가) — `auth.can_edit_meeting`
+  - [x] admin은 전역 슈퍼유저로 모든 팀 자료 편집·삭제 가능 (`work_team_id` 명시 강제는 `#16` 책임 — 본 사이클 미적용, 주석 표시)
+  - [x] 일정·체크·프로젝트 작성 폼에 "내 일정/팀 일정" 토글 같은 **개인/팀 구분 UI를 두지 않는다** (변경 없음 — 추가 안 함)
+  - [x] 추방·재가입 시 권한 자동 복구 — row의 동결값이 아니라 매 요청마다 `user_teams` 상태로 판단 (개인 문서는 추방과 무관하게 작성자 보유). `auth.user_team_ids`에 `teams.deleted_at IS NULL` 조인 추가로 삭제 예정 팀도 자동 제외
+- [x] **검증 (가시성 — 라우트 전체 열거)** — 합성 DB + TestClient 71 PASS (`.claude/workspaces/current/scripts/verify_team10.py`)
+  - [x] 다중 팀 사용자가 작업 팀 전환에 따라 자료가 바뀌는지 확인
+  - [x] 추방 시나리오 → 재가입 시나리오에서 자료 가시성 자동 복구
+  - [x] **현재 작업 팀 기준 라우트** (모두 `team_id` 파라미터 + `resolve_work_team` fallback): `/api/events`(+by-project-range/search-parent/subtasks/{id}), `/api/kanban`, **간트용** `/api/project-timeline`, `/api/checklists`, `/api/doc`(+calendar), `/api/projects`(+meta/project-list), **프로젝트 관리 목록** `/api/manage/projects`, `/check`·`/doc` 페이지
+  - [~] **모든 소속 팀 통합 라우트** ("내 스케줄" 계열): MCP `list_*`/`search_*`는 `user_team_ids(user)` 기준으로 동작(현재 작업 팀 종속 X). assignee 기반 미니 위젯(`/api/my-meetings`(event_type='meeting')·`/api/my-milestones`·`/api/project-milestones/calendar`)은 담당자+히든 필터만 — 팀 경계 미적용 (후속, qa_report.md 기록)
+  - [x] 각 라우트에서 다른 팀 row가 응답에 섞이지 않는지 통합 테스트
+- [x] **검증 (편집·삭제 권한)**
+  - [x] 같은 팀 멤버 A가 만든 일정·체크·팀 문서를 멤버 B가 편집·삭제 가능
+  - [x] `team_share=1` 개인 문서를 다른 팀 멤버가 읽기만 가능, 편집·삭제 시도 시 거부 (`_can_write_doc` False)
+  - [x] 추방된 멤버가 자기 작성 팀 자료에도 접근 불가 (event·team-doc 양쪽 검증)
+  - [x] 추방된 멤버도 자기 개인 문서는 계속 편집·삭제 가능
+- [x] **검증 (NULL team row 노출 안 됨 — 회귀 방지)**
+  - [x] 테스트 데이터로 `events.team_id IS NULL`(신규 str(id) 형식·legacy 이름 형식 둘 다), `checklists.team_id IS NULL`, `projects.team_id IS NULL` row 삽입
+  - [x] 다른 팀 멤버 세션으로 `/api/events`/`/api/checklists`/`/api/projects`/칸반 — NULL row가 어느 팀 컨텍스트에도 노출되지 않음. MCP `list_*`/`search_*`도 `work_team_ids` 필터 적용(합성 DB로 간접 검증, 실서버 E2E는 서버 OFF로 불가)
+  - [x] 작성자 본인(events/checklists, str(id)·이름 토큰 양쪽) 또는 owner(projects) 세션에서만 노출되는지 확인
+  - [x] admin 슈퍼유저 세션에서 전체 노출되는지 확인 (`/admin` 화면 자체는 #16 범위)
+  - [~] 공개 포털(`/팀이름`)에 NULL row 비노출 — 공개 포털 라우트는 #13 책임. 본 사이클 `_filter_events_by_visibility`는 `user=None`이면 `is_public=1`만 통과(NULL team row는 작성자 본인만 → `user=None`이면 절대 통과 안 함)으로 가드
 
 ---
 
@@ -699,3 +700,4 @@
 | 2026-05-11 | #8 계정 가입과 팀 신청 분리 | `/api/register` 를 pending_users 승인 대기 → 즉시 가입+자동 로그인으로 교체: `db.create_user_account`(name_norm 정규화·`password=''`+`password_hash`·`role='member'`·`team_id=NULL`, 사전 SELECT + IntegrityError 이중 가드), 정규식·비밀번호 정책(#7 헬퍼 재사용), 예약어 차단(`RESERVED_USERNAMES` + `casefold`), set_cookie 자동 세션. 팀 신청 분리: `POST /api/me/team-applications`(`db.apply_to_team` — 임의 팀 pending 1건이라도 있으면 신규 차단, approved 중복 차단, rejected→같은 row pending 갱신·joined_at 보존), `GET/POST /api/teams/{team_id}/applications[/{user_id}/decide]`(`_require_team_admin` = 글로벌 admin 또는 `user_teams.role='admin'`, decide는 화이트리스트+pending row만). `db.list_team_applications`/`decide_team_application`/`get_team_active` 신규. 프론트: register.html(memo 제거·`/` 리다이렉트), base.html 모달 문구. 마이그레이션 phase 변경 없음 → 서버 재시작 불필요. `check_register_duplicate`/`create_pending_user` 데드코드 보존(Phase 5 drop 시 정리). 리뷰 차단 0(경고 2). 합성 DB+TestClient 72 PASS. | `app.py`, `database.py`, `templates/register.html`, `templates/base.html`. workspace(다음 사이클 시작 시 archive로 이동): `00_input/feature_spec.md`, `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_team_a_008.py` |
 | 2026-05-11 | #9 IP 자동 로그인 관리 | `database.py`: `IPWhitelistConflict` 예외 + helper(`find_whitelist_owner`, `get_whitelist_status_for_ip`, `set_user_whitelist_ip`/`admin_set_whitelist_ip`(한 트랜잭션 충돌검사+history 1개 승격 or INSERT, IntegrityError→Conflict), `remove_user_whitelist_ip`(type='history' 강등 row 보존), `delete_ip_row`, `toggle_ip_whitelist` enable 충돌 시 예외). 신규 phase `team_phase_4b_user_ips_whitelist_unique_v1`(#4 데이터 백필 직후 등록): `idx_user_ips_whitelist_unique ON user_ips(ip_address) WHERE type='whitelist'` 부분 UNIQUE. preflight `_check_user_ips_whitelist_unique`(같은 IP 2명+ whitelist → abort + `preflight_user_ips_whitelist` warning, 자동 정리 없음 — phase 5a 식 자동 dedup 미적용). `app.py`: `GET/POST/DELETE /api/me/ip-whitelist`(POST는 admin 403), `POST /api/admin/users/{id}/ips`, `DELETE /api/admin/ips/{id}`, `PUT /api/admin/ips/{id}/whitelist` 충돌 409 보강, `_require_login` 헬퍼. 프론트: `base.html` 사용자 설정 패널 자동 로그인 토글(admin/비로그인 숨김, ON 시 `wuDialog.confirm` 사양서 §6 문구, OFF 즉시 DELETE, 초기 상태 `GET /api/me/ip-whitelist`), `admin.html` IP 모달에 임의 IP 등록 input + row 삭제 버튼 + 409 토스트. `tools/migration_doctor.py` [4] user_ips whitelist 충돌 진단 + 권장 SQL 추가. QA 자가 발견 결함 1건(history 중복 row 일괄 승격 → IntegrityError): MIN(id) 1개만 승격으로 패치. 리뷰 차단 0(경고 2). 합성 DB+TestClient+마이그레이션 phase 직접 호출 59 PASS. **서버 재시작 필요**(phase 4b + 새 라우트). | `database.py`, `app.py`, `templates/base.html`, `templates/admin.html`, `tools/migration_doctor.py`. workspace(다음 사이클 시작 시 archive로 이동): `00_input/feature_spec.md`, `backend_changes.md`, `frontend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_team_a_009.py` |
 | 2026-05-11 | A보강 자동 dedup phase + 운영자 도구 | 회사 운영 DB 첫 실행 안전망. 신규 phase `team_phase_5a_projects_dedup_safe_v1` (#5 앞에 등록): `(team_id, name_norm)` 충돌 그룹 중 events/checklists.project_id, project_members, project_milestones, trash_project_id, 문자열 project 참조 모두 0건인 row만 안전 hard DELETE(모든 row 0 참조면 MIN(id) 1개 살림). unsafe 그룹은 보존 → 이후 #5 preflight 거부 흐름 유지. warning 카테고리 `dedup_projects_auto`. 신규 `tools/migration_doctor.py` + `main.py --doctor` sub-command(콘솔/sidecar/uvicorn 초기화 전 분기): `check`(read-only 진단, projects 안전/unsafe 분류, users/teams.name_norm 충돌+권장 SQL 템플릿), `fix-projects`(dry-run 기본) / `--apply`(자체 백업 후 정리). `WhatUdoin.spec`에 tools 폴더 + hiddenimports 추가. 리뷰 블로커 1건(BEGIN IMMEDIATE 트랜잭션 충돌) + 마이너 1건(GROUP_CONCAT split) 즉시 패치. dedup 7 시나리오 + doctor 5 시나리오 PASS. 운영 DB 사전 진단: 자동 정리 가능 1건만 검출(`team_id=17, name_norm='alpha', ids=[104,105]`), unsafe 0건 → 서버 재시작만으로 phase 5a 자동 흡수. | `database.py`, `tools/migration_doctor.py`(신규), `tools/__init__.py`(신규), `main.py`, `WhatUdoin.spec`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_dedup_phase.py`, `scripts/verify_migration_doctor.py` |
+| 2026-05-11 | #10 문서·체크 팀 경계 + 편집·삭제 권한 모델 | 스키마 무변경(마이그레이션 phase 추가 없음 — 라우트·쿼리·권한 헬퍼만). `auth.user_team_ids`에 `JOIN teams ... AND deleted_at IS NULL` 추가(삭제 예정 팀 자동 제외 — `user_can_access_team`/`is_team_admin`/`resolve_work_team` 전파). `auth.can_edit_meeting` 신규(혼합 모델: is_team_doc=1→같은 팀 승인 멤버 누구나·created_by 무관·NULL팀잔존은 작성자한정 / is_team_doc=0→작성자 본인만 / admin 전역). `permissions._can_read_doc/_can_read_checklist`에 `work_team_ids` 인자 + 작업 팀 scoping(None&비admin→`user_team_ids` fallback). `app._filter_events_by_visibility(events, user, scope_team_ids=None)` 재작성(admin 무필터 / team_id∈scope 통과 / team_id NULL→작성자 본인(str(id)·이름 토큰 양쪽) / is_public==1 통과 / else skip). `_work_scope` 헬퍼(admin→None, 비admin→resolve_work_team 1개 set, 비소속 team_id 무시·대표팀 fallback, 미배정→set()). 라우트 ~20개에 `team_id` 파라미터+scoping(events·by-project-range·search-parent·subtasks·{id}, checklists, projects·meta·project-list·project-timeline, manage/projects, doc·doc/calendar, kanban, /check·/doc 페이지). create 경로(events·ai/confirm·manage event·checklists·doc) team_id를 `resolve_work_team`로. `database.py` 헬퍼 7종(`_meeting_team_clause`/`_viewer_team_ids`(auth 미import 순환회피)/`_author_token_set`/`_author_in_sql`/`_project_team_filter_sql`/`_events_checklists_team_name_set`/`_filter_rows_by_work_team`) + `work_team_ids` 인자(checklists·meetings·projects 조회 + MCP 조회 함수 다수, MCP응답은 team_id/created_by pop). `mcp_server.py` `import auth`+`_mcp_work_team_ids`(=user_team_ids — MCP엔 작업팀 쿠키 없음) 전 도구에 전달. advisor 리뷰 발견 결함 1건(`_can_read_doc` 작성자 단축이 추방된 팀문서 작성자에게 노출 — §8-1 위반) 동일 흐름 패치(is_team_doc=1은 작성자 단축 제거, meetings SQL 4곳 `m.created_by = ? AND (is_team_doc=0 OR team_id IS NULL)` + 팀문서절 `team_id IS NOT NULL` 추가, `can_edit_meeting` NULL팀팀문서 작성자한정 정합). 합성 DB+TestClient 71 PASS / 0 FAIL(가시성 전 라우트·편집삭제 권한·추방재가입 복구·추방 후 자기작성 팀자료 차단·NULL row 회귀방지). 기존 `tests/phase75` 21 PASS. `tests/test_project_rename.py` 2건 실패는 사전 결함(master HEAD에서도 동일, #10 무관). **서버 재시작 필요**(코드 reload — 스키마 무변경이라 마이그레이션은 불필요). 알려진 한계: assignee 기반 "내 스케줄" 미니위젯(`/api/my-meetings`(event_type='meeting')·`/api/my-milestones`·`/api/project-milestones/calendar`)은 담당자+히든 필터만(팀 경계 미적용 — 후속), 이름 기반 단건 프로젝트 조회 동명 충돌 잔존(§8-2 후속), 읽기 경로 project_id 전환은 부분적(가시성 필터는 적용, 간트 by-project-range는 여전히 name 기반). | `auth.py`, `permissions.py`, `app.py`, `database.py`, `mcp_server.py`. workspace(다음 사이클 시작 시 archive로 이동): `00_input/feature_spec.md`, `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_team10.py` |

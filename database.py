@@ -3055,8 +3055,13 @@ def update_kanban_status(event_id: int, kanban_status=_MISSING, priority=_MISSIN
         )
 
 
-def get_project_timeline(team_id: int = None, viewer=None) -> list[dict]:
-    """팀 → 프로젝트 2단계 그룹으로 일정 반환 (프로젝트 없는 일정은 '미지정'으로 묶음)"""
+def get_project_timeline(team_id: int = None, viewer=None, work_team_ids=None) -> list[dict]:
+    """팀 → 프로젝트 2단계 그룹으로 일정 반환 (프로젝트 없는 일정은 '미지정'으로 묶음).
+
+    work_team_ids — 팀 기능 그룹 A #10: team_id 미지정 시 비admin 사용자에게 보이는 팀 집합 제한
+      (NULL team 일정은 작성자 본인만). admin·비로그인은 무관(기존 동작). team_id 명시 시 그 팀만.
+    """
+    is_scoped = not (viewer is None or viewer.get("role") == "admin")
     with get_conn() as conn:
         if team_id:
             rows = conn.execute(
@@ -3066,6 +3071,27 @@ def get_project_timeline(team_id: int = None, viewer=None) -> list[dict]:
                    ORDER BY e.start_datetime""",
                 (team_id,)
             ).fetchall()
+        elif is_scoped:
+            scope = list(work_team_ids) if work_team_ids is not None else list(_viewer_team_ids(viewer))
+            auth_sql, auth_params = _author_in_sql(viewer, "e.created_by")
+            if scope:
+                _ph = ",".join("?" for _ in scope)
+                rows = conn.execute(
+                    f"""SELECT e.*, t.name as team_name
+                       FROM events e LEFT JOIN teams t ON e.team_id = t.id
+                       WHERE e.deleted_at IS NULL
+                         AND (e.team_id IN ({_ph}) OR (e.team_id IS NULL AND {auth_sql}))
+                       ORDER BY e.start_datetime""",
+                    (*scope, *auth_params),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    f"""SELECT e.*, t.name as team_name
+                       FROM events e LEFT JOIN teams t ON e.team_id = t.id
+                       WHERE e.deleted_at IS NULL AND e.team_id IS NULL AND {auth_sql}
+                       ORDER BY e.start_datetime""",
+                    tuple(auth_params),
+                ).fetchall()
         else:
             rows = conn.execute(
                 """SELECT e.*, t.name as team_name
@@ -3467,7 +3493,81 @@ def get_projects() -> list[str]:
     return [row[0] for row in rows]
 
 
-def get_unified_project_list(active_only: bool = True, viewer=None) -> list[dict]:
+def _author_token_set(viewer):
+    """events/checklists.created_by 비교용 토큰 집합 — 신규 쓰기는 str(user.id), legacy 는 사용자 이름.
+
+    팀 기능 그룹 A #10: NULL-team row 의 작성자 본인 판정에 사용. None/admin 입력은 빈 집합.
+    """
+    if not viewer:
+        return set()
+    s = {str(viewer.get("id"))}
+    if viewer.get("name"):
+        s.add(viewer.get("name"))
+    return s
+
+
+def _author_in_sql(viewer, col):
+    """팀 기능 그룹 A #10: `col IN (?,?)` 형태 fragment + 파라미터 (작성자 토큰 집합 기준).
+
+    빈 토큰이면 ("0", []) 반환 (항상 거짓).
+    """
+    tokens = list(_author_token_set(viewer))
+    if not tokens:
+        return "0", []
+    ph = ",".join("?" for _ in tokens)
+    return f"{col} IN ({ph})", tokens
+
+
+def _project_team_filter_sql(work_team_ids, viewer, alias=""):
+    """팀 기능 그룹 A #10: projects 테이블 행에 적용할 작업 팀 필터 SQL + 파라미터.
+
+    반환: (where_fragment, params). viewer=None/admin 또는 work_team_ids 미적용 시 ("1=1", []).
+    work_team_ids 가 None 이면 viewer 소속 팀 전체로 fallback.
+    a.team_id ∈ 집합 OR (a.team_id IS NULL AND a.owner_id = viewer.id) 만 통과.
+    """
+    if viewer is None or viewer.get("role") == "admin":
+        return "1=1", []
+    scope = list(work_team_ids) if work_team_ids is not None else list(_viewer_team_ids(viewer))
+    p = (alias + ".") if alias else ""
+    vid = viewer.get("id")
+    if scope:
+        ph = ",".join("?" for _ in scope)
+        return f"({p}team_id IN ({ph}) OR ({p}team_id IS NULL AND {p}owner_id = ?))", [*scope, vid]
+    return f"({p}team_id IS NULL AND {p}owner_id = ?)", [vid]
+
+
+def _events_checklists_team_name_set(conn, work_team_ids, viewer):
+    """팀 기능 그룹 A #10: events/checklists 중 작업 팀 컨텍스트에 보이는 row 의 project 이름 집합.
+
+    orphan 프로젝트(projects 테이블엔 없고 events/checklists.project 로만 존재)를 작업 팀별로
+    제한하기 위한 보조 — viewer=None/admin 이면 None 반환(필터 안 함).
+    """
+    if viewer is None or viewer.get("role") == "admin":
+        return None
+    scope = list(work_team_ids) if work_team_ids is not None else list(_viewer_team_ids(viewer))
+    auth_sql, auth_params = _author_in_sql(viewer, "created_by")
+    names: set[str] = set()
+    for table in ("events", "checklists"):
+        if scope:
+            ph = ",".join("?" for _ in scope)
+            rows = conn.execute(
+                f"SELECT DISTINCT project FROM {table} "
+                f"WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL "
+                f"AND (team_id IN ({ph}) OR (team_id IS NULL AND {auth_sql}))",
+                (*scope, *auth_params),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                f"SELECT DISTINCT project FROM {table} "
+                f"WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL "
+                f"AND team_id IS NULL AND {auth_sql}",
+                tuple(auth_params),
+            ).fetchall()
+        names.update(r[0] for r in rows if r[0])
+    return names
+
+
+def get_unified_project_list(active_only: bool = True, viewer=None, work_team_ids=None) -> list[dict]:
     """모든 페이지에서 일관되게 사용할 통합 프로젝트 목록.
 
     projects 테이블(삭제 안 된 것) + events.project + checklists.project 를 합산하여
@@ -3475,20 +3575,29 @@ def get_unified_project_list(active_only: bool = True, viewer=None) -> list[dict
     active_only=True(기본값)이면 is_active=1인 항목만 반환.
     viewer=None: 비로그인 — is_hidden=1 제외
     viewer=user_dict: 로그인 사용자 — admin이거나 project_members에 포함된 히든만 포함
+    work_team_ids — 팀 기능 그룹 A #10: 작업 팀 필터. team_id ∈ 집합 OR (NULL & owner 본인)만,
+      orphan 프로젝트 이름도 작업 팀 컨텍스트의 events/checklists 것만 포함. None 이면 소속 팀 전체 fallback.
     """
+    team_where, team_params = _project_team_filter_sql(work_team_ids, viewer, alias="p")
     with get_conn() as conn:
-        # 1. projects 테이블 (삭제 안 된 것)
+        # 1. projects 테이블 (삭제 안 된 것 + 작업 팀 필터)
         proj_rows = conn.execute(
-            "SELECT id, name, color, is_active, is_private, is_hidden, owner_id FROM projects WHERE deleted_at IS NULL"
+            f"SELECT p.id, p.name, p.color, p.is_active, p.is_private, p.is_hidden, p.owner_id, p.team_id "
+            f"FROM projects p WHERE p.deleted_at IS NULL AND {team_where}",
+            team_params,
         ).fetchall()
-        # 2. events.project 에서 프로젝트 이름 수집 (삭제 안 된 것)
-        ev_proj_rows = conn.execute(
-            "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
-        ).fetchall()
-        # 3. checklists.project 에서 프로젝트 이름 수집 (삭제 안 된 것)
-        ck_proj_rows = conn.execute(
-            "SELECT DISTINCT project FROM checklists WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
-        ).fetchall()
+        # 2~3. orphan 프로젝트 이름 집합 (작업 팀 컨텍스트 제한)
+        orphan_names = _events_checklists_team_name_set(conn, work_team_ids, viewer)
+        if orphan_names is None:
+            ev_proj_rows = conn.execute(
+                "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
+            ).fetchall()
+            ck_proj_rows = conn.execute(
+                "SELECT DISTINCT project FROM checklists WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
+            ).fetchall()
+            orphan_iter = [r[0] for r in ev_proj_rows] + [r[0] for r in ck_proj_rows]
+        else:
+            orphan_iter = list(orphan_names)
         # 4. 히든 프로젝트 멤버 pre-fetch (N+1 방지)
         visible_hidden_ids: set[int] = set()
         if viewer and viewer.get("role") == "admin":
@@ -3518,11 +3627,9 @@ def get_unified_project_list(active_only: bool = True, viewer=None) -> list[dict
         }
 
     # events/checklists 에만 있는 프로젝트 이름도 포함 (orphan — is_active 기본 1)
-    for rows in (ev_proj_rows, ck_proj_rows):
-        for r in rows:
-            name = r[0]
-            if name and name not in proj_map and name not in hidden_blocked:
-                proj_map[name] = {"id": None, "name": name, "color": None, "is_active": 1, "is_private": 0, "is_hidden": 0}
+    for name in orphan_iter:
+        if name and name not in proj_map and name not in hidden_blocked:
+            proj_map[name] = {"id": None, "name": name, "color": None, "is_active": 1, "is_private": 0, "is_hidden": 0}
 
     result = sorted(proj_map.values(), key=lambda x: x["name"])
     if active_only:
@@ -3532,31 +3639,59 @@ def get_unified_project_list(active_only: bool = True, viewer=None) -> list[dict
 
 # ── Project Management ───────────────────────────────────
 
-def get_all_projects_with_events(viewer=None) -> list[dict]:
+def get_all_projects_with_events(viewer=None, work_team_ids=None) -> list[dict]:
     """프로젝트 목록 + 각 프로젝트의 일정 반환 (projects 테이블 + events.project + checklists.project 합산)
     viewer=None: 비로그인 — is_hidden=1 제외
     viewer=user_dict: 로그인 사용자 — admin이거나 project_members에 포함된 히든만 포함
+    work_team_ids — 팀 기능 그룹 A #10: 작업 팀 필터 (projects: team_id ∈ 집합 OR NULL&owner본인,
+      events: team_id ∈ 집합 OR NULL&작성자본인, orphan 이름도 작업 팀 컨텍스트 것만). None 이면 소속 팀 전체.
     """
+    team_where, team_params = _project_team_filter_sql(work_team_ids, viewer, alias="projects")
+    is_scoped = not (viewer is None or viewer.get("role") == "admin")
+    if is_scoped:
+        ev_scope = list(work_team_ids) if work_team_ids is not None else list(_viewer_team_ids(viewer))
+        ev_auth_sql, ev_auth_params = _author_in_sql(viewer, "e.created_by")
     with get_conn() as conn:
-        # projects 테이블의 프로젝트 (삭제되지 않은 것만)
+        # projects 테이블의 프로젝트 (삭제되지 않은 것 + 작업 팀 필터)
         proj_rows = conn.execute(
-            "SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY is_active DESC, name"
+            f"SELECT * FROM projects WHERE deleted_at IS NULL AND {team_where} ORDER BY is_active DESC, name",
+            team_params,
         ).fetchall()
-        # events에서 project 이름 목록 (projects 테이블에 없는 것도 포함)
-        ev_proj_rows = conn.execute(
-            "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
-        ).fetchall()
-        # checklists에서 project 이름 목록 (projects 테이블에도 events에도 없는 것 보완)
-        ck_proj_rows = conn.execute(
-            "SELECT DISTINCT project FROM checklists WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
-        ).fetchall()
-        # 이벤트들 (삭제되지 않은 것만)
-        ev_rows = conn.execute(
-            """SELECT e.*, t.name as team_name
-               FROM events e LEFT JOIN teams t ON e.team_id = t.id
-               WHERE e.deleted_at IS NULL
-               ORDER BY e.start_datetime"""
-        ).fetchall()
+        # orphan 프로젝트 이름 (작업 팀 컨텍스트 제한)
+        orphan_names = _events_checklists_team_name_set(conn, work_team_ids, viewer)
+        if orphan_names is None:
+            _ev_pr = conn.execute("SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL").fetchall()
+            _ck_pr = conn.execute("SELECT DISTINCT project FROM checklists WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL").fetchall()
+            orphan_iter = [r[0] for r in _ev_pr] + [r[0] for r in _ck_pr]
+        else:
+            orphan_iter = list(orphan_names)
+        # 이벤트들 (삭제되지 않은 것 + 작업 팀 필터)
+        if is_scoped:
+            if ev_scope:
+                _ph = ",".join("?" for _ in ev_scope)
+                ev_rows = conn.execute(
+                    f"""SELECT e.*, t.name as team_name
+                       FROM events e LEFT JOIN teams t ON e.team_id = t.id
+                       WHERE e.deleted_at IS NULL
+                         AND (e.team_id IN ({_ph}) OR (e.team_id IS NULL AND {ev_auth_sql}))
+                       ORDER BY e.start_datetime""",
+                    (*ev_scope, *ev_auth_params),
+                ).fetchall()
+            else:
+                ev_rows = conn.execute(
+                    f"""SELECT e.*, t.name as team_name
+                       FROM events e LEFT JOIN teams t ON e.team_id = t.id
+                       WHERE e.deleted_at IS NULL AND e.team_id IS NULL AND {ev_auth_sql}
+                       ORDER BY e.start_datetime""",
+                    tuple(ev_auth_params),
+                ).fetchall()
+        else:
+            ev_rows = conn.execute(
+                """SELECT e.*, t.name as team_name
+                   FROM events e LEFT JOIN teams t ON e.team_id = t.id
+                   WHERE e.deleted_at IS NULL
+                   ORDER BY e.start_datetime"""
+            ).fetchall()
         # milestone 단일 SELECT (N+1 회피)
         ms_rows = conn.execute(
             "SELECT project_id, title, date FROM project_milestones ORDER BY project_id, sort_order"
@@ -3596,8 +3731,7 @@ def get_all_projects_with_events(viewer=None) -> list[dict]:
         }
 
     # events.project / checklists.project에만 있는 orphan 프로젝트도 추가 ('미지정' 제외)
-    for r in (*ev_proj_rows, *ck_proj_rows):
-        name = r[0]
+    for name in orphan_iter:
         if name and name != '미지정' and name not in proj_map and name not in hidden_blocked:
             proj_map[name] = {"id": None, "name": name, "color": None,
                               "start_date": None, "end_date": None, "is_active": 1,
@@ -3629,21 +3763,25 @@ def get_all_projects_with_events(viewer=None) -> list[dict]:
     return result
 
 
-def get_all_projects_meta(viewer=None) -> list[dict]:
+def get_all_projects_meta(viewer=None, work_team_ids=None) -> list[dict]:
     """프로젝트 메타 정보만 반환 (events 제외). check 페이지 등 이벤트 불필요 시 사용.
     viewer=None: 비로그인 — is_hidden=1 제외
     viewer=user_dict: 로그인 사용자 — admin이거나 project_members에 포함된 히든만 포함
+    work_team_ids — 팀 기능 그룹 A #10: 작업 팀 필터 (get_unified_project_list 와 동일 의미).
     """
+    team_where, team_params = _project_team_filter_sql(work_team_ids, viewer, alias="projects")
     with get_conn() as conn:
         proj_rows = conn.execute(
-            "SELECT id, name, color, is_active, is_private, is_hidden FROM projects WHERE deleted_at IS NULL ORDER BY is_active DESC, name"
+            f"SELECT id, name, color, is_active, is_private, is_hidden FROM projects WHERE deleted_at IS NULL AND {team_where} ORDER BY is_active DESC, name",
+            team_params,
         ).fetchall()
-        ev_proj_rows = conn.execute(
-            "SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
-        ).fetchall()
-        ck_proj_rows = conn.execute(
-            "SELECT DISTINCT project FROM checklists WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL"
-        ).fetchall()
+        orphan_names = _events_checklists_team_name_set(conn, work_team_ids, viewer)
+        if orphan_names is None:
+            _ev_pr = conn.execute("SELECT DISTINCT project FROM events WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL").fetchall()
+            _ck_pr = conn.execute("SELECT DISTINCT project FROM checklists WHERE project IS NOT NULL AND project != '' AND deleted_at IS NULL").fetchall()
+            orphan_iter = [r[0] for r in _ev_pr] + [r[0] for r in _ck_pr]
+        else:
+            orphan_iter = list(orphan_names)
         # 히든 프로젝트 멤버 pre-fetch
         visible_hidden_ids: set[int] = set()
         if viewer and viewer.get("role") == "admin":
@@ -3668,8 +3806,7 @@ def get_all_projects_meta(viewer=None) -> list[dict]:
             "is_hidden": is_hidden,
         }
 
-    for r in (*ev_proj_rows, *ck_proj_rows):
-        name = r[0]
+    for name in orphan_iter:
         if name and name not in proj_map and name not in hidden_blocked:
             proj_map[name] = {"id": None, "name": name, "color": None, "is_active": 1, "is_private": 0, "is_hidden": 0}
 
@@ -4936,8 +5073,25 @@ def get_team_active(team_id: int) -> dict | None:
 
 # ── Meetings ────────────────────────────────────────────
 
-def get_all_meetings(viewer=None):
-    """viewer: None=비로그인, dict=로그인 사용자. 가시성 규칙을 SQL에서 처리."""
+def _meeting_team_clause(team_ids):
+    """팀 기능 그룹 A #10: 작업 팀 집합에 대한 IN 절 + 파라미터 생성.
+
+    team_ids 비어 있으면 팀 조건은 항상 거짓 (작성자 본인·공개만 통과).
+    반환: (sql_fragment, params_list) — sql_fragment 는 'm.team_id IN (?,?)' 또는 '0'.
+    """
+    ids = [t for t in (team_ids or ()) if t is not None]
+    if not ids:
+        return "0", []
+    placeholders = ",".join("?" for _ in ids)
+    return f"m.team_id IN ({placeholders})", list(ids)
+
+
+def get_all_meetings(viewer=None, work_team_ids=None):
+    """viewer: None=비로그인, dict=로그인 사용자. 가시성 규칙을 SQL에서 처리.
+
+    work_team_ids — 팀 기능 그룹 A #10. None 이면 viewer 소속 팀 전체로 fallback
+    (작업 팀 쿠키 도입 전 — #15 이후 호출부에서 명시 작업 팀 1개 set 을 넘긴다). admin 은 무관.
+    """
     base = """SELECT m.*, u.name as author_name, u.id as author_id, t.name as team_name,
                (SELECT COUNT(*) FROM events e WHERE e.meeting_id = m.id AND e.deleted_at IS NULL) as event_count
                FROM meetings m
@@ -4955,19 +5109,46 @@ def get_all_meetings(viewer=None):
             ).fetchall()
         else:
             uid = viewer["id"]
-            tid = viewer.get("team_id")
+            team_clause, team_params = _meeting_team_clause(
+                work_team_ids if work_team_ids is not None else _viewer_team_ids(viewer)
+            )
             rows = conn.execute(
-                base + """
+                base + f"""
                   AND (
-                    m.created_by = ?
+                    (m.created_by = ? AND (m.is_team_doc = 0 OR m.team_id IS NULL))
                     OR m.is_public = 1
-                    OR (m.is_team_doc = 1 AND m.team_id = ?)
-                    OR (m.is_team_doc = 0 AND m.team_share = 1 AND m.team_id = ?)
+                    OR (m.is_team_doc = 1 AND m.team_id IS NOT NULL AND {team_clause})
+                    OR (m.is_team_doc = 0 AND m.team_share = 1 AND {team_clause})
                   )
                   ORDER BY m.updated_at DESC""",
-                (uid, tid, tid)
+                (uid, *team_params, *team_params)
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+def _viewer_team_ids(viewer):
+    """database.py 내부 fallback — auth.user_team_ids 와 동일 의미(approved + 비삭제 팀).
+
+    auth 모듈을 import 하면 순환 import 위험이 있어 직접 쿼리한다.
+    """
+    if not viewer:
+        return set()
+    if viewer.get("role") == "admin":
+        return set()
+    uid = viewer.get("id")
+    if uid is None:
+        return set()
+    try:
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT ut.team_id FROM user_teams ut JOIN teams t ON t.id = ut.team_id "
+                "WHERE ut.user_id = ? AND ut.status = 'approved' AND t.deleted_at IS NULL",
+                (uid,),
+            ).fetchall()
+        return {r[0] for r in rows if r[0] is not None}
+    except Exception:
+        legacy = viewer.get("team_id")
+        return {legacy} if legacy else set()
 
 
 def get_meeting(meeting_id: int):
@@ -5392,7 +5573,12 @@ def create_checklist(project: str, title: str, content: str, created_by: str, is
     return cur.lastrowid
 
 
-def get_checklists(project: str = None, viewer=None, active_only: bool | None = None, include_done_projects: bool = False) -> list:
+def get_checklists(project: str = None, viewer=None, active_only: bool | None = None, include_done_projects: bool = False, work_team_ids=None) -> list:
+    """work_team_ids — 팀 기능 그룹 A #10.
+      None  : 팀 필터 미적용 (admin 또는 비로그인 — 비로그인은 아래 public_filter 가 처리).
+      set() : 로그인 사용자의 작업 팀 집합. team_id ∈ 집합, 또는 team_id IS NULL & 작성자 본인만 통과.
+              (created_by 는 checklists 에서 이름 TEXT)
+    """
     if include_done_projects:
         inactive_filter = ""
     else:
@@ -5426,25 +5612,28 @@ def get_checklists(project: str = None, viewer=None, active_only: bool | None = 
         CASE WHEN (project IS NOT NULL AND project != ''
              AND project IN (SELECT name FROM projects WHERE is_active = 0 AND deleted_at IS NULL))
         THEN 1 ELSE 0 END as is_done_project"""
+    select_cols = f"SELECT id, project, title, created_by, team_id, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col}"
     with get_conn() as conn:
         if project is None:
             rows = conn.execute(
-                f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
+                f"{select_cols} FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
             ).fetchall()
         elif project == "":
             # 미지정 (project가 NULL 또는 빈 문자열인 항목)
             rows = conn.execute(
-                f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
+                f"{select_cols} FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC"
             ).fetchall()
         else:
             rows = conn.execute(
-                f"SELECT id, project, title, created_by, created_at, updated_at, is_public, is_locked, COALESCE(is_active,1) as is_active, {is_done_project_col} FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC",
+                f"{select_cols} FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter}{private_proj_filter}{active_filter} ORDER BY updated_at DESC",
                 (project,)
             ).fetchall()
     result = [dict(r) for r in rows]
     blocked = get_blocked_hidden_project_names(viewer)
     if blocked:
         result = [r for r in result if not r.get("project") or r["project"] not in blocked]
+    # 팀 기능 그룹 A #10: 작업 팀 필터 (비로그인은 public_filter 가 이미 처리, admin/None 은 무필터)
+    result = _filter_rows_by_work_team(result, viewer, work_team_ids, "created_by")
     return result
 
 
@@ -6106,12 +6295,13 @@ def get_mcp_token_meta(user_id: int) -> dict:
     }
 
 
-def get_event_for_mcp(event_id: int, viewer=None) -> dict | None:
+def get_event_for_mcp(event_id: int, viewer=None, work_team_ids=None) -> dict | None:
     """MCP용 이벤트 조회: ① visibility check → ② get_event() 호출.
-    종료 프로젝트(is_active=0) 소속 이벤트, 삭제된 이벤트는 None 반환."""
+    종료 프로젝트(is_active=0) 소속 이벤트, 삭제된 이벤트는 None 반환.
+    work_team_ids — 팀 기능 그룹 A #10: 작업 팀 필터 (None 이면 viewer 소속 팀 전체)."""
     with get_conn() as conn:
         row = conn.execute(
-            """SELECT project FROM events
+            """SELECT project, team_id, created_by FROM events
                WHERE id = ?
                  AND deleted_at IS NULL
                  AND (project IS NULL OR project = ''
@@ -6120,21 +6310,34 @@ def get_event_for_mcp(event_id: int, viewer=None) -> dict | None:
         ).fetchone()
     if not row:
         return None
-    proj_name = row[0] if row else None
+    proj_name = row["project"] if isinstance(row, sqlite3.Row) else row[0]
+    ev_team = row["team_id"] if isinstance(row, sqlite3.Row) else row[1]
+    ev_author = row["created_by"] if isinstance(row, sqlite3.Row) else row[2]
     if proj_name:
         blocked = get_blocked_hidden_project_names(viewer)
         if proj_name in blocked:
             return None
+    # 작업 팀 경계 (admin·비로그인 제외)
+    if viewer is not None and viewer.get("role") != "admin":
+        scope = set(work_team_ids) if work_team_ids is not None else _viewer_team_ids(viewer)
+        if ev_team is not None:
+            if ev_team not in scope:
+                return None
+        else:
+            if ev_author not in _author_token_set(viewer):
+                return None
     return get_event(event_id)
 
 
-def get_projects_for_mcp(conn, include_inactive: bool = False, viewer=None) -> list[dict]:
+def get_projects_for_mcp(conn, include_inactive: bool = False, viewer=None, work_team_ids=None) -> list[dict]:
     """MCP용 프로젝트 목록 조회.
     deleted_at IS NULL인 프로젝트만 반환.
     include_inactive=False(기본값)이면 is_active=1 조건 추가.
+    work_team_ids — 팀 기능 그룹 A #10: 작업 팀 필터 (None 이면 viewer 소속 팀 전체).
+      team_id ∈ 집합, 또는 team_id IS NULL & owner_id == viewer.id 만 통과.
     반환 필드: name, color, is_active, start_date, end_date
     """
-    query = "SELECT name, color, is_active, start_date, end_date FROM projects WHERE deleted_at IS NULL"
+    query = "SELECT name, color, is_active, start_date, end_date, team_id, owner_id FROM projects WHERE deleted_at IS NULL"
     if not include_inactive:
         query += " AND is_active = 1"
     query += " ORDER BY name"
@@ -6143,6 +6346,17 @@ def get_projects_for_mcp(conn, include_inactive: bool = False, viewer=None) -> l
     blocked = get_blocked_hidden_project_names(viewer)
     if blocked:
         result = [r for r in result if r["name"] not in blocked]
+    if viewer is not None and viewer.get("role") != "admin":
+        scope = set(work_team_ids) if work_team_ids is not None else _viewer_team_ids(viewer)
+        vid = viewer.get("id")
+        result = [
+            r for r in result
+            if (r.get("team_id") is not None and r.get("team_id") in scope)
+            or (r.get("team_id") is None and r.get("owner_id") == vid)
+        ]
+    for r in result:
+        r.pop("team_id", None)
+        r.pop("owner_id", None)
     return result
 
 
@@ -6152,6 +6366,7 @@ def get_events_filtered(
     start_after: str | None = None,
     end_before: str | None = None,
     viewer=None,
+    work_team_ids=None,
 ) -> list[dict]:
     """MCP용 필터링된 이벤트 조회.
     기존 get_all_events()의 조건(deleted_at IS NULL, 비활성 프로젝트 제외)을 유지하면서
@@ -6159,9 +6374,10 @@ def get_events_filtered(
     - project: events.project = ? 조건
     - start_after: events.start_datetime >= ? 조건 (ISO 8601 문자열 비교)
     - end_before: events.end_datetime <= ? 조건
+    - work_team_ids: 팀 기능 그룹 A #10 — 작업 팀 필터 (None 이면 viewer 소속 팀 전체)
     파라미터가 None이면 해당 조건 생략.
     """
-    query = """SELECT id, title, project, start_datetime, end_datetime, assignee, kanban_status, event_type
+    query = """SELECT id, title, project, start_datetime, end_datetime, assignee, kanban_status, event_type, team_id, created_by
                FROM events
                WHERE deleted_at IS NULL
                  AND (project IS NULL OR project = ''
@@ -6182,12 +6398,16 @@ def get_events_filtered(
     blocked = get_blocked_hidden_project_names(viewer)
     if blocked:
         result = [r for r in result if not r.get("project") or r["project"] not in blocked]
+    result = _filter_rows_by_work_team(result, viewer, work_team_ids, "created_by")
+    for r in result:
+        r.pop("team_id", None)
+        r.pop("created_by", None)
     return result
 
 
-def get_all_meetings_summary(viewer=None):
+def get_all_meetings_summary(viewer=None, work_team_ids=None):
     """MCP list_documents용 경량 조회 — content 제외.
-    가시성 로직은 get_all_meetings()와 동일.
+    가시성 로직은 get_all_meetings()와 동일 (work_team_ids 포함).
     """
     base = """SELECT m.id, m.title, u.name as author_name, t.name as team_name, m.updated_at,
                (SELECT COUNT(*) FROM events e WHERE e.meeting_id = m.id AND e.deleted_at IS NULL) as event_count
@@ -6206,24 +6426,26 @@ def get_all_meetings_summary(viewer=None):
             ).fetchall()
         else:
             uid = viewer["id"]
-            tid = viewer.get("team_id")
+            team_clause, team_params = _meeting_team_clause(
+                work_team_ids if work_team_ids is not None else _viewer_team_ids(viewer)
+            )
             rows = conn.execute(
-                base + """
+                base + f"""
                   AND (
-                    m.created_by = ?
+                    (m.created_by = ? AND (m.is_team_doc = 0 OR m.team_id IS NULL))
                     OR m.is_public = 1
-                    OR (m.is_team_doc = 1 AND m.team_id = ?)
-                    OR (m.is_team_doc = 0 AND m.team_share = 1 AND m.team_id = ?)
+                    OR (m.is_team_doc = 1 AND m.team_id IS NOT NULL AND {team_clause})
+                    OR (m.is_team_doc = 0 AND m.team_share = 1 AND {team_clause})
                   )
                   ORDER BY m.updated_at DESC""",
-                (uid, tid, tid)
+                (uid, *team_params, *team_params)
             ).fetchall()
     return [dict(r) for r in rows]
 
 
-def get_checklists_summary(project: str = None, viewer=None) -> list:
+def get_checklists_summary(project: str = None, viewer=None, work_team_ids=None) -> list:
     """MCP list_checklists용 경량 조회 — content 대신 item_count, done_count 계산.
-    가시성 로직은 get_checklists()와 동일 (active_only/include_done_projects 미사용).
+    가시성 로직은 get_checklists()와 동일 (active_only/include_done_projects 미사용, work_team_ids 포함).
     content는 마크다운 형식이며 '- [ ]'(미완료), '- [x]'(완료) 패턴 사용.
     """
     import re
@@ -6245,18 +6467,19 @@ def get_checklists_summary(project: str = None, viewer=None) -> list:
           OR project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
         )
     """ if viewer is None else ""
+    cols = "SELECT id, project, title, content, team_id, created_by, updated_at"
     with get_conn() as conn:
         if project is None:
             rows = conn.execute(
-                f"SELECT id, project, title, content, updated_at FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter} ORDER BY updated_at DESC"
+                f"{cols} FROM checklists WHERE deleted_at IS NULL {inactive_filter}{public_filter} ORDER BY updated_at DESC"
             ).fetchall()
         elif project == "":
             rows = conn.execute(
-                f"SELECT id, project, title, content, updated_at FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter} ORDER BY updated_at DESC"
+                f"{cols} FROM checklists WHERE (project IS NULL OR project = '') AND deleted_at IS NULL {public_filter} ORDER BY updated_at DESC"
             ).fetchall()
         else:
             rows = conn.execute(
-                f"SELECT id, project, title, content, updated_at FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter} ORDER BY updated_at DESC",
+                f"{cols} FROM checklists WHERE project = ? AND deleted_at IS NULL {inactive_filter}{public_filter} ORDER BY updated_at DESC",
                 (project,)
             ).fetchall()
     result = []
@@ -6271,16 +6494,24 @@ def get_checklists_summary(project: str = None, viewer=None) -> list:
     blocked = get_blocked_hidden_project_names(viewer)
     if blocked:
         result = [r for r in result if not r.get("project") or r["project"] not in blocked]
+    # 팀 기능 그룹 A #10: 작업 팀 필터 (admin/None viewer 는 무필터)
+    result = _filter_rows_by_work_team(result, viewer, work_team_ids, "created_by")
+    # MCP 응답에 team_id/created_by 노출 불필요 — 제거
+    for r in result:
+        r.pop("team_id", None)
+        r.pop("created_by", None)
     return result
 
 
 def search_all(query: str, type: str = None, viewer=None,
-               start_after: str | None = None, end_before: str | None = None) -> list[dict]:
+               start_after: str | None = None, end_before: str | None = None,
+               work_team_ids=None) -> list[dict]:
     """이벤트·문서·체크리스트 통합 키워드 검색 (MCP search 도구용).
     - query: 검색 키워드. 비어있으면 빈 리스트 반환.
     - type: "event"|"document"|"checklist"|None(전체)
     - viewer: None=비로그인, dict=로그인 사용자
     - start_after/end_before: 이벤트 날짜 범위 (겹치는 이벤트 포함). 문서·체크리스트는 미적용.
+    - work_team_ids: 팀 기능 그룹 A #10 — 작업 팀 필터 (None 이면 viewer 소속 팀 전체).
     반환: 경량 필드 + type 필드 포함 (content 미포함)
     정렬: event → document → checklist 순
     """
@@ -6293,7 +6524,7 @@ def search_all(query: str, type: str = None, viewer=None,
     with get_conn() as conn:
         # ── events ──────────────────────────────────────────────
         if type_filter is None or type_filter == "event":
-            sql = """SELECT id, title, project, start_datetime, end_datetime, assignee, kanban_status
+            sql = """SELECT id, title, project, start_datetime, end_datetime, assignee, kanban_status, team_id, created_by
                    FROM events
                    WHERE deleted_at IS NULL
                      AND title LIKE ?
@@ -6310,10 +6541,16 @@ def search_all(query: str, type: str = None, viewer=None,
             sql += " ORDER BY start_datetime"
             rows = conn.execute(sql, params).fetchall()
             blocked_evt = get_blocked_hidden_project_names(viewer)
+            evt_rows = []
             for r in rows:
                 d = dict(r)
                 if blocked_evt and d.get("project") and d["project"] in blocked_evt:
                     continue
+                evt_rows.append(d)
+            evt_rows = _filter_rows_by_work_team(evt_rows, viewer, work_team_ids, "created_by")
+            for d in evt_rows:
+                d.pop("team_id", None)
+                d.pop("created_by", None)
                 d["type"] = "event"
                 results.append(d)
 
@@ -6338,17 +6575,19 @@ def search_all(query: str, type: str = None, viewer=None,
                 ).fetchall()
             else:
                 uid = viewer["id"]
-                tid = viewer.get("team_id")
+                team_clause, team_params = _meeting_team_clause(
+                    work_team_ids if work_team_ids is not None else _viewer_team_ids(viewer)
+                )
                 rows = conn.execute(
-                    base + """
+                    base + f"""
                       AND (
-                        m.created_by = ?
+                        (m.created_by = ? AND (m.is_team_doc = 0 OR m.team_id IS NULL))
                         OR m.is_public = 1
-                        OR (m.is_team_doc = 1 AND m.team_id = ?)
-                        OR (m.is_team_doc = 0 AND m.team_share = 1 AND m.team_id = ?)
+                        OR (m.is_team_doc = 1 AND m.team_id IS NOT NULL AND {team_clause})
+                        OR (m.is_team_doc = 0 AND m.team_share = 1 AND {team_clause})
                       )
                       ORDER BY m.updated_at DESC""",
-                    (*like2, uid, tid, tid)
+                    (*like2, uid, *team_params, *team_params)
                 ).fetchall()
             for r in rows:
                 d = dict(r)
@@ -6376,7 +6615,7 @@ def search_all(query: str, type: str = None, viewer=None,
                 )
             """ if viewer is None else ""
             rows = conn.execute(
-                f"""SELECT id, title, project, updated_at
+                f"""SELECT id, title, project, updated_at, team_id, created_by
                     FROM checklists
                     WHERE deleted_at IS NULL
                       AND (title LIKE ? OR content LIKE ?)
@@ -6385,28 +6624,56 @@ def search_all(query: str, type: str = None, viewer=None,
                 (like, like)
             ).fetchall()
             blocked_cl = get_blocked_hidden_project_names(viewer) if viewer is not None else set()
+            cl_rows = []
             for r in rows:
                 d = dict(r)
                 if blocked_cl and d.get("project") and d["project"] in blocked_cl:
                     continue
+                cl_rows.append(d)
+            cl_rows = _filter_rows_by_work_team(cl_rows, viewer, work_team_ids, "created_by")
+            for d in cl_rows:
+                d.pop("team_id", None)
+                d.pop("created_by", None)
                 d["type"] = "checklist"
                 results.append(d)
 
     return results
 
 
+def _filter_rows_by_work_team(rows, viewer, work_team_ids, author_col):
+    """팀 기능 그룹 A #10: events/checklists 행을 작업 팀 기준으로 필터.
+
+    - viewer=None 또는 admin: 무필터 (호출부에서 hidden/public 필터를 별도로 처리한다)
+    - 그 외: team_id ∈ 작업 팀 집합, 또는 team_id IS NULL & 작성자 본인만 통과
+    work_team_ids 가 None 이면 viewer 소속 팀 전체로 fallback.
+    """
+    if viewer is None or viewer.get("role") == "admin":
+        return rows
+    scope = set(work_team_ids) if work_team_ids is not None else _viewer_team_ids(viewer)
+    author_tokens = _author_token_set(viewer)
+    out = []
+    for r in rows:
+        tid = r.get("team_id")
+        if tid is not None and tid in scope:
+            out.append(r)
+        elif tid is None and r.get(author_col) in author_tokens:
+            out.append(r)
+    return out
+
+
 def search_events_mcp(query: str, start_after: str | None = None,
-                      end_before: str | None = None, viewer=None) -> list[dict]:
+                      end_before: str | None = None, viewer=None, work_team_ids=None) -> list[dict]:
     """MCP search_events 도구용 이벤트 키워드 검색.
     - query: 검색 키워드. 비어있으면 빈 리스트 반환.
     - start_after/end_before: 날짜 겹침 조건 적용 (search_all events 부분과 동일 로직).
+    - work_team_ids: 팀 기능 그룹 A #10 — 작업 팀 필터 (None 이면 viewer 소속 팀 전체).
     반환: 경량 필드 목록 (id, title, project, start_datetime, end_datetime,
                           assignee, kanban_status, event_type)
     """
     if not query or not query.strip():
         return []
     like = f"%{query}%"
-    sql = """SELECT id, title, project, start_datetime, end_datetime, assignee, kanban_status, event_type
+    sql = """SELECT id, title, project, start_datetime, end_datetime, assignee, kanban_status, event_type, team_id, created_by
              FROM events
              WHERE deleted_at IS NULL
                AND title LIKE ?
@@ -6426,14 +6693,19 @@ def search_events_mcp(query: str, start_after: str | None = None,
     blocked = get_blocked_hidden_project_names(viewer)
     if blocked:
         result = [r for r in result if not r.get("project") or r["project"] not in blocked]
+    result = _filter_rows_by_work_team(result, viewer, work_team_ids, "created_by")
+    for r in result:
+        r.pop("team_id", None)
+        r.pop("created_by", None)
     return result
 
 
-def get_kanban_summary(project: str | None = None, viewer=None) -> list[dict]:
+def get_kanban_summary(project: str | None = None, viewer=None, work_team_ids=None) -> list[dict]:
     """MCP list_kanban 도구용 칸반 항목 경량 조회.
     get_kanban_events()의 필터 조건을 재사용하되 경량 필드만 SELECT.
     - project: None=전체, ""=프로젝트 미지정 항목만, 문자열=해당 프로젝트만
     - viewer: None=공개 항목만, dict=인증 사용자(비공개 프로젝트 포함)
+    - work_team_ids: 팀 기능 그룹 A #10 — 작업 팀 필터 (None 이면 viewer 소속 팀 전체)
     반환 필드: id, title, project, kanban_status, priority, assignee, start_datetime, end_datetime
     """
     private_clause = """
@@ -6466,7 +6738,7 @@ def get_kanban_summary(project: str | None = None, viewer=None) -> list[dict]:
         AND e.deleted_at IS NULL
         {private_clause}
     """
-    select = "SELECT e.id, e.title, e.project, e.kanban_status, e.priority, e.assignee, e.start_datetime, e.end_datetime FROM events e"
+    select = "SELECT e.id, e.title, e.project, e.kanban_status, e.priority, e.assignee, e.start_datetime, e.end_datetime, e.team_id, e.created_by FROM events e"
     with get_conn() as conn:
         if project is None:
             rows = conn.execute(
@@ -6485,14 +6757,19 @@ def get_kanban_summary(project: str | None = None, viewer=None) -> list[dict]:
     blocked = get_blocked_hidden_project_names(viewer)
     if blocked:
         result = [r for r in result if not r.get("project") or r["project"] not in blocked]
+    result = _filter_rows_by_work_team(result, viewer, work_team_ids, "created_by")
+    for r in result:
+        r.pop("team_id", None)
+        r.pop("created_by", None)
     return result
 
 
-def search_kanban_mcp(query: str, project: str | None = None, viewer=None) -> list[dict]:
+def search_kanban_mcp(query: str, project: str | None = None, viewer=None, work_team_ids=None) -> list[dict]:
     """MCP search_kanban 도구용 칸반 항목 키워드 검색.
     - query: 검색 키워드. 비어있으면 빈 리스트 반환.
     - project: None=전체, ""=프로젝트 미지정 항목만, 문자열=해당 프로젝트만
     - viewer: None=공개 항목만, dict=인증 사용자(비공개 프로젝트 포함)
+    - work_team_ids: 팀 기능 그룹 A #10 — 작업 팀 필터 (None 이면 viewer 소속 팀 전체)
     반환 필드: id, title, project, kanban_status, priority, assignee
     """
     if not query or not query.strip():
@@ -6528,7 +6805,7 @@ def search_kanban_mcp(query: str, project: str | None = None, viewer=None) -> li
         AND e.deleted_at IS NULL
         {private_clause}
     """
-    select = "SELECT e.id, e.title, e.project, e.kanban_status, e.priority, e.assignee FROM events e"
+    select = "SELECT e.id, e.title, e.project, e.kanban_status, e.priority, e.assignee, e.team_id, e.created_by FROM events e"
     with get_conn() as conn:
         if project is None:
             rows = conn.execute(
@@ -6549,13 +6826,18 @@ def search_kanban_mcp(query: str, project: str | None = None, viewer=None) -> li
     blocked = get_blocked_hidden_project_names(viewer)
     if blocked:
         result = [r for r in result if not r.get("project") or r["project"] not in blocked]
+    result = _filter_rows_by_work_team(result, viewer, work_team_ids, "created_by")
+    for r in result:
+        r.pop("team_id", None)
+        r.pop("created_by", None)
     return result
 
 
-def search_documents_mcp(query: str, viewer=None) -> list[dict]:
+def search_documents_mcp(query: str, viewer=None, work_team_ids=None) -> list[dict]:
     """MCP search_documents 도구용 문서 키워드 검색.
     - query: 검색 키워드. 비어있으면 빈 리스트 반환.
     - viewer: None=공개 문서만, dict=인증 사용자(열람 가능 문서)
+    - work_team_ids: 팀 기능 그룹 A #10 — 작업 팀 필터 (None 이면 viewer 소속 팀 전체)
     가시성 로직은 search_all의 meetings 부분과 동일.
     반환 필드: id, title, author_name, team_name, updated_at
     """
@@ -6581,26 +6863,29 @@ def search_documents_mcp(query: str, viewer=None) -> list[dict]:
             ).fetchall()
         else:
             uid = viewer["id"]
-            tid = viewer.get("team_id")
+            team_clause, team_params = _meeting_team_clause(
+                work_team_ids if work_team_ids is not None else _viewer_team_ids(viewer)
+            )
             rows = conn.execute(
-                base + """
+                base + f"""
                   AND (
-                    m.created_by = ?
+                    (m.created_by = ? AND (m.is_team_doc = 0 OR m.team_id IS NULL))
                     OR m.is_public = 1
-                    OR (m.is_team_doc = 1 AND m.team_id = ?)
-                    OR (m.is_team_doc = 0 AND m.team_share = 1 AND m.team_id = ?)
+                    OR (m.is_team_doc = 1 AND m.team_id IS NOT NULL AND {team_clause})
+                    OR (m.is_team_doc = 0 AND m.team_share = 1 AND {team_clause})
                   )
                   ORDER BY m.updated_at DESC""",
-                (like, like, uid, tid, tid)
+                (like, like, uid, *team_params, *team_params)
             ).fetchall()
     return [dict(r) for r in rows]
 
 
-def search_checklists_mcp(query: str, project: str | None = None, viewer=None) -> list[dict]:
+def search_checklists_mcp(query: str, project: str | None = None, viewer=None, work_team_ids=None) -> list[dict]:
     """MCP search_checklists 도구용 체크리스트 키워드 검색.
     - query: 검색 키워드. 비어있으면 빈 리스트 반환.
     - project: None=전체, ""=프로젝트 미지정 항목만, 문자열=해당 프로젝트만
     - viewer: None=공개 항목만, dict=인증 사용자
+    - work_team_ids: 팀 기능 그룹 A #10 — 작업 팀 필터 (None 이면 viewer 소속 팀 전체)
     가시성·필터 로직은 search_all의 checklists 부분과 동일.
     반환 필드: id, title, project, updated_at, item_count, done_count
     """
@@ -6626,10 +6911,11 @@ def search_checklists_mcp(query: str, project: str | None = None, viewer=None) -
           OR project NOT IN (SELECT name FROM projects WHERE (is_private = 1 OR is_hidden = 1) AND deleted_at IS NULL)
         )
     """ if viewer is None else ""
+    cl_cols = "SELECT id, title, project, content, updated_at, team_id, created_by"
     with get_conn() as conn:
         if project is None:
             rows = conn.execute(
-                f"""SELECT id, title, project, content, updated_at FROM checklists
+                f"""{cl_cols} FROM checklists
                     WHERE deleted_at IS NULL
                       AND (title LIKE ? OR content LIKE ?)
                       {inactive_filter}{public_filter}
@@ -6638,7 +6924,7 @@ def search_checklists_mcp(query: str, project: str | None = None, viewer=None) -
             ).fetchall()
         elif project == "":
             rows = conn.execute(
-                f"""SELECT id, title, project, content, updated_at FROM checklists
+                f"""{cl_cols} FROM checklists
                     WHERE (project IS NULL OR project = '')
                       AND deleted_at IS NULL
                       AND (title LIKE ? OR content LIKE ?)
@@ -6648,7 +6934,7 @@ def search_checklists_mcp(query: str, project: str | None = None, viewer=None) -
             ).fetchall()
         else:
             rows = conn.execute(
-                f"""SELECT id, title, project, content, updated_at FROM checklists
+                f"""{cl_cols} FROM checklists
                     WHERE project = ?
                       AND deleted_at IS NULL
                       AND (title LIKE ? OR content LIKE ?)
@@ -6668,4 +6954,8 @@ def search_checklists_mcp(query: str, project: str | None = None, viewer=None) -
     blocked = get_blocked_hidden_project_names(viewer)
     if blocked:
         result = [r for r in result if not r.get("project") or r["project"] not in blocked]
+    result = _filter_rows_by_work_team(result, viewer, work_team_ids, "created_by")
+    for r in result:
+        r.pop("team_id", None)
+        r.pop("created_by", None)
     return result
