@@ -1,71 +1,64 @@
 # 요청
-'팀 기능 구현 todo.md' 그룹 A의 #1 (DB 마이그레이션 인프라 구축) 마무리. 그룹 A의 마지막 미완 항목.
-- 단계 내부 idempotency 가드 감사 + 필요 시 보강
-- Phase 4 UNIQUE preflight 누락 점검 (특히 user_teams 인덱스 직전 preflight 명시 여부, team_menu_settings 중복 점검)
-- 검증 시나리오 3건 스크립트 추가 (빈 DB → Phase 마커 기록 / 재시작 → skip / 마커 강제 삭제 후 재실행 → 데이터 무결성)
-- todo.md sub-task 토글 + line 683 `그룹 A 완료 (#1~#10)` 마킹 + 단위 사이클 기록 1줄 + commit
+마이그레이션 dedup phase ordering 버그 수정. `database.py:_run_phase_migrations()`에서 모든 preflight가 모든 phase 본문보다 먼저 통째로 실행되기 때문에, "재시작만으로 안전 dedup → 그 다음 #5 preflight 통과 → 인덱스 생성"으로 의도한 `team_phase_5a_projects_dedup_safe_v1`가 실행 기회를 못 얻고 죽은 코드가 됨. dedup-성격 phase가 자기 대응 preflight보다 먼저 실행되도록 러너 실행 순서를 고친다. 작업 중 발생하는 에러도 같은 흐름에서 수정.
 
 # 분류
-백엔드 수정 (감사 위주 + 검증 스크립트 + 가능하면 가드 보강) / 백엔드 모드 (backend → reviewer → qa)
+백엔드 수정 (러너 실행 순서 / preflight gating) / 백엔드 모드 (backend → reviewer → qa)
 
-# 배경 (이미 완료된 것)
-- #1 "구현(기본)" [x]: `init_db()` 자동 백업(`backup.py:run_migration_backup`), Phase 마커 헬퍼(`is_phase_done`/`mark_phase_done` — `settings` 테이블, conn 공유), Phase 단위 트랜잭션 래퍼(`isolation_level=None` + `BEGIN IMMEDIATE`), 경고 누적(`settings.team_migration_warnings` JSON), `normalize_name`(NFC + casefold).
-- #2~#10 + 보강 사이클 전부 master 커밋됨 (최신 `fc8d071`).
-- `database.py` 핵심 위치:
-  - `PHASES` 리스트 (L721 부근 정의, 각 phase 본문이 `PHASES.append(...)`로 등록)
-  - `_PREFLIGHT_CHECKS` 리스트 (L736)
-  - phase 본문: `_phase_1_team_columns`(L852), `_phase_2_team_backfill`(L1005), `_phase_4_team_indexes`(L1064), `_phase_3_admin_separation`(L1148), `_phase_4_data_backfill`(L1335), `_phase_4b_user_ips_whitelist_unique`(L1553), `_phase_5a_projects_dedup_safe`(L1801), `_phase_5_projects_unique`(L1869), `_phase_6_project_id_backfill`(L2112), `_phase_7_password_hash`(L2168)
-  - preflight: `_check_projects_team_name_unique`(L2246), `_check_users_name_norm_unique`(L2288), `_check_teams_name_norm_unique`(L2325), `_check_user_ips_whitelist_unique`(L2361). 모두 `_PREFLIGHT_CHECKS.append(...)`.
-  - preflight 실행 루프: L2407 부근 `for check in _PREFLIGHT_CHECKS:`
+# 채택 방향 (advisor 확인 완료 — Candidate 1)
+`_PRE_PREFLIGHT_PHASES` 허용 리스트 방식. 새 phase 본문을 추가하지 않고 러너(`_run_phase_migrations`)의 실행 순서만 고친다. 기존 `_phase_5a_projects_dedup_safe` 본문은 그대로 둠.
 
-# backend-dev 담당 작업
+후보 2(preflight가 dedup pending이면 skip)·후보 3(preflight 직전 별도 훅으로 추출)은 채택하지 않음 — 2는 unsafe 케이스를 사람이 읽을 수 있는 preflight 메시지 대신 raw IntegrityError가 잡게 되어 UX 후퇴 + `team_migration_warnings`의 `team_id`/`name_norm` 컨텍스트 손실; 3은 phase 마커 + per-phase 트랜잭션 래퍼를 제거해 수술 범위가 크고 향후 dedup-성격 phase 추가가 어려움.
 
-## 1. 단계 내부 idempotency 가드 감사 (todo.md "### #1" 섹션 "구현 (단계 내부 idempotency 가드)" 항목들)
-각 phase 본문 SQL을 읽고 아래 가드가 실제로 있는지 확인. 있으면 → 감사 결과 기록(backend_changes.md), todo 토글 대상으로 표시. **없으면** → 보강 (surgical: 기존 WHERE에 조건 추가 정도, 리팩터 금지).
-  - `users.name_norm` 백필 (`_phase_2_team_backfill`): `WHERE name_norm IS NULL` 여부
-  - `users.password_hash` 변환 + `users.password` 비우기 (`_phase_7_password_hash`): `WHERE password IS NOT NULL AND password != ''` (이미 hash 변환·비운 row를 다시 hash() 안 넘김)
-  - admin `users.team_id`/`mcp_token_hash`/`mcp_token_created_at` (`_phase_3_admin_separation`): 이미 NULL이면 노옵 (`WHERE ... IS NOT NULL`)
-  - admin `user_ips` whitelist→history (`_phase_3_admin_separation`): `WHERE type='whitelist' AND user_id ...` (이미 history면 안 건드림)
-  - `users.role` editor→member (`_phase_2_team_backfill`): `WHERE role='editor'`
-  - `events/checklists/projects.team_id` NULL 보강 (`_phase_4_data_backfill`): 모두 `WHERE team_id IS NULL`
-  - `events.project_id` / `checklists.project_id` 백필 (`_phase_6_project_id_backfill`): `WHERE project_id IS NULL`
-  - `notifications.team_id`, `links.team_id`, `team_notices.team_id` 백필 (`_phase_4_data_backfill`): 모두 `WHERE team_id IS NULL`
-  - `pending_users` 자동 삭제 (`_phase_4_data_backfill`): Phase 마커로 단계 자체 skip (마커 강제 삭제 후 재실행 시엔 빈 테이블이라 무해 — 확인만)
-  - "관리팀" rename (`_phase_3_admin_separation`): `WHERE name='관리팀'` 또는 동등 (이미 AdminTeam이면 노옵)
+# backend-dev 담당 작업 (database.py 보고 최선 판단 — 아래는 가이드)
 
-## 2. Phase 4 UNIQUE preflight 누락 점검
-  - `users.name_norm`, `teams.name_norm`, `(team_id, projects.name_norm)`, `user_ips type='whitelist' ip_address` preflight는 이미 등록됨 — 확인만.
-  - **`user_teams(user_id, team_id)` 중복**: `_phase_4_team_indexes`가 `CREATE UNIQUE INDEX IF NOT EXISTS idx_user_teams_user_team` 만 함. 인덱스 생성 직전 명시적 preflight가 있는지 확인. 없으면: (a) preflight 추가하거나, (b) 정상 마이그레이션 경로(Phase 2가 `WHERE NOT EXISTS` 가드로 중복을 만들지 않음 — backend가 확인)에서 중복 발생 불가능하고 인덱스 생성 시 IntegrityError로 abort되면 트랜잭션 롤백+서버 시작 거부가 되는지 확인. **판단: 정상 경로에서 중복이 구조적으로 불가능하면 preflight 추가는 over-engineering — 그 사실을 backend_changes.md에 명시하고 todo에 그렇게 기록. 불확실하면 advisor 호출.**
-  - **`team_menu_settings(team_id, menu_key)` 중복**: 이 테이블은 `_phase_1_team_columns`에서 생성(빈 테이블, 시드는 #19). Phase 1에서 빈 상태로 만들어지고 #19 전엔 채워지지 않으므로 중복 발생 불가. 인덱스(`idx_team_menu_settings`)도 같은 Phase 4에서 생성. → preflight 불필요. todo.md "### #1" 섹션의 해당 라인에 "테이블이 #19 시드 전까지 빈 상태 — preflight 불필요, IF NEEDED는 #19 책임" 주석 추가.
-  - 충돌 감지 시 패턴 일관성: 모든 preflight가 충돌 시 (a) 예외/abort로 서버 시작 거부 + (b) `team_migration_warnings`에 `preflight_*` 카테고리 기록을 하는지 확인.
+## 1. `_PRE_PREFLIGHT_PHASES` 정의
+`PHASES`/`_PREFLIGHT_CHECKS` 정의부 근처(L729~736 부근)에 추가:
+```python
+# preflight 검사보다 *먼저* 실행되어야 하는 phase 이름 집합.
+# 여기 등록된 phase는 같은 init_db() 호출에서 preflight 앞에서 본문 실행 + 마커 커밋되고,
+# 그 뒤 preflight → 나머지 phase 순으로 진행된다.
+# 계약: (a) idempotent (재실행 안전, clean state면 노옵), (b) preflight가 강제하는
+#       UNIQUE invariant에 의존하지 않을 것 (그 invariant를 만들어주는 정리 작업이 목적).
+# 의도: team_phase_5a가 안전 dedup → 그 결과를 #5 preflight가 검증 → #5 인덱스 생성.
+_PRE_PREFLIGHT_PHASES: frozenset = frozenset({"team_phase_5a_projects_dedup_safe_v1"})
+```
 
-## 3. 검증 스크립트 추가
-`.claude/workspaces/current/scripts/verify_team_a_001_close.py` 생성. Python 인터프리터는 `D:\Program Files\Python\Python312\python.exe`.
-합성 임시 DB(`tempfile`)로 (실서버 띄우지 않음):
-  - case 1: 빈 임시 DB 경로 지정 → `database.init_db()` 호출 → `settings` 테이블에서 모든 등록 phase 마커(`team_phase_*`) 키가 기록됐는지 확인 (`PHASES`의 키 전부). preflight도 통과(예외 없음).
-  - case 2: 같은 DB로 `init_db()` 재호출 → 각 phase에 대해 `is_phase_done(...)` True 확인. 두 번째 호출에서 phase 본문이 다시 실행되지 않음을 확인 (예: 카운트 변화 없음 — 간단히는 마커 row 이미 존재 + 데이터 동일).
-  - case 3: `settings`에서 phase 마커 row 전부(또는 destructive 위험 있는 #2/#3/#4/#7) 삭제 → `init_db()` 재호출 → WHERE 가드 덕에:
-    - 비밀번호: `password_hash`가 한 번 더 hash되지 않음 (이미 `password=''`인 row가 hash() 입력으로 안 들어감 — hash 값 불변 확인)
-    - `team_id` 컬럼들 덮어쓰기 없음 (재실행 전후 값 동일)
-    - "관리팀" rename 중복 없음 (`AdminTeam` 그대로, `AdminTeam_legacy_...` 같은 게 안 생김 — 데이터에 관리팀 시나리오 넣어 테스트하거나, 빈 DB라 노옵임을 확인)
-  - 가능하면 약간의 합성 데이터(평문 password 가진 user, team_id NULL인 event 등)를 case 3 전에 심어서 가드가 실제로 동작하는지 검증. 단 #2~#7 phase 본문이 빈 DB 첫 init_db에서 이미 다 돌았을 것이므로, "마커만 지우고 데이터는 마이그레이션 후 상태"인 시뮬레이션이 핵심.
-  - 결과를 PASS/FAIL 형태로 stdout 출력. subprocess capture 시 디스크에도 남도록.
+## 2. `_run_phase_migrations` 실행 순서 분할
+현재 흐름: ① `pending = _pending_phases()`; 비면 즉시 반환 → ② 백업 1회 → ③ preflight 일괄 → ④ pending 전체 phase 본문 순차 실행.
 
-## 4. todo.md 업데이트
-`D:/Github/WhatUdoin/팀 기능 구현 todo.md`:
-  - "### #1. DB 마이그레이션 인프라 구축" 섹션:
-    - L31~42 "구현 (단계 내부 idempotency 가드)": 실제 확인·구현된 항목만 `[ ]` → `[x]` (감사로 확인된 것). 헤더 `[ ]` → `[x]` (전부 확인되면).
-    - L43~51 "구현 (Phase 4 UNIQUE preflight 검사)": 확인·정리된 항목 `[x]`. team_menu_settings 라인에 주석 추가 (위 2번).
-    - L52~57 "검증": case 1·2·3에 해당하는 3개 `[ ]` → `[x]`.
-  - L683 `- [ ] 그룹 A 완료 (#1~#10) — ...` → `- [x] ...` (#1까지 다 끝났으므로).
-  - "### 단위 사이클 기록" 표(L691~)에 1줄 추가: `| 2026-05-12 | #1 마무리 — 가드 감사 + preflight 점검 + 검증 | [핵심 결과 요약] | [산출물] |`
+수정 후 흐름:
+- ① `pending` 계산 + 비면 즉시 반환 — **불변** (백업·preflight 모두 skip).
+- ② 백업 1회 — **불변** (위치·로직 그대로).
+- ②.5 `pending`을 `pre_preflight = [(n,b) for (n,b) in pending if n in _PRE_PREFLIGHT_PHASES]` 와 `rest = [(n,b) for (n,b) in pending if n not in _PRE_PREFLIGHT_PHASES]`로 분할. **PHASES 등록 순서 유지** (재정렬 금지 — 필터링만).
+- ②.6 `pre_preflight`를 기존 ④의 per-phase 트랜잭션 래퍼(L2471~2486)와 **완전히 동일한 패턴**으로 먼저 실행: `with get_conn() as conn: conn.isolation_level=None; BEGIN IMMEDIATE; body(conn); _mark_phase_done; COMMIT` / 실패 시 ROLLBACK + RuntimeError. **각 pre-preflight phase는 preflight가 돌기 전에 마커까지 커밋되어야 함** (preflight 실패가 5a 마커를 롤백시키면 안 됨 — 별개 트랜잭션·별개 `with get_conn()` 블록이라 자연히 분리됨).
+- ③ preflight 일괄 실행 — **불변** (이제 5a dedup이 끝난 상태에서 돌므로 남은 충돌(unsafe)만 잡음).
+- ④ `rest`를 기존 패턴으로 순차 실행.
 
-## 5. backend_changes.md
-`.claude/workspaces/current/backend_changes.md`에 감사 결과(가드별 위치+상태), 보강한 게 있으면 diff 요약, preflight 점검 결론, 검증 스크립트 결과, 서버 재시작 필요 여부(가드 보강 정도면 코드 reload용 재시작 — phase 추가 안 했으면 명시) 기록.
+가능하면 per-phase 트랜잭션 래퍼를 작은 헬퍼(`_run_phase_body(name, body)`)로 빼서 ②.6과 ④에서 공유 — 단 surgical 원칙상 중복이 짧으면 그냥 두 번 써도 됨. backend 판단.
 
-# 주의사항
-- 가드가 이미 충분하면 코드 변경 없이 "감사 + todo 토글 + 검증 스크립트 추가"만으로 끝날 수 있음. 불필요한 보강·리팩터 금지 (CLAUDE.md surgical changes).
-- 실서버 E2E 불가 (VSCode 디버깅 모드, 서버 꺼짐). 검증은 합성 임시 DB로만.
-- phase 본문에 새 SQL을 추가하면 서버 재시작 필요. 가드만 보강해도 코드 reload용 재시작 필요. 그 사실을 명시.
-- commit prefix: 코드 변경 거의 없으면 `chore:` 또는 `test:`, 가드 보강 포함이면 `fix:` 또는 `feat:` 적절히. commit 메시지 끝에 Co-Authored-By 라인 추가 (planner 규칙).
-- `tempfile` 임시 DB는 루트가 아니라 OS temp dir 또는 `.claude/workspaces/current/` 하위에 — 루트에 .db 파일 남기지 말 것.
+## 3. 주석 갱신
+- L1592~1594 (`# 등록 순서:` 블록): 현재 "PHASES.append 순서 = 실행 순서 … dedup → preflight → 인덱스 생성 순서가 보장된다"는 이제 거짓. `_PRE_PREFLIGHT_PHASES`를 가리키도록 교체. 예: "5a는 `_PRE_PREFLIGHT_PHASES`에 등록되어 같은 init_db()에서 preflight 앞에서 실행된다 — 이게 dedup → preflight → 인덱스 생성 순서를 보장한다. (단순 PHASES 순서로는 보장 안 됨: 러너가 preflight를 모든 phase 본문보다 먼저 일괄 실행하기 때문.)"
+- L1864~1867, L1577~1578 부근 ("Phase 5a가 앞서 안전 그룹을 자동 정리하므로 …" / "→ 이후 #5 preflight가 거부") — 이미 의도를 맞게 서술하므로 사실관계만 맞으면 그대로. 어긋난 부분 있으면 surgical 수정.
+- `_run_phase_migrations` docstring(L2422~2431)의 "동작 순서" 리스트에 pre-preflight 단계 한 줄 추가.
+- (advisor 메모) case 2처럼 unsafe 충돌로 preflight가 거부해도 5a 마커는 set 상태로 남음 — 운영자가 unsafe row를 수동/doctor로 정리한 뒤 재시작하면 preflight가 통과하고 #5가 진행됨. 5a는 "고려됐고 안전하게 할 수 있는 게 더 없음" 상태이므로 재실행 불필요. 이 점을 5a 주석에 1줄 명시 (미래 독자가 버그로 오해 안 하게).
+
+## 4. migration_doctor.py 영향 확인 (수정 아님)
+`migration_doctor.py`는 `_classify_projects_dedup_group` / `_projects_duplicate_groups` / `_phase_5a_…` 헬퍼를 직접 호출하지 별개 진입점이라 `_run_phase_migrations`를 안 거침. grep 1회로 "doctor가 `_run_phase_migrations` 또는 분할된 함수를 호출하지 않음"만 확인. 수정 불필요.
+
+## 5. 기존 검증 스크립트 회귀 확인
+`scripts/verify_dedup_phase.py`, `scripts/verify_phase_infra.py`, `scripts/verify_team_a_001_close.py` (있으면) 가 이 변경으로 깨지지 않는지 — backend가 빠르게 실행해보거나, 적어도 어떤 가정에 의존하는지 확인. 깨지면 그 스크립트가 검증하던 invariant가 실제로 깨진 건지(=내 버그) 아니면 스크립트가 옛 순서를 하드코딩한 건지 판단.
+
+## 6. backend_changes.md
+`.claude/workspaces/current/backend_changes.md`에: 수정한 함수·라인, diff 요약, 분할 후 실행 순서, migration_doctor 무영향 근거(grep 결과), 기존 verify 스크립트 회귀 여부, 서버 재시작 필요 여부(러너 코드 변경 — 코드 reload용 재시작 필요, 스키마 변경 없음 명시).
+
+# 주의사항 / 불변식
+- 백업·트랜잭션 래퍼·`_mark_phase_done`·`team_migration_warnings` 누적 등 기존 인프라 동작 **불변**. 백업은 `if not pending: return` 직후·모든 phase 본문 전 1회 — 위치 그대로.
+- unsafe 그룹(참조 ≥2 등 살아남는 row 1건 이상)은 여전히 보존 + preflight(`_check_projects_team_name_unique`)가 잡아 RuntimeError로 서버 시작 거부 — 현 동작 유지.
+- pending=0이면 백업·preflight·phase 본문 전부 skip — 불변 (운영 DB는 이미 doctor로 정리됨, 마커도 다 찍혀 있을 가능성 — 이 수정이 운영 DB 기동을 막을 일 없음).
+- `_pending_phases()`는 PHASES 순서대로 반환 — 그 순서를 분할 후에도 유지.
+- 새 phase 본문 추가 금지. `_phase_5a_projects_dedup_safe` 본문 변경 금지 (주석은 가능).
+- CLAUDE.md surgical changes 원칙. 인접 코드 "개선" 금지.
+- 임시 .db 파일은 OS temp dir 또는 `.claude/workspaces/current/` 하위 — 루트에 안 남김.
+
+# 분류 메모
+백엔드 모드: backend-dev → code-reviewer → qa (frontend-dev 생략 — UI 변경 없음).

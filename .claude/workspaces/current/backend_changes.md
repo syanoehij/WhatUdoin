@@ -1,61 +1,64 @@
-# 팀 기능 그룹 A #1 마무리 — 변경/감사 결과
+# backend_changes — 마이그레이션 dedup phase ordering 버그 수정
 
-## 결론
-**소스 코드 변경 없음.** #1의 모든 미완 sub-task는 #2~#10 사이클 phase 본문에 이미 가드가
-들어가 있었고, Phase 4 UNIQUE preflight 누락도 실제로는 없었다 (구조적으로 불필요한 케이스만 남음).
-이번 사이클 산출물은 (1) 가드 감사 결과 기록, (2) preflight 점검 결론, (3) 검증 스크립트 추가,
-(4) todo.md 토글이다.
+## 문제
+`database.py:_run_phase_migrations()`는 preflight 검사를 **모든 phase 본문보다 먼저 일괄** 실행한다.
+`team_phase_5a_projects_dedup_safe_v1`("재시작만으로 안전 dedup → 그 다음 #5 preflight 통과 → #5 인덱스 생성")는
+단순히 `PHASES.append` 순서상 #5보다 앞에 등록돼 있을 뿐이라, #5 preflight(`_check_projects_team_name_unique`)가
+abort시키면 5a 본문은 실행 기회를 못 얻는다 → "자동 dedup 안전망"이 사실상 죽은 코드.
 
-따라서 **마이그레이션 phase 추가/수정 없음 → 운영 DB 반영 작업 없음.** 단, 본 사이클은 코드 자체를
-바꾸지 않았으므로 서버 재시작도 불필요하다 (todo.md 토글 + 검증 스크립트만 추가).
+## 수정 (Candidate 1 — `_PRE_PREFLIGHT_PHASES` 허용 리스트, advisor 확인)
+새 phase 본문 추가 없음. `_phase_5a_projects_dedup_safe` 본문 변경 없음. 러너 실행 순서만 고침.
 
-## 1. 단계 내부 idempotency 가드 감사 — 전부 이미 존재
+### 변경 파일/함수
+**`database.py`만 변경.**
 
-| sub-task | 위치 | 가드 | 상태 |
-|---|---|---|---|
-| `users.name_norm` 백필 | `database.py` `_phase_2_team_backfill` (L1015) | `SELECT ... WHERE name_norm IS NULL` 후 row 단위 UPDATE | ✅ 있음 |
-| `users.password_hash` 변환 + `password` 비우기 | `_phase_7_password_hash` (L2186) | `SELECT ... WHERE password_hash IS NULL AND password IS NOT NULL AND password != ''` → 1회 실행 후 `password_hash` 비NULL+`password=''` 이므로 재실행 시 0건 | ✅ 있음 |
-| admin `users.team_id` NULL 처리 | `_phase_3_admin_separation` (L1155) | `UPDATE ... WHERE role='admin' AND team_id IS NOT NULL` | ✅ 있음 |
-| admin `mcp_token_hash`/`mcp_token_created_at` NULL | `_phase_3_admin_separation` (L1162-1171) | `WHERE role='admin' AND mcp_token_hash IS NOT NULL` (각각) + 컬럼 존재 가드 | ✅ 있음 |
-| admin `user_ips` whitelist→history | `_phase_3_admin_separation` (L1174) | `UPDATE ... SET type='history' WHERE type='whitelist' AND user_id IN (admin)` (이미 history면 0건) | ✅ 있음 |
-| `users.role` editor→member | `_phase_2_team_backfill` (L1042) | `UPDATE users SET role='member' WHERE role='editor'` | ✅ 있음 |
-| `events/checklists.team_id` NULL 보강 | `_phase_4_data_backfill` (L1349-1402) | `SELECT ... WHERE team_id IS NULL` + 각 `UPDATE ... WHERE id=? AND team_id IS NULL` | ✅ 있음 |
-| `projects.team_id` NULL 보강 | `_phase_4_data_backfill` (L1442-1470) | `SELECT ... WHERE team_id IS NULL` + `UPDATE ... WHERE id=? AND team_id IS NULL` | ✅ 있음 |
-| `events.project_id` / `checklists.project_id` 백필 | `_phase_6_backfill_table_project_id` (L1996) | `SELECT ... WHERE project_id IS NULL` + `UPDATE ... WHERE id=? AND project_id IS NULL`. 재실행 시 0건 → 자동 프로젝트 중복 생성 불가 | ✅ 있음 |
-| `notifications.team_id` 백필 | `_phase_4_data_backfill` (L1476) | `UPDATE ... WHERE team_id IS NULL AND event_id IS NOT NULL AND EXISTS(...)` | ✅ 있음 |
-| `links.team_id` 백필 | `_phase_4_data_backfill` (L1490) | `SELECT ... WHERE scope='team' AND team_id IS NULL` + `UPDATE ... WHERE id=? AND scope='team' AND team_id IS NULL` | ✅ 있음 |
-| `team_notices.team_id` 백필 | `_phase_4_data_backfill` (L1513) | `SELECT ... WHERE team_id IS NULL` + `UPDATE ... WHERE id=? AND team_id IS NULL` | ✅ 있음 |
-| `pending_users` 자동 삭제 | `_phase_4_data_backfill` (L1535) | Phase 마커로 단계 자체 skip. 마커 강제 삭제 후 재실행 시엔 `DELETE FROM pending_users`가 이미 빈 테이블이라 0건 (무해) | ✅ 적절 |
-| "관리팀" rename | `_phase_3_admin_separation` (L1193-1233) | `SELECT id FROM teams WHERE name='관리팀' LIMIT 1` → 없으면 즉시 return. rename 후엔 이름이 `AdminTeam`/`관리팀_legacy_*`이라 재실행 시 lookup 0건 → no-op. AdminTeam 사전 존재 시 fallback `관리팀_legacy_{id}` + `admin_separation` warning | ✅ 있음 |
+1. **`_PRE_PREFLIGHT_PHASES` 추가** (`_PREFLIGHT_CHECKS` 정의 직후, 기존 L736 부근):
+   - `frozenset({"team_phase_5a_projects_dedup_safe_v1"})`.
+   - docstring 주석: preflight보다 먼저 실행되는 phase 집합. 계약 — (a) idempotent, (b) preflight가 강제하는 UNIQUE invariant에 의존 금지(오히려 그 invariant 충족이 목적).
 
-검증: 위 가드들은 verify 스크립트 case 3에서 실제로 동작 확인됨 (마커 삭제 + 위험 합성 데이터 심은 뒤
-재실행해도 password_hash/team_id/project_id/AdminTeam 이름 전부 불변, phase 7 "converted 0 plaintext").
+2. **`_run_phase_body(name, body)` 헬퍼 추출** (`_run_phase_migrations` 바로 위 신규 함수):
+   - 기존 `_run_phase_migrations` 안에 있던 per-phase 격리 트랜잭션 루프 본문(`with get_conn() / isolation_level=None / BEGIN IMMEDIATE / body / _mark_phase_done / COMMIT`, 실패 시 `ROLLBACK` + `RuntimeError`)을 그대로 함수로 옮김. 동작·로그 메시지 동일.
+   - pre-preflight 단계와 나머지 단계에서 공유.
 
-## 2. Phase 4 UNIQUE preflight 점검
+3. **`_run_phase_migrations` 분할** (기존 동작 보존 + 단계 삽입):
+   - ① `pending = _pending_phases()`; 비면 즉시 반환 — **불변**.
+   - ② 백업 1회 (`if not pending: return` 직후·모든 phase 본문 전) — **위치·로직 불변**.
+   - ②.5 `pending`을 PHASES 순서 유지하며 분할: `pre_preflight = [(n,b) for (n,b) in pending if n in _PRE_PREFLIGHT_PHASES]`, `rest = [...if n not in...]`. (필터링만, 재정렬 없음.)
+   - ②.6 `for name,body in pre_preflight: _run_phase_body(name, body)` — 각자 독립 `with get_conn()` 블록·독립 트랜잭션이라 **마커가 preflight 전에 커밋**됨 (preflight 실패가 5a 마커를 롤백시키지 않음).
+   - ③ preflight 일괄 실행 — **불변**. 이제 5a dedup 후 상태에서 돌므로 남은(unsafe) 충돌만 잡음. 충돌 시 경고 누적 + `RuntimeError`.
+   - ④ `for name,body in rest: _run_phase_body(name, body)` — 나머지 phase 순차 실행.
+   - docstring "동작 순서" 1~5단계로 갱신.
 
-| 대상 | preflight | 상태 |
-|---|---|---|
-| `users.name_norm` 전역 | `_check_users_name_norm_unique` (`database.py` L2288, `_PREFLIGHT_CHECKS.append`) | ✅ 등록됨 |
-| `teams.name_norm` 전역 | `_check_teams_name_norm_unique` (L2325) | ✅ 등록됨 |
-| `(team_id, projects.name_norm)` | `_check_projects_team_name_unique` (L2246) | ✅ 등록됨 |
-| `user_ips type='whitelist' ip_address` | `_check_user_ips_whitelist_unique` (L2361) | ✅ 등록됨 |
-| `user_teams(user_id, team_id)` 중복 | (없음 — 불필요) | ✅ 의도적 미적용. `user_teams`는 `_phase_1_team_columns`에서 **빈 테이블**로 생성되고, `_phase_2_team_backfill`의 INSERT가 `WHERE NOT EXISTS` 가드로 중복을 만들지 않으며, Phase 1 이전엔 테이블 자체가 없어 사전 중복도 불가능. 만약 어떤 이유로든 중복이 존재하면 `_phase_4_team_indexes`의 `CREATE UNIQUE INDEX IF NOT EXISTS idx_user_teams_user_team`가 IntegrityError → phase 러너 ROLLBACK + `RuntimeError`로 서버 시작 거부. 별도 preflight는 over-engineering. |
-| `team_menu_settings(team_id, menu_key)` 중복 | (없음 — 불필요, #19 책임) | ✅ 의도적 미적용. `team_menu_settings`도 Phase 1에서 빈 테이블로 생성, 시드는 #19에서. #19 전까지 비어 있으므로 중복 발생 불가. 인덱스(`idx_team_menu_settings`)도 같은 Phase 4에서 생성. #19가 시드를 채우는 시점에 중복 가능성이 생기면 그 사이클에서 preflight 추가 — todo.md #1 섹션에 주석 추가. |
+4. **주석 갱신** (`database.py` L1605~1607 부근 — 5a 등록 블록):
+   - 기존: "PHASES.append 순서 = 실행 순서. 본 5a 등록은 #5 등록 *위*에 위치해 같은 init_db()에서 dedup → preflight → 인덱스 생성 순서가 보장된다." → 이제 거짓.
+   - 신규: 5a는 `_PRE_PREFLIGHT_PHASES`에 등록되어 preflight 앞에서 실행됨이 순서를 보장한다. 단순 PHASES 순서로는 보장 안 됨(러너가 preflight를 모든 phase 본문보다 먼저 일괄 실행하므로). + unsafe 충돌로 preflight가 거부해도 5a 마커는 set 상태로 남고, 운영자가 unsafe row를 수동/migration_doctor로 정리 후 재시작하면 preflight 통과 → #5 진행 — 5a 재실행 불필요(버그 아님).
 
-preflight 일관성: `_run_phase_migrations` (L2421)에서 충돌 1건 이상이면 (a) 각 충돌을
-`_append_team_migration_warning(conn, category, msg)`로 누적 + stdout 로그 → (b) commit 후
-`RuntimeError(f"migration preflight failed with {n} conflict(s); ...")`로 서버 시작 거부. 4개 preflight
-함수 모두 `(category, message)` 튜플 리스트를 반환하고 `category`는 `preflight_*` 네임스페이스. 일관됨.
+### 안 건드린 것 (불변 확인)
+- 백업 타이밍/로직 — `if not pending: return` 직후 1회, 그대로.
+- `_mark_phase_done`, `_append_team_migration_warning`, `team_migration_warnings` 누적 — 그대로.
+- per-phase 트랜잭션 래퍼 시맨틱 (`isolation_level=None` + `BEGIN IMMEDIATE` + 수동 COMMIT/ROLLBACK) — `_run_phase_body`로 옮겼을 뿐 동작 동일.
+- preflight 실행부 (`_run_preflight_checks`, default isolation_level, 경고 commit 후 raise) — 그대로.
+- unsafe 그룹(살아남는 row ≥1) 보존 + `_check_projects_team_name_unique`가 잡아 RuntimeError — 그대로.
+- pending=0 → 백업·preflight·phase 본문 전부 skip — 그대로.
+- `_phase_5a_projects_dedup_safe` 본문·`_classify_projects_dedup_group`·`_projects_duplicate_groups` — 미변경.
 
-## 3. 검증 스크립트
-`.claude/workspaces/current/scripts/verify_team_a_001_close.py` (+ `.log`):
-- case 1: 빈 임시 DB(`tempfile`, `WHATUDOIN_RUN_DIR` 오버라이드) 첫 `init_db()` → 등록 phase 10개 마커 전부 기록 + preflight 통과
-- case 2: 재호출 → 모든 phase `is_phase_done` True, users/teams row 수 불변, `_pending_phases()==[]` (백업·preflight skip 경로)
-- case 3: phase 마커 전부 삭제 + 위험 합성 데이터 심기(평문 password 잔존+hash 보유 user / team_id 채운 event / project_id 채운 event / AdminTeam 이름 팀) → `init_db()` 재호출 → 마커 재기록 + 데이터 무결성(password_hash 불변·재hash 안 됨·"converted 0", team_id/project_id 덮어쓰기 없음, AdminTeam 중복 rename 없음)
-- **결과: 15 PASS / 0 FAIL**
+### migration_doctor 영향
+없음. `tools/migration_doctor.py`는 `_projects_duplicate_groups` / `_classify_projects_dedup_group` 헬퍼만 직접 호출(L88~92). `_run_phase_migrations`·`_run_phase_body`·`_pending_phases`·`_run_preflight_checks`·`_PRE_PREFLIGHT_PHASES` 어느 것도 참조 안 함 (grep 확인). 별개 진입점.
 
-## 4. 부수 메모 (out of scope — 기록만)
-- `user_teams` 테이블 실제 컬럼은 `role`/`status`인데 todo.md §#2 명세는 `team_role`/`join_status`로 적혀 있다. #2 사이클에서 명칭이 단순화된 것으로 보임. 본 #1 범위 밖이라 변경하지 않음 — 미래에 "새 불일치"로 재발견하지 않도록 여기 기록만.
+### 기존 verify 스크립트 회귀
+- `scripts/`(active 테스트 디렉토리 = `tests/`)에는 dedup/migration 관련 verify 스크립트 없음. `tests/`의 phaseN_*.spec.js / *.py는 마이그레이션 러너를 import하지 않음.
+- 과거 verify 스크립트(`.claude/workspaces/archive/.../verify_dedup_phase.py` 등)는 모두 archive에 있고, phase 본문을 자체 `_run_phase` 래퍼로 직접 호출하지 `_run_phase_migrations`를 안 거침 → 이번 변경과 무관. (archive라 active 회귀 대상도 아님.)
+
+### 스모크
+- `python -c "import ast; ast.parse(...)"` → parse OK.
+- `python -c "import database; ..."` → import OK, `_PRE_PREFLIGHT_PHASES == frozenset({'team_phase_5a_projects_dedup_safe_v1'})`, `_run_phase_body`/`_run_phase_migrations` callable, 5a가 PHASES에 있고 #5보다 앞 인덱스.
 
 ## 서버 재시작
-**불필요.** 이번 사이클은 소스 코드를 바꾸지 않았다 (todo.md 토글 + 검증 스크립트 추가만).
+필요. **러너 코드(`database.py`) 변경 — 코드 reload용 재시작.** 스키마 변경·새 phase 본문 추가 없음. 운영 DB는 이미 migration_doctor로 정리됐고(충돌 0건) 모든 phase 마커가 찍혀 있어 `_pending_phases()`가 빈 리스트 → 이 변경이 운영 DB 기동 경로에 닿지 않음. (그래도 QA에 "충돌 0건 DB에서도 정상" 케이스 포함 요청.)
+
+## QA 검증 시나리오 (합성 임시 DB — 실서버 X)
+1. **safe-only 충돌 DB**: phase 1·2가 적용된 합성 스키마 + 같은 `(team_id, name_norm)` 그룹에 참조 0건 중복 row → `init_db()`(또는 `_run_phase_migrations` 직접) → `settings`에 `migration_phase:team_phase_5a_...` AND `migration_phase:team_phase_5_...` 마커, `idx_projects_team_name_norm`(또는 실제 인덱스명) 존재, `team_migration_warnings`에 `dedup_projects_auto` 항목. 예외 없음.
+2. **unsafe 충돌 DB** (discriminator): 같은 그룹에 `events.project_id`(deleted_at IS NULL)가 2건 이상 참조하는 중복 row → `init_db()` → `RuntimeError`, `migration_phase:team_phase_5a_...` 마커는 **set**(5a가 돌았으나 안전 정리할 게 없어 cleanly return), `migration_phase:team_phase_5_...` 마커는 **미set**, `team_migration_warnings`에 `preflight_projects_team_name` 항목. ※ 5a 마커가 set이 아니면 러너 버그(pre-preflight가 preflight 실패로 롤백된 것).
+3. **충돌 0건 DB**: 정상 마이그레이션 → pending이면 백업 → pre-preflight 작업 없음(또는 5a 노옵) → preflight 통과 → 나머지 phase 실행. 회귀 없음.
+4. **재호출**: 같은 DB로 `init_db()` 재호출 → `_pending_phases()` 빈 리스트 → 즉시 반환, 백업·preflight·phase 본문 전부 skip. 마커·데이터 불변.
+- 기존 `tests/` spec이 깨지지 않는지(특히 import 단계). archive verify 스크립트는 회귀 대상 아님.

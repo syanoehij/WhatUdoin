@@ -735,6 +735,19 @@ PHASES: list = []
 # 본 #1에서는 비어 있다. UNIQUE 제약 추가 시 검사 함수를 등록한다.
 _PREFLIGHT_CHECKS: list = []
 
+# preflight 검사보다 *먼저* 실행되어야 하는 phase 이름 집합.
+# 러너(_run_phase_migrations)는 preflight를 모든 phase 본문보다 앞에서 일괄 실행한다.
+# 따라서 단순히 PHASES.append 순서를 앞당기는 것만으로는 "dedup → preflight → 인덱스 생성"
+# 순서를 보장할 수 없다. 여기 등록된 phase는 같은 init_db() 호출에서 preflight 앞에서
+# 본문 실행 + 마커 커밋되고, 그 뒤 preflight → 나머지 phase 순으로 진행된다.
+# 계약:
+#   (a) idempotent — 재실행 안전, clean state면 노옵.
+#   (b) preflight가 강제하는 UNIQUE invariant에 의존하지 않을 것
+#       (오히려 그 invariant를 만족시키기 위한 안전 정리 작업이 목적).
+# 의도: team_phase_5a가 안전 dedup → 그 결과를 #5 preflight(_check_projects_team_name_unique)가
+#       검증 → 통과하면 #5가 (team_id, name_norm) UNIQUE 인덱스 생성.
+_PRE_PREFLIGHT_PHASES: frozenset = frozenset({"team_phase_5a_projects_dedup_safe_v1"})
+
 
 def _is_phase_done(conn, name: str) -> bool:
     """phase 마커 존재 여부. set_setting/get_setting을 거치지 않고
@@ -1589,9 +1602,16 @@ PHASES.append(("team_phase_4b_user_ips_whitelist_unique_v1", _phase_4b_user_ips_
 #   - 마커 강제 삭제 후 재실행 → 이미 row 수가 1이라 GROUP BY HAVING COUNT(*) > 1 자체가
 #     0건 매칭. 본문은 사실상 노옵.
 #
-# 등록 순서:
-#   PHASES.append 순서 = 실행 순서. 본 5a 등록은 #5 등록 *위*에 위치해 같은 init_db()
-#   호출에서 dedup → preflight → 인덱스 생성 순서가 보장된다.
+# 실행 순서:
+#   본 5a는 `_PRE_PREFLIGHT_PHASES`에 등록되어 같은 init_db() 호출에서 preflight *앞*에서
+#   실행된다 — 이게 dedup → preflight → 인덱스 생성 순서를 보장한다. (단순 PHASES.append
+#   순서로는 보장되지 않는다: 러너 `_run_phase_migrations`가 preflight를 모든 phase 본문보다
+#   먼저 일괄 실행하므로, _PRE_PREFLIGHT_PHASES에 없는 phase는 preflight 통과 후에야 돈다.)
+#   pre-preflight 단계에서 5a 마커는 별도 트랜잭션으로 커밋되므로, 직후 preflight가 unsafe
+#   충돌로 RuntimeError를 던져 서버 시작이 거부되더라도 5a 마커는 set 상태로 남는다.
+#   운영자가 unsafe row를 수동/migration_doctor로 정리한 뒤 재시작하면 preflight가 통과하고
+#   #5가 인덱스를 만든다 — 5a는 "고려됐고 안전하게 더 할 게 없음" 상태라 재실행하지 않는다
+#   (버그 아님).
 
 # 도구(migration_doctor)와 phase 본문이 공유하는 안전 정리 헬퍼.
 # (a) 그룹 식별  (b) 참조 카운트  (c) 안전 그룹 정리.
@@ -2418,16 +2438,47 @@ def _run_preflight_checks(conn) -> list:
     return conflicts
 
 
+def _run_phase_body(name: str, body) -> None:
+    """phase 1개를 격리 트랜잭션으로 실행.
+
+    Python sqlite3의 default isolation_level=""는 DDL(CREATE/ALTER/DROP) 직전에
+    자동 COMMIT을 호출하여, body가 raise해도 DDL은 이미 영속화되는 함정이 있다.
+    phase 본문이 DDL+DML 혼합일 때 부분 적용을 막기 위해 isolation_level=None으로
+    자동 트랜잭션을 끄고 BEGIN IMMEDIATE/COMMIT/ROLLBACK을 수동으로 관리한다.
+    이 변경은 이 conn에만 적용되며, 코드베이스 전역 get_conn() 시맨틱은 건드리지 않는다.
+
+    본문 성공 시 같은 conn으로 마커 기록 → COMMIT(get_conn 컨텍스트 매니저 종료).
+    본문 실패 시 ROLLBACK → stdout 로그 + RuntimeError 재발생으로 서버 시작 거부.
+    """
+    try:
+        with get_conn() as conn:
+            conn.isolation_level = None
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                body(conn)
+                _mark_phase_done(conn, name)
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+        print(f"{_MIGRATION_LOG_PREFIX} phase {name!r} OK")
+    except Exception as exc:
+        print(f"{_MIGRATION_LOG_PREFIX} phase {name!r} FAILED: {exc!r}")
+        raise RuntimeError(f"migration phase {name!r} failed: {exc!r}") from exc
+
+
 def _run_phase_migrations() -> None:
     """init_db()의 with get_conn() 블록 종료 직후 호출되는 진입점.
 
     동작 순서:
       1. PHASES 중 미적용분(_pending_phases)이 0개면 즉시 반환(백업·preflight 모두 skip).
       2. 미적용분이 1개라도 있으면 자동 백업 1회.
-      3. preflight 검사 실행 — 충돌 1개 이상이면 경고 누적 후 RuntimeError로 서버 시작 거부.
-      4. 각 pending phase를 독립 connection(자체 트랜잭션)으로 실행.
-         - 본문 성공 시 같은 conn으로 마커 기록 → conn.commit()(get_conn 컨텍스트 매니저 종료).
-         - 본문 실패 시 conn.rollback() → stdout 로그 + RuntimeError 재발생으로 서버 시작 거부.
+      3. pre-preflight phase(_PRE_PREFLIGHT_PHASES에 등록된 것) 먼저 실행 — 각자 독립
+         트랜잭션으로 본문 + 마커 커밋. preflight가 강제하는 invariant를 만족시키기 위한
+         안전 정리(예: projects 자동 dedup)가 여기서 일어나고, 그 결과를 4)가 검증한다.
+      4. preflight 검사 실행 — (3)이 정리하고도 남은 충돌 1개 이상이면 경고 누적 후
+         RuntimeError로 서버 시작 거부.
+      5. 나머지 pending phase를 각자 독립 트랜잭션으로 순차 실행.
     """
     pending = _pending_phases()
     if not pending:
@@ -2443,7 +2494,16 @@ def _run_phase_migrations() -> None:
         print(f"{_MIGRATION_LOG_PREFIX} backup FAILED, aborting migration: {exc!r}")
         raise RuntimeError(f"migration backup failed: {exc!r}") from exc
 
-    # 2) preflight 검사 — 충돌 시 경고 누적 후 거부
+    # PHASES 등록 순서를 유지하면서 preflight 앞/뒤로 분할 (재정렬 금지 — 필터링만).
+    pre_preflight = [(n, b) for (n, b) in pending if n in _PRE_PREFLIGHT_PHASES]
+    rest = [(n, b) for (n, b) in pending if n not in _PRE_PREFLIGHT_PHASES]
+
+    # 2) pre-preflight phase 실행 — 각자 독립 트랜잭션. 여기서 마커가 커밋되므로
+    #    3)의 preflight가 실패해 RuntimeError가 나도 이 단계 마커는 롤백되지 않는다.
+    for name, body in pre_preflight:
+        _run_phase_body(name, body)
+
+    # 3) preflight 검사 — 충돌 시 경고 누적 후 거부
     # 여기서는 default isolation_level("")을 그대로 둔다. preflight 자체는 SELECT만 돌고
     # 경고 누적은 INSERT/UPDATE(DML)이라 implicit BEGIN이 깔끔하게 동작한다. phase 러너에서만
     # isolation_level=None을 쓰는 것은 거기서만 DDL이 섞이기 때문이다 (asymmetry 의도적).
@@ -2460,30 +2520,9 @@ def _run_phase_migrations() -> None:
             f"migration preflight failed with {len(conflicts)} conflict(s); see settings.team_migration_warnings"
         )
 
-    # 3) 각 phase 격리 트랜잭션 실행
-    #
-    # Python sqlite3의 default isolation_level=""는 DDL(CREATE/ALTER/DROP) 직전에
-    # 자동 COMMIT을 호출하여, body가 raise해도 DDL은 이미 영속화되는 함정이 있다.
-    # phase 본문이 DDL+DML 혼합일 때 부분 적용을 막기 위해 isolation_level=None으로
-    # 자동 트랜잭션을 끄고 BEGIN IMMEDIATE/COMMIT/ROLLBACK을 수동으로 관리한다.
-    # 이 변경은 phase 러너 안의 conn에만 적용되며, 코드베이스 전역 get_conn()
-    # 시맨틱은 건드리지 않는다.
-    for name, body in pending:
-        try:
-            with get_conn() as conn:
-                conn.isolation_level = None
-                conn.execute("BEGIN IMMEDIATE")
-                try:
-                    body(conn)
-                    _mark_phase_done(conn, name)
-                    conn.execute("COMMIT")
-                except Exception:
-                    conn.execute("ROLLBACK")
-                    raise
-            print(f"{_MIGRATION_LOG_PREFIX} phase {name!r} OK")
-        except Exception as exc:
-            print(f"{_MIGRATION_LOG_PREFIX} phase {name!r} FAILED: {exc!r}")
-            raise RuntimeError(f"migration phase {name!r} failed: {exc!r}") from exc
+    # 4) 나머지 phase 각자 격리 트랜잭션 실행
+    for name, body in rest:
+        _run_phase_body(name, body)
 
 
 @contextmanager
