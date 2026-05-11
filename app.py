@@ -2631,15 +2631,16 @@ def hidden_project_assignees(request: Request, project: str):
 @app.get("/api/project-timeline")
 def project_timeline(request: Request, team_id: int = None):
     viewer = auth.get_current_user(request)
-    proj_colors = db.get_project_colors()
-    if viewer and not auth.is_admin(viewer):
+    # 팀 기능 그룹 A #10: 간트는 현재 작업 팀 기준 (/api/kanban 과 동일 골격).
+    # 비admin(비로그인 포함)이 작업 팀을 결정할 수 없거나 비소속이면 빈 목록 — 다른 팀 자료 누출 방지.
+    # admin 은 무필터(team_id 그대로, 보통 None) — 전 팀 슈퍼유저, 의도된 동작.
+    if not auth.is_admin(viewer):
         scope = _work_scope(request, viewer, team_id)
         if not scope:
             return []
         team_id = next(iter(scope))
-        teams = db.get_project_timeline(team_id, viewer=viewer)
-    else:
-        teams = db.get_project_timeline(team_id, viewer=viewer)
+    proj_colors = db.get_project_colors()
+    teams = db.get_project_timeline(team_id, viewer=viewer)
     for team in teams:
         for project in team.get("projects", []):
             project["color"] = resolve_project_color(project.get("name"), proj_colors)
