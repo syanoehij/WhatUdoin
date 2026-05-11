@@ -4595,6 +4595,142 @@ def reject_pending_user(pending_id: int):
         )
 
 
+# ── Account Registration / Team Applications (팀 기능 그룹 A #8) ──────
+
+def create_user_account(name: str, password: str) -> dict | None:
+    """계정 가입 (#8): 이름·비밀번호만으로 즉시 활성 사용자 row 생성.
+
+    - role='member', team_id=NULL (팀 신청은 별도 흐름).
+    - name_norm: ``normalize_name`` 으로 정규화하여 저장 (users.name_norm 전역 UNIQUE — #7).
+    - password 컬럼은 NOT NULL DEFAULT '' 이라 빈 문자열로 두고 password_hash 에 hash 저장
+      (#7 의 deviation 과 동일; Phase 5 컬럼 drop 후 정리).
+    - name_norm 충돌 시(사전 SELECT 또는 IntegrityError) None 반환 — 라우트가 409 매핑.
+
+    반환: dict(user) 신규 row | None(중복).
+    """
+    norm = normalize_name(name)
+    pw_hash = passwords.hash_password(password)
+    with get_conn() as conn:
+        # 사전 중복 검사 (활성/비활성 무관 — name_norm 전역 UNIQUE 이므로).
+        if conn.execute("SELECT 1 FROM users WHERE name_norm = ?", (norm,)).fetchone():
+            return None
+        try:
+            cur = conn.execute(
+                "INSERT INTO users (name, name_norm, password, password_hash, role, team_id, is_active) "
+                "VALUES (?, ?, '', ?, 'member', NULL, 1)",
+                (name, norm, pw_hash),
+            )
+        except sqlite3.IntegrityError:
+            # name_norm UNIQUE race — 사전 SELECT 와 INSERT 사이에 동일 이름 가입.
+            return None
+        uid = cur.lastrowid
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    return dict(row) if row else None
+
+
+def apply_to_team(user_id: int, team_id: int) -> tuple[str, str | None]:
+    """팀 신청 (#8). ``user_teams`` 에 pending row 생성/갱신.
+
+    규칙:
+      - 사용자에게 (임의 팀 대상) pending row 가 1개라도 있으면 추가 신청 차단.
+        단, 차단 대상이 **바로 이 팀** 인 경우는 "이미 이 팀에 신청 중" 으로 분기.
+      - 이미 approved 멤버면 차단.
+      - rejected row 가 있으면 같은 row 를 status='pending' 으로 갱신 (row 추가 X — joined_at 보존).
+      - row 가 없으면 신규 INSERT.
+
+    반환: (result, detail)
+      result ∈ {"created", "updated", "blocked"}
+      detail: blocked 일 때 "pending_here" | "pending_other" | "already_member", 그 외 None.
+    """
+    with get_conn() as conn:
+        # 1. 사용자의 다른 pending 존재 여부 (임의 팀).
+        other_pending = conn.execute(
+            "SELECT team_id FROM user_teams WHERE user_id = ? AND status = 'pending'",
+            (user_id,),
+        ).fetchall()
+        existing = conn.execute(
+            "SELECT id, status FROM user_teams WHERE user_id = ? AND team_id = ?",
+            (user_id, team_id),
+        ).fetchone()
+        # 2. 이 팀 row 분기.
+        if existing is not None:
+            status = existing["status"] if isinstance(existing, sqlite3.Row) else existing[1]
+            row_id = existing["id"] if isinstance(existing, sqlite3.Row) else existing[0]
+            if status == "approved":
+                return ("blocked", "already_member")
+            if status == "pending":
+                return ("blocked", "pending_here")
+            # rejected (또는 그 외) → pending 으로 갱신. 단 다른 팀에 pending 이 있으면 차단.
+            if other_pending:
+                return ("blocked", "pending_other")
+            conn.execute(
+                "UPDATE user_teams SET status = 'pending', role = 'member' WHERE id = ?",
+                (row_id,),
+            )
+            return ("updated", None)
+        # 3. 이 팀 row 없음 → 다른 팀 pending 있으면 차단, 없으면 신규.
+        if other_pending:
+            return ("blocked", "pending_other")
+        conn.execute(
+            "INSERT INTO user_teams (user_id, team_id, role, status) VALUES (?, ?, 'member', 'pending')",
+            (user_id, team_id),
+        )
+        return ("created", None)
+
+
+def list_team_applications(team_id: int) -> list[dict]:
+    """해당 팀의 pending 신청 목록 (admin·팀 관리자 조회용). user name 동반."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT ut.id, ut.user_id, ut.team_id, ut.status, ut.joined_at, "
+            "       u.name AS user_name, u.name_norm AS user_name_norm "
+            "  FROM user_teams ut JOIN users u ON ut.user_id = u.id "
+            " WHERE ut.team_id = ? AND ut.status = 'pending' "
+            " ORDER BY ut.id ASC",
+            (team_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def decide_team_application(user_id: int, team_id: int, decision: str) -> bool:
+    """팀 신청 수락/거절 (#8). 대상 row 가 status='pending' 일 때만 처리.
+
+    decision: 'approved' → status='approved' + joined_at=CURRENT_TIMESTAMP.
+              'rejected'  → status='rejected'.
+    반환: 처리 성공 True / 대상 없거나 pending 아니면 False.
+    """
+    if decision not in ("approved", "rejected"):
+        return False
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM user_teams WHERE user_id = ? AND team_id = ? AND status = 'pending'",
+            (user_id, team_id),
+        ).fetchone()
+        if not row:
+            return False
+        row_id = row["id"] if isinstance(row, sqlite3.Row) else row[0]
+        if decision == "approved":
+            conn.execute(
+                "UPDATE user_teams SET status = 'approved', joined_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (row_id,),
+            )
+        else:
+            conn.execute(
+                "UPDATE user_teams SET status = 'rejected' WHERE id = ?",
+                (row_id,),
+            )
+    return True
+
+
+def get_team_active(team_id: int) -> dict | None:
+    """삭제되지 않은 팀 조회. team_id 유효성 검사용."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM teams WHERE id = ? AND deleted_at IS NULL", (team_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
 # ── Meetings ────────────────────────────────────────────
 
 def get_all_meetings(viewer=None):

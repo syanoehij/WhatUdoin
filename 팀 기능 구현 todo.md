@@ -231,23 +231,24 @@
 📖 섹션 6 (계정 가입과 팀 신청)
 **의존: ← #7**
 
-- [ ] **구현 (계정 가입)**
-  - [ ] `/api/register` 신규 흐름: 이름·비밀번호만 받고 즉시 `users` row 생성 (`role=member`, `team_id=NULL`, `name_norm` 정규화 저장)
-  - [ ] **계정명 정규식 검증**: `^[A-Za-z0-9가-힣]+$` (영문+한글+숫자만, 밑줄·공백·특수문자 차단)
-  - [ ] 비밀번호 정책(영문+숫자 동시 포함) 서버 검증
-  - [ ] 예약 사용자명 차단: `admin`, `system`, `root`, `guest`, `anonymous` (대소문자 무관)
-  - [ ] 비밀번호 중복 검사는 더 이상 하지 않음 (salted hash 구조에서 무의미)
-  - [ ] 가입 직후 자동 세션 생성 + `/`로 리다이렉트
-  - [ ] `pending_users` 신규 쓰기 경로 제거
-- [ ] **구현 (팀 신청)**
-  - [ ] `/api/me/team-applications` (POST): `user_teams`에 `pending` row 생성/갱신
-  - [ ] `pending` row가 1개라도 있으면 추가 신청 차단
-  - [ ] 거절·추방 후 재신청은 같은 `(user_id, team_id)` row를 `pending`으로 갱신
-  - [ ] 시스템 관리자 또는 해당 팀 관리자가 수락/거절 처리
-- [ ] **테스트**
-  - [ ] 예약 사용자명 차단 확인 (`admin`, `Admin`, `ADMIN` 모두)
-  - [ ] 가입 후 자동 세션 + `/` 리다이렉트 동작
-  - [ ] pending 상태에서 추가 신청 차단
+- [x] **구현 (계정 가입)**
+  - [x] `/api/register` 신규 흐름: 이름·비밀번호만 받고 즉시 `users` row 생성 (`role=member`, `team_id=NULL`, `name_norm` 정규화 저장) — `db.create_user_account`
+  - [x] **계정명 정규식 검증**: `^[A-Za-z0-9가-힣]+$` (`passwords.is_valid_user_name` 재사용)
+  - [x] 비밀번호 정책(영문+숫자 동시 포함) 서버 검증 (`passwords.is_valid_password_policy` 재사용)
+  - [x] 예약 사용자명 차단: `admin`, `system`, `root`, `guest`, `anonymous` (대소문자 무관 — `RESERVED_USERNAMES` + `casefold`)
+  - [x] 비밀번호 중복 검사는 더 이상 하지 않음
+  - [x] 가입 직후 자동 세션 생성 + `/`로 리다이렉트 (백엔드 set_cookie + register.html `window.location='/'`)
+  - [x] `pending_users` 신규 쓰기 경로 제거 (`check_register_duplicate`/`create_pending_user` 호출 제거 — 함수 자체는 Phase 5 drop 검토 시 정리)
+- [x] **구현 (팀 신청)**
+  - [x] `/api/me/team-applications` (POST): `user_teams`에 `pending` row 생성/갱신 (`db.apply_to_team`)
+  - [x] `pending` row가 1개라도 있으면 추가 신청 차단 (임의 팀 pending 존재 시 신규 차단)
+  - [x] 거절·추방 후 재신청은 같은 `(user_id, team_id)` row를 `pending`으로 갱신 (row 추가 X, joined_at 보존)
+  - [x] 시스템 관리자 또는 해당 팀 관리자가 수락/거절 처리 — `GET/POST /api/teams/{team_id}/applications[/{user_id}/decide]` (`_require_team_admin`). 멤버 관리 페이지 UI는 #18.
+- [x] **테스트**
+  - [x] 예약 사용자명 차단 확인 (`admin`, `Admin`, `ADMIN` + `system`/`ROOT`/`Guest`/`anonymous`)
+  - [x] 가입 후 자동 세션 + `/` 리다이렉트 동작 (set_cookie + DB row 검증)
+  - [x] pending 상태에서 추가 신청 차단 (같은 팀/다른 팀 모두 409)
+  - 합성 DB + TestClient 72 PASS (`scripts/verify_team_a_008.py`). 실서버 브라우저 E2E는 서버 재시작 후 후속.
 
 ### #9. IP 자동 로그인 관리
 
@@ -694,4 +695,5 @@
 | 2026-05-10 | #5 projects (team_id, name_norm) UNIQUE + 라우트 중복 검사 | Phase 본문(`team_phase_5_projects_unique_v1`): 잔존 `name_norm IS NULL` 백필 + `idx_projects_team_name` 부분 UNIQUE 인덱스(`WHERE team_id IS NOT NULL` — NULL 잔존 면제). preflight `_check_projects_team_name_unique`로 충돌 시 서버 시작 거부 + `preflight_projects_team_name` warning. DB 함수: `create_project(team_id=None)` 시그니처 확장, `create_hidden_project`의 `LOWER(name)` 전역 검사 → `(team_id, name_norm)` 팀 제한, `rename_project` cross-team 누출 차단(리뷰 발견 결함 패치). 라우트: POST /api/manage/projects, PUT /api/manage/projects/{name}, POST /api/manage/hidden-projects에서 `resolve_work_team` 사용으로 team_id 결정. 9/9 시나리오 PASS(빈 DB·NULL 백필·preflight 충돌·다른 팀 같은 이름·같은 팀 차단·NULL 면제·마커 강제 삭제·cross-team rename 비간섭·히든 프로젝트). | `database.py`, `app.py`. archive: `archive/TeamA_005_ProjectsUnique_20260510_235413/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_projects_unique.py}` |
 | 2026-05-11 | #6 events/checklists.project_id 백필 + 자동 프로젝트 생성 | Phase 본문(`team_phase_6_project_id_backfill_v1`): events/checklists.project_id 매칭 백필(`(team_id, name_norm)`, deleted_at IS NULL 우선) + team_id 있고 매칭 실패 row의 자동 프로젝트 생성(같은 phase 내 캐시로 중복 방지, `(team_id, name_norm)` 부분 UNIQUE와 정합). team_id NULL row는 project_id NULL + `project_id_backfill_no_team` warning. project_milestones/project_members/trash_project_id dangling 검증(발견 시 `project_id_backfill_dangling_trash` warning, 데이터 변경 X). Phase 4 인덱스(`idx_events_project_id`, `idx_checklists_project_id`) 추가. 신규 쓰기 경로: INSERT INTO events/checklists + PATCH /api/events/{id}/project + `update_checklist`(리뷰 1차 차단 결함 패치)에서 project_id 동반 갱신. 읽기 경로 전환은 #10 책임. 17 케이스 PASS. | `database.py`. archive: `archive/TeamA_006_ProjectIdBackfill_20260511_001118/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_project_id_backfill.py}` |
 | 2026-05-11 | #7 비밀번호 hash + 일반 로그인 이름+비밀번호 + name_norm UNIQUE | 신규 `passwords.py` 모듈(hash_password/verify_password). Phase 본문(`team_phase_7_password_hash_v1`): 평문 password → password_hash 일괄 변환(admin 포함, 빈 password 가드), 같은 트랜잭션에서 `password = ''` 처리(NOT NULL 제약 deviation으로 빈 문자열 — 자가 발견 결함 패치). preflight 2건(`_check_users_name_norm_unique`, `_check_teams_name_norm_unique`) → 충돌 시 서버 시작 거부. Phase 4 인덱스: `users.name_norm` 전역 UNIQUE, `teams.name_norm` UNIQUE. 라우트: POST /api/login 이름+비밀번호 + 정규식(`^[A-Za-z0-9가-힣]+$`) + name_norm 매칭 + admin 제외(더미 hash 비교로 timing 차이 최소화), POST /api/me/change-password 새 비밀번호 정책(영문+숫자 동시 포함) + hash 저장, POST /api/admin/login 내부 hash 검증으로 교체(외부 동작 동일). DB 함수 `get_user_by_login` 신규, `get_user_by_credentials` 내부 변경, `reset_user_password` hash 저장. **운영 DB 반영은 서버 재시작 시 phase 자동 적용** — 재시작 전 `users.name_norm`/`teams.name_norm` 충돌 검사 SQL은 qa_report.md 참고. import-time 63 PASS. | `database.py`, `app.py`, `passwords.py`(신규), `templates/base.html`. archive: `archive/TeamA_007_PasswordHash_20260511_004746/{backend_changes.md, code_review_report.md, qa_report.md, scripts/verify_password_hash.py, scripts/verify_login_routes.py}` |
+| 2026-05-11 | #8 계정 가입과 팀 신청 분리 | `/api/register` 를 pending_users 승인 대기 → 즉시 가입+자동 로그인으로 교체: `db.create_user_account`(name_norm 정규화·`password=''`+`password_hash`·`role='member'`·`team_id=NULL`, 사전 SELECT + IntegrityError 이중 가드), 정규식·비밀번호 정책(#7 헬퍼 재사용), 예약어 차단(`RESERVED_USERNAMES` + `casefold`), set_cookie 자동 세션. 팀 신청 분리: `POST /api/me/team-applications`(`db.apply_to_team` — 임의 팀 pending 1건이라도 있으면 신규 차단, approved 중복 차단, rejected→같은 row pending 갱신·joined_at 보존), `GET/POST /api/teams/{team_id}/applications[/{user_id}/decide]`(`_require_team_admin` = 글로벌 admin 또는 `user_teams.role='admin'`, decide는 화이트리스트+pending row만). `db.list_team_applications`/`decide_team_application`/`get_team_active` 신규. 프론트: register.html(memo 제거·`/` 리다이렉트), base.html 모달 문구. 마이그레이션 phase 변경 없음 → 서버 재시작 불필요. `check_register_duplicate`/`create_pending_user` 데드코드 보존(Phase 5 drop 시 정리). 리뷰 차단 0(경고 2). 합성 DB+TestClient 72 PASS. | `app.py`, `database.py`, `templates/register.html`, `templates/base.html`. workspace(다음 사이클 시작 시 archive로 이동): `00_input/feature_spec.md`, `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_team_a_008.py` |
 | 2026-05-11 | A보강 자동 dedup phase + 운영자 도구 | 회사 운영 DB 첫 실행 안전망. 신규 phase `team_phase_5a_projects_dedup_safe_v1` (#5 앞에 등록): `(team_id, name_norm)` 충돌 그룹 중 events/checklists.project_id, project_members, project_milestones, trash_project_id, 문자열 project 참조 모두 0건인 row만 안전 hard DELETE(모든 row 0 참조면 MIN(id) 1개 살림). unsafe 그룹은 보존 → 이후 #5 preflight 거부 흐름 유지. warning 카테고리 `dedup_projects_auto`. 신규 `tools/migration_doctor.py` + `main.py --doctor` sub-command(콘솔/sidecar/uvicorn 초기화 전 분기): `check`(read-only 진단, projects 안전/unsafe 분류, users/teams.name_norm 충돌+권장 SQL 템플릿), `fix-projects`(dry-run 기본) / `--apply`(자체 백업 후 정리). `WhatUdoin.spec`에 tools 폴더 + hiddenimports 추가. 리뷰 블로커 1건(BEGIN IMMEDIATE 트랜잭션 충돌) + 마이너 1건(GROUP_CONCAT split) 즉시 패치. dedup 7 시나리오 + doctor 5 시나리오 PASS. 운영 DB 사전 진단: 자동 정리 가능 1건만 검출(`team_id=17, name_norm='alpha', ids=[104,105]`), unsafe 0건 → 서버 재시작만으로 phase 5a 자동 흡수. | `database.py`, `tools/migration_doctor.py`(신규), `tools/__init__.py`(신규), `main.py`, `WhatUdoin.spec`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_dedup_phase.py`, `scripts/verify_migration_doctor.py` |

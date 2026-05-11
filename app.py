@@ -1443,20 +1443,40 @@ def logout(request: Request, response: Response):
     return {"ok": True}
 
 
+# 팀 기능 그룹 A #8: 예약 사용자명 (대소문자 무관) — 가입 차단.
+RESERVED_USERNAMES = {"admin", "system", "root", "guest", "anonymous"}
+
+
 @app.post("/api/register")
 @limiter.limit("5/minute")
-async def register(request: Request):
+async def register(request: Request, response: Response):
+    """계정 가입 (#8): 이름·비밀번호만으로 즉시 활성 사용자 생성 + 자동 로그인.
+
+    팀 신청은 별도(`POST /api/me/team-applications`). pending_users 는 더 이상 쓰지 않는다.
+    """
     data = await request.json()
     name = data.get("name", "").strip()
     password = data.get("password", "").strip()
-    memo = data.get("memo", "").strip()
     if not name or not password:
         raise HTTPException(status_code=400, detail="이름과 비밀번호를 입력하세요.")
-    err = db.check_register_duplicate(name, password)
-    if err:
-        raise HTTPException(status_code=409, detail=err)
-    db.create_pending_user(name, password, memo)
-    return {"ok": True}
+    if not passwords.is_valid_user_name(name):
+        raise HTTPException(status_code=400, detail="이름은 영문·숫자·한글만 사용할 수 있습니다.")
+    if name.casefold() in RESERVED_USERNAMES:
+        raise HTTPException(status_code=400, detail="사용할 수 없는 이름입니다.")
+    if not passwords.is_valid_password_policy(password):
+        raise HTTPException(status_code=400, detail="비밀번호는 영문과 숫자를 모두 포함해야 합니다.")
+    user = db.create_user_account(name, password)
+    if not user:
+        raise HTTPException(status_code=409, detail="이미 사용 중인 이름입니다.")
+    session_id = db.create_session(user["id"], role=user["role"])
+    db.record_ip(user["id"], auth.get_client_ip(request))
+    response.set_cookie(
+        auth.SESSION_COOKIE, session_id,
+        httponly=True, samesite="lax",
+        secure=(request.url.scheme == "https"),
+        max_age=86400 * 30,
+    )
+    return {"ok": True, "name": user["name"], "role": user["role"], "team_id": user["team_id"]}
 
 
 # ── 관리자 인증 API ──────────────────────────────────────
@@ -1506,6 +1526,73 @@ async def admin_approve(pending_id: int, request: Request):
 def admin_reject(pending_id: int, request: Request):
     _require_admin(request)
     db.reject_pending_user(pending_id)
+    return {"ok": True}
+
+
+# ── 팀 신청 API (팀 기능 그룹 A #8) ──────────────────────
+
+@app.post("/api/me/team-applications")
+@limiter.limit("10/minute")
+async def apply_team(request: Request):
+    """본인이 특정 팀에 가입 신청. user_teams 에 pending row 생성/갱신."""
+    _check_csrf(request)
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    if auth.is_admin(user):
+        raise HTTPException(status_code=400, detail="관리자는 팀 신청 대상이 아닙니다.")
+    data = await request.json()
+    team_id = data.get("team_id")
+    if team_id is None:
+        raise HTTPException(status_code=400, detail="팀을 선택하세요.")
+    try:
+        team_id = int(team_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="팀을 선택하세요.")
+    if not db.get_team_active(team_id):
+        raise HTTPException(status_code=404, detail="존재하지 않는 팀입니다.")
+    result, detail = db.apply_to_team(user["id"], team_id)
+    if result == "blocked":
+        msg = {
+            "pending_here": "이미 가입 신청 중입니다.",
+            "pending_other": "다른 팀 신청이 처리 대기 중입니다.",
+            "already_member": "이미 해당 팀의 멤버입니다.",
+        }.get(detail, "신청할 수 없습니다.")
+        raise HTTPException(status_code=409, detail=msg)
+    return {"ok": True, "status": "pending"}
+
+
+def _require_team_admin(request: Request, team_id: int):
+    """admin 또는 해당 팀 관리자만 통과. 실패 시 HTTPException."""
+    _check_csrf(request)
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    if not auth.is_team_admin(user, team_id):
+        raise HTTPException(status_code=403, detail="해당 팀에 대한 관리 권한이 없습니다.")
+    return user
+
+
+@app.get("/api/teams/{team_id}/applications")
+def list_team_apps(team_id: int, request: Request):
+    """해당 팀의 pending 신청 목록 (admin·팀 관리자)."""
+    _require_team_admin(request, team_id)
+    return db.list_team_applications(team_id)
+
+
+@app.post("/api/teams/{team_id}/applications/{user_id}/decide")
+async def decide_team_app(team_id: int, user_id: int, request: Request):
+    """팀 신청 수락/거절 (admin·팀 관리자). body: {decision: 'approve'|'reject'}."""
+    _require_team_admin(request, team_id)
+    data = await request.json()
+    raw = str(data.get("decision") or "").strip().lower()
+    decision = {"approve": "approved", "approved": "approved",
+                "reject": "rejected", "rejected": "rejected"}.get(raw)
+    if not decision:
+        raise HTTPException(status_code=400, detail="decision 은 approve 또는 reject 여야 합니다.")
+    ok = db.decide_team_application(user_id, team_id, decision)
+    if not ok:
+        raise HTTPException(status_code=404, detail="처리할 신청이 없습니다.")
     return {"ok": True}
 
 

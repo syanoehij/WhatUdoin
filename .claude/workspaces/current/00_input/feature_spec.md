@@ -1,145 +1,97 @@
-# 팀 기능 그룹 A — 보강 사이클: 자동 dedup phase + 운영자 도구
+# 요청
+'팀 기능 구현 todo.md' 그룹 A의 #8 (계정 가입과 팀 신청 분리) 구현.
 
-## 요청
+# 분류
+백엔드 수정 (라우트/DB 함수 변경 중심) + 소량 프론트 (register.html 안내 문구·자동 로그인). 실행 모드: 팀 모드(backend → frontend → reviewer → qa). 프론트는 최소(register.html의 success 동작·문구만, 팀 신청 UI는 #12·#14·#18 책임).
 
-회사 운영 DB 첫 실행에서 #5 preflight(`_check_projects_team_name_unique`)가 충돌을 막을 가능성이 있다. 본 사이클은 두 가지를 함께 추가한다(옵션 C):
+# 컨텍스트 (탐색 결과)
+- `passwords.py`: `hash_password`, `verify_password`, `is_valid_user_name`(`^[A-Za-z0-9가-힣]+$`), `is_valid_password_policy`(영문+숫자 동시), `DUMMY_HASH`.
+- `database.py`:
+  - `normalize_name(s)` — NFC+casefold 정규화 (line 771).
+  - `user_teams` 컬럼: `id, user_id, team_id, role, status, joined_at` (created_at 없음). `idx_user_teams_user_team` UNIQUE on `(user_id, team_id)` (phase 4).
+  - `users` 컬럼: name, name_norm, password, password_hash, role, team_id, is_active, ... — password NOT NULL DEFAULT ''.
+  - `check_register_duplicate`(line 4539), `create_pending_user`(4557), `get_pending_users`(4566), `approve_pending_user`(4574), `reject_pending_user`(4591) — pending_users 테이블 기반. **이 사이클은 register 경로에서 pending 쓰기만 제거**, admin 승인 UI/라우트는 그대로 둠 (Phase 5/후속에서 정리).
+  - `create_session(user_id, role="editor")`, `record_ip(user_id, ip)`.
+- `app.py`:
+  - `/api/register` (line 1446): 현재 `check_register_duplicate` → `create_pending_user`. 교체 대상.
+  - `/api/login` (1399 근처): 이미 이름+비밀번호+정규식+name_norm 매칭 (#7).
+  - `/api/me/change-password` (1415).
+  - admin pending 라우트 (1486~1509): `/api/admin/pending`, `.../approve`, `.../reject` — 그대로 둠.
+  - `auth.SESSION_COOKIE`, `auth.get_client_ip`, `auth.get_current_user`, `auth.is_admin`, `auth.is_team_admin`.
+- `templates/register.html`: 가입 폼(이름·비밀번호·메모) + success-box("관리자 승인 후 사용 가능"). #8 후엔 즉시 가입 완료 + 자동 로그인 + `/` 이동으로 바꿔야 함.
+- `templates/base.html`: line 521 `<a href="/register" class="login-link">가입 신청</a>` — 문구 "계정 가입"으로 변경 검토(선택).
 
-1. **자동 dedup phase**: 안전 조건을 만족하는 충돌 그룹은 phase 본문이 자동 흡수 → preflight까지 가지 않게 한다.
-2. **운영자 도구 (`migration_doctor`)**: WhatUdoin.exe에 sub-command(`--doctor`)로 추가. 회사 운영자가 사전 점검·사후 진단·SQL 안내를 받을 수 있게.
+# 에이전트별 작업
 
-이 사이클이 끝나면 회사 첫 실행 위험이 크게 줄고, 만약 unsafe 충돌이 남아 있더라도 운영자가 도구로 진단하고 정리한 뒤 재시작 가능.
+## backend-dev
+### A. /api/register 신규 흐름 (app.py + database.py)
+1. `database.py`에 신규 함수 `create_user_account(name, password) -> dict | None`:
+   - `name_norm = normalize_name(name)`.
+   - 트랜잭션 안에서 `users(name, name_norm, password, password_hash, role, team_id, is_active)` INSERT. `password=''`(NOT NULL deviation, #7과 동일), `password_hash=passwords.hash_password(password)`, `role='member'`, `team_id=NULL`, `is_active=1`.
+   - `users.name_norm` 전역 UNIQUE 인덱스(#7)와 충돌 시 `sqlite3.IntegrityError` → None 반환 (라우트가 409 매핑) 또는 사전 SELECT로 중복 검사 후 메시지 반환. **권장: 사전 SELECT + IntegrityError 둘 다 가드** (race 안전).
+   - 반환: `{"id": ..., "name": ..., "role": "member", "team_id": None}`.
+2. `app.py` `/api/register` 교체:
+   - body: `{name, password}` (memo는 더 이상 받지 않거나 무시).
+   - `name`/`password` 빈 값 → 400.
+   - `passwords.is_valid_user_name(name)` 위반 → 400 "이름은 영문·숫자·한글만 사용할 수 있습니다."
+   - **예약 사용자명 차단**: `name.casefold()` 또는 `name.lower()` ∈ {`admin`, `system`, `root`, `guest`, `anonymous`} → 400 "사용할 수 없는 이름입니다." (모듈 상수 `RESERVED_USERNAMES` 정의).
+   - `passwords.is_valid_password_policy(password)` 위반 → 400 "비밀번호는 영문과 숫자를 모두 포함해야 합니다."
+   - `db.create_user_account(name, password)` → None이면 409 "이미 사용 중인 이름입니다."
+   - 성공 시 `session_id = db.create_session(user["id"], role="member")` (또는 role 인자 — `create_session`의 admin 분기만 5분, 그 외 30일이므로 "member" 무방), `db.record_ip(user["id"], auth.get_client_ip(request))`, `response.set_cookie(auth.SESSION_COOKIE, session_id, httponly, samesite="lax", secure=(scheme=="https"), max_age=86400*30)`.
+   - 응답: `{"ok": True, "name": user["name"], "role": user["role"], "team_id": user["team_id"]}` (프론트가 `/`로 리다이렉트).
+   - `@limiter.limit("5/minute")` 유지.
+   - **주의**: `register`는 `response: Response` 파라미터가 필요 (현재 시그니처에 없음 — `/api/login`·`/api/admin/login` 패턴 참고하여 추가).
+3. `db.check_register_duplicate` / `db.create_pending_user` 호출부는 `/api/register`에서만 사용 → 호출 제거. **함수 자체는 삭제하지 않음**(다른 곳에서 안 쓰이면 데드코드로 남겨두되 mention만). grep으로 다른 참조 없는지 확인.
 
-## 분류
+### B. 팀 신청 라우트 (app.py + database.py)
+1. `database.py` 신규 함수:
+   - `apply_to_team(user_id, team_id) -> str`: 반환값 `"created"` | `"updated"` | `"blocked"`.
+     - 트랜잭션 안에서: `SELECT id, status FROM user_teams WHERE user_id=? AND team_id=?`.
+       - 없으면 `INSERT INTO user_teams(user_id, team_id, role, status) VALUES(?,?,'member','pending')` → "created".
+       - 있고 `status='pending'` → "blocked" (이미 신청 중).
+       - 있고 `status='approved'` → "blocked" (이미 멤버) — 라우트가 다른 메시지로 분기 가능하게 status도 반환 고려. 단순화 위해 `apply_to_team`이 `(result, current_status)` 튜플 반환해도 됨.
+       - 있고 `status='rejected'` → `UPDATE user_teams SET status='pending', role='member' WHERE id=?` (joined_at은 건드리지 않음) → "updated".
+     - **추가 가드**: `SELECT 1 FROM user_teams WHERE user_id=? AND status='pending'` (다른 팀에도 pending이 있으면 차단? — 명세는 "pending row가 1개라도 있으면 추가 신청 차단" → **임의 팀에 대한 pending이 있으면 신규 신청 자체 차단**. rejected→pending 갱신은 같은 팀에 한해 허용). 구현: 신규 INSERT 직전에 user의 다른 pending 존재 여부 확인 → 있으면 "blocked".
+     - team_id가 존재하는 팀인지(`teams` 에 있고 `deleted_at IS NULL`) 검증은 라우트에서. (`teams.deleted_at` 컬럼은 #2에서 추가됨.)
+   - `decide_team_application(user_id, team_id, decision: 'approved'|'rejected') -> bool`: 대상 row가 `status='pending'`일 때만 처리. `approved` → `UPDATE ... SET status='approved', joined_at=CURRENT_TIMESTAMP`. `rejected` → `UPDATE ... SET status='rejected'`. 대상 없거나 pending 아니면 False.
+   - (선택) `list_team_applications(team_id) -> list[dict]`: `status='pending'` row + user name join — admin/팀관리자 조회용. 본 사이클 최소 UI 안 만들면 라우트만 노출하고 UI는 #18.
+2. `app.py` 신규 라우트:
+   - `POST /api/me/team-applications`: body `{team_id}`. `user = auth.get_current_user(request)`; 없으면 401. `auth.is_admin(user)`면 400 "관리자는 팀 신청 대상이 아닙니다." team_id 유효성(존재 + deleted_at IS NULL) 검사 → 없으면 404. `db.apply_to_team(...)` 결과: "created"/"updated" → 200 `{"ok": True, "status": "pending"}`; "blocked" → 409 (현재 상태에 따라 "이미 가입 신청 중입니다." / "이미 해당 팀 멤버입니다." / "다른 팀 신청이 처리 대기 중입니다." 중 하나 — `apply_to_team`이 이유를 반환하도록).
+   - `GET /api/admin/teams/{team_id}/applications` (또는 `/api/teams/{team_id}/applications`): `user`가 `auth.is_admin(user)` 또는 `auth.is_team_admin(user, team_id)`여야 함 → 아니면 403. `db.list_team_applications(team_id)` 반환.
+   - `POST /api/admin/teams/{team_id}/applications/{user_id}/decide`: body `{decision}` ∈ {"approve"/"approved", "reject"/"rejected"}. 권한: admin 또는 해당 팀 관리자. `db.decide_team_application(...)` → False면 404/409. 200 `{"ok": True}`.
+   - (라우트 경로명은 기존 컨벤션 보고 결정. `/api/admin/...`은 admin 전용 느낌이라 팀관리자도 쓰는 라우트는 `/api/teams/{team_id}/applications` 류가 더 적절할 수 있음 — backend-dev가 기존 라우트 네이밍 보고 판단.)
+3. `backend_changes.md`에 변경 내용·신규 함수 시그니처·라우트 목록 기록.
 
-백엔드: 새 phase 본문 1건(`team_phase_5a_projects_dedup_safe_v1`) + 운영자 도구 1건 + main.py sub-command + (필요 시) PyInstaller spec 업데이트.
-프론트 변경 없음. **팀 모드: backend → reviewer → qa.**
+### 주의
+- `users` INSERT 시 다른 NOT NULL/DEFAULT 컬럼 확인 (현 `approve_pending_user`는 `name, password, role, team_id, is_active`만 지정 → 나머지 DEFAULT로 충분). `name_norm`, `password_hash`만 추가하면 됨.
+- `create_session` role 인자: admin이 아닌 한 만료 30일. 'member' 넘기면 OK.
+- 마이그레이션 phase 본문 추가 불필요 (#8은 런타임 라우트만).
 
-## 전제 (#1~#7 완료)
+## frontend-dev (backend 완료 후)
+- `templates/register.html`:
+  - 폼에서 memo textarea 제거(또는 placeholder만 유지 — backend가 memo를 무시하므로 제거 권장). h2/desc 문구를 "계정 가입" / "이름과 비밀번호로 가입하면 바로 시작할 수 있습니다."로 변경.
+  - submit JS: `/api/register` 응답 `res.ok` 시 → `window.location.href = '/'` (현재의 success-box 표시 대신). 에러 시 기존처럼 `err.detail` 표시.
+  - success-box 블록은 제거하거나 안 쓰이게 처리.
+- `templates/base.html` line 521: `가입 신청` → `계정 가입` (선택, 문구 일관성).
+- 팀 신청 버튼/모달은 만들지 않음 (#12·#14·#18 책임).
+- `frontend_changes.md` 기록.
 
-- PHASES 인프라 + Phase 1·2·3·4·5·6·7 본문 등록됨.
-- 회사 운영 DB에 `(team_id, name_norm)` 충돌 가능성 확인됨(개발 DB에서 1건 발견 — `team_id=17`, `name_norm='alpha'`, ids=[104,105], 둘 다 빈 + 참조 0건).
-- `users.name_norm`/`teams.name_norm` 충돌 가능성도 잠재적으로 존재(현재 미확인).
-- 자동 dedup은 **projects만** 다룬다. users/teams는 운영 결정 영역 → 도구 진단까지만, 자동 정리 X.
+## code-reviewer
+- backend_changes.md + frontend_changes.md 읽고 변경 파일 정적 리뷰.
+- 중점: (1) `/api/register`에 `response: Response` 누락 여부, set_cookie 옵션 일관성, (2) 예약어 비교 시 casefold 처리(`Admin`, `ADMIN`), (3) `create_user_account`의 race-safe 처리(IntegrityError 가드), (4) `apply_to_team`의 pending 차단 로직 정확성(다른 팀 pending 존재 시 차단 / 같은 팀 rejected→pending 갱신 / approved 중복 방지), (5) 권한 체크 — team-applications decide 라우트가 admin OR team_admin 둘 다 허용하는지, 외부인 차단, (6) pending_users 쓰기 경로가 register에서 완전히 빠졌는지, (7) rate limit 유지, (8) UNIQUE 인덱스(`idx_user_teams_user_team`)와 INSERT 충돌 가능성.
 
-## 핵심 설계
+## qa
+- import-time + 합성 DB 검증 (서버 재시작 불가).
+- 시나리오:
+  1. 예약 사용자명 차단: `admin`, `Admin`, `ADMIN`, `system`, `ROOT` 등 → 400.
+  2. 정규식 위반(`hong gildong` 공백, `a_b` 밑줄, `유저@1`) → 400. 정책 위반(`abcdef` 숫자없음, `123456` 영문없음) → 400.
+  3. 정상 가입 → `users` row 생성(role='member', team_id NULL, name_norm 정규화됨, password_hash 채워짐, password=''), 세션 생성됨, 응답에 ok/name/role/team_id, Set-Cookie 헤더 존재.
+  4. 같은 이름 재가입(대소문자 변형 포함, name_norm 충돌) → 409.
+  5. 가입한 사용자가 `/api/me/team-applications`로 팀 신청 → user_teams pending row 1건. 같은 사용자가 다른 팀에 또 신청 → 409 (pending 차단). 같은 팀에 또 신청 → 409.
+  6. admin이 `decide`로 approve → status='approved', joined_at 채워짐. reject 시나리오: 새 신청 → reject → status='rejected'. 같은 팀 재신청 → row 갱신되어 pending(row 추가 X — count 동일).
+  7. 권한: 외부 사용자가 decide 라우트 호출 → 403. 팀 관리자(`user_teams` role='admin' or is_team_admin 헬퍼 충족)가 자기 팀 decide → 200.
+  8. pending_users 테이블에 register로 인한 신규 row가 생기지 않음을 확인.
+- 서버 재시작 필요 없음(런타임 라우트, 마이그레이션 변경 없음). 실서버 E2E는 사용자 재시작 후 후속 가능 — qa_report에 명시.
 
-### 1) 자동 dedup phase — 안전 조건
-
-phase 이름: `team_phase_5a_projects_dedup_safe_v1`. **#5(`team_phase_5_projects_unique_v1`) 앞**에 등록되어 같은 init_db() 호출에서 dedup → preflight → 인덱스 생성 순서가 되도록 PHASES 리스트 순서를 명시 관리.
-
-같은 `(team_id, name_norm)` 그룹의 모든 row가 다음 안전 조건을 모두 만족할 때만 자동 정리 대상:
-
-- `events.project_id` 참조 0건 (`deleted_at IS NULL`만 카운트 — 휴지통은 제외해도 안전)
-- `events.project = projects.name AND project_id IS NULL` 문자열 잔존 참조 0건
-- `checklists.project_id` 참조 0건 (deleted_at IS NULL)
-- `checklists.project = projects.name AND project_id IS NULL` 문자열 잔존 참조 0건
-- `meetings.trash_project_id` 참조 0건 (휴지통 메타이지만 보수적 접근)
-- `events.trash_project_id`, `checklists.trash_project_id` 참조 0건 (동일)
-- `project_members` 참조 0건
-- `project_milestones` 참조 0건
-- 메타데이터 동일 또는 모두 NULL: `memo`, `color`, `owner_id`, `is_hidden`, `is_private`, `start_date`, `end_date`, `is_active` 모든 컬럼이 그룹 내 일치(또는 모두 NULL)
-- 그룹 내 `deleted_at IS NULL` row가 적어도 1개(살릴 row 후보 존재)
-
-### 정리 동작 (만족 그룹)
-- `MIN(id) WHERE deleted_at IS NULL` row 1개를 유지(없으면 그룹 자체 skip).
-- 나머지 row는 **hard DELETE** (참조 0건이므로 cascade 사고 없음, phase 시작 전 자동 백업이 떠 있어 복구 가능).
-- warning 누적: 카테고리 `dedup_projects_auto`, 메시지에 그룹 키와 정리된 id 목록 포함. dedup 가드는 `_append_team_migration_warning` 내장(중복 누적 방지).
-
-### unsafe 그룹
-- 안전 조건 미충족 그룹은 그대로 둔다.
-- 이후 `team_phase_5_projects_unique_v1`의 preflight이 거부 → 운영자가 도구로 진단·정리 → 재시작.
-
-### Idempotency
-- 두 번째 init_db() → 마커로 phase 미실행.
-- 마커 강제 삭제 후 재실행 → 같은 그룹이 이미 정리되어 row 수 1이라 `GROUP BY HAVING COUNT(*) > 1` 자체가 0건 매칭. 노옵.
-
-### 2) 운영자 도구 `tools/migration_doctor.py`
-
-WhatUdoin.exe에 sub-command 형태로 노출. 회사 운영자가 별도 exe 설치/Python 설치 없이 진단 가능.
-
-**진입점 변경 (main.py)**:
-- `if __name__ == "__main__"` 블록 가장 처음에 `sys.argv` 검사. `--doctor` 또는 `doctor` 첫 인자면 도구 모드로 진입(uvicorn·tray 안 뜸).
-
-**도구 명령어**:
-- `WhatUdoin.exe --doctor check` (기본): 등록된 모든 `_PREFLIGHT_CHECKS` 순회 + dedup 그룹 진단(자동 처리 가능 vs 운영자 결정 필요 분류). 운영 DB(`whatudoin.db`)는 read-only로 열어 검사. 출력은 사람이 읽기 좋은 한국어 + ASCII 표.
-- `WhatUdoin.exe --doctor fix-projects --apply`: dedup 안전 조건 충족 그룹만 자동 정리. `--apply` 없으면 dry-run으로 어떤 row가 지워질지 미리보기. 자체 백업 호출 후 정리.
-- `WhatUdoin.exe --doctor --help`: 사용법 출력.
-
-**unsafe 충돌 (users/teams.name_norm)**:
-- 진단만 출력. 자동 정리 안 함. 운영자가 직접 처리하도록 **권장 SQL 템플릿**을 출력(예: `UPDATE users SET name='...' WHERE id=?`). 운영자가 의도 결정.
-
-### 3) PyInstaller spec 업데이트
-
-- `migration_doctor.py`를 `tools/migration_doctor.py`로 두고 `datas` 또는 `pathex`에 추가 — 단일 파일 sub-command 방식이라 별도 entry point는 불필요(main.py가 dispatch).
-- 필요 시 hiddenimports에 추가될 모듈 없음(이미 sqlite3, json만 사용).
-
-## step 분해 (플래너 참고)
-
-| step | 제목 | exit criteria |
-|------|------|---------------|
-| S1 | 자동 dedup phase 본문 등록 + PHASES 순서 정렬 | `team_phase_5a_projects_dedup_safe_v1`이 `team_phase_5_projects_unique_v1` 앞에 위치. 안전 조건 헬퍼 정확. unsafe 그룹은 변경 X. 합성 DB 7 시나리오 PASS. |
-| S2 | `tools/migration_doctor.py` + main.py sub-command | check/fix-projects 두 명령어 동작. read-only 진단 + dry-run 보호. 자체 백업 후 정리. |
-| S3 | PyInstaller spec 업데이트 + 빌드 사전 검증 | spec 변경 후 `pyinstaller --noconfirm WhatUdoin.spec` 시도(qa는 spec 파일 점검만, 실제 빌드는 사용자가 실행 — 시간 큼). 빌드 시도 실패 시 spec 패치. |
-
-## exit criteria (사이클 전체)
-
-### 자동 dedup phase
-- [ ] 빈 DB → phase 본문 노옵.
-- [ ] 합성 DB 시나리오:
-  - (a) 안전 그룹(빈 + 참조 0 + 메타 일치) → MIN id 유지, 나머지 DELETE, dedup_projects_auto warning 누적.
-  - (b) 한 row만 참조 있음 + 다른 row 빈 + 메타 일치 → 정리 대상 (참조 있는 쪽이 살아남도록 — `MIN(id WHERE 참조有)` 또는 단순 MIN id가 다를 수 있음. **사양 결정**: 단순 MIN(id)를 유지 후, 그것이 우연히 참조 없는 row면 자동 dedup이 위험 — 따라서 **"그룹 내 참조 없는 row만 DELETE"** 정책으로 변경. 사양 명세 끝.)
-  - (c) 메타 다름 → 그대로 둠 → 이후 #5 preflight 거부.
-  - (d) 양쪽 모두 참조 있음 → 그대로 둠 → preflight 거부.
-- [ ] 두 번째 init_db() → 노옵.
-- [ ] 마커 강제 삭제 후 재실행 → row 수 1이라 노옵.
-
-### 운영자 도구
-- [ ] `WhatUdoin.exe --doctor check` (또는 dev: `python main.py --doctor check`):
-  - projects (team_id, name_norm) 충돌 그룹 + 안전 분류 출력.
-  - users/teams.name_norm 충돌 출력 + 권장 SQL 템플릿.
-  - 충돌 0건이면 "이상 없음".
-- [ ] `--doctor fix-projects` dry-run: 어떤 row 지워질지만 출력, 변경 X.
-- [ ] `--doctor fix-projects --apply`: 백업 후 안전 그룹 정리. dry-run 결과와 동일 동작.
-
-### main.py 변경
-- [ ] `--doctor` 인자 없이 실행 → 기존 동작 100% 유지(uvicorn + tray).
-- [ ] `--doctor` 인자 있으면 도구 모드 진입, 정리 후 종료. tray 안 뜸.
-
-### PyInstaller
-- [ ] spec에 `tools/migration_doctor.py` 포함.
-- [ ] 사용자 직접 빌드 시 정상 패키징.
-
-## 정리된 자동 dedup 정책 (사양 확정)
-
-**룰**: 같은 `(team_id, name_norm)` 그룹에서 다음을 만족하는 row만 자동 DELETE:
-- 그 row의 events/checklists.project_id 참조 0건
-- 그 row의 events/checklists/meetings.trash_project_id 참조 0건
-- 그 row의 project_members 참조 0건
-- 그 row의 project_milestones 참조 0건
-- `events.project = projects.name AND project_id IS NULL` 문자열 참조 0건
-- `checklists.project = projects.name AND project_id IS NULL` 문자열 참조 0건
-- 그룹 내에 살아남을 row(참조 ≥ 1건 또는 메타데이터 보존이 필요한 row)가 존재
-
-→ 즉 그룹의 "빈 + 참조 0건" row만 DELETE. 모든 row가 참조 0건이면 `MIN(id)` 1개를 살리고 나머지 DELETE. 메타데이터 동일성 검사는 살아남는 row의 메타가 그룹 대표가 되도록 설계가 단순해짐. 메타가 서로 달라도 빈 row는 안전 정리, 메타 보존은 살아남는 row가 자기 메타 그대로.
-
-이 룰의 장점: 메타 동일성 검사를 안 해도 안전(참조 없는 row는 메타가 무엇이든 운영 영향 0).
-
-## 진행 방식
-
-- backend가 S1+S2+S3을 한 흐름으로 처리. step별 섹션으로 분리.
-- reviewer는 (a) phase 순서 (b) 안전 조건 정밀도(거짓 양성/음성) (c) 도구 dry-run 보호 (d) main.py sub-command 분기.
-- qa는 시나리오 (1) 안전 그룹 자동 정리, (2) unsafe 그룹 보존, (3) 도구 check, (4) 도구 fix-projects dry-run, (5) 도구 fix-projects --apply, (6) main.py 일반 모드 영향 0.
-- 메인에는 한 줄 요약만 반환.
-
-## 주의사항
-
-- **정리는 hard DELETE**. phase 시작 시 `run_migration_backup()`이 자동으로 떠 있고, 도구의 `--apply`도 자체 백업 호출 후 진행. 백업 위치는 `backupDB/whatudoin-migrate-*.db`.
-- 도구는 `whatudoin.db`를 default로 사용하지만 `--db-path` 옵션으로 다른 경로 지정 가능(QA 시 합성 DB 사용).
-- **users.name_norm / teams.name_norm 자동 정리는 본 사이클 X.** 도구가 진단·SQL 템플릿만 출력. 자동 정리는 운영 합병 의사결정이 필요해 별도 사이클 검토.
-- `--doctor` sub-command는 sys.argv를 일찍(콘솔 초기화 전·트레이 전·sidecar 전) 검사. 도구 모드에서는 colon stdout/stderr 인코딩만 하고 나머지 초기화 skip.
-- VSCode 디버깅 모드 — 서버 자동 재시작 불가. qa는 import-time + 합성 DB.
-
-## 산출물 위치
-
-- `backend_changes.md`, `code_review_report.md`, `qa_report.md`: `.claude/workspaces/current/` 직속
-- 검증 스크립트: `.claude/workspaces/current/scripts/verify_dedup_phase.py`, `verify_migration_doctor.py`
+# 산출물
+`.claude/workspaces/current/{backend_changes.md, code_review_report.md, qa_report.md}` + `scripts/`(qa 검증 스크립트).
