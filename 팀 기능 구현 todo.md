@@ -28,33 +28,33 @@
   - [x] Phase 단위 트랜잭션 래퍼 (실패 시 롤백 + 서버 시작 거부 + stdout 로그) — `isolation_level=None` + `BEGIN IMMEDIATE` 수동 발행으로 DDL implicit COMMIT 우회
   - [x] 마이그레이션 경고 누적 로그: `settings.team_migration_warnings` JSON 누적 (race-safe + 같은 (category, message) 쌍 중복 방지)
   - [x] `normalize_name(s: str) -> str` 헬퍼 (NFC + lower) — `unicodedata.NFC + casefold`
-- [ ] **구현 (단계 내부 idempotency 가드 — destructive 작업 보호)**
+- [x] **구현 (단계 내부 idempotency 가드 — destructive 작업 보호)** — #2~#10 phase 본문에 이미 모두 들어가 있음 (감사 확인, `archive/.../backend_changes.md` 표 참고)
   - Phase 마커는 큰 틀의 idempotency만 보장한다. 단계 내부 SQL은 추가로 WHERE 가드를 둬 재실행/부분 실패 후 재진입에도 데이터를 망가뜨리지 않도록 한다.
-  - [ ] `users.name_norm` 백필: `WHERE name_norm IS NULL` (이미 채운 row 보호)
-  - [ ] `users.password_hash` 변환 + `users.password` NULL 처리: `WHERE password IS NOT NULL AND password != ''` (이미 hash 변환 후 NULL인 row를 다시 hash()에 넘기지 않음)
-  - [ ] admin `users.team_id`/`mcp_token_hash`/`mcp_token_created_at` NULL 처리: 이미 NULL이면 노옵 (NULL → NULL은 안전하지만 명시적으로 `WHERE ... IS NOT NULL`로 갱신 카운트 0인 경우와 구분)
-  - [ ] admin `user_ips` whitelist → history 강등: `WHERE type='whitelist' AND user_id IN (admin)` (이미 history인 row는 건드리지 않음)
-  - [ ] `users.role` editor → member 일괄 갱신: `WHERE role='editor'`
-  - [ ] `events/checklists/projects.team_id` NULL 보강: 모두 `WHERE team_id IS NULL` (이미 채운 row 보호)
-  - [ ] `events.project_id` / `checklists.project_id` 백필: `WHERE project_id IS NULL`
-  - [ ] `notifications.team_id`, `links.team_id`, `team_notices.team_id` 백필: 모두 `WHERE team_id IS NULL` (재실행 시 기존 값 덮어쓰지 않음)
-  - [ ] `pending_users` 자동 삭제: 한 번 후 빈 테이블이라 무해하지만 Phase 마커로 단계 자체를 건너뜀
-  - [ ] "관리팀" rename: `WHERE name='관리팀'` (재실행 시 이미 AdminTeam이면 노옵)
-- [ ] **구현 (Phase 4 UNIQUE preflight 검사)**
-  - [ ] Phase 4 인덱스 생성 **직전**에 데이터 충돌 사전 점검 — 충돌 시 **서버 시작 거부 + `team_migration_warnings`에 충돌 row 정보 기록**:
-    - `users.name_norm` 충돌 (전역, `is_active` 무관)
-    - `teams.name_norm` 충돌
-    - `(team_id, projects.name_norm)` 충돌 (팀 안에서만)
-    - `user_ips`의 `type='whitelist'` `ip_address` 전역 충돌
-    - `user_teams(user_id, team_id)` 중복 row
-    - `team_menu_settings(team_id, menu_key)` 중복 row
-  - [ ] 충돌 감지 시 운영자가 자동 백업으로 복구 + 충돌 데이터 정리 후 재시작 (Phase 4는 Phase 2 백필 직후이므로 사전 정리 후 재시작 가능)
-- [ ] **검증**
-  - [ ] 빈 DB에서 첫 시작 → Phase 1~4 마커 모두 기록 확인
-  - [ ] 재시작 시 모든 Phase 건너뛰기 확인
+  - [x] `users.name_norm` 백필: `WHERE name_norm IS NULL` — `_phase_2_team_backfill` (이미 채운 row 보호)
+  - [x] `users.password_hash` 변환 + `users.password` NULL 처리: `WHERE password_hash IS NULL AND password IS NOT NULL AND password != ''` — `_phase_7_password_hash` (1회 후 hash 비NULL+password='' 이라 재실행 시 0건, hash() 재호출 없음)
+  - [x] admin `users.team_id`/`mcp_token_hash`/`mcp_token_created_at` NULL 처리: `WHERE role='admin' AND ... IS NOT NULL` — `_phase_3_admin_separation` (이미 NULL이면 0건)
+  - [x] admin `user_ips` whitelist → history 강등: `WHERE type='whitelist' AND user_id IN (admin)` — `_phase_3_admin_separation` (이미 history인 row는 건드리지 않음)
+  - [x] `users.role` editor → member 일괄 갱신: `WHERE role='editor'` — `_phase_2_team_backfill`
+  - [x] `events/checklists/projects.team_id` NULL 보강: 모두 `WHERE team_id IS NULL` (SELECT + 각 UPDATE) — `_phase_4_data_backfill`
+  - [x] `events.project_id` / `checklists.project_id` 백필: `WHERE project_id IS NULL` (SELECT + UPDATE) — `_phase_6_backfill_table_project_id` (재실행 시 0건 → 자동 프로젝트 중복 생성 불가)
+  - [x] `notifications.team_id`, `links.team_id`, `team_notices.team_id` 백필: 모두 `WHERE team_id IS NULL` — `_phase_4_data_backfill` (재실행 시 기존 값 덮어쓰지 않음)
+  - [x] `pending_users` 자동 삭제: Phase 마커로 단계 자체를 건너뜀. 마커 강제 삭제 후 재실행 시엔 빈 테이블이라 `DELETE` 0건 (무해)
+  - [x] "관리팀" rename: `SELECT id FROM teams WHERE name='관리팀'` → 없으면 즉시 return, rename 후엔 이름이 AdminTeam/관리팀_legacy_* 이라 재실행 시 lookup 0건 (노옵) — `_phase_3_admin_separation`
+- [x] **구현 (Phase 4 UNIQUE preflight 검사)** — 4개 preflight 등록 완료, 나머지 2개는 구조적으로 불필요
+  - [x] Phase 4 인덱스 생성 **직전**에 데이터 충돌 사전 점검 — 충돌 시 **서버 시작 거부 + `team_migration_warnings`에 충돌 row 정보 기록** (`_run_phase_migrations` → `_run_preflight_checks` → 충돌 시 `_append_team_migration_warning` + `RuntimeError`):
+    - [x] `users.name_norm` 충돌 (전역, `is_active` 무관) — `_check_users_name_norm_unique` (#7)
+    - [x] `teams.name_norm` 충돌 — `_check_teams_name_norm_unique` (#7)
+    - [x] `(team_id, projects.name_norm)` 충돌 (팀 안에서만) — `_check_projects_team_name_unique` (#5)
+    - [x] `user_ips`의 `type='whitelist'` `ip_address` 전역 충돌 — `_check_user_ips_whitelist_unique` (#9)
+    - [x] `user_teams(user_id, team_id)` 중복 row — **preflight 불필요(의도적)**: `user_teams`는 Phase 1에서 빈 테이블로 생성 + Phase 2 백필이 `WHERE NOT EXISTS` 가드 → 구조적으로 중복 불가. 만일 존재하면 `CREATE UNIQUE INDEX IF NOT EXISTS idx_user_teams_user_team` IntegrityError → phase 러너 ROLLBACK + RuntimeError로 서버 시작 거부
+    - [x] `team_menu_settings(team_id, menu_key)` 중복 row — **preflight 불필요(의도적)**: Phase 1에서 빈 테이블로 생성, 시드는 #19에서. #19 전까지 빈 상태이므로 중복 발생 불가, 인덱스(`idx_team_menu_settings`)도 같은 Phase 4에서 생성. #19가 시드를 채울 때 중복 가능성이 생기면 그 사이클(#19)에서 preflight 추가 책임
+  - [x] 충돌 감지 시 운영자가 자동 백업으로 복구 + 충돌 데이터 정리 후 재시작 가능 (Phase 4는 Phase 2 백필 직후 + 백업은 미적용 phase 1건이라도 있으면 `_run_phase_migrations` 진입 시 1회 생성됨). 운영자 진단 도구: `tools/migration_doctor.py` (`main.py --doctor`)
+- [x] **검증** — 합성 임시 DB 기반 (실서버 X), `verify_team_a_001_close.py` 15/15 PASS
+  - [x] 빈 DB에서 첫 시작 → 등록된 phase 10개 마커 모두 기록 확인 (case 1) + preflight 통과
+  - [x] 재시작 시 모든 Phase 건너뛰기 확인 (case 2: `is_phase_done` 전부 True, row 수 불변, `_pending_phases()==[]`)
   - [x] 인위적 실패 주입 시 서버 시작 거부 + 백업 파일로 복구 가능 확인 — `verify_phase_infra.py` case 3 PASS
   - [x] preflight 충돌 주입 시 (예: `name_norm` 중복 강제) 서버 시작 거부 + 경고 로그에 충돌 row 명시 — case 7 PASS
-  - [ ] **Phase 마커 강제 삭제 후 재실행 시뮬레이션** — 마커가 없어 단계가 다시 돌아도 단계 내부 WHERE 가드 덕에 비밀번호 hash 재변환·team_id 덮어쓰기·관리팀 rename 중복 등 데이터 망가짐 없음 확인
+  - [x] **Phase 마커 강제 삭제 후 재실행 시뮬레이션** — 마커 삭제 + 위험 합성 데이터(평문 password 잔존+hash 보유 user, team_id/project_id 채운 event, AdminTeam 이름 팀) 심은 뒤 재실행 → 단계 내부 WHERE 가드 덕에 비밀번호 hash 재변환 안 됨("converted 0 plaintext"), team_id/project_id 덮어쓰기 없음, 관리팀 rename 중복 없음 확인 (case 3)
 
 ### #2. user_teams 모델 + users.role 전환 + name_norm + notifications.team_id
 
@@ -680,7 +680,7 @@
 
 각 그룹 완료 시 여기에 한 줄로 기록하면 좋다.
 
-- [ ] 그룹 A 완료 (#1~#10) — DB·인증 기반 + 데이터 백필 끝
+- [x] 그룹 A 완료 (#1~#10) — DB·인증 기반 + 데이터 백필 끝
 - [ ] 그룹 B 완료 (#11~#15-3) — 화면 정비 + work_team_id 도입 + 히든 프로젝트/links/team_notices 다중 팀 전환 끝
 - [ ] 그룹 C 완료 (#16~#22) — 관리·통합 기능 끝
 - [ ] 그룹 D 완료 (#23~#24) — 운영 정책 끝
@@ -700,4 +700,5 @@
 | 2026-05-11 | #8 계정 가입과 팀 신청 분리 | `/api/register` 를 pending_users 승인 대기 → 즉시 가입+자동 로그인으로 교체: `db.create_user_account`(name_norm 정규화·`password=''`+`password_hash`·`role='member'`·`team_id=NULL`, 사전 SELECT + IntegrityError 이중 가드), 정규식·비밀번호 정책(#7 헬퍼 재사용), 예약어 차단(`RESERVED_USERNAMES` + `casefold`), set_cookie 자동 세션. 팀 신청 분리: `POST /api/me/team-applications`(`db.apply_to_team` — 임의 팀 pending 1건이라도 있으면 신규 차단, approved 중복 차단, rejected→같은 row pending 갱신·joined_at 보존), `GET/POST /api/teams/{team_id}/applications[/{user_id}/decide]`(`_require_team_admin` = 글로벌 admin 또는 `user_teams.role='admin'`, decide는 화이트리스트+pending row만). `db.list_team_applications`/`decide_team_application`/`get_team_active` 신규. 프론트: register.html(memo 제거·`/` 리다이렉트), base.html 모달 문구. 마이그레이션 phase 변경 없음 → 서버 재시작 불필요. `check_register_duplicate`/`create_pending_user` 데드코드 보존(Phase 5 drop 시 정리). 리뷰 차단 0(경고 2). 합성 DB+TestClient 72 PASS. | `app.py`, `database.py`, `templates/register.html`, `templates/base.html`. workspace(다음 사이클 시작 시 archive로 이동): `00_input/feature_spec.md`, `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_team_a_008.py` |
 | 2026-05-11 | #9 IP 자동 로그인 관리 | `database.py`: `IPWhitelistConflict` 예외 + helper(`find_whitelist_owner`, `get_whitelist_status_for_ip`, `set_user_whitelist_ip`/`admin_set_whitelist_ip`(한 트랜잭션 충돌검사+history 1개 승격 or INSERT, IntegrityError→Conflict), `remove_user_whitelist_ip`(type='history' 강등 row 보존), `delete_ip_row`, `toggle_ip_whitelist` enable 충돌 시 예외). 신규 phase `team_phase_4b_user_ips_whitelist_unique_v1`(#4 데이터 백필 직후 등록): `idx_user_ips_whitelist_unique ON user_ips(ip_address) WHERE type='whitelist'` 부분 UNIQUE. preflight `_check_user_ips_whitelist_unique`(같은 IP 2명+ whitelist → abort + `preflight_user_ips_whitelist` warning, 자동 정리 없음 — phase 5a 식 자동 dedup 미적용). `app.py`: `GET/POST/DELETE /api/me/ip-whitelist`(POST는 admin 403), `POST /api/admin/users/{id}/ips`, `DELETE /api/admin/ips/{id}`, `PUT /api/admin/ips/{id}/whitelist` 충돌 409 보강, `_require_login` 헬퍼. 프론트: `base.html` 사용자 설정 패널 자동 로그인 토글(admin/비로그인 숨김, ON 시 `wuDialog.confirm` 사양서 §6 문구, OFF 즉시 DELETE, 초기 상태 `GET /api/me/ip-whitelist`), `admin.html` IP 모달에 임의 IP 등록 input + row 삭제 버튼 + 409 토스트. `tools/migration_doctor.py` [4] user_ips whitelist 충돌 진단 + 권장 SQL 추가. QA 자가 발견 결함 1건(history 중복 row 일괄 승격 → IntegrityError): MIN(id) 1개만 승격으로 패치. 리뷰 차단 0(경고 2). 합성 DB+TestClient+마이그레이션 phase 직접 호출 59 PASS. **서버 재시작 필요**(phase 4b + 새 라우트). | `database.py`, `app.py`, `templates/base.html`, `templates/admin.html`, `tools/migration_doctor.py`. workspace(다음 사이클 시작 시 archive로 이동): `00_input/feature_spec.md`, `backend_changes.md`, `frontend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_team_a_009.py` |
 | 2026-05-11 | A보강 자동 dedup phase + 운영자 도구 | 회사 운영 DB 첫 실행 안전망. 신규 phase `team_phase_5a_projects_dedup_safe_v1` (#5 앞에 등록): `(team_id, name_norm)` 충돌 그룹 중 events/checklists.project_id, project_members, project_milestones, trash_project_id, 문자열 project 참조 모두 0건인 row만 안전 hard DELETE(모든 row 0 참조면 MIN(id) 1개 살림). unsafe 그룹은 보존 → 이후 #5 preflight 거부 흐름 유지. warning 카테고리 `dedup_projects_auto`. 신규 `tools/migration_doctor.py` + `main.py --doctor` sub-command(콘솔/sidecar/uvicorn 초기화 전 분기): `check`(read-only 진단, projects 안전/unsafe 분류, users/teams.name_norm 충돌+권장 SQL 템플릿), `fix-projects`(dry-run 기본) / `--apply`(자체 백업 후 정리). `WhatUdoin.spec`에 tools 폴더 + hiddenimports 추가. 리뷰 블로커 1건(BEGIN IMMEDIATE 트랜잭션 충돌) + 마이너 1건(GROUP_CONCAT split) 즉시 패치. dedup 7 시나리오 + doctor 5 시나리오 PASS. 운영 DB 사전 진단: 자동 정리 가능 1건만 검출(`team_id=17, name_norm='alpha', ids=[104,105]`), unsafe 0건 → 서버 재시작만으로 phase 5a 자동 흡수. | `database.py`, `tools/migration_doctor.py`(신규), `tools/__init__.py`(신규), `main.py`, `WhatUdoin.spec`. workspace(다음 사이클 시작 시 archive로 이동): `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_dedup_phase.py`, `scripts/verify_migration_doctor.py` |
+| 2026-05-12 | #1 마무리 — 가드 감사 + preflight 점검 + 검증 | 소스 변경 0. #1 미완 sub-task 전수 감사: 단계 내부 idempotency 가드(name_norm/password_hash/team_id/project_id/관리팀 rename 등 14개)는 #2~#10 phase 본문에 이미 모두 존재 — `WHERE ... IS NULL`/`WHERE role='editor'`/`WHERE password_hash IS NULL ...` 등. Phase 4 UNIQUE preflight: `_check_users_name_norm_unique`/`_check_teams_name_norm_unique`/`_check_projects_team_name_unique`/`_check_user_ips_whitelist_unique` 4건 등록 확인, `user_teams`·`team_menu_settings` 중복 preflight는 두 테이블이 Phase 1에서 빈 상태로 생성 + Phase 2 백필 `WHERE NOT EXISTS`(user_teams)·시드 #19 이후(team_menu_settings)라 구조적으로 중복 불가 → 의도적 미적용으로 todo 주석 추가(team_menu_settings는 #19 책임). preflight 충돌 일관성(`_append_team_migration_warning` + `RuntimeError` 서버 시작 거부) 확인. 검증 스크립트 신규: 합성 임시 DB(`WHATUDOIN_RUN_DIR` 오버라이드)로 case 1(빈 DB→마커 10개+preflight 통과)/case 2(재호출→전 phase skip, `_pending_phases()==[]`)/case 3(마커 삭제+위험 합성 데이터→재실행 시 password_hash 불변·"converted 0"·team_id/project_id 덮어쓰기 없음·AdminTeam 중복 rename 없음) → 15/15 PASS. `user_teams` 실 컬럼명 `role`/`status` vs todo §#2 명세 `team_role`/`join_status` 불일치 인지(범위 밖, 기록만). 코드 무변경이라 서버 재시작 불필요. | `database.py`(읽기만), `팀 기능 구현 todo.md`. workspace(다음 사이클 시작 시 archive로 이동): `00_input/feature_spec.md`, `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_team_a_001_close.py` + `.log` |
 | 2026-05-11 | #10 문서·체크 팀 경계 + 편집·삭제 권한 모델 | 스키마 무변경(마이그레이션 phase 추가 없음 — 라우트·쿼리·권한 헬퍼만). `auth.user_team_ids`에 `JOIN teams ... AND deleted_at IS NULL` 추가(삭제 예정 팀 자동 제외 — `user_can_access_team`/`is_team_admin`/`resolve_work_team` 전파). `auth.can_edit_meeting` 신규(혼합 모델: is_team_doc=1→같은 팀 승인 멤버 누구나·created_by 무관·NULL팀잔존은 작성자한정 / is_team_doc=0→작성자 본인만 / admin 전역). `permissions._can_read_doc/_can_read_checklist`에 `work_team_ids` 인자 + 작업 팀 scoping(None&비admin→`user_team_ids` fallback). `app._filter_events_by_visibility(events, user, scope_team_ids=None)` 재작성(admin 무필터 / team_id∈scope 통과 / team_id NULL→작성자 본인(str(id)·이름 토큰 양쪽) / is_public==1 통과 / else skip). `_work_scope` 헬퍼(admin→None, 비admin→resolve_work_team 1개 set, 비소속 team_id 무시·대표팀 fallback, 미배정→set()). 라우트 ~20개에 `team_id` 파라미터+scoping(events·by-project-range·search-parent·subtasks·{id}, checklists, projects·meta·project-list·project-timeline, manage/projects, doc·doc/calendar, kanban, /check·/doc 페이지). create 경로(events·ai/confirm·manage event·checklists·doc) team_id를 `resolve_work_team`로. `database.py` 헬퍼 7종(`_meeting_team_clause`/`_viewer_team_ids`(auth 미import 순환회피)/`_author_token_set`/`_author_in_sql`/`_project_team_filter_sql`/`_events_checklists_team_name_set`/`_filter_rows_by_work_team`) + `work_team_ids` 인자(checklists·meetings·projects 조회 + MCP 조회 함수 다수, MCP응답은 team_id/created_by pop). `mcp_server.py` `import auth`+`_mcp_work_team_ids`(=user_team_ids — MCP엔 작업팀 쿠키 없음) 전 도구에 전달. advisor 리뷰 발견 결함 1건(`_can_read_doc` 작성자 단축이 추방된 팀문서 작성자에게 노출 — §8-1 위반) 동일 흐름 패치(is_team_doc=1은 작성자 단축 제거, meetings SQL 4곳 `m.created_by = ? AND (is_team_doc=0 OR team_id IS NULL)` + 팀문서절 `team_id IS NOT NULL` 추가, `can_edit_meeting` NULL팀팀문서 작성자한정 정합). 합성 DB+TestClient 71 PASS / 0 FAIL(가시성 전 라우트·편집삭제 권한·추방재가입 복구·추방 후 자기작성 팀자료 차단·NULL row 회귀방지). 기존 `tests/phase75` 21 PASS. `tests/test_project_rename.py` 2건 실패는 사전 결함(master HEAD에서도 동일, #10 무관). **서버 재시작 필요**(코드 reload — 스키마 무변경이라 마이그레이션은 불필요). 알려진 한계: assignee 기반 "내 스케줄" 미니위젯(`/api/my-meetings`(event_type='meeting')·`/api/my-milestones`·`/api/project-milestones/calendar`)은 담당자+히든 필터만(팀 경계 미적용 — 후속), 이름 기반 단건 프로젝트 조회 동명 충돌 잔존(§8-2 후속), 읽기 경로 project_id 전환은 부분적(가시성 필터는 적용, 간트 by-project-range는 여전히 name 기반). | `auth.py`, `permissions.py`, `app.py`, `database.py`, `mcp_server.py`. workspace(다음 사이클 시작 시 archive로 이동): `00_input/feature_spec.md`, `backend_changes.md`, `code_review_report.md`, `qa_report.md`, `scripts/verify_team10.py` |

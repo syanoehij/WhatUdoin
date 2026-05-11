@@ -1,0 +1,52 @@
+임시 작업 디렉토리: C:\Users\Lumen\AppData\Local\Temp\wu_verify_a001_7hiu4xby
+DB_PATH: C:\Users\Lumen\AppData\Local\Temp\wu_verify_a001_7hiu4xby\whatudoin.db
+등록된 PHASES (10): ['team_phase_1_columns_v1', 'team_phase_2_backfill_v1', 'team_phase_4_indexes_v1', 'team_phase_3_admin_separation_v1', 'team_phase_4_data_backfill_v1', 'team_phase_4b_user_ips_whitelist_unique_v1', 'team_phase_5a_projects_dedup_safe_v1', 'team_phase_5_projects_unique_v1', 'team_phase_6_project_id_backfill_v1', 'team_phase_7_password_hash_v1']
+
+=== case 1: 빈 DB 첫 init_db() → 모든 phase 마커 기록 + preflight 통과 ===
+[WhatUdoin] 초기 관리자 비밀번호: eC31Af0WmX6fVMYX  (최초 1회만 표시, 즉시 변경 권장)
+[WhatUdoin][migration] pre-migration backup: C:\Users\Lumen\AppData\Local\Temp\wu_verify_a001_7hiu4xby\backupDB\whatudoin-migrate-20260512T004839334731.db
+[WhatUdoin][migration] phase 'team_phase_1_columns_v1' OK
+[WhatUdoin][migration] phase 'team_phase_2_backfill_v1' OK
+[WhatUdoin][migration] phase 'team_phase_4_indexes_v1' OK
+[WhatUdoin][migration] phase 'team_phase_3_admin_separation_v1' OK
+[WhatUdoin][migration] phase 'team_phase_4_data_backfill_v1' OK
+[WhatUdoin][migration] phase 'team_phase_4b_user_ips_whitelist_unique_v1' OK
+[WhatUdoin][migration] phase 'team_phase_5a_projects_dedup_safe_v1' OK
+[WhatUdoin][migration] phase 'team_phase_5_projects_unique_v1' OK
+[WhatUdoin][migration] phase 'team_phase_6_project_id_backfill_v1' OK
+[WhatUdoin][migration] phase 7: converted 1 plaintext password(s) to hash
+[WhatUdoin][migration] phase 'team_phase_7_password_hash_v1' OK
+  [PASS] init_db() 예외 없이 완료 (preflight 충돌 없음)
+  [PASS] 등록된 모든 phase 마커가 settings 에 존재  — 10개 기록
+
+=== case 2: 재호출 → 모든 phase is_phase_done True (재실행 없음) ===
+  [PASS] init_db() 재호출 예외 없이 완료
+  [PASS] 모든 phase is_phase_done() == True
+  [PASS] 재호출이 users/teams row 수를 바꾸지 않음  — users 1->1, teams 0->0
+  [PASS] _pending_phases() == [] (백업·preflight skip 경로)  — pending=[]
+
+=== case 3: phase 마커 강제 삭제 + 위험 합성 데이터 심기 → 재호출 시 데이터 무결성 ===
+  [PASS] phase 마커 전부 삭제됨
+[WhatUdoin][migration] pre-migration backup: C:\Users\Lumen\AppData\Local\Temp\wu_verify_a001_7hiu4xby\backupDB\whatudoin-migrate-20260512T004839583051.db
+[WhatUdoin][migration] phase 'team_phase_1_columns_v1' OK
+[WhatUdoin][migration] phase 'team_phase_2_backfill_v1' OK
+[WhatUdoin][migration] phase 'team_phase_4_indexes_v1' OK
+[WhatUdoin][migration] phase 'team_phase_3_admin_separation_v1' OK
+[WhatUdoin][migration] phase 'team_phase_4_data_backfill_v1' OK
+[WhatUdoin][migration] phase 'team_phase_4b_user_ips_whitelist_unique_v1' OK
+[WhatUdoin][migration] phase 'team_phase_5a_projects_dedup_safe_v1' OK
+[WhatUdoin][migration] phase 'team_phase_5_projects_unique_v1' OK
+[WhatUdoin][migration] phase 'team_phase_6_project_id_backfill_v1' OK
+[WhatUdoin][migration] phase 7: converted 0 plaintext password(s) to hash
+[WhatUdoin][migration] phase 'team_phase_7_password_hash_v1' OK
+  [PASS] 마커 삭제 후 init_db() 재호출 예외 없이 완료 (preflight 충돌 없음)
+  [PASS] 재호출 후 모든 phase 마커 재기록
+  [PASS] phase 7 가드: 이미 hash 보유 row 의 password_hash 불변 (재-hash 안 됨)  — $2b$12$ABCDE... → $2b$12$ABCDE...
+  [PASS] phase 7 가드: 평문 password 잔존 row 는 가드에 안 걸려 손대지 않음 (의도된 동작)  — password='PLAINTEXT_LEFTOVER'
+  [PASS] phase 4-data 가드: 이미 team_id 채운 event 덮어쓰지 않음  — team_id 1 → 1
+  [PASS] phase 6 가드: 이미 project_id 채운 event 덮어쓰지 않음  — project_id 1 → 1
+  [PASS] phase 3 가드: 'AdminTeam' 팀 이름 불변 (관리팀 lookup no-op, legacy 이름 안 생김)  — name='AdminTeam'
+  [PASS] phase 3 가드: AdminTeam/관리팀 류 팀 수 불변 (중복 rename 없음)  — 1 → 1
+
+============================================================
+결과: 15 PASS / 0 FAIL  (총 15)

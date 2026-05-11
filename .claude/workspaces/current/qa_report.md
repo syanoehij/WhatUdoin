@@ -1,33 +1,47 @@
-## QA 보고서 — 팀 기능 그룹 A #10 (문서·체크 팀 경계 + 편집·삭제 권한 모델)
+# QA — 팀 기능 그룹 A #1 마무리
 
-### 환경 제약
-- 실서버 OFF + VSCode 디버깅 모드 → 자동 재시작 불가 → **실서버 Playwright E2E 불가**.
-- 대안: import-time 검증 + 합성 DB + FastAPI TestClient + 기존 standalone 테스트.
-- **서버 재시작 필요**: 본 사이클은 라우트/쿼리/권한 헬퍼만 변경, **스키마 변경(마이그레이션 phase 추가) 없음**. 따라서 재시작 시 코드 reload 만 필요(DB 마이그레이션 불필요). 운영 반영 전 사용자가 VSCode 디버거 수동 재시작 필요.
+## 환경 제약
+- 실서버 꺼짐 + VSCode 디버깅 모드 → 실서버 E2E(Playwright) 불가.
+- 본 사이클은 **소스 코드 변경 0건** (todo.md 토글 + 검증 스크립트 추가만) → 회귀 위험 없음. Playwright 스위트 실행 생략 정당.
+- 검증은 합성 임시 DB(`tempfile`, `WHATUDOIN_RUN_DIR` 오버라이드)로 마이그레이션 인프라를 직접 exercise.
 
-### 통과 ✅
-- [x] import-time: `import app, mcp_server, permissions, auth, database` — OK (라우트 데코레이터/시그니처/순환 import 깨짐 없음).
-- [x] 합성 DB + TestClient (`.claude/workspaces/current/scripts/verify_team10.py`): **71 PASS / 0 FAIL**. 커버리지:
-  - 가시성 (현재 작업 팀 기준): `/api/events`, `/api/checklists`, `/api/projects`, `/api/manage/projects`, `/api/doc`, `/api/kanban` — 다중 팀 사용자(X∈A,B)의 작업 팀 전환에 따라 자료 변동, 같은 팀 멤버(Y∈A)는 작업 팀 자료만, 비소속(Z∈B)은 타팀·NULL row 미노출, admin 은 전체, 비로그인은 is_public 만.
-  - 비소속 team_id 명시(Y@B): 무시하고 대표 팀 A 로 fallback → B 자료 노출 안 됨.
-  - 문서 혼합 모델: 팀문서(team_id ∈ scope) / 개인문서(작성자 본인 항상, team_share=1 은 같은 작업 팀 멤버 읽기만) / NULL팀 개인문서(작성자 본인만).
-  - 편집·삭제 권한: 팀 공유 모델(같은 팀 멤버 B 가 멤버 A 작성 일정 편집 가능 / 타팀 불가), 문서 혼합(팀문서=같은팀 누구나, 개인문서=작성자만, team_share=1 은 읽기만 → 편집 시 거부), admin 전역.
-  - **추방 시나리오**: 추방된 멤버는 자기 작성 팀자료(EvA·DocTeamA_byY)에도 접근/편집 불가(§8-1 "팀 소속이라서 보이는 것"), 단 자기 개인문서(DocPersA_byY)·자기 작성 개인 row(EvNullLegacy)는 계속 보유. 재가입 시 자동 복구.
-  - NULL team row 회귀 방지: events/checklists/projects 의 team_id IS NULL row 가 다른 팀 멤버(Z) 세션의 모든 목록에 노출 안 됨, 작성자/owner 본인 세션에서만 노출.
-  - `teams.deleted_at` 자동 제외: 삭제 예정 팀 멤버십은 `user_team_ids` 에서 빠짐.
-- [x] 기존 회귀: `tests/phase75_m6_mcp_owner_boundary.py` 21 PASS (MCP write-owner 경계 — `import auth` 추가에도 영향 없음). `tests/test_html_table_to_gfm.py` 등 standalone 12 PASS.
+## 실행한 검증
+`.claude/workspaces/current/scripts/verify_team_a_001_close.py` — `D:\Program Files\Python\Python312\python.exe`로 실행. 로그: 같은 폴더 `.log`.
 
-### 실패 / 미커버 ❌
-- 없음 (신규 결함). advisor 리뷰에서 발견된 `_can_read_doc` 작성자 단축 결함(추방된 팀문서 작성자에게 노출)은 같은 흐름에서 패치 + 재검증 완료(위 추방 시나리오 항목에 포함).
+### case 1 — 빈 DB 첫 init_db()
+- `init_db()` 예외 없이 완료 (preflight 충돌 없음) ✅
+- 등록된 phase 10개(`team_phase_1_columns_v1` … `team_phase_7_password_hash_v1`) 마커가 `settings`에 모두 기록 ✅
+- 마이그레이션 로그에 phase 1~7 + 4b + 5a 전부 "OK", "phase 7: converted 1 plaintext password(s) to hash" (admin 시드) 확인
 
-### 알려진 한계 (차단 아님 — 후속)
-- `tests/test_project_rename.py` 2건 실패 — **#10 무관 사전 결함**. `master` HEAD(`f433c20`)에서도 동일 실패 (`database.py:4080 no such column: team_id` — 테스트 픽스처가 #4/#5 era 스키마와 불일치). 본 사이클이 도입한 회귀 아님.
-- assignee 기반 "내 스케줄" 미니 위젯(`/api/my-meetings`, `/api/my-milestones`, `/api/project-milestones/calendar`): 팀 경계 미적용(담당자+히든 필터만) — backend_changes.md·code_review_report.md 에 기록. 후속 권고.
-- MCP 도구 end-to-end 미검증(실서버 OFF) — 단 동일 db 헬퍼·`_can_read_*` 함수를 공유하고 합성 DB 검증으로 간접 커버됨.
+### case 2 — 재호출(같은 DB로 init_db 재호출) → 모든 phase skip
+- `init_db()` 재호출 예외 없이 완료 ✅
+- 모든 phase `is_phase_done() == True` ✅
+- 재호출이 users/teams row 수를 바꾸지 않음 (users 1→1, teams 0→0) ✅
+- `_pending_phases() == []` → 백업·preflight 모두 skip 경로 진입 확인 ✅ (마이그레이션 로그에 "pre-migration backup" 두 번째 없음)
 
-### 회귀 확인
-- import-time OK / MCP owner boundary 21 PASS / standalone unit 12 PASS / 합성 DB 71 PASS.
-- `tests/test_project_rename.py` 2건 실패는 사전 결함(본 사이클 무관).
+### case 3 — Phase 마커 강제 삭제 + 위험 합성 데이터 → 재실행 시 데이터 무결성
+**심은 위험 데이터** (마이그레이션-후 상태 흉내):
+- `guard_user_pw`: `password='PLAINTEXT_LEFTOVER'` + `password_hash=<가짜 bcrypt 형태>` (이미 변환된 row)
+- `guard event`: `team_id=<GuardTeam id>` + `project_id=<guard project id>` (이미 백필된 row)
+- `AdminTeam` 이름 팀 (이미 rename 완료된 상태)
 
-### 최종 판정
-- **통과** — 실서버 E2E 불가 환경에서 가능한 최대 검증(import + 합성 DB + TestClient + 기존 테스트) 모두 통과. 운영 반영 시 서버 수동 재시작 필요(스키마 무변경, 코드 reload 만).
+**마커 전부 삭제 → `init_db()` 재호출** 후:
+- 마커 전부 삭제됨 / 재호출 예외 없이 완료(preflight 충돌 없음) / 마커 10개 재기록 ✅
+- phase 7 가드: `guard_user_pw`의 `password_hash` 불변 — 마이그레이션 로그 "phase 7: converted 0 plaintext password(s) to hash" → `WHERE password_hash IS NULL` 가드가 이 row를 다시 hash()에 안 넘김 ✅
+- phase 7 가드: 평문 `password='PLAINTEXT_LEFTOVER'` 잔존 row는 가드(`WHERE password_hash IS NULL`)에 안 걸려 손대지 않음 — 의도된 동작 ✅
+- phase 4-data 가드: `guard event`의 `team_id` 1→1 (덮어쓰기 없음) ✅
+- phase 6 가드: `guard event`의 `project_id` 1→1 (덮어쓰기 없음) ✅
+- phase 3 가드: `AdminTeam` 팀 이름 불변 (관리팀 lookup no-op, `관리팀_legacy_*` 안 생김) ✅
+- phase 3 가드: `AdminTeam`/`관리팀` 류 팀 수 1→1 (중복 rename 없음) ✅
+
+## 결과
+**15 PASS / 0 FAIL** — exit code 0.
+
+## 백엔드-프론트엔드 경계면
+이번 변경에 프론트엔드/API 표면 변경 없음 → 경계면 정합성 점검 불필요.
+
+## 서버 재시작
+**불필요** — 소스 코드 무변경.
+
+## 결론
+**통과.** 마이그레이션 인프라의 idempotency 가드·preflight·마커 동작이 합성 DB에서 전부 확인됨.
