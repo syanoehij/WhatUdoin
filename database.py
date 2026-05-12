@@ -4544,6 +4544,15 @@ def get_all_teams():
     return [dict(r) for r in rows]
 
 
+def get_visible_teams():
+    """삭제 예정(deleted_at IS NOT NULL) 팀을 제외한 팀 목록 — 공개 화면용 (팀 기능 #11)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM teams WHERE deleted_at IS NULL ORDER BY name"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def create_team(name: str) -> int:
     with get_conn() as conn:
         cur = conn.execute("INSERT INTO teams (name) VALUES (?)", (name,))

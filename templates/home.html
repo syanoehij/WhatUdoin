@@ -107,28 +107,37 @@
   .priority-dot.normal { background: #74b9ff; }
   .priority-dot.low    { background: var(--text-faint); }
 
-  /* ── 게스트 뷰 툴바 ── */
-  .home-toolbar {
-    display: flex; align-items: center;
-    justify-content: space-between;
-    gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+  /* ── 게스트 랜딩 (비로그인) ── */
+  .landing-hero {
+    background: var(--surface-2); border-radius: 12px;
+    padding: 32px 28px; margin-bottom: 28px;
   }
-  .home-toolbar-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .home-toolbar label { font-size: 0.88rem; color: var(--text-muted); font-weight: 500; }
-  .home-toolbar select {
-    border: 1px solid var(--border); border-radius: 6px;
-    padding: 6px 28px 6px 10px; font-size: 0.88rem;
-    font-family: inherit; background: var(--surface); color: var(--text);
-    outline: none; appearance: none; -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236e7681' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 10px center;
-    cursor: pointer; transition: border-color 0.15s;
+  .landing-hero h2 {
+    font-size: 1.6rem; font-weight: 700; color: var(--text);
+    margin: 0 0 6px;
   }
-  .home-toolbar select:focus { border-color: var(--accent); }
-  [data-theme="dark"] .home-toolbar select {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238b949e' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  .landing-hero p {
+    font-size: 0.95rem; color: var(--text-muted); margin: 0 0 18px;
   }
-  .kanban-total-label { font-size: 0.85rem; color: var(--text-muted); }
+  .landing-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .landing-team-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+    gap: 12px;
+  }
+  .landing-team-card {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px;
+    text-decoration: none; color: var(--text);
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+  }
+  .landing-team-card:hover {
+    border-color: var(--accent); box-shadow: var(--shadow-sm);
+    transform: translateY(-1px);
+  }
+  .landing-team-name { font-size: 1rem; font-weight: 600; word-break: break-word; }
+  .landing-team-arrow { color: var(--text-faint); font-size: 1.1rem; flex-shrink: 0; }
 
   /* ── 유저 대시보드 ── */
   .home-greeting {
@@ -174,22 +183,30 @@
 
 {% block content %}
 
-<!-- ── 게스트 뷰 (비로그인) ── -->
+<!-- ── 게스트 뷰 (비로그인): 팀 목록 + 로그인/계정 가입 ── -->
 <div id="view-guest" class="hidden">
-  <div class="home-toolbar">
-    <div class="home-toolbar-left">
-      <label>팀 필터</label>
-      <select id="guest-team-filter" onchange="loadGuest()">
-        <option value="">전체</option>
-        {% for team in teams %}
-        <option value="{{ team.id }}">{{ team.name }}</option>
-        {% endfor %}
-      </select>
-      <span id="guest-total" class="kanban-total-label"></span>
+  <div class="landing-hero">
+    <h2>WhatUDoin</h2>
+    <p>팀을 선택해 공개된 일정을 보거나, 로그인하여 업무를 시작하세요.</p>
+    <div class="landing-actions">
+      <button class="btn btn-primary" onclick="openLoginModal()">로그인</button>
+      <a href="/register" class="btn btn-outline">계정 가입</a>
     </div>
-    <button class="btn btn-outline" onclick="openLoginModal()">로그인하여 일정 추가</button>
   </div>
-  <div class="kanban-board" id="guest-board"></div>
+
+  <div class="home-section-title">팀 목록</div>
+  {% if teams %}
+  <div class="landing-team-grid">
+    {% for team in teams %}
+    <a class="landing-team-card" href="/{{ team.name | urlencode }}">
+      <span class="landing-team-name">{{ team.name }}</span>
+      <span class="landing-team-arrow">→</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="no-tasks">아직 생성된 팀이 없습니다.</p>
+  {% endif %}
 </div>
 
 <!-- ── 유저 대시보드 (로그인) ── -->
@@ -388,15 +405,6 @@ function buildBoard(containerId, events, draggable) {
   });
 }
 
-// ── 게스트 뷰 ──────────────────────────────────────────
-async function loadGuest() {
-  const teamId = document.getElementById('guest-team-filter').value;
-  const url = teamId ? `/api/kanban?team_id=${teamId}` : '/api/kanban';
-  const events = await fetch(url).then(r => r.json());
-  document.getElementById('guest-total').textContent = `총 ${events.length}개`;
-  buildBoard('guest-board', events, false);
-}
-
 // ── 유저 대시보드 ──────────────────────────────────────
 async function loadUser() {
   const [events, meetings, milestones, notice] = await Promise.all([
@@ -500,29 +508,27 @@ function openMeetingModal(id) {
     .catch(() => {});
 }
 
-window.onEventSaved   = () => { if (CURRENT_USER) loadUser(); else loadGuest(); };
+window.onEventSaved   = () => { if (CURRENT_USER) loadUser(); };
 window.onKDetailSaved = window.onEventSaved;
 
 // ── 초기화 ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  loadProjColors().then(() => {
-    if (CURRENT_USER) {
-      document.getElementById('view-user').classList.remove('hidden');
-      loadUser();
-    } else {
-      document.getElementById('view-guest').classList.remove('hidden');
-      loadGuest();
-    }
-  });
+  if (CURRENT_USER) {
+    document.getElementById('view-user').classList.remove('hidden');
+    loadProjColors().then(loadUser);
+  } else {
+    document.getElementById('view-guest').classList.remove('hidden');
+  }
 });
 
 // 실시간 동기화
 (function () {
   if (typeof wuDebounce !== 'function') return;
   var _reload = wuDebounce(function () {
+    if (!CURRENT_USER) return;
     if (typeof wuShouldSuppressRefetch === 'function' && wuShouldSuppressRefetch()) return;
     if (homeDragSrcId !== null) return;
-    if (CURRENT_USER) loadUser(); else loadGuest();
+    loadUser();
   }, 300);
   window.addEventListener('wu:events:changed', _reload);
 })();

@@ -1,33 +1,27 @@
-## QA 보고서 — 팀 기능 #10 가시성 누수 패치 (`/api/project-timeline`)
+## QA 보고서 — #11 `/` 비로그인 접속 화면
 
-### 실행 환경
-- 실서버 OFF + VSCode 디버깅 모드 → 합성 임시 DB + FastAPI `TestClient` (Playwright E2E 불가).
-- 테스트 스크립트: `.claude/workspaces/current/scripts/verify_team10_timeline_leak.py`
-- 실행: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 "D:/Program Files/Python/Python312/python.exe" .claude/workspaces/current/scripts/verify_team10_timeline_leak.py`
-- 합성 데이터: 팀 A/B, 사용자 X(A·B 둘 다)·Y(A만)·Z(B만)·adminU(admin)·unassignedU(팀 미배정), 각 팀 프로젝트·일정·체크·문서 + 공개/비공개 변형, NULL팀 row.
+### 테스트 방식
+- 라이브 Playwright 대신 **TestClient(임시 DB) 기반 테스트** 사용. 이유: 운영 서버는 IP 자동 로그인이라 브라우저로는 비로그인 `/` 화면 자체를 재현할 수 없다 (Playwright 접속 시 항상 자동 로그인 상태). TestClient는 `testclient` IP라 화이트리스트 미매칭 → 익명 요청으로 비로그인 경로를 직접 검증 가능.
+- 신규 테스트 파일: `tests/phase80_landing_page.py` (5 케이스, 모두 통과).
+- 서버 재시작 **불필요** — 테스트가 임시 DB로 격리 실행되고, 운영 서버에 의존하지 않음. (단, 운영 서버에 변경을 반영하려면 코드 배포 후 재시작 필요 — 아래 참조.)
 
-### 결과: **31 PASS / 0 FAIL**
+### 통과 ✅
+- [x] `app.py index()` — 비로그인 `/kanban` redirect 코드 제거 확인 (소스 grep)
+- [x] `database.py get_visible_teams()` 존재 + `deleted_at IS NULL` 필터 확인, `get_all_teams()` 미변경 확인
+- [x] `templates/home.html` — `#view-guest`가 팀 목록 랜딩(`landing-team-card`, 계정 가입, `openLoginModal`)으로 교체, 게스트 칸반 고아 코드(`loadGuest`, `guest-board`, `home-toolbar` 등) 전부 제거, 공유 코드(`buildBoard`/`cardHTML`/`loadUser`/`view-user`) 유지
+- [x] 익명 `GET /` → 200, `view-guest` + 계정 가입 버튼 + 비삭제 팀 카드 렌더, 팀 이름 href URL 인코딩(공백 `%20`, 한글 `%XX`) 확인
+- [x] soft-deleted 팀(`deleted_at IS NOT NULL`)이 목록에서 제외됨 — `삭제예정팀` HTML에 미노출
+- [x] 로그인 사용자 `GET /` → 200, `view-user` 대시보드 정상 렌더 (회귀 확인)
 
-### 통과 ✅ — `/api/project-timeline` 누수 패치 핵심
-- [x] 비로그인 `GET /api/project-timeline` → `[]` (**이전엔 전 팀 public 일정·프로젝트 노출 — 누수 해소 확인**)
-- [x] 팀 미배정 로그인(unassignedU) → `[]`
-- [x] 팀 A 멤버(Y, 작업 팀 미지정 → 대표 팀 A) → TeamA 만, EvA_pub + EvA_priv 노출(같은 팀이라 비공개도), EvB_pub·TeamB 미노출
-- [x] 다중 팀 사용자 X: `team_id=tA` → TeamA 만 / `team_id=tB` → TeamB 만 (작업 팀 전환 정상)
-- [x] 비소속 팀 명시(Z@A) → A 팀 자료 노출 안 됨, 대표 팀 B 로 fallback
-- [x] admin → 무필터, 전 팀(TeamA+TeamB) + EvA_pub·EvA_priv·EvB_pub 모두 노출 (**의도된 동작 유지**)
+### 실패 ❌
+- 없음
 
-### 통과 ✅ — 회귀 (#10 명세 준수, 누수 없음)
-- [x] `/api/kanban`: 비로그인 `[]`, 미배정 `[]`, Y@A 는 EvB_pub 미노출, admin 은 NULL팀 backlog 노출
-- [x] `/api/events`: 비로그인 → is_public=1 만(EvA_pub+EvB_pub), EvA_priv·EvNull 미노출. Y@A → 같은 팀 비공개(EvA_priv) 봄 + is_public 일정은 작업 팀 무관 전원 노출(EvB_pub) [기존 rule 4, 누수 아님] + EvNull(작성자 아님) 미노출. admin → 전부.
-- [x] `/api/checklists`: 비로그인 → is_public/non-private project 만. Y@A → CkA_pub 노출 / CkB_pub 미노출.
-- [x] `/api/projects`: 비로그인 → ProjPriv(is_private) 제외. Y@A → ProjA+ProjPriv / ProjB 미노출. admin → 전부.
-- [x] `/api/doc`: 비로그인 → DocPubB(is_public) 만. Y@A → DocTeamA+DocPubB. admin → 전부.
-- [x] 권한 가드: 비로그인 `/api/project-list`·`/api/manage/projects` → 403.
+### 회귀 확인
+- `tests/phase80_landing_page.py` 5/5 통과.
+- `tests/test_project_rename.py` 2건 실패 — **본 변경과 무관한 사전 실패** (해당 테스트의 자체 hand-rolled 스키마에 그룹 A 마이그레이션이 추가한 `projects.team_id` 컬럼이 없어서 발생; `git stash` 후 동일하게 실패함 확인).
 
-### 기존 테스트 영향
-- `app` 모듈 import OK, `/api/project-timeline` 라우트 정상 등록 확인.
-- 변경 범위가 `/api/project-timeline` 라우트 본문 한정 — 라우트의 로그인/admin 동작은 기존과 동등(이전 `if viewer and not auth.is_admin(viewer)` 분기와 새 `if not auth.is_admin(viewer)` 분기는 비로그인을 제외하면 동일). `database.py` 무변경.
-- `tests/phase46_gantt_project_date_boundary.spec.js` 등 간트 관련 JS E2E 는 실서버 필요 → 서버 재시작 후 사용자 환경에서 별도 확인 권장(본 변경은 응답 스키마·로그인 사용자 동작 불변이므로 영향 없을 것으로 판단).
+### 알려진 한계 (의도된 단계적 상태)
+- 팀 카드 → `/팀이름` 링크는 #13(`/팀이름` 동적 라우트)이 아직 없어 현재 404. 링크 마크업은 사양대로 구현됨. #13 완료 시 동작 — 결함 아님.
 
-### 서버 재시작
-- 코드 변경(`app.py`)이므로 **서버 재시작 필요**. 스키마 변경 없음 → migration 불필요.
+### 서버 반영 안내
+- `app.py`·`database.py`·`templates/home.html` 변경. 운영 서버(VSCode 디버깅 모드, `https://192.168.0.18:8443/`)에 반영하려면 **사용자가 수동으로 서버를 재시작**해야 함. (단, 본 단위의 검증은 TestClient로 완료되었으므로 재시작 없이도 머지 가능.)
