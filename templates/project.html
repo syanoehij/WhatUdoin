@@ -337,12 +337,6 @@ main { padding: 0; }
 {% block content %}
 <!-- ── 툴바 ─────────────────────────────────────────────── -->
 <div class="project-toolbar">
-  <select id="team-filter" onchange="loadData()">
-    <option value="">전체 팀</option>
-    {% for team in teams %}
-    <option value="{{ team.id }}">{{ team.name }}</option>
-    {% endfor %}
-  </select>
   <div class="nav-btns">
     <button class="nav-btn" onclick="navPrev()">&#9664;</button>
     <span class="nav-label" id="nav-label">-</span>
@@ -434,18 +428,6 @@ const LS_ZOOM      = 'proj_zoom';
 const LS_COLLAPSED = 'proj_collapsed';
 const LS_TASKS_COLLAPSED = 'proj_tasks_collapsed';
 const LS_DATE      = 'proj_date';
-const LS_TEAM      = 'proj_team_filter';
-
-function _applyInitialTeamFilter() {
-  const sel = document.getElementById('team-filter');
-  if (!sel) return;
-  const saved = localStorage.getItem(LS_TEAM);
-  let target;
-  if (saved !== null) target = saved;
-  else if (CURRENT_USER && CURRENT_USER.team_id != null) target = String(CURRENT_USER.team_id);
-  else target = '';
-  if (sel.querySelector(`option[value="${target}"]`)) sel.value = target;
-}
 
 function saveProjectState() {
   localStorage.setItem(LS_ZOOM, daysShown);
@@ -599,10 +581,8 @@ function navNext() { viewStart = addDays(viewStart, navStep()); saveProjectState
 
 // ── 데이터 로드 ──────────────────────────────────────────
 async function loadData() {
-  const teamId = document.getElementById('team-filter').value;
-  localStorage.setItem(LS_TEAM, teamId);
-  const url = '/api/project-timeline' + (teamId ? `?team_id=${teamId}` : '');
-  allTeams = await (await fetch(url)).json();
+  // 팀 기능 #15: 작업 팀은 work_team_id 쿠키로 서버가 결정 — 화면별 팀 드롭다운 제거.
+  allTeams = await (await fetch('/api/project-timeline')).json();
   // 간트는 업무(schedule) + 하위 업무(subtask)만 표시 — 회의·일지는 제거
   allTeams.forEach(t => t.projects.forEach(p => {
     p.events = (p.events || []).filter(e => e.event_type !== 'meeting' && e.event_type !== 'journal');
@@ -1383,7 +1363,6 @@ function scrollToToday() {
 // ── 초기화 ───────────────────────────────────────────────
 (function init() {
   loadProjectState();           // localStorage 복원
-  _applyInitialTeamFilter();    // 팀 필터: 저장값 우선, 없으면 소속팀 기본 선택
   syncSlider(); syncViewBtns(); updateZoomLabel();
   if (!viewStart) viewStart = addDays(today(), -Math.floor(daysShown / 3));
   _syncGanttMyOnlyBtn();        // 내 일정만 버튼 초기 상태 동기화

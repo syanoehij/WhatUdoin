@@ -5152,6 +5152,65 @@ def get_team_by_name_exact(name: str) -> dict | None:
     return dict(row) if row else None
 
 
+# ── 작업 팀(work_team_id) 결정 헬퍼 — 팀 기능 그룹 B #15 ──────────────
+
+def first_active_team_id() -> int | None:
+    """삭제되지 않은 팀 중 가장 작은 id. admin 의 작업 팀 fallback (쿠키 없음/무효).
+
+    계획서 §7: admin 의 기본 작업 팀은 "마지막 선택 팀(별도 저장 시) 또는 첫 번째 팀".
+    '마지막 선택 팀'은 work_team_id 쿠키가 그 역할을 하므로, 쿠키가 없거나 무효일 때
+    첫 번째 비삭제 팀(id 최소)으로 fallback 한다. 비삭제 팀이 하나도 없으면 None.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM teams WHERE deleted_at IS NULL ORDER BY id ASC LIMIT 1"
+        ).fetchone()
+    if not row:
+        return None
+    return row["id"] if isinstance(row, sqlite3.Row) else row[0]
+
+
+def primary_team_id_for_user(user_id: int) -> int | None:
+    """일반 사용자의 대표 작업 팀 — 쿠키가 없을 때 fallback.
+
+    계획서 §7 / todo §#15: approved 소속이고 teams.deleted_at IS NULL 인 팀 중
+    joined_at 이 가장 이른 팀 (동일 시 team_id 최소). approved 소속이 없으면 None.
+    admin 은 user_teams row 가 없으므로 None → 호출부가 first_active_team_id 로 분기.
+    """
+    if user_id is None:
+        return None
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT ut.team_id FROM user_teams ut "
+            "JOIN teams t ON t.id = ut.team_id "
+            "WHERE ut.user_id = ? AND ut.status = 'approved' AND t.deleted_at IS NULL "
+            "ORDER BY ut.joined_at ASC, ut.team_id ASC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return row["team_id"] if isinstance(row, sqlite3.Row) else row[0]
+
+
+def user_work_teams(user_id: int) -> list[dict]:
+    """프로필 "팀 변경" 드롭다운 / POST /api/me/work-team 검증용.
+
+    사용자의 approved + 비삭제 소속 팀 목록 [{id, name}], joined_at 순(동일 시 team_id 순).
+    admin 은 호출하지 않는다 (admin 은 전체 비삭제 팀 = get_visible_teams() 사용).
+    """
+    if user_id is None:
+        return []
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT t.id AS id, t.name AS name FROM user_teams ut "
+            "JOIN teams t ON t.id = ut.team_id "
+            "WHERE ut.user_id = ? AND ut.status = 'approved' AND t.deleted_at IS NULL "
+            "ORDER BY ut.joined_at ASC, ut.team_id ASC",
+            (user_id,),
+        ).fetchall()
+    return [{"id": r["id"], "name": r["name"]} for r in rows]
+
+
 # 팀 기능 그룹 B #13: 공개 포털 메뉴 노출 기본값.
 # team_menu_settings 에 행이 없을 때의 fallback (계획서 섹션 9 기본값 표).
 # #19 가 team_menu_settings 시드를 추가하면 그 값이 우선한다 — 여기는 임시 기본값.

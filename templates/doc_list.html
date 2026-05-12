@@ -692,8 +692,8 @@ async function openWeeklyReportModal() {
   document.getElementById('weekly-error').classList.add('hidden');
   document.getElementById('weekly-loading').classList.add('hidden');
   document.getElementById('weekly-form').style.display = '';
-  if (CURRENT_USER && CURRENT_USER.team_id)
-    document.getElementById('weekly-team').value = CURRENT_USER.team_id;
+  if (CURRENT_USER && CURRENT_USER.work_team_id)
+    document.getElementById('weekly-team').value = CURRENT_USER.work_team_id;
   try {
     const res  = await fetch('/api/ai/models');
     const data = await res.json();

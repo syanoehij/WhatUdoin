@@ -642,10 +642,20 @@ def _https_available() -> bool:
 
 def _ctx(request: Request, **kwargs):
     user = auth.get_current_user(request)
+    # 팀 기능 그룹 B #15: 현재 작업 팀 — 프로필 라벨 + JS payload 용
+    work_team_id = None
+    work_team_name = None
+    if user is not None and not auth.is_unassigned(user):
+        work_team_id = auth.resolve_work_team(request, user, None)
+        if work_team_id is not None:
+            t = db.get_team_active(work_team_id)
+            work_team_name = t["name"] if t else None
     return {
         "request": request,
         "user": user,
         "is_unassigned": auth.is_unassigned(user),  # 팀 기능 그룹 B #12 — 알림 벨 게이팅 등에 사용
+        "work_team_id": work_team_id,            # 팀 기능 그룹 B #15
+        "work_team_name": work_team_name,        # 팀 기능 그룹 B #15
         "https_available": _https_available(),
         "https_port": 8443,
         "http_port": 8000,
@@ -699,15 +709,20 @@ def index(request: Request):
     if auth.is_unassigned(user):
         extra["team_status_map"] = db.get_my_team_statuses(user["id"])
         extra["my_docs"] = db.get_my_personal_meetings(user["id"])
-    return templates.TemplateResponse(request, "home.html", _ctx(request, teams=teams, **extra))
+    resp = templates.TemplateResponse(request, "home.html", _ctx(request, teams=teams, **extra))
+    _ensure_work_team_cookie(request, resp, user)
+    return resp
 
 
 @app.get("/calendar", response_class=HTMLResponse)
 def calendar_page(request: Request):
-    if auth.get_current_user(request) is None:
+    user = auth.get_current_user(request)
+    if user is None:
         return RedirectResponse("/", status_code=303)
     teams = db.get_all_teams()
-    return templates.TemplateResponse(request, "calendar.html", _ctx(request, teams=teams))
+    resp = templates.TemplateResponse(request, "calendar.html", _ctx(request, teams=teams))
+    _ensure_work_team_cookie(request, resp, user)
+    return resp
 
 
 @app.get("/register", response_class=HTMLResponse)
@@ -723,27 +738,35 @@ def admin_page(request: Request):
     teams = db.get_all_teams()
     pending = db.get_pending_users()
     users = db.get_all_users()
-    return templates.TemplateResponse(request, "admin.html", _ctx(
+    resp = templates.TemplateResponse(request, "admin.html", _ctx(
         request, teams=teams, pending=pending, members=users
     ))
+    _ensure_work_team_cookie(request, resp, user)
+    return resp
 
 
 @app.get("/kanban", response_class=HTMLResponse)
 def kanban_page(request: Request):
     teams = db.get_all_teams()
-    return templates.TemplateResponse(request, "kanban.html", _ctx(request, teams=teams))
+    resp = templates.TemplateResponse(request, "kanban.html", _ctx(request, teams=teams))
+    _ensure_work_team_cookie(request, resp, auth.get_current_user(request))
+    return resp
 
 
 @app.get("/gantt", response_class=HTMLResponse)
 def project_page(request: Request):
     teams = db.get_all_teams()
-    return templates.TemplateResponse(request, "project.html", _ctx(request, teams=teams))
+    resp = templates.TemplateResponse(request, "project.html", _ctx(request, teams=teams))
+    _ensure_work_team_cookie(request, resp, auth.get_current_user(request))
+    return resp
 
 
 @app.get("/project-manage", response_class=HTMLResponse)
 def project_manage_page(request: Request):
-    _require_editor(request)
-    return templates.TemplateResponse(request, "project_manage.html", _ctx(request))
+    user = _require_editor(request)
+    resp = templates.TemplateResponse(request, "project_manage.html", _ctx(request))
+    _ensure_work_team_cookie(request, resp, user)
+    return resp
 
 
 @app.get("/doc", response_class=HTMLResponse)
@@ -751,10 +774,12 @@ def docs_page(request: Request):
     user = auth.get_current_user(request)
     docs = db.get_all_meetings(viewer=user, work_team_ids=(_work_scope(request, user, None) if user else None))
     teams = db.get_all_teams()
-    return templates.TemplateResponse(request, "doc_list.html", _ctx(
+    resp = templates.TemplateResponse(request, "doc_list.html", _ctx(
         request, docs=docs, teams=teams,
         default_model=llm_parser.DEFAULT_MODEL,
     ))
+    _ensure_work_team_cookie(request, resp, user)
+    return resp
 
 
 @app.get("/doc/new", response_class=HTMLResponse)
@@ -762,7 +787,9 @@ def doc_new_page(request: Request):
     user = auth.get_current_user(request)
     if not auth.is_editor(user):
         return RedirectResponse("/")
-    return templates.TemplateResponse(request, "doc_editor.html", _ctx(request, doc=None, doc_events=[], can_edit=True))
+    resp = templates.TemplateResponse(request, "doc_editor.html", _ctx(request, doc=None, doc_events=[], can_edit=True))
+    _ensure_work_team_cookie(request, resp, user)
+    return resp
 
 
 @app.get("/doc/{meeting_id}", response_class=HTMLResponse)
@@ -788,10 +815,12 @@ def doc_detail_page(request: Request, meeting_id: int):
             lock_type = "other_user"
             locked_by = lock["user_name"]
     done_projects = db.get_done_project_names()
-    return templates.TemplateResponse(request, "doc_editor.html", _ctx(
+    resp = templates.TemplateResponse(request, "doc_editor.html", _ctx(
         request, doc=doc, doc_events=events,
         locked_by=locked_by, lock_type=lock_type, can_edit=can_edit, done_projects=done_projects,
     ))
+    _ensure_work_team_cookie(request, resp, current_user)
+    return resp
 
 
 @app.get("/doc/{meeting_id}/history", response_class=HTMLResponse)
@@ -801,9 +830,11 @@ def doc_history_page(request: Request, meeting_id: int):
     if current_user is None or not _can_read_doc(current_user, doc):
         raise HTTPException(status_code=404)
     histories = db.get_meeting_histories(meeting_id)
-    return templates.TemplateResponse(request, "doc_history.html", _ctx(
+    resp = templates.TemplateResponse(request, "doc_history.html", _ctx(
         request, doc=doc, histories=histories
     ))
+    _ensure_work_team_cookie(request, resp, current_user)
+    return resp
 
 
 @app.get("/ai-import", response_class=HTMLResponse)
@@ -925,8 +956,10 @@ def check_page(request: Request):
     visible = [p for p in all_projs if user or not p.get("is_private", 0)]
     active_projs = [p for p in visible if p.get("is_active", 1)]
     done_projs   = [p for p in visible if not p.get("is_active", 1)]
-    return templates.TemplateResponse(request, "check.html",
+    resp = templates.TemplateResponse(request, "check.html",
         _ctx(request, projects=active_projs, done_projects=done_projs))
+    _ensure_work_team_cookie(request, resp, user)
+    return resp
 
 
 @app.get("/check/new/edit", response_class=HTMLResponse)
@@ -1480,6 +1513,74 @@ def remove_my_ip_whitelist(request: Request):
     ip = auth.get_client_ip(request)
     db.remove_user_whitelist_ip(user["id"], ip)
     return {"ok": True, "ip": ip}
+
+
+# ── 현재 작업 팀 (work_team_id 쿠키) — 팀 기능 그룹 B #15 ──────────────
+
+def _set_work_team_cookie(response: Response, team_id: int) -> None:
+    response.set_cookie(
+        auth.WORK_TEAM_COOKIE, str(team_id),
+        max_age=86400 * 365, samesite="lax", httponly=False, path="/",
+    )
+
+
+def _ensure_work_team_cookie(request: Request, response: Response, user) -> None:
+    """SSR 페이지 응답에 work_team_id 쿠키가 현재 작업 팀과 일치하도록 보정.
+
+    - 비로그인 / 팀 미배정: 작업 팀 개념 없음 → 아무것도 안 함 (기존 쿠키도 건드리지 않음).
+    - 그 외: resolve_work_team(검증 포함) 결과와 현재 쿠키가 다르면(없거나 무효라 fallback 됐거나
+      오래된 값) Set-Cookie 로 갱신. resolve 결과가 None(admin인데 비삭제 팀 0개 등)이면 안 함.
+    """
+    if user is None or auth.is_unassigned(user):
+        return
+    intended = auth.resolve_work_team(request, user, None)
+    if intended is None:
+        return
+    cookie_raw = request.cookies.get(auth.WORK_TEAM_COOKIE)
+    if cookie_raw != str(intended):
+        _set_work_team_cookie(response, intended)
+
+
+@app.get("/api/me/work-team")
+def get_my_work_team(request: Request):
+    """현재 작업 팀 + 선택 가능한 팀 목록. 프로필 "팀 변경" 드롭다운용.
+
+    - 비admin: 본인 approved + 비삭제 소속 팀 (joined_at 순).
+    - admin:   전체 비삭제 팀 (이름 순).
+    """
+    user = _require_login(request)
+    current = auth.resolve_work_team(request, user, None)
+    if auth.is_admin(user):
+        teams = [{"id": t["id"], "name": t["name"]} for t in db.get_visible_teams()]
+    else:
+        teams = db.user_work_teams(user["id"])
+    return {"current": current, "teams": teams, "is_admin": auth.is_admin(user)}
+
+
+@app.post("/api/me/work-team")
+async def set_my_work_team(request: Request, response: Response):
+    """현재 작업 팀 변경 — 검증 후 work_team_id 쿠키 갱신.
+
+    - 비admin: 그 팀의 approved 멤버여야 함 (require_work_team_access). 비삭제 팀이어야 함.
+    - admin:   비삭제 팀이면 허용.
+    잘못된 팀이면 4xx.
+    """
+    _check_csrf(request)
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    data = await request.json()
+    raw = data.get("team_id")
+    try:
+        tid = int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="team_id가 올바르지 않습니다.")
+    team = db.get_team_active(tid)
+    if not team:
+        raise HTTPException(status_code=404, detail="존재하지 않거나 삭제 예정인 팀입니다.")
+    auth.require_work_team_access(user, tid)  # admin은 통과, 비admin은 소속 검증 (403)
+    _set_work_team_cookie(response, tid)
+    return {"ok": True, "team_id": tid, "team_name": team["name"]}
 
 
 @app.post("/api/logout")
@@ -4760,7 +4861,9 @@ async def ai_weekly_report(request: Request):
 @app.get("/trash", response_class=HTMLResponse)
 def trash_page(request: Request):
     user = _require_editor(request)
-    return templates.TemplateResponse(request, "trash.html", _ctx(request))
+    resp = templates.TemplateResponse(request, "trash.html", _ctx(request))
+    _ensure_work_team_cookie(request, resp, user)
+    return resp
 
 
 @app.get("/api/trash")

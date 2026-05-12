@@ -1,27 +1,47 @@
-# frontend_changes — 팀 기능 그룹 B #14
+# #15 프론트엔드 변경 — 프로필 "팀 변경" UI + 화면별 팀 드롭다운 제거
 
-## 변경 파일
-- `templates/team_portal.html` (3곳: docstring 주석, `.portal-hero-actions` 버튼 분기, `{% block scripts %}`)
+## templates/base.html
 
-## 변경 내용
+- `current_user_payload` 에 `work_team_id`/`work_team_name` 추가 (백엔드 `_ctx` 가 넘김) → JS `CURRENT_USER.work_team_id` 접근 가능.
+- 프로필 드롭다운 헤더 이름줄: `{{ user.name }}{% if work_team_name %} · {{ work_team_name }}{% if user.role == 'admin' %}(슈퍼유저){% endif %}{% endif %}` — 계획서 §7 예시 (`홍길동 · HW팀`, admin `admin · HW팀(슈퍼유저)`). work_team_name 없으면(미배정/팀 0개) 이름만.
+- 프로필 드롭다운 최상단(헤더 아래)에 "👥 팀 변경" 토글 버튼 + `#work-team-list` 접히는 서브리스트 + 구분선. 토글 시 `GET /api/me/work-team` 한 번 fetch → 팀 목록 렌더(현재 작업 팀엔 ✔). 이름은 `textContent` 로 주입(XSS 회피).
+- 팀 선택 → `selectWorkTeam(id)`: `POST /api/me/work-team {team_id}` → `r.ok` 면 `location.reload()`, 실패면 `showToast`(있으면)/`alert` 로 `detail`.
+- JS 신규: `_workTeamLoaded` 플래그, `toggleWorkTeamMenu()`, `loadWorkTeams()`, `selectWorkTeam(teamId)`. `closeProfileMenu()` 에 `#work-team-list` 닫기 1줄 추가.
 
-### 1. `.portal-hero-actions` 버튼 분기 (계획서 섹션 7 표)
-`<a href="/" ...>홈</a>` 는 그대로 유지. 그 뒤를:
-```
-{% if not user %}              → <a href="/register" ... btn-primary>계정 가입</a>   (#13, 유지)
-{% elif my_team_status == 'approved' %}  → 버튼 없음
-{% elif my_team_status == 'pending' %}   → <button class="btn btn-sm" disabled>가입 대기 중</button>
-{% elif user.role == 'admin' %}          → 버튼 없음 (슈퍼유저)
-{% else %}                               → <button ... onclick="applyToTeam({{ team.id }})">팀 신청</button>
-```
-admin 분기를 `else` **앞**에 둔 이유: admin 은 `my_team_status=None` 이라 그냥 두면 `else` 의 "팀 신청"으로 떨어진다.
+## static/css/style.css
 
-### 2. `applyToTeam` JS (`{% block scripts %}` `{% if not deleted %}` 안)
-home.html 의 `applyToTeam` 최소 복제 (~18줄). `fetch('/api/me/team-applications', POST {team_id})`, 성공 시 `showToast`(있으면) + 600ms 후 `location.reload()`, 실패 시 `detail` 토스트/alert fallback. `team_portal.html` 에는 다른 JS 가 없어 독립 복제가 적절 (surgical — 버튼 1개).
+- `.profile-dropdown-sep` 뒤에 `.work-team-list` / `.work-team-list.hidden` / `.work-team-empty` / `.profile-dropdown-item.work-team-item` / `.profile-dropdown-item.work-team-item.active` (max-height 220 + overflow 스크롤, active 는 `--accent` 색·굵게) 추가.
 
-### 3. 주석 정리
-- 상단 docstring(#13)에 #14 버튼 분기 표를 명시. "#14 에서 로그인 UI 분기 추가" 같은 미루기 문구 제거.
-- `.portal-hero-actions` 안의 `{# #14 범위: ... #13 에서 구현하지 않는다. #}` 미루기 주석 제거.
+## templates/kanban.html (화면별 팀 드롭다운 제거)
 
-## 건드리지 않은 것
-데이터 노출/탭/패널 5종/탭 전환 IIFE/CSS — #13 구현 그대로. deleted 안내 분기 변경 없음.
+- `<label>팀</label>` + `<select id="team-filter" onchange="loadKanban()">...{% for team in teams %}...</select>` 제거.
+- `_applyInitialTeamFilter()` 함수 제거 + 초기화 호출부 제거.
+- `loadKanban()`: `team-filter.value` / `kanban_team_filter` localStorage / 조건부 URL 제거 → `fetch('/api/kanban')` (서버가 `work_team_id` 쿠키로 결정).
+- 팀원 칩 로드: `CURRENT_USER.team_id` → `CURRENT_USER.work_team_id`.
+- `project-filter`·`kbn-my-only-btn`·`kanban-team-members`·member-chip 로직 그대로.
+
+## templates/project.html (간트 — 화면별 팀 드롭다운 제거)
+
+- `<select id="team-filter" onchange="loadData()">...{% for team in teams %}...</select>` 제거.
+- `const LS_TEAM = 'proj_team_filter';` + `_applyInitialTeamFilter()` 함수 + init 호출부 제거.
+- `loadData()`: `team-filter.value` / `LS_TEAM` localStorage / 조건부 URL 제거 → `fetch('/api/project-timeline')` (서버 쿠키 의존).
+- nav 버튼·접기·my-only 그대로.
+
+## templates/calendar.html
+
+- 팀원 칩 로드: `CURRENT_USER.team_id` → `CURRENT_USER.work_team_id`.
+- 일정 상세 수정 버튼 게이팅: `p.team_id === CURRENT_USER.team_id` → `p.team_id === CURRENT_USER.work_team_id` (실제 권한은 서버 최종 판단 — UI 힌트만). `CURRENT_USER.role === 'editor'` 리터럴은 #16 책임이라 미변경 (surgical).
+- `/api/events` fetch는 team_id 파라미터 안 보냄 — 그대로 (서버 쿠키 의존). 캘린더는 원래 화면별 팀 드롭다운 없음.
+
+## templates/doc_list.html
+
+- 주간 업무 작성 모달 `#weekly-team` 기본 선택값: `CURRENT_USER.team_id` → `CURRENT_USER.work_team_id`. 드롭다운 자체(`{% for t in teams %}` "전체 팀" 옵션)는 그대로 — 주간 보고서의 per-report 파라미터(어느 팀 기준으로 보고서 생성할지)이지 화면 컨텍스트 필터가 아니라서 #15 범위 밖. (계획서 §7은 칸반·간트·캘린더만 명시.)
+
+## 알려진 한계 / 범위 밖
+
+- `teams` 컨텍스트 변수는 `kanban_page`/`project_page` 라우트가 여전히 넘기지만 kanban.html/project.html 에서 더 이상 사용 안 함. 라우트 시그니처는 admin.html 등 다른 템플릿이 공유하므로 미변경 (백엔드와 합의).
+- `weekly-team` 모달 드롭다운 / `CURRENT_USER.role === 'editor'` 리터럴 — #15 범위 밖.
+
+## Jinja 구문 검증
+
+`Environment(FileSystemLoader('templates')).get_template(...)` — base/kanban/project/calendar/doc_list 전부 OK.

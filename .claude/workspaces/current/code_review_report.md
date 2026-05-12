@@ -1,21 +1,31 @@
-# code_review_report — 팀 기능 그룹 B #14
+# #15 코드 리뷰 — work_team_id 쿠키 + 프로필 "팀 변경" UI
 
-## 범위
-`app.py` (`team_public_portal` 1곳), `templates/team_portal.html` (3곳), `tests/phase83_team_portal_loggedin.py` (신규).
+대상: `auth.py`, `database.py`, `app.py`, `templates/base.html`, `templates/kanban.html`, `templates/project.html`, `templates/calendar.html`, `templates/doc_list.html`, `static/css/style.css`, `tests/phase84_work_team_cookie.py`.
 
-## 결과: 차단 0 / 경고 1
+## 결론: 차단 결함 0건. 경고 3건 (현 범위 허용).
 
-### 통과 확인
-- **계획서 섹션 7 표 충실 구현**: 비로그인="계정 가입" / approved=버튼 없음 / pending="가입 대기 중"(disabled) / 미소속·rejected="팀 신청" / admin=버튼 없음. admin 행은 표에 없어 본 구현이 명시 결정(주석으로 근거 — "슈퍼유저, 팀 신청 의미 없음").
-- **redirect 없음**: 라우트에 `RedirectResponse` 미사용. 로그인/admin 모두 200 공개 포털 (계획서 핵심: "URL 은 권한 경계가 아니다", "홈 버튼으로 / 이동").
-- **surgical**: 백엔드는 1 라우트만, 새 DB 헬퍼·마이그레이션 없음 (#12/#13 자산 재사용). 프론트는 버튼 분기 + JS 복제 + 주석 정리만 — 데이터 노출/탭 로직 무변경.
-- **#12 패턴 일관**: `get_my_team_statuses` 재사용, `pending_other` 는 새 UI 안 만들고 서버 에러에 위임 (home.html 과 동일). `applyToTeam` 마크업/동작도 home.html 미러.
-- **분기 순서 정확**: admin(`user.role=='admin'`, `my_team_status=None`)이 `else` 의 "팀 신청"으로 새지 않게 `else` 앞에 admin 분기 배치 — 템플릿·테스트 모두 검증.
-- **주석 정리**: #13 이 남긴 "#14 에서 구현" 미루기 문구 2곳 제거. 테스트가 `'구현하지 않는다' not in html` 로 회귀 가드.
-- **테스트**: phase83 9개 + 회귀 phase80(5)·phase81(8)·phase82(8) = 30/30 PASS. TestClient + 임시 DB (운영 IP 자동 로그인이라 특정 사용자 상태 브라우저 재현 불가 — 적절한 선택).
+## 점검 항목
 
-### 경고 (현 범위에서 허용)
-1. **`applyToTeam` 중복** — home.html 과 team_portal.html 에 동일 함수 ~18줄. 공유 static JS 로 추출 가능하나 버튼 1개·범위 작음 → surgical 원칙상 복제 허용. 향후 공통 JS 정리 시 후보.
+- **마이그레이션 phase 추가 없음** ✔ — 신규 DB 헬퍼(`first_active_team_id`/`primary_team_id_for_user`/`user_work_teams`) 전부 SELECT 전용. `PHASES`/`_PREFLIGHT_CHECKS` 미변경. 스키마 무변경 → 운영 DB 마이그레이션 불필요.
+- **#10 회귀 안전** ✔ — `_work_scope`(app.py) 무변경: admin `None` 반환·explicit team_id 우선·비소속 무시 fallback·미배정 빈 set 그대로. 쿠키 검증을 `resolve_work_team` 내부로 흡수했지만 `_work_scope`의 line 1948-1950 재검증은 중복일 뿐 무해(그대로 둠 — surgical). phase84 test_j(명시 team_id 우선) PASS.
+- **admin 동작** ✔ — `resolve_work_team(admin, no/invalid cookie)` = 첫 비삭제 팀(`first_active_team_id`) — 계획서 §7 의도. `_work_scope(admin)` = `None` 유지 → READ 슈퍼유저 무필터 (phase84 test_l PASS). admin write 경로(`resolve_work_team` 호출 — app.py:2153 event create 등)가 이제 admin에게 실제 team_id 반환 — 계획서 §7 의도. 아카이브 `verify_team10.py` read-focused로 admin write `team_id IS NULL` 단언 없음 (확인 완료).
+- **쿠키 검증** ✔ — `resolve_work_team` 쿠키 경로: int 파싱 + `user_can_access_team(user, ctid)` AND `_team_is_active(ctid)` 통과 시에만 사용. 무효(삭제 예정/소속 빠짐)면 무시 → `_work_team_default` → 호출부 `_ensure_work_team_cookie` 가 Set-Cookie 갱신 (phase84 test_d/test_e PASS).
+- **Set-Cookie 발급** ✔ — `_set_work_team_cookie`(max_age 1년, samesite=lax, httponly=False, path=/). `_ensure_work_team_cookie`: user None/미배정이면 noop, `resolve_work_team` 결과(None이면 noop)와 현재 쿠키 다르면 Set-Cookie. SSR 페이지 12개에 호출 추가. 미배정 SSR `GET /` → Set-Cookie 없음 (phase84 test_k PASS).
+- **`POST /api/me/work-team`** ✔ — `_check_csrf` + 로그인 필수(401) + int 파싱(400) + `db.get_team_active`(없으면 404) + `auth.require_work_team_access`(비admin 비소속 403). phase84 test_f/g/h/n PASS.
+- **`GET /api/me/work-team`** ✔ — `_require_login`. 비admin=`user_work_teams`, admin=`get_visible_teams()`. phase84 test_m PASS.
+- **프론트 XSS** ✔ — `loadWorkTeams` 가 팀 이름을 `textContent` 로 주입(HTML interpolation 아님). 버튼 onclick 은 int `t.id` 만.
+- **프론트 surgical** ✔ — kanban/project 화면별 팀 드롭다운 + `_applyInitialTeamFilter` + localStorage 키(`kanban_team_filter`/`proj_team_filter`) 제거, `loadKanban`/`loadData` URL 단순화. member-chip·my-only·project-filter 등 나머지 그대로. `CURRENT_USER.team_id` → `work_team_id` 4곳(kanban/calendar 멤버칩 + calendar 편집 게이팅 힌트 + doc_list weekly-team 기본값) 교체, legacy 잔존 없음.
+- **import** ✔ — `python -c "import app"` OK. Jinja `get_template` base/kanban/project/calendar/doc_list OK.
 
-## 사전 결함 (이번 변경 무관)
-`tests/test_project_rename.py` 2 FAIL — 옛 픽스처 DB 에 `projects.team_id` 없음. master HEAD 동일, #13 에서도 동일하게 기록됨.
+## 경고 (허용)
+
+1. `_ctx` 가 모든 SSR 페이지에서 `resolve_work_team` 호출 → 페이지당 DB 쿼리 +1~2회 (`user_can_access_team`/`primary_team_id_for_user`/`get_team_active`). 호출 빈도 낮고 #12에서도 `_ctx` +1 쿼리 허용한 전례 — 허용. 향후 캐싱 후보.
+2. `_ensure_work_team_cookie` 내부에서도 `resolve_work_team` 한 번 더 호출 (`_ctx`와 합쳐 페이지당 2회). 마찬가지로 허용.
+3. `templates/kanban.html`/`project.html` 라우트가 여전히 `teams=db.get_all_teams()` 넘기지만 두 템플릿에서 더 이상 사용 안 함 (다른 템플릿 공유라 시그니처 미변경). 사소한 데드 인자 — 허용 (#16 정리 후보).
+4. `weekly-team` 모달 드롭다운 / `calendar.html` 의 `CURRENT_USER.role === 'editor'` 리터럴 — #15 범위 밖, 미변경.
+
+## 회귀 테스트
+
+- `tests/phase84_work_team_cookie.py` 19/19 PASS.
+- `tests/phase80_landing_page.py`(#11) 5 / `phase81_unassigned_user.py`(#12) 8 / `phase82_team_portal.py`(#13) 8 / `phase83_team_portal_loggedin.py`(#14) 9 — 30/30 PASS.
+- `tests/test_project_rename.py` 2 FAIL은 사전 결함(`git stash` 후 동일 — 옛 픽스처 DB에 `projects.team_id` 없음, master HEAD `04006ba` 동일, #15 무관).

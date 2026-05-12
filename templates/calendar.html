@@ -566,9 +566,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // 내 일정만 버튼 초기 상태 동기화
   _syncMyOnlyBtn();
 
-  // 팀원 칩 로드
-  if (CURRENT_USER && CURRENT_USER.team_id) {
-    fetch(`/api/teams/members?team_id=${CURRENT_USER.team_id}`)
+  // 팀원 칩 로드 — 현재 작업 팀 기준 (팀 기능 #15)
+  if (CURRENT_USER && CURRENT_USER.work_team_id) {
+    fetch(`/api/teams/members?team_id=${CURRENT_USER.work_team_id}`)
       .then(r => r.json())
       .then(members => {
         const strip = document.getElementById('team-members-strip');
@@ -762,11 +762,11 @@ function showDetail(fcEvent) {
     </div>
   `).join('');
 
-  // 수정 버튼: 에디터/관리자이고 자기 팀 일정일 때만 표시
+  // 수정 버튼: 에디터/관리자이고 현재 작업 팀 일정일 때만 표시 (실제 권한은 서버 최종 판단 — 팀 기능 #15)
   const editBtn = document.getElementById('btn-edit-from-detail');
   const canEdit = CURRENT_USER && (
     CURRENT_USER.role === 'admin' ||
-    (CURRENT_USER.role === 'editor' && (p.team_id === null || p.team_id === CURRENT_USER.team_id))
+    (CURRENT_USER.role === 'editor' && (p.team_id === null || p.team_id === CURRENT_USER.work_team_id))
   );
   editBtn.style.display = canEdit ? '' : 'none';
 

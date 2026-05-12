@@ -244,13 +244,6 @@
 {% block content %}
 <div class="kanban-toolbar">
   <div class="kanban-toolbar-left">
-    <label>팀</label>
-    <select id="team-filter" onchange="loadKanban()">
-      <option value="">전체</option>
-      {% for team in teams %}
-      <option value="{{ team.id }}">{{ team.name }}</option>
-      {% endfor %}
-    </select>
     <label>프로젝트</label>
     <select id="project-filter" onchange="renderBoard()">
       <option value="">전체</option>
@@ -335,17 +328,6 @@ let _kanbanMyOnly = !!CURRENT_USER;
 let _kanbanFilterMember = null;
 let _kanbanStatusFilter = null;
 
-function _applyInitialTeamFilter() {
-  const sel = document.getElementById('team-filter');
-  if (!sel) return;
-  const saved = localStorage.getItem('kanban_team_filter');
-  let target;
-  if (saved !== null) target = saved;
-  else if (CURRENT_USER && CURRENT_USER.team_id != null) target = String(CURRENT_USER.team_id);
-  else target = '';
-  if (sel.querySelector(`option[value="${CSS.escape(target)}"]`) || sel.querySelector(`option[value="${target}"]`)) sel.value = target;
-}
-
 function _syncKanbanMyOnlyBtn() {
   const btn = document.getElementById('kbn-my-only-btn');
   if (!btn) return;
@@ -376,10 +358,8 @@ function toggleKanbanMemberFilter(name) {
 }
 
 async function loadKanban() {
-  const teamId = document.getElementById('team-filter').value;
-  localStorage.setItem('kanban_team_filter', teamId);
-  const url = teamId ? `/api/kanban?team_id=${teamId}` : '/api/kanban';
-  const res = await fetch(url);
+  // 팀 기능 #15: 작업 팀은 work_team_id 쿠키로 서버가 결정 — 화면별 팀 드롭다운 제거.
+  const res = await fetch('/api/kanban');
   allEvents = await res.json();
 
   // 프로젝트 필터 목록 — 실제 로드된 이벤트에 있는 프로젝트만 표시 (events 기반 뷰이므로)
@@ -594,15 +574,14 @@ window.onKDetailSaved = loadKanban;
 })();
 
 // 초기 로드
-_applyInitialTeamFilter();
 _syncKanbanMyOnlyBtn();
 const _initStatusParam = new URLSearchParams(location.search).get('status');
 if (_initStatusParam) _kanbanStatusFilter = _initStatusParam;
 loadProjColors().then(() => loadKanban());
 
-// 팀원 칩 로드
-if (CURRENT_USER && CURRENT_USER.team_id) {
-  fetch(`/api/teams/members?team_id=${CURRENT_USER.team_id}`)
+// 팀원 칩 로드 — 현재 작업 팀 기준 (팀 기능 #15)
+if (CURRENT_USER && CURRENT_USER.work_team_id) {
+  fetch(`/api/teams/members?team_id=${CURRENT_USER.work_team_id}`)
     .then(r => r.json())
     .then(members => {
       const strip = document.getElementById('kanban-team-members');

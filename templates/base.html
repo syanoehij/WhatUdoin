@@ -341,7 +341,7 @@
   }
   .settings-hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
   </style>
-  {% set current_user_payload = {'role': user.role, 'team_id': user.team_id, 'name': user.name} if user else none %}
+  {% set current_user_payload = {'role': user.role, 'team_id': user.team_id, 'name': user.name, 'work_team_id': work_team_id, 'work_team_name': work_team_name} if user else none %}
   <script type="application/json" id="current-user-json">{{ current_user_payload | tojson }}</script>
   <script>
     var CURRENT_USER = JSON.parse(document.getElementById('current-user-json').textContent);
@@ -463,9 +463,18 @@
           </button>
           <div class="profile-dropdown hidden" id="profile-dropdown">
             <div class="profile-dropdown-header">
-              <div class="profile-dropdown-name">{{ user.name }}</div>
+              <div class="profile-dropdown-name">{{ user.name }}{% if work_team_name %} · {{ work_team_name }}{% if user.role == 'admin' %}(슈퍼유저){% endif %}{% endif %}</div>
               <div class="profile-dropdown-role">{% if user.role == 'admin' %}관리자{% else %}에디터{% endif %}</div>
             </div>
+            {# 팀 기능 그룹 B #15: 현재 작업 팀 선택 #}
+            <button class="profile-dropdown-item" id="work-team-toggle" onclick="event.stopPropagation(); toggleWorkTeamMenu()">
+              👥 팀 변경
+              <span class="profile-caret" style="margin-left:auto;font-size:0.7rem;">▾</span>
+            </button>
+            <div class="work-team-list hidden" id="work-team-list">
+              <div class="work-team-empty">불러오는 중...</div>
+            </div>
+            <div class="profile-dropdown-sep"></div>
             <a href="/trash" class="profile-dropdown-item" onclick="closeProfileMenu()">🗑️ 휴지통</a>
             <button class="profile-dropdown-item" onclick="closeProfileMenu(); openUserSettings()">⚙️ 설정</button>
             <div class="profile-dropdown-item theme-row">
@@ -965,11 +974,65 @@
     function closeProfileMenu() {
       document.getElementById('profile-dropdown')?.classList.add('hidden');
       document.getElementById('profile-menu')?.classList.remove('open');
+      document.getElementById('work-team-list')?.classList.add('hidden');
     }
     document.addEventListener('click', function(e) {
       const menu = document.getElementById('profile-menu');
       if (menu && !menu.contains(e.target)) closeProfileMenu();
     });
+
+    /* ── 팀 기능 #15: 현재 작업 팀 선택 ── */
+    let _workTeamLoaded = false;
+    async function toggleWorkTeamMenu() {
+      const list = document.getElementById('work-team-list');
+      if (!list) return;
+      const willOpen = list.classList.contains('hidden');
+      list.classList.toggle('hidden', !willOpen);
+      if (willOpen && !_workTeamLoaded) await loadWorkTeams();
+    }
+    async function loadWorkTeams() {
+      const list = document.getElementById('work-team-list');
+      if (!list) return;
+      try {
+        const r = await fetch('/api/me/work-team');
+        if (!r.ok) throw new Error('load failed');
+        const data = await r.json();
+        const teams = data.teams || [];
+        if (!teams.length) {
+          list.innerHTML = '<div class="work-team-empty">선택할 팀이 없습니다.</div>';
+        } else {
+          list.innerHTML = teams.map(t => {
+            const cur = (t.id === data.current);
+            return '<button class="profile-dropdown-item work-team-item' + (cur ? ' active' : '') +
+              '" onclick="event.stopPropagation(); selectWorkTeam(' + t.id + ')">' +
+              (cur ? '✔ ' : '   ') +
+              '<span class="work-team-name"></span></button>';
+          }).join('');
+          // textContent 로 안전하게 이름 주입 (XSS 회피)
+          const btns = list.querySelectorAll('.work-team-item .work-team-name');
+          teams.forEach((t, i) => { if (btns[i]) btns[i].textContent = t.name; });
+        }
+        _workTeamLoaded = true;
+      } catch (e) {
+        list.innerHTML = '<div class="work-team-empty">불러오기 실패</div>';
+      }
+    }
+    async function selectWorkTeam(teamId) {
+      try {
+        const r = await fetch('/api/me/work-team', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({team_id: teamId}),
+        });
+        if (r.ok) { location.reload(); return; }
+        let msg = '팀 변경에 실패했습니다.';
+        try { const j = await r.json(); if (j && j.detail) msg = j.detail; } catch {}
+        if (typeof showToast === 'function') showToast(msg, 'error'); else alert(msg);
+      } catch (e) {
+        if (typeof showToast === 'function') showToast('팀 변경 중 오류가 발생했습니다.', 'error');
+        else alert('팀 변경 중 오류가 발생했습니다.');
+      }
+    }
 
     /* ── 다크 테마 ── */
     function applyDarkTheme(isDark) {

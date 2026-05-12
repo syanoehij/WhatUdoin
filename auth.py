@@ -153,17 +153,51 @@ def require_work_team_access(user, team_id) -> None:
         raise HTTPException(status_code=403, detail="해당 팀에 대한 접근 권한이 없습니다.")
 
 
-# work_team_id 결정 쿠키 — UI 통합은 #15 책임. 본 사이클은 헬퍼 시그니처 + fallback만.
+# work_team_id 결정 쿠키 — 팀 기능 그룹 B #15: 발급/검증/Set-Cookie 통합.
 WORK_TEAM_COOKIE = "work_team_id"
 
 
-def resolve_work_team(request: Request, user, explicit_id=None):
-    """현재 작업 컨텍스트의 team_id를 결정한다.
+def _team_is_active(team_id) -> bool:
+    """teams.deleted_at IS NULL 인 팀이 존재하는지 — 작업 팀 쿠키/명시 값 검증용."""
+    if team_id is None:
+        return False
+    try:
+        return db.get_team_active(team_id) is not None
+    except Exception:
+        return False
 
-    우선순위: explicit_id → 쿠키 → 사용자의 대표 팀 → users.team_id legacy → None.
-    admin은 명시 work_team_id가 없으면 None을 반환한다 (admin_team_scope의 의도).
+
+def _work_team_default(user):
+    """쿠키가 없거나 무효일 때의 대표 작업 팀.
+
+    - 비admin: user_teams approved + 비삭제 팀 중 joined_at 가장 이른 팀(대표 팀).
+               approved 소속이 없으면 legacy users.team_id (비삭제일 때만) → None.
+    - admin:   첫 번째 비삭제 팀(id 최소). 비삭제 팀이 없으면 None.
     """
-    # 1. 명시 인자
+    if is_admin(user):
+        return db.first_active_team_id()
+    uid = user.get("id") if user else None
+    if uid is not None:
+        primary = db.primary_team_id_for_user(uid)
+        if primary is not None:
+            return primary
+    # legacy fallback (마이그레이션 전 호출 방어) — 비삭제 팀일 때만
+    legacy = user.get("team_id") if user else None
+    if legacy is not None and _team_is_active(legacy):
+        return legacy
+    return None
+
+
+def resolve_work_team(request: Request, user, explicit_id=None):
+    """현재 작업 컨텍스트의 team_id를 결정한다 (팀 기능 그룹 B #15).
+
+    우선순위: explicit_id(검증 안 함 — 호출부가 require_work_team_access/_work_scope 로 검증)
+              → work_team_id 쿠키(검증: 사용자 접근 가능 + 비삭제 팀)
+              → 대표 작업 팀(_work_team_default).
+    쿠키 값이 무효(삭제 예정 팀 / 소속 빠짐)면 무시하고 대표 팀으로 fallback.
+    admin 의 대표 팀은 첫 번째 비삭제 팀 (계획서 §7 — '마지막 선택 팀'은 쿠키가 담당).
+    """
+    # 1. 명시 인자 (호출부 책임으로 무조건 신뢰 — _work_scope/require_work_team_access 가 검증)
     if explicit_id is not None:
         try:
             tid = int(explicit_id)
@@ -172,27 +206,19 @@ def resolve_work_team(request: Request, user, explicit_id=None):
         if tid is not None:
             return tid
 
-    # 2. 쿠키
+    # 2. 쿠키 — 검증 통과 시에만 사용
     cookie_val = request.cookies.get(WORK_TEAM_COOKIE) if request else None
     if cookie_val:
         try:
-            return int(cookie_val)
+            ctid = int(cookie_val)
         except (TypeError, ValueError):
-            pass
+            ctid = None
+        if ctid is not None and user_can_access_team(user, ctid) and _team_is_active(ctid):
+            return ctid
+        # 무효 쿠키 → 아래 fallback (호출부가 Set-Cookie 로 갱신)
 
-    # 3. admin은 명시 미지정 시 None (전 팀 슈퍼유저 — 특정 팀 컨텍스트 강제 안 함)
-    if is_admin(user):
-        return None
-
-    # 4. 사용자의 대표 팀 (user_teams 첫 번째 approved row)
-    team_ids = user_team_ids(user)
-    if team_ids:
-        # 결정성 위해 최소 id 선택
-        return min(team_ids)
-
-    # 5. legacy fallback
-    legacy = user.get("team_id") if user else None
-    return legacy
+    # 3. 대표 작업 팀
+    return _work_team_default(user)
 
 
 def admin_team_scope(user):
