@@ -1,36 +1,32 @@
-# QA — 팀 기능 그룹 B #13 (`/팀이름` 비로그인 공개 포털)
+# qa_report — 팀 기능 그룹 B #14
 
-## 방법
+## 방식
+TestClient + 임시 DB (`monkeypatch.setattr(db, "DB_PATH", ...)`). 운영 서버는 IP 자동 로그인이라 특정 사용자 상태(미소속/pending/rejected/approved/admin) 브라우저 재현 불가 — phase81/82 와 동일하게 TestClient 로 검증. 임시 DB 는 실행 후 정리.
 
-운영 서버는 IP 자동 로그인이라 비로그인 브라우저 재현 불가 → **TestClient + 임시 DB**로 익명 요청 검증
-(TestClient 기본 클라이언트 IP `testclient`는 user_ips whitelist 미매칭 → 익명). `tests/phase82_team_portal.py` 신규.
-임시 DB는 `.claude/workspaces/current/test_dbs/` 하위에 격리 생성 후 정리.
+## 신규: `tests/phase83_team_portal_loggedin.py` — 9/9 PASS
 
-## 결과: 8/8 PASS
+| # | 케이스 | 단언 |
+|---|--------|------|
+| 1 | 정적: `team_public_portal` | `my_team_status` 컨텍스트 전달 + `is_admin`/`user_team_ids`/`get_my_team_statuses` 사용 + `RedirectResponse` 미사용 + `import app` OK |
+| 2 | 정적: `team_portal.html` | `my_team_status == 'approved'/'pending'` 분기 + `user.role == 'admin'` 분기 + `applyToTeam(`/`async function applyToTeam`/`/api/me/team-applications` + `가입 대기 중` `disabled` + `#14` 주석 + `구현하지 않는다` 미루기 문구 제거됨 |
+| 3 | 미소속 로그인, 신청 이력 없음 → `/ABC` | 200, `onclick="applyToTeam(` 노출, `가입 대기 중`·`btn-primary">계정 가입` 부재 |
+| 4 | 해당 팀 pending → `/ABC` | 200, `<button class="btn btn-sm" disabled>가입 대기 중</button>` 노출, `applyToTeam(` 부재 |
+| 5 | 다른 팀 pending(해당 팀 미소속) → `/ABC` | 200, `applyToTeam(` 노출 (서버가 클릭 시 `pending_other` 차단 — UI 관심사 아님), pending 버튼 부재 |
+| 6 | 해당 팀 approved 멤버 → `/ABC` | 200, `applyToTeam(`·`가입 대기 중`·`계정 가입` 모두 부재 |
+| 7 | 해당 팀 rejected → `/ABC` | 200, `applyToTeam(` 재노출 (재신청), pending 버튼 부재 |
+| 8 | admin → `/ABC` | status 200 (30x 아님), `applyToTeam(`·`가입 대기 중`·`계정 가입` 부재, `id="portal-tabs"` 존재 (포털 본문 정상) |
+| 9 | 비로그인 → `/ABC` | 200, `btn-primary">계정 가입` 노출 (#13 회귀), `applyToTeam(`·pending 버튼 부재 |
 
-| 테스트 | 검증 내용 | 결과 |
-|--------|----------|------|
-| `test_dynamic_route_registered_last` | `/{team_name}`이 모든 정적 페이지 라우트(`/`,`/calendar`,`/admin`,`/kanban`,`/gantt`,`/doc`,`/check`,`/notice`,`/trash`,`/remote`,`/avr`)보다 뒤에 등록(소스 오프셋) + 핸들러가 `_TEAM_NAME_RE`/`casefold`/`RESERVED_TEAM_PATHS`/404/`get_team_by_name_exact`/`deleted` 사용 | PASS |
-| `test_db_helpers_exist_no_new_phases` | `get_team_by_name_exact`(WHERE name = ?)·`get_team_menu_visibility`·`get_public_portal_data` 존재 + `team_phase_13`/`public_portal_v1` 마커 부재(스키마 무변경) | PASS |
-| `test_team_portal_template` | `team_portal.html`: `{% if deleted %}` 분기 + `{% if not user %}`/`href="/register"` 계정 가입 조건 + `portal.menu` 사용 + `#14` 미룸 주석 | PASS |
-| `test_portal_case_exact_and_404s` | `GET /ABC`(대문자 팀)→200·팀 이름·`btn-primary">계정 가입`·`공개 포털 — ...` / `GET /abc`→404(대소문자 분리) / `GET /Nonexistent`→404 / `GET /Bad-Name`(하이픈)→404 | PASS |
-| `test_static_and_api_routes_not_eclipsed` | `GET /admin`→admin 로그인 페이지(포털 아님) / `GET /api/health`→200 / `GET /docs`·`/redoc`·`/openapi.json`→200 / `GET /static/<실제 파일>`→404 아님(mount 살아 있음) / 예약어 20종 각각 `GET /<예약어>`→포털 마크업 부재 | PASS |
-| `test_portal_data_filtering` | `/ABC` 마크업: `PUBLIC_EVENT/CHECK/DOC` 노출, `PRIVATE_EVENT/CHECK/DOC`(is_public=0) 비노출, `PERSONAL_DOC`(is_team_doc=0) 비노출, `HIDDEN_PROJ_EVENT/CHECK`(히든 프로젝트, is_public=1이어도) 비노출, `HiddenProj` 이름 자체 비노출 | PASS |
-| `test_deleted_team_notice_only` | 삭제 예정 팀 `GET /GoneTeam`→200·"삭제 예정" 노출·`btn-primary">계정 가입` 부재·`공개 포털 — ...` 부재·`id="portal-tabs"` 부재·공개 데이터 부재 | PASS |
-| `test_logged_in_user_gets_portal_no_redirect` | 로그인 사용자(create_user_account+create_session 쿠키) `GET /ABC`→200 포털(redirect 아님)·`공개 포털 — ...` 노출·`btn-primary">계정 가입`(포털 본문) 부재 | PASS |
+공통(`_assert_portal_ok`): 모든 케이스 status 200, `공개 포털 — 공개 설정된 항목만` 본문, `href="/" class="btn btn-sm btn-outline">홈` (홈 버튼이 `/` 로) 존재.
 
-## 회귀
+## 회귀: 모두 PASS
+- `tests/phase80_landing_page.py` (#11) — 5/5
+- `tests/phase81_unassigned_user.py` (#12) — 8/8
+- `tests/phase82_team_portal.py` (#13) — 8/8
+- 합계 phase83 포함 30/30 PASS (`pytest ... -v`, 7.9s)
 
-- `tests/phase80_landing_page.py`(#11) 5/5 PASS
-- `tests/phase81_unassigned_user.py`(#12) 9/9(8 함수, 1 함수 다중 시나리오) PASS
-- 나머지 `tests/` 전체: 12 PASS / 2 FAIL — 2건은 `tests/test_project_rename.py`의 사전 결함(`sqlite3.OperationalError: no such column: team_id` — 옛 픽스처 DB에 `projects.team_id` 없음. master HEAD에서도 동일, prior cycle changelog 다수 기록. #13 무관).
-- `import app` OK (실제 Python 3.12).
-
-## 자가 발견 결함
-
-수정 중 1건: 테스트 초안에서 `"계정 가입" not in html`로 단언했으나 `base.html`의 로그인 모달(항상 렌더)에 `/register` "계정 가입" 링크(`class="login-link"`)가 항상 존재 → 포털 본문 버튼만 식별하도록 `'btn-primary">계정 가입'`로 교체. (소스 변경 아님 — 테스트 수정만.)
-또 1건: `"portal-tabs" not in html`은 CSS 셀렉터 텍스트(`.portal-tabs { ... }`)에 매칭됨 → `'id="portal-tabs"'`(요소)로 교체.
+## 사전 결함 (이번 변경 무관)
+`tests/test_project_rename.py` 2 FAIL — 옛 픽스처 DB 에 `projects.team_id` 없음 (master HEAD 동일, #13 에서도 동일 기록).
 
 ## 서버 재시작
-
-운영 서버 반영 시 **재시작 필요** (app.py / database.py 코드 reload — 스키마 무변경이라 마이그레이션 불필요). 단 본 사이클 단위 검증은 TestClient(임시 DB)로 완료.
+**필요** — `app.py` + `templates/team_portal.html` 변경 (코드/템플릿 reload). 스키마 무변경 → 마이그레이션 불필요. 본 단위 검증은 TestClient 로 완료(서버 재시작 없이 통과).

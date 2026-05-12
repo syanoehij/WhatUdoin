@@ -4989,9 +4989,10 @@ RESERVED_TEAM_PATHS = _build_reserved_team_paths()
 
 @app.get("/{team_name}", response_class=HTMLResponse)
 def team_public_portal(request: Request, team_name: str):
-    # #13: /팀이름 비로그인 공개 포털. URL 은 권한 경계가 아니다 — 항상 공개 portal context.
+    # #13: /팀이름 공개 포털. URL 은 권한 경계가 아니다 — 항상 공개 portal context.
     #   로그인 사용자·admin 이 와도 동일하게 200 공개 포털을 주되 redirect 하지 않는다.
-    #   "팀 신청 / 가입 대기 중" 등 로그인 사용자 UI 분기는 #14 범위.
+    # #14: 로그인 사용자·admin 별 "팀 신청 / 가입 대기 중 / 버튼 없음" 분기는
+    #   my_team_status 컨텍스트를 템플릿에 넘겨 처리한다 (계획서 섹션 7 표).
     if not _TEAM_NAME_RE.match(team_name) or team_name.casefold() in RESERVED_TEAM_PATHS:
         raise HTTPException(status_code=404, detail="Not Found")
     team = db.get_team_by_name_exact(team_name)
@@ -5002,8 +5003,21 @@ def team_public_portal(request: Request, team_name: str):
         return templates.TemplateResponse(request, "team_portal.html",
                 _ctx(request, team=team, deleted=True))
     portal = db.get_public_portal_data(team["id"])
+    # #14: 이 팀에 대한 현재 사용자 상태 → 템플릿 버튼 분기용.
+    #   None      = 비로그인 / admin (admin 은 슈퍼유저 — user_teams 소속이 가상이고
+    #               "팀 신청" 의미가 없으므로 버튼 없음. 계획서 섹션 7 표엔 admin 행이 없음)
+    #   'approved'= 이 팀 승인 멤버 → 버튼 없음
+    #   'pending' = 이 팀 가입 대기 중 → "가입 대기 중" (disabled)
+    #   'rejected'/None(로그인 미소속) → "팀 신청"
+    user = auth.get_current_user(request)
+    my_team_status = None
+    if user and not auth.is_admin(user):
+        if team["id"] in auth.user_team_ids(user):
+            my_team_status = "approved"
+        else:
+            my_team_status = db.get_my_team_statuses(user["id"]).get(team["id"])
     return templates.TemplateResponse(request, "team_portal.html",
-            _ctx(request, team=team, deleted=False, portal=portal))
+            _ctx(request, team=team, deleted=False, portal=portal, my_team_status=my_team_status))
 
 
 if __name__ == "__main__":

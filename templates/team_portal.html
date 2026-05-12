@@ -1,9 +1,14 @@
 {% extends "base.html" %}
 {% block title %}WhatUDoin — {{ team.name }}{% endblock %}
 
-{# 팀 기능 그룹 B #13: /팀이름 비로그인 공개 포털.
-   - URL 은 권한 경계가 아니다. 로그인 사용자·admin 이 와도 동일한 공개 포털을 본다 (#14 에서 로그인 UI 분기 추가).
-   - "계정 가입" 버튼은 비로그인일 때만 노출 (가입 후 자동 로그인 + / 로 이동 — #8 동작).
+{# 팀 기능 그룹 B #13·#14: /팀이름 공개 포털.
+   - URL 은 권한 경계가 아니다. 로그인 사용자·admin 이 와도 동일한 공개 포털을 본다 (redirect 없음).
+   - 우상단 버튼 분기 (계획서 섹션 7 표):
+       비로그인          → "계정 가입" (→ /register, 가입 후 자동 로그인 + / 로 이동 — #8 동작)
+       my_team_status=approved → 버튼 없음 (이미 이 팀 멤버)
+       my_team_status=pending  → "가입 대기 중" (disabled)
+       admin (user.role==admin)→ 버튼 없음 (슈퍼유저 — "팀 신청" 의미 없음, 표에 admin 행 없음)
+       그 외 (로그인 미소속/rejected) → "팀 신청" (→ POST /api/me/team-applications, 해당 팀 미리 선택)
    - 메뉴 노출 설정(portal.menu)은 탭/링크 UI 진입 차단만 한다. 데이터 필터는 백엔드에서 별개로 적용됨 (계획서 섹션 9).
 #}
 
@@ -66,11 +71,21 @@
     </div>
     <div class="portal-hero-actions">
       <a href="/" class="btn btn-sm btn-outline">홈</a>
+      {# #14: 접근 상태별 버튼 (계획서 섹션 7 표). admin(role==admin)은 my_team_status=None 이므로
+         else 로 떨어지지 않게 admin 분기를 else 앞에 둔다. #}
       {% if not user %}
         {# 비로그인: 계정 가입 → /register (가입 후 자동 로그인 + / 로 이동) #}
         <a href="/register" class="btn btn-sm btn-primary">계정 가입</a>
+      {% elif my_team_status == 'approved' %}
+        {# 이미 이 팀 승인 멤버 → 버튼 없음 #}
+      {% elif my_team_status == 'pending' %}
+        <button class="btn btn-sm" disabled>가입 대기 중</button>
+      {% elif user.role == 'admin' %}
+        {# 시스템 관리자 → 버튼 없음 (슈퍼유저, "팀 신청" 의미 없음) #}
+      {% else %}
+        {# 로그인 미소속 / rejected / 추방 후 → 재신청 가능 #}
+        <button class="btn btn-sm btn-primary" onclick="applyToTeam({{ team.id }})">팀 신청</button>
       {% endif %}
-      {# #14 범위: 로그인 사용자용 "팀 신청 / 가입 대기 중" 버튼 분기는 #13 에서 구현하지 않는다. #}
     </div>
   </div>
 
@@ -174,6 +189,28 @@
 {% block scripts %}
 {% if not deleted %}
 <script>
+  // #14: "팀 신청" 버튼 핸들러 — home.html 의 applyToTeam 최소 복제 (team_portal.html 엔 다른 JS 없음).
+  //   미소속/rejected 로그인 사용자만 이 버튼을 본다. 서버가 pending_other 등은 detail 로 반환.
+  async function applyToTeam(teamId) {
+    try {
+      const res = await fetch('/api/me/team-applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ team_id: teamId }),
+      });
+      if (res.ok) {
+        if (typeof showToast === 'function') showToast('팀 신청을 보냈습니다. 관리자 승인을 기다려 주세요.', 'success');
+        setTimeout(function () { location.reload(); }, 600);
+        return;
+      }
+      var detail = '신청에 실패했습니다.';
+      try { detail = (await res.json()).detail || detail; } catch (e) {}
+      if (typeof showToast === 'function') showToast(detail, 'error'); else alert(detail);
+    } catch (e) {
+      if (typeof showToast === 'function') showToast('신청 중 오류가 발생했습니다.', 'error'); else alert('신청 중 오류가 발생했습니다.');
+    }
+  }
+
   // 공개 포털 탭 전환 — 첫 탭을 기본 활성화. 서브 라우트(/팀이름/calendar)는 만들지 않음(충돌 위험·범위 밖).
   (function () {
     var tabs = Array.prototype.slice.call(document.querySelectorAll('#portal-tabs .portal-tab'));

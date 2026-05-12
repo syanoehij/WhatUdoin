@@ -1,131 +1,90 @@
 # 요청
 
-'팀 기능 구현 todo.md' 그룹 B #13 (`/팀이름` 비로그인 공개 포털) 한 항목만 끝까지 진행.
-상세 사양: '팀 기능 구현 계획.md' 섹션 4(URL 정책)·7(비로그인 URL 동작)·9(공개 포털 데이터 노출 정책).
-그룹 A(#1~#10) + 그룹 B #11(커밋 ae7a74e)·#12(커밋 fd1003a) 완료됨. #11에서 비로그인 `/` 랜딩의 팀 카드가 `<a href="/{{ team.name | urlencode }}">`로 걸려 있는데 아직 `/팀이름` 라우트가 없어 404 — #13이 그 라우트를 만든다.
+'팀 기능 구현 todo.md' 그룹 B #14 — `/팀이름` 로그인 사용자 (소속 무관). 상세 사양: '팀 기능 구현 계획.md' 섹션 7 (팀에 배정된 로그인 사용자, 시스템 관리자) + 섹션 7 말미 "`/팀이름` 공개 포털에서의 계정/팀 신청 버튼 상태" 표.
+
+#13에서 `/{team_name}` 동적 라우트(`app.py` `team_public_portal`) + `templates/team_portal.html` 공개 포털이 이미 생겼고, 로그인 사용자도 200 공개 포털을 받되 redirect는 안 하는 상태. 로그인 상태별 UI 분기만 #14로 미뤄둠.
 
 # 분류
 
-백엔드 수정 → 라우트·필터 (backend) + 공개 포털 템플릿 (frontend) → code-review → qa.
-실행 모드: 팀 모드 (backend → frontend → reviewer → qa, 순차).
+백엔드 수정 + 프론트 수정 (라우트 컨텍스트 추가 + 템플릿 버튼 분기). 실행 모드: 팀 모드 (backend → frontend → reviewer → qa).
 
-# 핵심 설계 결정 (사전 advisor 검토 반영)
+# 핵심 사양 — `/팀이름` 공개 포털 계정/팀 신청 버튼 상태 (계획서 섹션 7 표가 권위)
 
-1. **라우트 등록 순서가 1차 메커니즘.** FastAPI/Starlette는 등록 순서대로 매칭, 첫 매치 승리. `/{team_name}` 동적 라우트는 `app.py`의 **모든 정적 페이지 라우트보다 뒤에** 등록해야 한다. 정적 페이지 라우트 목록(현재 `app.py`): `/` `/calendar` `/register` `/admin` `/kanban` `/gantt` `/project-manage` `/doc` `/doc/new` `/doc/{meeting_id}` `/doc/{meeting_id}/history` `/ai-import` `/changelog` `/alarm-setup` `/settings/mcp` `/notice` `/notice/history` `/check` `/check/new/edit` `/check/{checklist_id}/edit` `/check/{checklist_id}/history` `/trash` `/remote` `/avr` + `/favicon.ico` `/api/health` `/healthz` `/api/cert/rootCA.zip`. `/api/*` 라우트는 `/{team_name}`이 단일 세그먼트라 충돌 없음(다만 안전을 위해 `/{team_name}`을 `/api/*` 블록 **뒤**에 둬도 무방 — 가장 안전한 위치는 모든 `@app.get/post/...` 데코레이터 라우트 정의가 끝난 직후, 즉 `app.py` 라우트 정의 영역 맨 끝). FastAPI 자동 문서 `/docs` `/redoc` `/openapi.json`은 `app = FastAPI(...)`(line 153)에서 등록 — 모든 유저 라우트보다 앞.
-   - **하드코딩 예약어 목록은 방어선(defense-in-depth)이지 1차 메커니즘 아님.**
+| 접근 상태 | 버튼 |
+|-----------|------|
+| 비로그인 | "계정 가입" → `/register` (가입 후 자동 로그인 + `/`로) — **이미 #13에서 구현됨, 그대로 유지** |
+| 로그인, 해당 팀 미소속 (user_teams row 없음 / status='rejected' / 추방) | "팀 신청" → 해당 팀이 미리 선택된 상태로 바로 신청 (이름·비밀번호 입력 없음) |
+| 로그인, 해당 팀 pending 대기 중 | "가입 대기 중" (disabled, 비활성) |
+| 로그인, 해당 팀 approved 소속 | 버튼 없음 |
+| 로그인, admin | **표에 없음 → 버튼 없음**으로 결정. admin은 슈퍼유저 — `user_teams` 소속이 가상이고 "팀 신청" 의미가 없다. 라우트에서 명시적으로 admin → 버튼 없음 처리하고 근거 주석을 남긴다. (계획서: admin은 일반 사용자와 동일하게 공개 포털을 보되 redirect 안 함.) |
 
-2. **핸들러 결정 트리 — 404를 3가지 경우에 동일 의미로 반환:**
-   - 이름이 정규식 `^[A-Za-z0-9_]+$` 불일치 → 404 (핸들러 안에서 검사; `Path(pattern=...)`는 422를 내므로 쓰지 않음)
-   - 이름이 RESERVED 집합에 속함 (casefold 비교) → 404
-   - DB 대소문자 정확 일치 조회(`SELECT * FROM teams WHERE name = ?`)가 빈 결과 → 404 (`teams.name`은 SQLite 기본 BINARY collation이라 `name = ?`는 대소문자 구분 — `/ABC` 유효 시 `/abc`는 자연히 404)
-   - row 있음 + `deleted_at IS NOT NULL` → 삭제 예정 안내 페이지 (가입 버튼·팀 신청·공개 데이터 모두 비노출)
-   - 그 외 → 공개 포털 페이지
+공통: 로그인이든 admin이든 `/팀이름`은 항상 200 공개 포털 — redirect 절대 금지. 홈 버튼은 `/`로 이동 (이미 #13에서 `<a href="/">홈</a>` 구현됨, 유지).
 
-3. **로그인 사용자도 라우트 레벨에서 분기하지 않음** — 항상 공개 포털 200(redirect 없음). "계정 가입" 버튼은 템플릿에서 `not user`일 때만. "팀 신청 / 가입 대기" 버튼 분기는 #14로 미룸(템플릿에 주석으로 명시).
+`pending_other`(다른 팀 pending) 처리: #12 패턴 그대로. `/팀이름`에서 "해당 팀에 pending"이 아니면 그냥 "팀 신청" 버튼을 보인다. 사용자가 클릭하면 기존 `POST /api/me/team-applications`가 `pending_other` 에러를 반환한다. **#14에서 "다른 팀 신청 중" 같은 새 UI 상태를 추가하지 않는다.** home.html과 동일하게 동작.
 
-4. **데이터 필터는 메뉴 설정과 독립** (계획서 섹션 9). 메뉴 노출 설정 = UI 진입(탭/링크) 차단만. `team_menu_settings` 시드는 #19 책임 → 현재 모든 팀에서 빈 상태. 따라서 `db.get_team_menu_visibility(team_id) -> dict`를 추가하되, 행이 없으면 계획서 섹션 9 기본값 fallback: `{"kanban": True, "gantt": True, "doc": True, "check": True, "calendar": False}`. 코드 주석: "interim default — #19가 team_menu_settings 시드 추가 시 그 값을 우선". 프론트는 이 dict 기준으로 탭 링크를 조건부 렌더; **데이터 필터에는 절대 넣지 않음** (캘린더 메뉴 OFF여도 같은 events가 칸반/간트 탭에 나오는 게 의도된 동작).
+# 에이전트별 작업
 
-5. **히든 프로젝트(`is_hidden=1`) 항목은 모든 채널에서 완전 차단** (`is_public` 값 무관). 이미 기존 DB 함수들이 `viewer is None`일 때 `is_private = 1 OR is_hidden = 1` 프로젝트 제외 SQL을 적용 → 재사용한다.
+## backend-dev
 
-# backend-dev 담당 작업
+대상 파일: `app.py` (`team_public_portal` 라우트만)
 
-## 1. `database.py` — 헬퍼 추가 (SELECT만 — 마이그레이션 phase 추가 금지)
+`team_public_portal` 라우트(`app.py` ~L4990)에서 deleted가 아닌 경우 템플릿 컨텍스트에 **해당 팀에 대한 현재 사용자 상태**를 추가한다:
 
-- `get_team_by_name_exact(name: str) -> dict | None` — `SELECT * FROM teams WHERE name = ? LIMIT 1` (대소문자 정확 일치, 삭제 예정 팀도 포함해서 반환 — `deleted_at` 판정은 라우트가 함). 이미 비슷한 게 있으면 재사용.
-- `get_team_menu_visibility(team_id: int) -> dict` — `team_menu_settings`에서 `menu_key→enabled` 읽어 dict 빌드, 없는 키는 기본값(`kanban/gantt/doc/check` True, `calendar` False)으로 채움. 코멘트로 #19 시드 의존 명시.
-- 공개 포털 데이터 집계 — **새 aggregator 함수 1개를 권장** (이름 예: `get_public_portal_data(team_id: int) -> dict`):
-  - `kanban`: `get_kanban_events(team_id, viewer=None)` 재사용 (이미 `is_public` + private/hidden 프로젝트 제외 SQL 내장 — `viewer is None and team_id` 경로 확인됨).
-  - `gantt`: `get_project_timeline(team_id, viewer=None)` 재사용 (`viewer is None`이면 `is_public==0` 제외, `is_public is None`이면 private/미지정 프로젝트 제외, 히든 프로젝트 제외 — 확인됨).
-  - `docs`: 기존 `get_all_meetings(viewer=None)`은 **전 팀** 공개 문서를 주므로 그대로 쓰면 안 됨. team_id 필터가 필요 → ① `get_all_meetings`에 `team_id` 파라미터를 추가(None이면 기존 동작 유지)하거나, ② aggregator 안에서 `m.team_id = ?`로 직접 조회하는 작은 쿼리를 새로 작성. 둘 중 더 surgical한 쪽 선택. 조건: `deleted_at IS NULL AND is_public = 1 AND team_id = ? AND is_team_doc = 1` (개인 문서 `is_team_doc=0`은 포털에 노출 안 함 — 팀 자료가 아님). **추가로 히든 프로젝트는 문서엔 직접 연결 없음**(문서엔 project 컬럼 없음)이므로 별도 처리 불필요.
-  - `checks`: 기존 `get_checklists(viewer=None)`은 `is_public` + private/hidden 프로젝트 제외는 하지만 `team_id` 필터는 안 함 → ① `get_checklists`에 `team_id` 파라미터 추가(None=기존), 또는 ② aggregator에서 결과를 받아 `r["team_id"] == team_id`로 Python 필터 (간단). 둘 중 surgical한 쪽. 히든 프로젝트는 `get_checklists`의 `public_filter`(`is_private = 1 OR is_hidden = 1` 제외) + `get_blocked_hidden_project_names(None)`로 이미 차단됨 — 확인하고 재사용.
-  - `calendar`: 캘린더 탭 데이터는 칸반/간트와 같은 events 풀에서 온다(계획서 섹션 9). 별도 events 조회를 둘지(예: `_filter_events_by_visibility(db.get_all_events_for_team(team_id), None, scope_team_ids={team_id})`) 또는 칸반 데이터 재활용할지는 backend 판단. 단 캘린더 메뉴는 기본 OFF라 프론트가 탭을 안 그릴 수 있음 — 데이터는 채워두되 UI 진입은 메뉴 설정에 맡김.
-  - `menu`: `get_team_menu_visibility(team_id)` 결과.
-- aggregator는 **항상 team_id 단일 팀 기준**, viewer는 항상 None(공개 portal context). admin/로그인 사용자가 와도 동일 데이터 — URL은 권한 경계가 아님(계획서 섹션 7 마지막).
+- 키 이름: **`my_team_status`** (프론트와 합의된 이름 — 다른 이름 쓰지 말 것).
+- 값: `"approved"` | `"pending"` | `"rejected"` | `None`.
+- 계산 방법 (#12 패턴 재사용, 새 DB 헬퍼 만들지 않음):
+  - `user = auth.get_current_user(request)` (`_ctx`가 이미 user를 넣지만 라우트에서 명시적으로 다시 가져와 분기 — 기존 라우트가 이미 `request`만 받으므로 user 변수 추가).
+  - `user` 가 `None` → `my_team_status = None` (비로그인 — 템플릿에서 `not user`로 분기되므로 사실상 안 쓰임).
+  - `auth.is_admin(user)` → `my_team_status = None` (admin은 버튼 없음 — 위 표 결정. 주석으로 근거).
+  - 그 외: `team["id"] in auth.user_team_ids(user)` → `"approved"`; 아니면 `db.get_my_team_statuses(user["id"]).get(team["id"])` (→ `"pending"` | `"rejected"` | `None`).
+- deleted 팀 분기는 `my_team_status` 전달 불필요 (안내 페이지만 — 버튼 없음). 그대로 둔다.
+- `_ctx(request, team=team, deleted=False, portal=portal, my_team_status=my_team_status)` 형태로 넘긴다.
+- 라우트 상단 주석의 "#14 범위" 언급(`"팀 신청 / 가입 대기 중" 등 로그인 사용자 UI 분기는 #14 범위.`)을 #14 구현 완료에 맞게 수정 (예: "로그인 사용자·admin 별 버튼 분기는 my_team_status 컨텍스트 + 템플릿에서 처리").
 
-## 2. `app.py` — 라우트 + 예약어
+주의: `auth.user_team_ids`는 approved 소속 set을 반환한다(`auth.py` 확인). `auth.is_admin` 존재 확인.
 
-- 모듈 상단(또는 `RESERVED_USERNAMES` 근처)에 `RESERVED_TEAM_PATHS` frozenset 정의 — 계획서 섹션 4 목록 전부:
-  ```
-  api, admin, doc, check, kanban, gantt, calendar, mcp, mcp-codex, uploads, static,
-  settings, changelog, register, project-manage, ai-import, alarm-setup, notice,
-  trash, remote, avr, favicon.ico, docs, redoc, openapi.json, healthz
-  ```
-  (모두 lowercase로 저장, 비교 시 `name.casefold()`로). 추가로 `healthz`·`api/health`의 첫 세그먼트 `api`는 이미 포함. **권장**: 정의 직후 또는 lifespan에서 `{r.path.strip("/").split("/")[0] for r in app.routes if isinstance(r, APIRoute)}`로 실제 등록된 라우트 첫 세그먼트를 모아 `RESERVED_TEAM_PATHS`에 합집합으로 보강 — 누락 자동 방지(advisor 권장). 단순화를 위해 합집합 보강이 까다로우면 하드코딩만으로도 검증 통과는 가능 — backend 판단.
-- 새 라우트 (모든 정적 페이지 라우트 정의 이후, `app.py` 라우트 정의 영역 맨 끝 — 예: `/api/me/mcp-token` 관련 라우트들 뒤):
-  ```python
-  import re as _re   # 이미 import re 있으면 재사용
-  _TEAM_NAME_RE = re.compile(r"^[A-Za-z0-9_]+$")
+## frontend-dev
 
-  @app.get("/{team_name}", response_class=HTMLResponse)
-  def team_public_portal(request: Request, team_name: str):
-      # #13: /팀이름 비로그인 공개 포털. URL은 권한 경계 아님 — 항상 공개 portal context.
-      if not _TEAM_NAME_RE.match(team_name) or team_name.casefold() in RESERVED_TEAM_PATHS:
-          raise HTTPException(status_code=404, detail="Not Found")
-      team = db.get_team_by_name_exact(team_name)
-      if not team:
-          raise HTTPException(status_code=404, detail="Not Found")
-      if team.get("deleted_at"):
-          # 삭제 예정 팀: 안내만 (가입 버튼·팀 신청·공개 데이터 모두 비노출)
-          return templates.TemplateResponse(request, "team_portal.html",
-                  _ctx(request, team=team, deleted=True))
-      data = db.get_public_portal_data(team["id"])
-      return templates.TemplateResponse(request, "team_portal.html",
-              _ctx(request, team=team, deleted=False, portal=data))
-  ```
-  - `_ctx`가 이미 `user`를 채우므로 템플릿이 `not user`로 "계정 가입" 버튼을 조건부 렌더 가능. 로그인 사용자에게도 200 공개 포털을 주되 redirect 안 함(#13 범위).
-  - `404`는 `HTTPException(404)` — FastAPI 기본 `{"detail": "Not Found"}` JSON 응답 (기존 패턴과 일관).
+대상 파일: `templates/team_portal.html` (`.portal-hero-actions` 영역 + 하단 `{% block scripts %}`)
 
-## 3. 주의
+1. `.portal-hero-actions` 안의 버튼 분기를 다음으로 교체 (계획서 섹션 7 표):
+   - `<a href="/" class="btn btn-sm btn-outline">홈</a>` — 그대로 유지 (홈 버튼은 `/`로).
+   - `{% if not user %}` → `<a href="/register" class="btn btn-sm btn-primary">계정 가입</a>` — 그대로 유지.
+   - `{% elif my_team_status == 'approved' %}` → 버튼 없음 (아무것도 렌더 안 함).
+   - `{% elif my_team_status == 'pending' %}` → `<button class="btn btn-sm" disabled>가입 대기 중</button>` (home.html과 동일한 마크업).
+   - `{% else %}` (로그인 + 미소속/rejected, admin은 my_team_status=None이지만 admin도 여기 들어옴 — admin 버튼 없음 처리 필요!) →
+     - **admin 처리**: `{% elif user.role == 'admin' %}` 를 `{% else %}` 앞에 추가해서 admin이면 버튼 없음. 그 다음 `{% else %}` 에서 `<button class="btn btn-sm btn-primary" onclick="applyToTeam({{ team.id }})">팀 신청</button>`.
+     - 즉 분기 순서: `not user` → `my_team_status == 'approved'` → `my_team_status == 'pending'` → `user.role == 'admin'` → `else (팀 신청)`.
+   - 기존 line 73 `{# #14 범위: 로그인 사용자용 "팀 신청 / 가입 대기 중" 버튼 분기는 #13 에서 구현하지 않는다. #}` 주석 제거(또는 #14 구현 설명 주석으로 교체).
+   - 상단 docstring 주석(L4~8) 의 "#14 에서 로그인 UI 분기 추가" 도 완료에 맞게 정리.
 
-- 스키마 무변경, 마이그레이션 phase 추가 금지. DB 함수는 SELECT 전용.
-- 기존 라우트·DB 함수의 시그니처를 깰 변경 금지 — `team_id` 파라미터를 추가한다면 keyword-only/default None으로 추가해 기존 호출부 무영향.
-- 완료 후 `.claude/workspaces/current/backend_changes.md` 기록.
+2. `applyToTeam` JS 함수: home.html의 것을 `team_portal.html` `{% block scripts %}` 안에 최소 버전으로 복제 (약 15줄). `showToast`/`alert` fallback 포함. 성공 시 `setTimeout(() => location.reload(), 600)`. `team_portal.html`에는 home.html의 다른 JS가 없으므로 독립 복제가 적절(중복 허용 — surgical change). `{% if not deleted %}` 안에 둔다 (deleted 페이지에는 팀 신청 버튼 자체가 없음).
+   - `showToast`가 base.html에서 전역으로 제공되는지 확인하고, 없으면 `alert` fallback만으로도 충분.
 
-# frontend-dev 담당 작업
+3. 데이터 노출/탭/패널 등 #13 구현은 일절 건드리지 않는다 (surgical).
 
-## 새 템플릿 `templates/team_portal.html`
+# 검증 (qa)
 
-- `base.html` 확장 여부: 기존 페이지 템플릿이 `base.html`을 extends 하는지 확인 후 동일 패턴 따름 (헤더·CSRF·`CURRENT_USER` 등 공통 인프라 재사용). 단 공개 포털은 비로그인도 보므로 base의 알림 벨/사용자 패널 등은 `not user`면 자연히 숨겨짐(이미 `is_unassigned`/`CURRENT_USER` 게이팅 존재).
-- 구조:
-  - **삭제 예정 분기** (`deleted` True): 페이지 상단에서 `{% if deleted %}` 짧은 안내 블록만 — "이 팀은 삭제 예정입니다" 류 메시지. **계정 가입 버튼·팀 신청·공개 데이터 모두 비노출.** admin이면 `/admin` 관리 링크 추가(계획서 섹션 7 표 — `{% if user and user.role == 'admin' %}`). 그 외엔 `{% else %}` 본문.
-  - **본문** (정상 팀):
-    - 헤더: 팀 이름 표시 + 홈 버튼(`/`로 이동) + (`{% if not user %}`) "계정 가입" 버튼 → `/register` (가입 후 자동 로그인 + `/`로 이동은 기존 #8 동작).
-    - **#14 자리 표시 주석**: `{# 로그인 사용자용 "팀 신청 / 가입 대기 중" 버튼 분기는 #14 범위 #}` — #13에선 구현하지 않음.
-    - 탭 네비게이션: `portal.menu` dict 기준 조건부 렌더 — `{% if portal.menu.kanban %}` 칸반 탭, `gantt` 간트 탭, `doc` 문서 탭, `check` 체크 탭, `calendar` 캘린더 탭(기본 OFF라 안 그려질 것). 탭 전환은 in-page JS(클릭 시 `display` 토글) — 서브 라우트(`/팀이름/calendar`) 만들지 않음(충돌 위험·범위 밖).
-    - 각 탭 패널:
-      - 칸반: `portal.kanban` 항목들을 읽기 전용 카드 목록으로 간단히 (기존 `home.html`의 `cardHTML`/`buildBoard`를 참고하되, 공개 포털은 단순 목록으로도 충분 — 과하게 만들지 말 것. 제목·프로젝트·날짜 정도).
-      - 간트: `portal.gantt`(팀→프로젝트→일정 2단계 구조) 간단 목록 — 풀 간트 차트 라이브러리까지 끌어올 필요 없음. 프로젝트별 일정 리스트면 충분.
-      - 문서: `portal.docs` 제목 + 작성자 + `updated_at[:10]` 목록 — **링크는 비활성 또는 제목만** (공개 포털 비로그인은 `/doc/{id}` 접근 시 어차피 가시성 검증으로 막힘; #13에선 목록 노출까지만, 클릭 동작은 깊게 안 감 — 단순 텍스트 표시).
-      - 체크: `portal.checks` 제목 + 프로젝트 + `updated_at[:10]` 목록 (마찬가지로 텍스트).
-      - 캘린더(렌더되면): `portal.calendar` 간단 목록 또는 FullCalendar — 기본 OFF라 우선순위 낮음. 단순 목록 OK.
-    - 빈 데이터: "공개된 항목이 없습니다" 류 메시지.
-- **임시 스크린샷은 `.claude/workspaces/current/screenshots/` 하위에만** 저장 (루트 금지 — CLAUDE.md 정책).
-- 완료 후 `.claude/workspaces/current/frontend_changes.md` 기록.
+TestClient(임시 DB) — 운영 서버는 IP 자동 로그인이라 특정 사용자 상태(미소속/pending/admin) 브라우저 재현 불가. `tests/phase83_team_portal_loggedin.py` 신규.
 
-# code-reviewer / qa
+케이스:
+1. 미소속 로그인 사용자, 신청 이력 없음 → `/ABC` 200, "팀 신청" 버튼(`applyToTeam(<team_id>)`) 노출, "가입 대기 중" 부재, "계정 가입" 부재.
+2. 해당 팀 pending → `/ABC` 200, "가입 대기 중" + `disabled` 노출, "팀 신청" 부재.
+3. 다른 팀 pending (해당 팀은 미소속) → `/ABC` 200, "팀 신청" 노출 (서버가 클릭 시 차단 — UI 관심사 아님).
+4. 해당 팀 approved 멤버 → `/ABC` 200, "팀 신청"·"가입 대기 중"·"계정 가입" 모두 부재.
+5. 해당 팀 rejected → `/ABC` 200, "팀 신청" 재노출 (재신청 가능).
+6. admin → `/ABC` 200 (30x 아님), "팀 신청"·"가입 대기 중" 부재, 포털 본문 정상.
+7. 모든 케이스: status 200, redirect(30x) 없음, 홈 버튼 `href="/"` 존재.
+8. 비로그인 → `/ABC` 200, "계정 가입" 그대로 (#13 회귀).
+9. 회귀: `tests/phase80_landing_page.py`(#11), `tests/phase81_unassigned_user.py`(#12), `tests/phase82_team_portal.py`(#13) 전부 PASS.
+10. `import app` OK.
 
-- code-review: `*_changes.md` + 변경 파일 정적 리뷰. 특히 ① 라우트 등록 순서(`/{team_name}`이 모든 정적 페이지 라우트 뒤인지) ② 예약어 casefold 비교 ③ 정규식 검사가 핸들러 안 (Path pattern 아님) ④ 데이터 필터가 메뉴 설정과 독립 ⑤ 삭제 예정 팀이 데이터·가입 버튼 비노출 ⑥ DB 함수 시그니처 호환성 ⑦ 마이그레이션 phase 추가 없음.
-- qa: **TestClient(임시 DB)로 익명 요청 검증** (운영 서버는 IP 자동 로그인이라 비로그인 브라우저 재현 불가, TestClient `testclient` IP는 whitelist 미매칭이라 익명). 검증 매트릭스:
-  - `GET /ABC`(대문자 팀 생성 후) → 200, 팀 이름 포함, "계정 가입" 포함
-  - `GET /abc` → 404 (대소문자 불일치 분리)
-  - `GET /Nonexistent` → 404
-  - `GET /admin` → admin 로그인 페이지 (eclipse 안 됨)
-  - `GET /api/health` → 200
-  - `GET /docs` → 200, `GET /redoc` → 200, `GET /openapi.json` → 200
-  - `GET /static/<존재하는 파일>` → 404 아님 (mount 살아있음)
-  - 예약어 각각(`api`, `admin`, `docs`, `redoc`, `openapi.json`, `kanban`, `check`, `doc`, `notice`, `register`, ...) `GET /<예약어>` → 404 또는 해당 정적 라우트 응답(어쨌든 포털 아님)
-  - `GET /Bad-Name`(하이픈 등 정규식 불일치) → 404
-  - 공개 포털: `is_public=0` 일정·체크·문서가 응답 마크업에 안 나옴
-  - 공개 포털: 히든 프로젝트(`is_hidden=1`) 하위 항목은 `is_public=1`이어도 안 나옴
-  - 삭제 예정 팀: 안내 페이지, "계정 가입" 버튼 없음, 공개 데이터 없음
-  - 로그인 사용자가 `GET /팀이름` → 200 포털 (redirect 안 됨)
-  - 회귀: `tests/phase80_landing_page.py`(#11), `tests/phase81_unassigned_user.py`(#12) 여전히 PASS
-  - 네이밍: `tests/phase82_team_portal.py` (todo 컨벤션 `tests/phaseN_*.spec.js` — 단 이 프로젝트는 Python TestClient 패턴이라 기존 `tests/phase8X_*.py` 따름)
-- 서버 재시작 필요 여부를 결과에 명시 (코드 reload — 스키마 무변경이라 마이그레이션 불필요. 단 단위 검증은 TestClient로 완료).
+TestClient에서 특정 사용자로 로그인하는 방법: 기존 phase81/82 테스트가 어떻게 세션/쿠키를 세팅하는지 참고. 임시 DB에 user + user_teams row를 직접 insert 후 auth 세션 쿠키 발급 경로 사용.
 
-# 범위 밖 (불변)
+# 주의사항
 
-- #14: 로그인 사용자용 "팀 신청 / 가입 대기 중" 버튼 분기, 로그인 상태별 포털 UI
-- #15: `work_team_id` 쿠키
-- #19: `team_menu_settings` 기본값 시드 (이번엔 빈 상태 + fallback 기본값으로 동작)
-- 한글 이름 레거시 팀: 정규식 `^[A-Za-z0-9_]+$` 불일치로 404 — 계획서 의도된 동작 (rename/마이그레이션은 범위 밖). #11의 `team.name | urlencode` 카드는 유효 팀명에 대해선 사실상 no-op.
+- 라우트는 절대 redirect하지 않는다 — 로그인/admin 모두 200 포털.
+- `my_team_status` 키 이름을 backend/frontend가 동일하게 사용해야 함. 다르면 템플릿이 조용히 모두에게 "팀 신청"을 렌더.
+- 분기 순서 주의: admin(role='admin')은 `my_team_status=None`이므로 `else`에 빠지지 않게 `user.role == 'admin'` 분기를 `else` 앞에 둔다.
+- 데이터 노출 로직(#13)·예약어·404·deleted 안내·탭 전환 IIFE는 변경 금지.
+- 스키마 무변경 — 마이그레이션 phase 추가 없음 (SELECT만 재사용).
