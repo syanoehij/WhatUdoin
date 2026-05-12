@@ -696,6 +696,23 @@ def _can_write_doc(user, doc: dict) -> bool:
     return auth.can_edit_meeting(user, doc)
 
 
+def _notice_work_team(request: Request, user, explicit_id=None):
+    """팀 기능 그룹 B #15-3: 공지 라우트가 사용할 현재 작업 팀 team_id (int | None).
+
+    - admin: explicit_id 를 그대로 신뢰(호출부가 require_work_team_access 로 검증) →
+             없으면 work_team_id 쿠키 → first_active_team_id (auth.resolve_work_team).
+    - 비admin: 비소속 explicit_id 는 버리고(다른 팀 공지 임의 조회 차단) →
+              쿠키 → 대표 팀 (auth.resolve_work_team).
+    user 가 None 이거나 미배정이면 None.
+    """
+    if user is None or auth.is_unassigned(user):
+        return None
+    if not auth.is_admin(user):
+        if explicit_id is not None and not auth.user_can_access_team(user, _safe_int(explicit_id)):
+            explicit_id = None
+    return auth.resolve_work_team(request, user, explicit_id=explicit_id)
+
+
 # ── 페이지 ──────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -939,14 +956,23 @@ def download_rootca():
 
 @app.get("/notice", response_class=HTMLResponse)
 def notice_page(request: Request):
-    notice = db.get_latest_notice()
-    return templates.TemplateResponse(request, "notice.html", _ctx(request, notice=notice))
+    user = auth.get_current_user(request)
+    tid = _notice_work_team(request, user, None)  # 팀 기능 #15-3: 현재 작업 팀
+    notice = db.get_notice_latest_for_team(tid) if tid is not None else None
+    resp = templates.TemplateResponse(request, "notice.html", _ctx(request, notice=notice))
+    _ensure_work_team_cookie(request, resp, user)
+    return resp
 
 
 @app.get("/notice/history", response_class=HTMLResponse)
 def notice_history_page(request: Request):
-    histories = db.get_notice_history()
-    return templates.TemplateResponse(request, "notice_history.html", _ctx(request, histories=histories))
+    user = auth.get_current_user(request)
+    tid = _notice_work_team(request, user, None)  # 팀 기능 #15-3: 현재 작업 팀
+    histories = (db.get_notice_history(tid, include_null=auth.is_admin(user))
+                 if tid is not None else [])
+    resp = templates.TemplateResponse(request, "notice_history.html", _ctx(request, histories=histories))
+    _ensure_work_team_cookie(request, resp, user)
+    return resp
 
 
 @app.get("/check", response_class=HTMLResponse)
@@ -1359,8 +1385,13 @@ async def set_checklist_is_locked(checklist_id: int, request: Request):
 
 
 @app.get("/api/notice")
-def api_get_notice():
-    return db.get_latest_notice() or {}
+def api_get_notice(request: Request, team_id: int = None):
+    # 팀 기능 #15-3: 현재 작업 팀의 최신 공지 1건. 비로그인/미배정 → {}.
+    user = auth.get_current_user(request)
+    tid = _notice_work_team(request, user, team_id)
+    if tid is None:
+        return {}
+    return db.get_notice_latest_for_team(tid) or {}
 
 
 @app.post("/api/notice")
@@ -1368,20 +1399,34 @@ async def api_save_notice(request: Request):
     user = _require_editor(request)
     data = await request.json()
     content = data.get("content", "")
-    notice_id = db.save_notice(content, user["name"])
+    # 팀 기능 #15-3: work_team_id 기준 저장 (팀 공유 모델 — 같은 팀 승인 멤버 누구나).
+    team_id = auth.resolve_work_team(request, user, explicit_id=data.get("team_id"))
+    if team_id is None:
+        raise HTTPException(status_code=400, detail="현재 작업 팀이 필요합니다.")
+    auth.require_work_team_access(user, team_id)
+    notice_id = db.save_notice(content, team_id, user["name"])
     return {"id": notice_id}
 
 
 @app.post("/api/notice/notify")
 async def api_notify_notice(request: Request):
     user = _require_editor(request)
-    notice = db.get_latest_notice()
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    # 팀 기능 #15-3: 현재 작업 팀 결정 후 그 팀의 최신 공지를 같은 팀 승인 멤버에게만 알림.
+    team_id = auth.resolve_work_team(request, user, explicit_id=(data or {}).get("team_id"))
+    if team_id is None:
+        raise HTTPException(status_code=400, detail="현재 작업 팀이 필요합니다.")
+    auth.require_work_team_access(user, team_id)
+    notice = db.get_notice_latest_for_team(team_id)
     if not notice:
         return {"ok": False, "reason": "no_notice"}
     content = notice["content"]
     preview = content.replace("#", "").strip()[:40]
     msg = f"📢 팀 공지 업데이트: {preview}…" if len(content.replace("#", "").strip()) > 40 else f"📢 팀 공지 업데이트: {preview}"
-    db.create_notification_for_all("notice", msg, exclude_user=user["name"])
+    db.create_notification_for_team(team_id, "notice", msg, exclude_user=user["name"])
     return {"ok": True}
 
 

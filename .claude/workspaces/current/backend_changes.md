@@ -1,29 +1,66 @@
-# backend_changes — 팀 기능 그룹 B #15-2 (links 다중 팀 전환)
+# #15-3 백엔드 변경 — team_notices 팀별 공지 전환
 
 ## database.py
-- `get_links(user_name, work_team_ids)` — 시그니처 `team_id` → `work_team_ids`. 컨벤션 (`app._work_scope` 와 동일):
-  - `None` (admin 슈퍼유저): 전 팀의 `scope='team'` 링크 + 본인 `scope='personal'` 링크. SQL: `WHERE (scope='personal' AND created_by=?) OR (scope='team')`.
-    - **주의**: `scope='team' AND team_id IS NULL` 인 orphan 링크(그룹 A #4 백필 누락 잔존, 정상이면 0건)도 admin GET에 포함됨 — admin 슈퍼유저 패턴과 일관 (모든 자료 가시).
-  - `set()` (팀 미배정): 본인 개인 링크만.
-  - `{tid, ...}`: 해당 팀들의 `scope='team'` 링크 + 본인 개인 링크. `team_id IN (...)` 일반화 (비admin은 항상 0~1개; admin이 명시 work_team_id 다중 줄 가능성 위해 일반화).
-- `update_link(link_id, title, url, desc, user_name, role)` — `role` 인자 추가. `role=='admin'` → `WHERE id=?` (작성자 무관), else → `WHERE id=? AND created_by=?`. `delete_link` 와 동일 패턴. 계획서 §8-1 — 링크는 "작성자/admin만 편집·삭제" (일정·체크의 팀 공유 모델과 다른 예외).
-- `create_link` — 시그니처 무변경. 주석 한 줄 추가 (scope='team'이면 team_id는 호출부가 resolve_work_team으로 확정).
-- `delete_link` — 무변경 (이미 role 분기 있음).
-- **스키마 무변경** — 마이그레이션 phase 추가 없음. `links` 테이블 그대로 (그룹 A #4에서 `links.team_id` 백필 이미 완료).
 
-## app.py — `/api/links` 4개 라우트
-- `GET /api/links` — `team_id: int = None` 쿼리 파라미터 추가. 비로그인 `[]` 유지. 로그인 시 `scope_team_ids = _work_scope(request, user, team_id)` (admin→None / 비admin→{tid} 또는 set()) → `db.get_links(user["name"], scope_team_ids)`.
-- `POST /api/links` — `scope=='team'`이면 `team_id = auth.resolve_work_team(request, user, explicit_id=data.get("team_id"))`; `None`이면 `400` (admin이 work_team 없이 호출 거부 — `manage/projects` 라우트 미러); `auth.require_work_team_access(user, team_id)` (admin 통과 / 비admin 비소속 → 403). `scope=='personal'`이면 `team_id=None`. `user.get("team_id")` 참조 제거.
-- `PUT /api/links/{link_id}` — `db.update_link(..., user["name"], user.get("role", "member"))`. 실패 시 403 유지. 작성자 본인 + admin만 편집.
-- `DELETE /api/links/{link_id}` — `user.get("role", "editor")` → `user.get("role", "member")` (default만 정리; 동작 동일 — 이미 role 전달했음).
+### `get_latest_notice()` → `get_notice_latest_for_team(team_id)` (rename + 팀 필터)
+- `SELECT * FROM team_notices WHERE team_id = ? ORDER BY id DESC LIMIT 1`. `team_id is None` → `None`.
+- NULL 잔존 row(백필 누락분)는 반환하지 않음 — admin 이력 화면(`get_notice_history(..., include_null=True)`)에서만 노출. docstring 명시.
 
-## admin GET 시맨틱 (리뷰어 확인 요청)
-`_work_scope`가 admin에 `None` 반환 → DB 무필터 → admin은 헤더 링크 드롭다운에서 **전 팀의 scope='team' 링크 + 본인 개인 링크**를 본다. `/api/checklists`·`/api/events`·`/api/doc`와 일관 (모두 admin → 전 팀 슈퍼유저). 의도와 다르면 flag.
+### `save_notice(content, created_by)` → `save_notice(content, team_id, created_by)`
+- `INSERT INTO team_notices (team_id, content, created_by) VALUES (?, ?, ?)`.
+- 자동 정리 **팀별로**:
+  - `DELETE FROM team_notices WHERE team_id = ? AND created_at < datetime('now', '-30 days')`
+  - `DELETE FROM team_notices WHERE team_id = ? AND id NOT IN (SELECT id FROM team_notices WHERE team_id = ? ORDER BY id DESC LIMIT 100)`
+- team_id IS NULL 잔존 row 는 `team_id = ?` 매칭 안 되어 자동 정리 대상 아님(운영자 사후 정리 — 계획서 §13). docstring 명시.
+
+### `get_notice_history(limit=100)` → `get_notice_history(team_id, include_null=False, limit=100)`
+- `include_null=False` → `WHERE team_id = ?`
+- `include_null=True` (admin 이력 화면) → `WHERE team_id = ? OR team_id IS NULL`
+- `ORDER BY id DESC LIMIT ?`. docstring 명시.
+
+### 신규 `create_notification_for_team(team_id, type_, message, event_id=None, exclude_user=None)`
+- `create_notification_for_all` 바로 아래 배치.
+- `SELECT u.name FROM users u JOIN user_teams ut ON ut.user_id = u.id WHERE ut.team_id = ? AND ut.status = 'approved' AND u.is_active = 1` → `exclude_user` 제외하고 `INSERT INTO notifications (user_name, type, message, event_id)`.
+- 글로벌 admin(users.role='admin')은 user_teams row 없어 미수신 — 계획서 §13("같은 팀 승인 멤버에게만")과 일치. docstring 명시. `team_id is None` → no-op.
+
+## app.py
+
+### 신규 헬퍼 `_notice_work_team(request, user, explicit_id=None) -> int | None` (line ~700, `_can_write_doc` 뒤)
+- `user is None` 또는 `auth.is_unassigned(user)` → `None`.
+- 비admin: 비소속 `explicit_id` 는 버림(`auth.user_can_access_team(user, _safe_int(explicit_id))` 실패 시 None) — 다른 팀 공지 임의 조회 차단.
+- admin: `explicit_id` 그대로 신뢰(호출부가 `require_work_team_access` 로 검증; admin 통과).
+- → `auth.resolve_work_team(request, user, explicit_id=explicit_id)` (= explicit → 쿠키(검증) → 대표 팀 / admin은 first_active_team_id).
+- (`_safe_int` 은 app.py line ~2070 정의 — 호출 시점엔 이미 모듈 로드 완료라 forward-reference OK.)
+
+### `GET /notice` (SSR, line ~957)
+- `user = auth.get_current_user(request)`; `tid = _notice_work_team(request, user, None)`; `notice = db.get_notice_latest_for_team(tid) if tid is not None else None`.
+- `resp = templates.TemplateResponse(...)`; `_ensure_work_team_cookie(request, resp, user)`; `return resp` — **#15 SSR 쿠키 hook 추가** (이전엔 없었음).
+
+### `GET /notice/history` (SSR, line ~967)
+- 동일하게 `user`/`tid` 계산. `histories = db.get_notice_history(tid, include_null=auth.is_admin(user)) if tid is not None else []`.
+- `_ensure_work_team_cookie` 추가.
+
+### `GET /api/notice` (line ~1387)
+- 시그니처 `api_get_notice(request: Request, team_id: int = None)`.
+- `user = auth.get_current_user(request)`; `tid = _notice_work_team(request, user, team_id)`; `tid is None` → `{}` (비로그인/미배정/admin 비삭제팀0); else `db.get_notice_latest_for_team(tid) or {}`.
+
+### `POST /api/notice` (line ~1396)
+- `user = _require_editor(request)` (CSRF + is_member; 역할 정리는 #16). `data = await request.json()`.
+- `team_id = auth.resolve_work_team(request, user, explicit_id=data.get("team_id"))`; `None` → `HTTPException(400, "현재 작업 팀이 필요합니다.")` (admin이 work_team 없이 호출 거부 — `/api/links` POST 미러).
+- `auth.require_work_team_access(user, team_id)` (비admin 비소속 → 403; admin 통과).
+- `db.save_notice(content, team_id, user["name"])`. **작성자 본인 게이트 없음 — 팀 공유 모델 (같은 팀 승인 멤버 누구나 작성·갱신; links 의 "작성자만"과 다름).**
+
+### `POST /api/notice/notify` (line ~1411)
+- `user = _require_editor(request)`. `data = await request.json()` (body 없으면 `{}`).
+- `team_id = auth.resolve_work_team(request, user, explicit_id=(data or {}).get("team_id"))`; `None` → `HTTPException(400, ...)`.
+- `auth.require_work_team_access(user, team_id)`. **resolve THEN fetch** — `notice = db.get_notice_latest_for_team(team_id)`; `not notice` → `{"ok": False, "reason": "no_notice"}` (기존 동작 보존).
+- msg 생성 로직 유지. `db.create_notification_for_team(team_id, "notice", msg, exclude_user=user["name"])` (전 → 같은 팀 승인 멤버만). `{"ok": True}`.
+
+## 변경 안 한 것 (의도)
+- `templates/notice.html` / `notice_history.html` / `base.html`: SSR `notice`/`histories` 가 작업 팀 기준으로 바뀌므로 자연 반영. 작업 팀 전환 → base.html `selectWorkTeam`→`location.reload()` → 새 work_team_id 쿠키로 SSR 다시 렌더. `IS_EDITOR`/`user.role in ('editor','admin')` 리터럴 = #16 책임 — 미변경. (NULL orphan row 도 `created_by`(이름 문자열)·`created_at` 만 렌더 — 표시 깨짐 없음.)
+- 스키마/마이그레이션: `team_notices.team_id` 컬럼·백필 모두 그룹 A 완료 — 추가 없음.
+- `_require_editor`/`is_editor` 역할 정리: #16. `users.team_id` 컬럼 제거: #23.
 
 ## 검증
-- `tests/phase86_links_multiteam.py` 13 PASS (정적 invariant 3 + TestClient 시나리오 A~I + 직접 DB 컨벤션).
-- 회귀: `tests/phase80~85` 60 PASS.
-- `import app` OK. `get_links`/`update_link` 시그니처 외 호출부 없음 (mcp_server.py에 link 도구 없음).
-
-## 서버 재시작
-**필요** — 코드 reload (스키마 무변경이라 마이그레이션 불필요).
+- `import app` OK. `templates.get_template('notice.html'/'notice_history.html'/'base.html')` OK.
+- `get_latest_notice`/`save_notice`(2-인자)/`get_notice_history`(0-인자) 옛 시그니처 호출부: app.py 3곳 외 없음(grep — mcp_server.py 에 notice 도구 없음). 전부 새 시그니처로 전환됨.

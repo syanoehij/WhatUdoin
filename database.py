@@ -3376,6 +3376,31 @@ def create_notification_for_all(type_: str, message: str, event_id: int = None, 
             )
 
 
+def create_notification_for_team(team_id: int, type_: str, message: str,
+                                 event_id: int = None, exclude_user: str = None):
+    """팀 기능 그룹 B #15-3: 해당 팀의 approved + 활성 멤버에게만 알림 생성 (exclude_user 제외).
+
+    글로벌 admin(users.role='admin')은 user_teams row 가 없으므로 알림을 받지 않는다
+    (계획서 §13 — 공지 발송 알림은 같은 팀 승인 멤버에게만).
+    """
+    if team_id is None:
+        return
+    with get_conn() as conn:
+        users = conn.execute(
+            "SELECT u.name FROM users u "
+            "JOIN user_teams ut ON ut.user_id = u.id "
+            "WHERE ut.team_id = ? AND ut.status = 'approved' AND u.is_active = 1",
+            (team_id,)
+        ).fetchall()
+        for u in users:
+            if exclude_user and u["name"] == exclude_user:
+                continue
+            conn.execute(
+                "INSERT INTO notifications (user_name, type, message, event_id) VALUES (?,?,?,?)",
+                (u["name"], type_, message, event_id)
+            )
+
+
 def _notification_visible_to_viewer(conn, notification: dict, viewer=None) -> bool:
     event_id = notification.get("event_id")
     if not event_id:
@@ -3489,38 +3514,64 @@ def check_upcoming_event_alarms():
                     )
 
 
-def get_latest_notice() -> dict | None:
+def get_notice_latest_for_team(team_id: int) -> dict | None:
+    """팀 기능 그룹 B #15-3: 해당 작업 팀의 최신 공지 1건.
+
+    NULL 잔존 row(백필 누락 — #4 Phase 2에서 admin/매칭실패 row)는 여기서 반환하지 않는다.
+    그쪽은 admin 이력 화면(get_notice_history(..., include_null=True))에서만 노출된다.
+    """
+    if team_id is None:
+        return None
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT * FROM team_notices ORDER BY id DESC LIMIT 1"
+            "SELECT * FROM team_notices WHERE team_id = ? ORDER BY id DESC LIMIT 1",
+            (team_id,)
         ).fetchone()
     return dict(row) if row else None
 
 
-def save_notice(content: str, created_by: str) -> int:
+def save_notice(content: str, team_id: int, created_by: str) -> int:
+    """팀 기능 그룹 B #15-3: 작업 팀 기준으로 공지 저장 + 그 팀에 한해 자동 정리.
+
+    자동 정리(30일 이전 / 100개 초과)는 `WHERE team_id = ?` 로 제한 — 다른 팀 공지는 영향 없음.
+    team_id IS NULL 인 잔존 row 는 자동 정리 대상이 아니다(운영자가 사후 정리 — 계획서 §13).
+    """
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO team_notices (content, created_by) VALUES (?, ?)",
-            (content, created_by)
+            "INSERT INTO team_notices (team_id, content, created_by) VALUES (?, ?, ?)",
+            (team_id, content, created_by)
         )
-        # 30일 이전 이력 자동 삭제
+        # 30일 이전 이력 자동 삭제 (해당 팀만)
         conn.execute(
-            "DELETE FROM team_notices WHERE created_at < datetime('now', '-30 days')"
+            "DELETE FROM team_notices WHERE team_id = ? AND created_at < datetime('now', '-30 days')",
+            (team_id,)
         )
-        # 100개 초과분 삭제 (가장 오래된 것부터)
+        # 100개 초과분 삭제 (해당 팀의 가장 오래된 것부터)
         conn.execute(
-            "DELETE FROM team_notices WHERE id NOT IN "
-            "(SELECT id FROM team_notices ORDER BY id DESC LIMIT 100)"
+            "DELETE FROM team_notices WHERE team_id = ? AND id NOT IN "
+            "(SELECT id FROM team_notices WHERE team_id = ? ORDER BY id DESC LIMIT 100)",
+            (team_id, team_id)
         )
     return cur.lastrowid
 
 
-def get_notice_history(limit: int = 100) -> list[dict]:
+def get_notice_history(team_id: int, include_null: bool = False, limit: int = 100) -> list[dict]:
+    """팀 기능 그룹 B #15-3: 해당 작업 팀의 공지 이력.
+
+    include_null=True 는 admin 이력 화면에서 백필 누락 NULL 잔존 row 도 함께 노출하기 위한 옵션.
+    """
     with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM team_notices ORDER BY id DESC LIMIT ?",
-            (limit,)
-        ).fetchall()
+        if include_null:
+            rows = conn.execute(
+                "SELECT * FROM team_notices WHERE team_id = ? OR team_id IS NULL "
+                "ORDER BY id DESC LIMIT ?",
+                (team_id, limit)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM team_notices WHERE team_id = ? ORDER BY id DESC LIMIT ?",
+                (team_id, limit)
+            ).fetchall()
     return [dict(r) for r in rows]
 
 
