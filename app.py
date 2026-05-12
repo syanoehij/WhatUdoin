@@ -3143,9 +3143,9 @@ async def add_hidden_project_member_route(name: str, request: Request):
     target_user_id = data.get("user_id")
     if not target_user_id:
         raise HTTPException(status_code=400, detail="user_id를 입력하세요.")
-    result = db.add_hidden_project_member(proj["id"], target_user_id, proj["owner_id"])
+    result = db.add_hidden_project_member(proj["id"], target_user_id)
     if result is False:
-        raise HTTPException(status_code=403, detail="같은 팀 사용자만 멤버로 추가할 수 있습니다.")
+        raise HTTPException(status_code=403, detail="해당 팀의 승인된 멤버만 멤버로 추가할 수 있습니다.")
     if result is None:
         raise HTTPException(status_code=409, detail="이미 멤버입니다.")
     _sse_publish("projects.changed", {"name": None, "action": "member_add"})

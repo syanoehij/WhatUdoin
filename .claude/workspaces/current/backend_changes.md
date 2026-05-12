@@ -1,46 +1,51 @@
-# #15 백엔드 변경 — work_team_id 쿠키 발급/검증 + /api/me/work-team
+# #15-1 백엔드 변경 내역 — 히든 프로젝트 다중 팀 전환
 
-스키마 무변경 (마이그레이션 phase 추가 없음 — 신규 DB 헬퍼는 전부 SELECT 전용).
+## 핵심: `users.team_id` 단일 비교 → `user_teams.status='approved'` + `projects.team_id`
 
-## auth.py
+substitution 패턴 (모든 대상 쿼리에 적용):
+```
+- AND u.team_id IS NOT NULL
+- AND p.team_id IS NOT NULL       (← 유지)
+- AND u.team_id = p.team_id
++ AND p.team_id IS NOT NULL       (유지)
++ AND EXISTS (SELECT 1 FROM user_teams ut
++              WHERE ut.user_id = u.id AND ut.team_id = p.team_id AND ut.status = 'approved')
+```
 
-- `WORK_TEAM_COOKIE = "work_team_id"` (불변, 주석만 갱신).
-- `_team_is_active(team_id) -> bool` 신규 — `db.get_team_active(team_id) is not None` (쿠키/명시 값 검증용, 예외 시 False).
-- `_work_team_default(user)` 신규 — 쿠키 없거나 무효일 때 대표 작업 팀:
-  - admin → `db.first_active_team_id()` (첫 비삭제 팀 id 최소)
-  - 비admin → `db.primary_team_id_for_user(uid)` (joined_at 가장 이른 approved+비삭제 팀) → 없으면 legacy `users.team_id` (비삭제일 때만) → None
-- `resolve_work_team(request, user, explicit_id=None)` 재작성:
-  - explicit_id → int 파싱되면 무조건 신뢰 (호출부 `_work_scope`/`require_work_team_access` 가 검증) — #10 동작 불변
-  - work_team_id 쿠키 → int 파싱 + `user_can_access_team(user, ctid)` AND `_team_is_active(ctid)` 통과 시에만 사용. 무효면 무시
-  - 그 외 → `_work_team_default(user)`
-  - **변경점 vs 이전**: ① 쿠키 값 검증 추가(이전엔 무조건 신뢰), ② admin no-cookie/무효-cookie fallback = `None` → 첫 비삭제 팀, ③ 비admin 대표 팀 = `min(team_ids)` → joined_at 기준 (`primary_team_id_for_user`)
+## database.py
 
-## database.py (get_team_by_name_exact 뒤에 추가)
+1. **`create_hidden_project(name, color, memo, owner_id, team_id=None)`** — `team_id is None` 시 owner의 `users.team_id` fallback 코드 제거. None이면 `ValueError("히든 프로젝트는 team_id가 필요합니다")` raise (NULL row 생성 금지). 시그니처는 호환을 위해 `team_id: int | None = None` 유지, 본문에서 None 거부. docstring 갱신.
 
-- `first_active_team_id() -> int | None` — `SELECT id FROM teams WHERE deleted_at IS NULL ORDER BY id ASC LIMIT 1`
-- `primary_team_id_for_user(user_id) -> int | None` — `user_teams` approved + `teams.deleted_at IS NULL` JOIN, `ORDER BY ut.joined_at ASC, ut.team_id ASC LIMIT 1` (joined_at 컬럼 실재 확인됨: database.py:458 CREATE)
-- `user_work_teams(user_id) -> list[dict]` — 본인 approved+비삭제 소속 팀 `[{id, name}]` joined_at 순 (드롭다운/POST 검증용; admin은 호출 안 함)
-- `get_team_active(team_id)` 는 이미 존재 — `team_active` 용도로 재사용
+2. **`_hidden_project_visible_row(conn, project_id, user)`** — 가시성 쿼리 `u.team_id IS NOT NULL ... u.team_id = p.team_id` → substitution 패턴. 이 함수가 `is_hidden_project_visible`, `_can_view_hidden_trash_project`, `_trash_item_visible_to_viewer` 의 단일 진입점이므로 전부 반영됨.
+
+3. **`get_hidden_project_members(project_id)`** — 변경 없음. docstring에 "`u.team_id`는 표시용 legacy 값, 권한 판단 안 함" 한 줄 추가.
+
+4. **`get_hidden_project_addable_members(project_id)`** — owner의 `users.team_id` 참조 제거. `SELECT team_id FROM projects WHERE id = ?` 로 `project_team_id` 조회 → `None`이면 `[]`. 후보 쿼리: `is_active=1 AND role != 'admin' AND id NOT IN (project_members) AND EXISTS(user_teams approved on project_team_id)`. **owner_id=NULL 이어도 동작** (owner를 안 봄). docstring 갱신.
+
+5. **`add_hidden_project_member(project_id, user_id)`** — **시그니처에서 `owner_id` 인자 제거** (3-인자 → 2-인자). owner 참조 대신 `SELECT team_id FROM projects WHERE id = ?` 로 `proj_team_id` 조회 → `None`이면 `False`. target은 `SELECT role, is_active FROM users` (team_id 컬럼 불필요), is_active=0 또는 role=='admin' → `False`. `SELECT 1 FROM user_teams WHERE user_id=? AND team_id=proj_team_id AND status='approved'` 없으면 `False`. 이미 멤버면 `None`, 아니면 INSERT 후 `True`. owner_id=NULL 복구 시 admin이 호출해도 동작. docstring 갱신.
+
+6. **`transfer_hidden_project_owner(project_id, new_owner_id, requester_id)`** — member 검증 쿼리에 substitution 패턴. 시그니처·동작 무변경.
+
+7. **`admin_change_hidden_project_owner(project_id, new_owner_id)`** — member 검증 쿼리에 substitution 패턴. 시그니처·동작 무변경. docstring 갱신.
+
+8. **`transfer_hidden_projects_on_removal(user_id, hidden_projects)`** — next_owner 후보 쿼리에 substitution 패턴. 시그니처·동작 무변경. docstring에 "후보 조회는 user_teams + projects.team_id 기준" 추가. (단일 caller `app.py:1776 admin_update_user` 는 레거시 단일 팀 admin 경로 — 다중 팀 부분 추방 시나리오는 이번 범위 밖.)
 
 ## app.py
 
-- `_set_work_team_cookie(response, team_id)` — `set_cookie(WORK_TEAM_COOKIE, str(tid), max_age=86400*365, samesite="lax", httponly=False, path="/")`
-- `_ensure_work_team_cookie(request, response, user)` — SSR 응답 보정: user None 또는 미배정이면 noop / `resolve_work_team` 결과(None이면 noop)와 현재 쿠키가 다르면 Set-Cookie
-- `GET /api/me/work-team` — `_require_login`. `{current: <tid|None>, teams: [{id,name}], is_admin}`. 비admin=`db.user_work_teams`, admin=`db.get_visible_teams()`
-- `POST /api/me/work-team` — `_check_csrf` + 로그인 필수(401) + `team_id` int 파싱(400) + `db.get_team_active`(없으면 404) + `auth.require_work_team_access`(비admin 비소속 403, admin 통과) → `_set_work_team_cookie` → `{ok, team_id, team_name}`
-- `_ctx(request, **kwargs)` — `work_team_id`/`work_team_name` 키 추가 (user None 또는 미배정이면 둘 다 None; 그 외 `resolve_work_team` + `get_team_active().name`)
-- SSR 페이지 라우트에 `_ensure_work_team_cookie` 호출 추가: `/`(index), `/calendar`, `/admin`(admin인 경우만 — admin_login 응답엔 안 붙음, user None이라 noop), `/kanban`, `/gantt`, `/project-manage`, `/doc`(docs_page), `/doc/new`, `/doc/{id}`(doc_detail_page), `/doc/{id}/history`, `/check`, `/trash` — 총 12개. `calendar_page` 는 `user` 변수 추출하도록 미세 리팩터(동작 동일).
+- `add_hidden_project_member_route` (line 3146): `db.add_hidden_project_member(proj["id"], target_user_id, proj["owner_id"])` → `db.add_hidden_project_member(proj["id"], target_user_id)`. 403 메시지 "같은 팀 사용자만 멤버로 추가할 수 있습니다." → "해당 팀의 승인된 멤버만 멤버로 추가할 수 있습니다."
+- `POST /api/manage/hidden-projects` (line 3008~) — 변경 없음 (이미 `resolve_work_team` + `require_work_team_access` 적용됨).
+- `_assert_assignees_in_hidden_project` (line 3059~) — 변경 없음 (이미 `get_hidden_project_members` 이름만 비교 → assignee 후보가 `project_members` 기준으로 이미 제한됨; admin은 멤버가 아니라 자연 제외).
 
-## 회귀 주의
+## 변경 안 한 것 (스코프 밖)
+- 마이그레이션 phase 추가 없음 (스키마 무변경 — SELECT 쿼리 전환만).
+- changelog 미수정.
+- `_hidden_project_visible_row` 등에 `teams.deleted_at IS NULL` 추가 검증은 의도적으로 추가 안 함 (기존 쿼리도 안 봤고 스코프 최소화 — soft-delete된 팀의 히든 프로젝트는 별개 이슈).
+- 프론트엔드 변경 없음 (멤버 후보 드롭다운·assignee 후보는 백엔드 반환값만 렌더).
 
-- `_work_scope`(app.py) **무변경** — admin `None` 반환·explicit team_id 우선·비소속 무시 fallback·미배정 빈 set 그대로. 쿠키 검증은 `resolve_work_team` 내부로 흡수돼 `_work_scope`의 line 1948-1950 재검증과 중복이지만 무해 (그대로 둠 — surgical).
-- admin write 경로(`resolve_work_team` 호출 — app.py:2153 event create 등)는 이제 admin에게 실제 team_id(쿠키 or 첫 비삭제 팀) 반환 — 계획서 §7 의도. 아카이브 `verify_team10.py` 는 read-focused로 admin write `team_id IS NULL` 단언 없음 (확인 완료).
-- 쿠키 없이 명시 `team_id`만 보내던 #10 검증 테스트 = explicit_id 경로 그대로 → 영향 없음.
+## 검증
+- `import app` OK.
+- `add_hidden_project_member` / `create_hidden_project` 외부 caller 전수: app.py 라우트 2곳뿐 (둘 다 갱신/무변경 확인). 테스트는 신규 phase85 + 기존 phase46(Playwright)·phase80~84.
 
-## import 검증
-
-`python -c "import app"` → OK.
-
-## 서버 재시작
-
-스키마 무변경 → 운영 DB 마이그레이션 불필요. 코드 reload 위해 **서버 재시작 필요** (auth.py / database.py / app.py 변경).
+## 변경 파일
+- `database.py`
+- `app.py`

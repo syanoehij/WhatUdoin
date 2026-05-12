@@ -1,46 +1,33 @@
-# #15 QA — work_team_id 쿠키 + 프로필 "팀 변경" UI
+## QA 보고서 — #15-1 히든 프로젝트 다중 팀 전환
 
-## 방식
+### 신규 테스트: `tests/phase85_hidden_project_multiteam.py` — 11/11 PASS (4.9s)
 
-운영 서버는 IP 자동 로그인이라 특정 사용자/다중 팀/admin 상태를 브라우저로 재현할 수 없다.
-TestClient(`fastapi.testclient`) + 임시 DB(`monkeypatch.setattr(db, "DB_PATH", ...)`)로 검증한다 —
-session/work_team_id 쿠키 set 가능, Set-Cookie 응답 헤더 inspect 가능, 다중 팀 사용자·admin 임시 구성 가능.
-신규 spec: `tests/phase84_work_team_cookie.py` (네이밍 컨벤션 — phase80~83 다음).
+**정적 invariant (4)**
+- [x] `test_static_no_legacy_team_id_join` — 히든 프로젝트 함수 8개 한정 `u.team_id = p.team_id` 잔존 0건, owner 의 `users.team_id` 참조(owner_row) 0건 (create_hidden_project 제외).
+- [x] `test_static_create_hidden_project_no_users_teamid_fallback` — `SELECT team_id FROM users` fallback 제거, `team_id None` 시 `ValueError`.
+- [x] `test_static_user_teams_approved_exists` — `_hidden_project_visible_row`/`get_hidden_project_addable_members`/`transfer_hidden_project_owner`/`admin_change_hidden_project_owner`/`transfer_hidden_projects_on_removal` 에 `user_teams` + `status = 'approved'`; `add_hidden_project_member` 2-인자(owner_id 인자 제거) + user_teams approved.
+- [x] `test_static_app_route_call_updated` — app.py 라우트가 `db.add_hidden_project_member(proj["id"], target_user_id)` 2-인자 호출 + 구 3-인자 호출 부재 + `import app` OK.
 
-## 결과: 19/19 PASS
+**동작 (7)**
+- [x] **A** `test_a_transfer_on_removal_picks_oldest_member` — 팀 A owner+멤버2, owner를 `transfer_hidden_projects_on_removal` → `added_at` 오름차순 최선두(선임)에게 owner 이양 + 추방된 owner는 project_members 에서 제거.
+- [x] **B** `test_b_owner_null_then_admin_recovery` — 팀 A 히든에 owner만 → 추방 → `owner_id IS NULL` 확인 → admin(owner 부재)이 `add_hidden_project_member(pid, 새멤버)` (owner 참조 없이 projects.team_id 기준) 성공 → `admin_change_hidden_project_owner(pid, 새멤버)` 성공 → owner_id = 새멤버.
+- [x] **C** `test_c_admin_excluded_from_candidates` — admin 이 (비정상이지만) user_teams approved row 를 가져도 `get_hidden_project_addable_members` 결과에서 제외 (role != 'admin' 필터 이중 보장); `get_hidden_project_members`(=assignee 후보)에 admin 이름 미포함; `add_hidden_project_member(pid, admin)` → False.
+- [x] **D** `test_d_multiteam_owner_candidate_scope` — owner 가 팀 A·B 둘 다 approved. owner 가 owner 인 히든 P(team_id=A) → `get_hidden_project_addable_members(P)` 후보는 팀 A 멤버만, 팀 B 멤버 미포함. `add_hidden_project_member(P, 팀B멤버)` → False; `add_hidden_project_member(P, 팀A멤버)` → True.
+- [x] **E** `test_e_visibility_follows_user_teams` — project_members row + user_teams approved → `is_hidden_project_visible` True. user_teams 에서 제거(project_members row 는 잔존) → False. 재가입 approved → True. status='pending' → False. admin → 항상 True.
+- [x] **F** `test_f_addable_members_when_owner_null` — P.owner_id=NULL, P.team_id=A → `get_hidden_project_addable_members(P)` 가 빈 리스트가 아니라 팀 A 승인 멤버(전 owner 포함, project_members 만 빠진 상태) 반환. 전 owner 를 user_teams 에서도 제거하면 후보에서도 빠짐.
+- [x] **G** `test_g_create_requires_team_id` — `create_hidden_project(team_id=None)` → `ValueError`. team_id 기준 저장 확인. 같은 팀 동일 이름 → None. 다른 팀 동일 이름 → 허용.
 
-| # | 시나리오 | 결과 |
-|---|---------|------|
-| static×5 | app.py 라우트/헬퍼/`_ctx` · auth.py `resolve_work_team` 쿠키 검증 · db 헬퍼 3종+joined_at · 템플릿(팀 변경 UI·드롭다운 제거·work_team_id) · CSS | PASS |
-| A | 첫 로드(쿠키 없음), 2팀 멤버(joined_at 순) → `GET /` → `work_team_id` Set-Cookie = 가장 이른 팀 | PASS |
-| B | 첫 로드(쿠키 없음), admin → Set-Cookie = 가장 작은 id 비삭제 팀 | PASS |
-| C | 유효 쿠키(대표 팀 아닌 다른 소속 팀) → 그 값 사용, Set-Cookie 갱신 없음 | PASS |
-| D | 쿠키 팀 soft-deleted → 새 대표 팀으로 Set-Cookie 갱신 | PASS |
-| E | 쿠키 팀 비소속(추방) → 새 대표 팀으로 Set-Cookie 갱신 | PASS |
-| F | `POST /api/me/work-team {소속 팀}` → 200 + `{ok, team_id, team_name}` + Set-Cookie | PASS |
-| G | `POST` {비소속 팀} (비admin) → 403 | PASS |
-| H | `POST` {삭제 예정 팀} → 404 / `POST` {team_id: "abc"} → 400 | PASS |
-| I | `POST` 후 `/api/kanban`·`/api/events`·`/api/project-timeline` 가 새 팀 컨텍스트로 (다른 팀 데이터 미노출) + `/api/checklists`·`/api/doc` 200 | PASS |
-| J | #10 회귀: `?team_id=X`(소속) 가 쿠키보다 우선 / 비소속 X 명시는 무시→쿠키 fallback | PASS |
-| K | 미배정 사용자 `GET /` → Set-Cookie 없음 / 비로그인도 영향 없음 | PASS |
-| L | admin `_work_scope`=None 유지 — admin 쿠키가 ta 라도 `/api/kanban` 전 팀 노출 | PASS |
-| M | `GET /api/me/work-team`: 비admin → 본인 소속 팀 + 대표 팀 / admin → 전체 비삭제 팀 | PASS |
-| N | 비로그인 `GET`/`POST /api/me/work-team` → 401 | PASS |
+### 회귀 확인 ✅
+- [x] `import app` OK.
+- [x] `tests/phase80_landing_page.py` + `phase81_unassigned_user.py` + `phase82_team_portal.py` + `phase83_team_portal_loggedin.py` + `phase84_work_team_cookie.py` — 49/49 PASS (16.8s).
+- [x] `tests/phase46_hidden_project_{a,b,c}.spec.js` (Playwright E2E) — **미실행**. 운영 서버 IP 자동 로그인 + 코드 변경(database.py/app.py) 후 서버 재시작 필요 → 사용자 재시작 후 실행 가능. 본 단위 검증은 TestClient/직접 DB 로 완료. (프론트엔드 무변경이라 마크업 회귀 위험 없음 — 멤버 후보 드롭다운·assignee 후보는 백엔드 반환값만 렌더.)
 
-## 회귀
+### 사전 결함 (이번 변경 무관) ⚠️
+- `tests/test_project_rename.py` 2 FAIL (`no such column: team_id`) — 옛 픽스처 DB 에 `projects.team_id` 없음. #15 사이클에서 이미 확인된 사전 결함 (`git stash` 후 동일, master HEAD 동일). #15-1 무관.
 
-- `tests/phase80_landing_page.py`(#11) 5 / `phase81_unassigned_user.py`(#12) 8 / `phase82_team_portal.py`(#13) 8 / `phase83_team_portal_loggedin.py`(#14) 9 — **30/30 PASS** (10.2s).
-- `tests/test_project_rename.py` 2 FAIL은 사전 결함(`git stash` 후 동일 — 옛 픽스처 DB에 `projects.team_id` 없음, master HEAD `04006ba` 동일, #15 무관).
-- `python -c "import app"` OK. Jinja `get_template` base/kanban/project/calendar/doc_list OK.
+### 임시 산출물
+- 테스트 실행 중 생성된 `_phase85_*.db` / `_phase8*.db` 등 임시 DB 는 실행 후 정리 완료.
 
-## 자가 발견 결함
-
-없음 (1차 통과).
-
-## 서버 재시작
-
-스키마 무변경 → 운영 DB 마이그레이션 불필요. 코드 reload(auth.py / database.py / app.py / 템플릿 5종 / style.css) 위해 **운영 서버 재시작 필요**. 단 본 단위 검증은 TestClient(임시 DB)로 완료 — 재시작 없이 검증됨.
-
-## 브라우저 검증 미수행 사유
-
-운영 서버 IP 자동 로그인 + 단일 IP 환경이라 다중 팀 사용자 전환·admin 슈퍼유저 시나리오를 Playwright 로 재현할 수 없다. 프로필 "팀 변경" 드롭다운 UI 자체는 정적 검증(템플릿 마크업·JS 함수 존재·`/api/me/work-team` 호출)으로 확인. 서버 재시작 후 사용자가 실제 다중 팀 계정으로 드롭다운 동작을 한 번 확인하면 좋다.
+### 최종 판정
+- **통과** — 신규 11/11 PASS + 회귀 49/49 PASS. 차단 결함 없음. Playwright phase46 은 서버 재시작 후 별도 확인 권장(무변경 프론트라 위험 낮음).
+- **운영 서버 반영 시 재시작 필요** (database.py + app.py reload). 스키마 무변경 → 마이그레이션 불필요.

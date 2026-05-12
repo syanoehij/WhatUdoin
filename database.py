@@ -3885,27 +3885,22 @@ def create_hidden_project(name: str, color: str, memo: str, owner_id: int,
                           team_id: int | None = None) -> dict | None:
     """히든 프로젝트 생성. (team_id, name_norm) 안에서 중복 시 None 반환.
 
-    team_id가 None이면 owner의 users.team_id를 fallback으로 사용한다 — 라우트가
-    `resolve_work_team`을 사용해 명시 team_id를 넘기는 게 정상 흐름이지만 호환을 위해 유지.
+    team_id는 현재 작업 팀(`resolve_work_team`) 기준으로 라우트가 명시 전달한다 (#15-1).
+    None이면 NULL row를 만들지 않고 ValueError — 다중 팀 모델에서 owner의 users.team_id
+    fallback은 더 이상 사용하지 않는다.
     """
+    if team_id is None:
+        raise ValueError("히든 프로젝트는 team_id가 필요합니다")
     norm = normalize_name(name)
     with get_conn() as conn:
-        # team_id 결정 (명시 인자가 없으면 users.team_id fallback).
-        if team_id is None:
-            owner_row = conn.execute(
-                "SELECT team_id FROM users WHERE id = ?", (owner_id,)
-            ).fetchone()
-            team_id = owner_row["team_id"] if owner_row else None
-
-        # (team_id, name_norm) 중복 검사 — team_id IS NULL인 row끼리는 면제.
-        if team_id is not None:
-            exists = conn.execute(
-                "SELECT 1 FROM projects "
-                " WHERE team_id = ? AND name_norm = ? AND deleted_at IS NULL",
-                (team_id, norm),
-            ).fetchone()
-            if exists:
-                return None
+        # (team_id, name_norm) 중복 검사.
+        exists = conn.execute(
+            "SELECT 1 FROM projects "
+            " WHERE team_id = ? AND name_norm = ? AND deleted_at IS NULL",
+            (team_id, norm),
+        ).fetchone()
+        if exists:
+            return None
 
         cur = conn.execute(
             "INSERT INTO projects "
@@ -3959,9 +3954,13 @@ def _hidden_project_visible_row(conn, project_id: int, user: dict):
            WHERE pm.project_id = ?
              AND pm.user_id = ?
              AND u.is_active = 1
-             AND u.team_id IS NOT NULL
              AND p.team_id IS NOT NULL
-             AND u.team_id = p.team_id""",
+             AND EXISTS (
+                   SELECT 1 FROM user_teams ut
+                    WHERE ut.user_id = u.id
+                      AND ut.team_id = p.team_id
+                      AND ut.status = 'approved'
+                 )""",
         (project_id, user_id)
     ).fetchone()
 
@@ -4061,7 +4060,10 @@ def _resolve_project_id_for_write(
 
 
 def get_hidden_project_members(project_id: int) -> list[dict]:
-    """히든 프로젝트 멤버 목록 (owner 포함). user 정보 JOIN."""
+    """히든 프로젝트 멤버 목록 (owner 포함). user 정보 JOIN.
+
+    `u.team_id`는 표시용 legacy 값일 뿐 — 멤버십·권한 판단에는 쓰지 않는다 (#15-1).
+    """
     with get_conn() as conn:
         rows = conn.execute(
             """SELECT u.id, u.name, u.team_id,
@@ -4077,48 +4079,65 @@ def get_hidden_project_members(project_id: int) -> list[dict]:
 
 
 def get_hidden_project_addable_members(project_id: int) -> list[dict]:
-    """추가 가능한 사용자 목록.
-    owner와 같은 팀 소속 + 현재 멤버 아닌 사람 + is_active=1 + team_id IS NOT NULL.
+    """추가 가능한 사용자 목록 (#15-1: projects.team_id + user_teams 기준).
+
+    프로젝트 소속 팀(`projects.team_id`)의 승인 멤버(`user_teams.status='approved'`) 중
+    현재 멤버가 아니고 활성·비-admin인 사용자. owner를 참조하지 않으므로
+    owner_id = NULL 복구 상황에서도 동작한다. team_id IS NULL 잔존 프로젝트는 [].
     """
     with get_conn() as conn:
-        owner_row = conn.execute(
-            "SELECT u.team_id FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = ?",
-            (project_id,)
+        proj_row = conn.execute(
+            "SELECT team_id FROM projects WHERE id = ?", (project_id,)
         ).fetchone()
-        if not owner_row or owner_row["team_id"] is None:
+        if not proj_row or proj_row["team_id"] is None:
             return []
-        owner_team_id = owner_row["team_id"]
+        project_team_id = proj_row["team_id"]
         rows = conn.execute(
             """SELECT u.id, u.name FROM users u
-               WHERE u.team_id = ?
-               AND u.is_active = 1
-               AND u.team_id IS NOT NULL
+               WHERE u.is_active = 1
                AND u.role != 'admin'
                AND u.id NOT IN (SELECT user_id FROM project_members WHERE project_id = ?)
+               AND EXISTS (
+                     SELECT 1 FROM user_teams ut
+                      WHERE ut.user_id = u.id
+                        AND ut.team_id = ?
+                        AND ut.status = 'approved'
+                   )
                ORDER BY u.name""",
-            (owner_team_id, project_id)
+            (project_id, project_team_id)
         ).fetchall()
     return [dict(r) for r in rows]
 
 
-def add_hidden_project_member(project_id: int, user_id: int, owner_id: int) -> bool | None:
-    """멤버 추가. 팀 검증 후 INSERT.
-    반환: True(성공), False(팀 불일치), None(이미 멤버)
+def add_hidden_project_member(project_id: int, user_id: int) -> bool | None:
+    """멤버 추가 (#15-1: projects.team_id + user_teams 기준).
+
+    프로젝트 소속 팀의 승인 멤버(`user_teams.status='approved'`)만 추가 가능.
+    owner를 참조하지 않으므로 owner_id = NULL 복구 시 admin이 호출해도 동작한다.
+    반환: True(성공), False(팀 미승인/admin/비활성/NULL팀), None(이미 멤버)
     """
     with get_conn() as conn:
-        owner_row = conn.execute(
-            "SELECT team_id FROM users WHERE id = ?", (owner_id,)
+        proj_row = conn.execute(
+            "SELECT team_id FROM projects WHERE id = ?", (project_id,)
         ).fetchone()
+        if not proj_row or proj_row["team_id"] is None:
+            return False
+        proj_team_id = proj_row["team_id"]
         target_row = conn.execute(
-            "SELECT team_id, role, is_active FROM users WHERE id = ?", (user_id,)
+            "SELECT role, is_active FROM users WHERE id = ?", (user_id,)
         ).fetchone()
-        if not owner_row or not target_row:
+        if not target_row:
             return False
         if not target_row["is_active"]:
             return False
         if target_row["role"] == "admin":
             return False
-        if owner_row["team_id"] is None or owner_row["team_id"] != target_row["team_id"]:
+        approved = conn.execute(
+            "SELECT 1 FROM user_teams "
+            " WHERE user_id = ? AND team_id = ? AND status = 'approved'",
+            (user_id, proj_team_id)
+        ).fetchone()
+        if not approved:
             return False
         existing = conn.execute(
             "SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?",
@@ -4169,10 +4188,14 @@ def transfer_hidden_project_owner(project_id: int, new_owner_id: int, requester_
                WHERE pm.project_id = ?
                  AND pm.user_id = ?
                  AND u.is_active = 1
-                 AND u.team_id IS NOT NULL
                  AND p.team_id IS NOT NULL
-                 AND u.team_id = p.team_id
-                 AND u.role != 'admin'""",
+                 AND u.role != 'admin'
+                 AND EXISTS (
+                       SELECT 1 FROM user_teams ut
+                        WHERE ut.user_id = u.id
+                          AND ut.team_id = p.team_id
+                          AND ut.status = 'approved'
+                     )""",
             (project_id, new_owner_id)
         ).fetchone()
         if not member:
@@ -4186,7 +4209,7 @@ def transfer_hidden_project_owner(project_id: int, new_owner_id: int, requester_
 
 def admin_change_hidden_project_owner(project_id: int, new_owner_id: int) -> bool:
     """admin 강제 관리자 변경.
-    검증: new_owner_id in project_members
+    검증: new_owner_id in project_members + projects.team_id 승인 멤버 (#15-1)
     처리: projects.owner_id = new_owner_id (기존 owner는 members에 유지)
     """
     with get_conn() as conn:
@@ -4198,10 +4221,14 @@ def admin_change_hidden_project_owner(project_id: int, new_owner_id: int) -> boo
                WHERE pm.project_id = ?
                  AND pm.user_id = ?
                  AND u.is_active = 1
-                 AND u.team_id IS NOT NULL
                  AND p.team_id IS NOT NULL
-                 AND u.team_id = p.team_id
-                 AND u.role != 'admin'""",
+                 AND u.role != 'admin'
+                 AND EXISTS (
+                       SELECT 1 FROM user_teams ut
+                        WHERE ut.user_id = u.id
+                          AND ut.team_id = p.team_id
+                          AND ut.status = 'approved'
+                     )""",
             (project_id, new_owner_id)
         ).fetchone()
         if not member:
@@ -6366,6 +6393,7 @@ def transfer_hidden_projects_on_removal(user_id: int, hidden_projects: list):
     """팀원 강제 제외 시 히든 프로젝트 owner 자동 이양.
     hidden_projects: get_user_owned_hidden_projects() 반환값.
     이양 대상: 해당 프로젝트 멤버 중 user 제외 added_at 오름차순 첫 번째.
+    후보 조회는 `user_teams.status='approved'` + `projects.team_id` 기준 (#15-1).
     이양 불가 시 owner_id = NULL (admin만 관리 가능 상태).
     """
     with get_conn() as conn:
@@ -6379,10 +6407,14 @@ def transfer_hidden_projects_on_removal(user_id: int, hidden_projects: list):
                    WHERE pm.project_id = ?
                      AND pm.user_id != ?
                      AND u.is_active = 1
-                     AND u.team_id IS NOT NULL
                      AND p.team_id IS NOT NULL
-                     AND u.team_id = p.team_id
                      AND u.role != 'admin'
+                     AND EXISTS (
+                           SELECT 1 FROM user_teams ut
+                            WHERE ut.user_id = u.id
+                              AND ut.team_id = p.team_id
+                              AND ut.status = 'approved'
+                         )
                    ORDER BY pm.added_at ASC
                    LIMIT 1""",
                 (proj_id, user_id)
