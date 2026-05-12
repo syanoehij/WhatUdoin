@@ -1,28 +1,20 @@
-## 코드 리뷰 보고서 — #15-1 히든 프로젝트 다중 팀 전환
+# code_review_report — 팀 기능 그룹 B #15-2 (links 다중 팀 전환)
 
-### 리뷰 대상 파일
-- `database.py` — `create_hidden_project`, `_hidden_project_visible_row`, `get_hidden_project_members`(주석), `get_hidden_project_addable_members`, `add_hidden_project_member`, `transfer_hidden_project_owner`, `admin_change_hidden_project_owner`, `transfer_hidden_projects_on_removal`
-- `app.py` — `add_hidden_project_member_route` (line ~3146)
+리뷰 대상: `database.py` (get_links/update_link/create_link), `app.py` (/api/links 4개 라우트), `tests/phase86_links_multiteam.py`. base.html 무변경.
 
-### 차단(Blocking) ❌
-- 없음.
+## 차단 결함
+없음.
 
-### 경고(Warning) ⚠️
-- `database.py:get_hidden_project_addable_members` / `transfer_hidden_project_owner` / `admin_change_hidden_project_owner` / `transfer_hidden_projects_on_removal` — `EXISTS(SELECT 1 FROM user_teams ut WHERE ut.user_id = u.id ...)` 상관 서브쿼리가 함수마다 4벌 복제됨. 현 규모에서 허용이나, `_approved_member_clause()` 같은 SQL 조각 헬퍼로 묶을 여지(향후 정리 후보, #16 정리 시점). 동작상 문제 없음.
-- `database.py:create_hidden_project` — `team_id is None` 시 기존 `None` 반환(중복) 대신 `ValueError` raise로 동작 변경. 라우트(`POST /api/manage/hidden-projects`)는 이미 `resolve_work_team` None을 403으로 막으므로 정상 흐름 영향 없음. 단 다른 내부 caller가 추후 None으로 호출하면 500이 됨 — 현재 caller는 app.py 1곳뿐이라 OK. (의도된 변경, feature_spec §1과 일치.)
+## 경고 / 관찰
+1. **admin GET 시 orphan team 링크 노출** — `get_links(work_team_ids=None)` 의 `OR (scope='team')` 절은 `team_id IS NULL` 인 잔존 team 링크(그룹 A #4 백필 누락분, 정상이면 0건)도 admin에게 노출한다. admin 슈퍼유저 패턴(`/api/events`·`/api/checklists` 등 admin→전 팀)과 일관하므로 의도된 동작. 운영 후 `settings.team_migration_warnings` 에 links 경고가 있으면 운영자가 정리. → **수용**.
+2. **`require_work_team_access` 와 `resolve_work_team` 의 explicit 우선** — POST에서 `data.get("team_id")` 가 명시되면 `resolve_work_team` 이 무조건 신뢰(`explicit_id` 우선)하지만, 직후 `require_work_team_access` 가 비admin 비소속이면 403. admin은 슈퍼유저로 통과 → 임의 팀에 team 링크 작성 가능 (의도됨 — admin은 모든 팀 자료 큐레이션 가능). `manage/projects` 라우트와 동일 패턴. → **수용**.
+3. **`api_delete_link` default role** `"editor"` → `"member"` 정리 — 동작 무영향(role이 dict에 항상 존재). 관례 일관성. → **수용**.
+4. **프로젝트 관례 준수**: `_work_scope`/`resolve_work_team`/`require_work_team_access` 사용 = #10 라우트와 동일 패턴. `_require_editor` 미변경(#16 책임). `create_link` 시그니처 보존 — 호출부가 team_id 확정. 마이그레이션 phase 추가 없음. ✔
 
-### 통과 ✅
-- [x] **권한 체크**: 변경된 라우트(`add_hidden_project_member_route`)는 기존 `_require_editor` + `_get_hidden_proj_or_404` + `_require_hidden_can_manage` 그대로 유지. 신규 라우트 없음.
-- [x] **SQL 파라미터화**: 모든 신규/수정 쿼리가 `?` 바인딩 사용. 문자열 포매팅 삽입 없음 (`status = 'approved'` 는 리터럴 상수).
-- [x] **`u.team_id = p.team_id` 잔존 0건**: 히든 프로젝트 관련 함수 전수 확인 — 모두 `user_teams` EXISTS로 전환됨. 남은 `users.team_id` 참조는 마이그레이션 코드/주석뿐.
-- [x] **owner_id=NULL 케이스 대응**: `get_hidden_project_addable_members` / `add_hidden_project_member` 가 owner를 참조하지 않고 `projects.team_id` 기준 → owner 부재 복구 흐름에서 admin이 멤버 추가 가능. feature_spec §3·§4 충족.
-- [x] **admin 자동 제외**: 후보 쿼리에 `u.role != 'admin'` 유지 + admin은 `user_teams` row 없음(이중 보장). assignee 후보(`get_hidden_project_members` → `_assert_assignees_in_hidden_project`)는 멤버만 → admin 자연 제외.
-- [x] **`_hidden_project_visible_row` 단일 진입점**: `is_hidden_project_visible`, `_can_view_hidden_trash_project`, `_trash_item_visible_to_viewer` 모두 자동 반영.
-- [x] **시그니처 변경 호출부 일치**: `add_hidden_project_member` 3-인자 → 2-인자, app.py 라우트 호출부 갱신 확인. `create_hidden_project` 시그니처 무변경(team_id=None 본문 거부만), app.py 호출부는 항상 `team_id=` 명시 → 영향 없음.
-- [x] **DB 경로 / `_ctx` / 마이그레이션 패턴**: 해당 변경 없음 (SELECT 쿼리 전환 + 시그니처 정리만, 스키마 무변경).
-- [x] **`import app` OK** (backend 단계에서 확인).
-- [x] **SSE 노출**: `_sse_publish("projects.changed", {"name": None, ...})` — 기존대로 히든 프로젝트 이름 미노출 유지.
-- [x] **외부 caller 전수**: `add_hidden_project_member` / `create_hidden_project` 호출은 app.py 라우트 2곳뿐 (둘 다 처리됨).
+## 테스트 커버리지
+- 정적 invariant 3건 (시그니처/admin 분기/라우트 헬퍼 사용 + import).
+- TestClient 시나리오 A~I: 작업 팀 전환 / 다른 팀 멤버 격리 / personal 본인 한정 / POST team_id 확정 / admin CRUD + 전 팀 GET / 같은 팀 멤버 B 403 / admin 타인 편집·삭제 / admin work_team 없이 POST 400 / 회귀(personal CRUD, 비로그인 [], validation).
+- 직접 DB: get_links work_team_ids 컨벤션 (None/set()/{tid}/{ta,tb}/타 사용자).
+- 회귀: phase80~85 60 PASS.
 
-### 최종 판정
-- **통과** — 차단 결함 없음. 경고 2건은 모두 의도된 설계·향후 리팩터 후보. QA 진행 가능.
+**판정: 통과.**

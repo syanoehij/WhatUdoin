@@ -1,33 +1,33 @@
-## QA 보고서 — #15-1 히든 프로젝트 다중 팀 전환
+# qa_report — 팀 기능 그룹 B #15-2 (links 다중 팀 전환)
 
-### 신규 테스트: `tests/phase85_hidden_project_multiteam.py` — 11/11 PASS (4.9s)
+## 테스트 전략
+운영 서버는 IP 자동 로그인(로그아웃 불가)이라 다중 팀 사용자/admin 상태/팀 전환 시나리오를 브라우저로 재현 불가 → FastAPI `TestClient` + 임시 DB(`.claude/workspaces/current/test_dbs/`)로 검증. (phase84/85와 동일 패턴.)
 
-**정적 invariant (4)**
-- [x] `test_static_no_legacy_team_id_join` — 히든 프로젝트 함수 8개 한정 `u.team_id = p.team_id` 잔존 0건, owner 의 `users.team_id` 참조(owner_row) 0건 (create_hidden_project 제외).
-- [x] `test_static_create_hidden_project_no_users_teamid_fallback` — `SELECT team_id FROM users` fallback 제거, `team_id None` 시 `ValueError`.
-- [x] `test_static_user_teams_approved_exists` — `_hidden_project_visible_row`/`get_hidden_project_addable_members`/`transfer_hidden_project_owner`/`admin_change_hidden_project_owner`/`transfer_hidden_projects_on_removal` 에 `user_teams` + `status = 'approved'`; `add_hidden_project_member` 2-인자(owner_id 인자 제거) + user_teams approved.
-- [x] `test_static_app_route_call_updated` — app.py 라우트가 `db.add_hidden_project_member(proj["id"], target_user_id)` 2-인자 호출 + 구 3-인자 호출 부재 + `import app` OK.
+## 신규 테스트: `tests/phase86_links_multiteam.py` — 13 PASS / 0 FAIL
 
-**동작 (7)**
-- [x] **A** `test_a_transfer_on_removal_picks_oldest_member` — 팀 A owner+멤버2, owner를 `transfer_hidden_projects_on_removal` → `added_at` 오름차순 최선두(선임)에게 owner 이양 + 추방된 owner는 project_members 에서 제거.
-- [x] **B** `test_b_owner_null_then_admin_recovery` — 팀 A 히든에 owner만 → 추방 → `owner_id IS NULL` 확인 → admin(owner 부재)이 `add_hidden_project_member(pid, 새멤버)` (owner 참조 없이 projects.team_id 기준) 성공 → `admin_change_hidden_project_owner(pid, 새멤버)` 성공 → owner_id = 새멤버.
-- [x] **C** `test_c_admin_excluded_from_candidates` — admin 이 (비정상이지만) user_teams approved row 를 가져도 `get_hidden_project_addable_members` 결과에서 제외 (role != 'admin' 필터 이중 보장); `get_hidden_project_members`(=assignee 후보)에 admin 이름 미포함; `add_hidden_project_member(pid, admin)` → False.
-- [x] **D** `test_d_multiteam_owner_candidate_scope` — owner 가 팀 A·B 둘 다 approved. owner 가 owner 인 히든 P(team_id=A) → `get_hidden_project_addable_members(P)` 후보는 팀 A 멤버만, 팀 B 멤버 미포함. `add_hidden_project_member(P, 팀B멤버)` → False; `add_hidden_project_member(P, 팀A멤버)` → True.
-- [x] **E** `test_e_visibility_follows_user_teams` — project_members row + user_teams approved → `is_hidden_project_visible` True. user_teams 에서 제거(project_members row 는 잔존) → False. 재가입 approved → True. status='pending' → False. admin → 항상 True.
-- [x] **F** `test_f_addable_members_when_owner_null` — P.owner_id=NULL, P.team_id=A → `get_hidden_project_addable_members(P)` 가 빈 리스트가 아니라 팀 A 승인 멤버(전 owner 포함, project_members 만 빠진 상태) 반환. 전 owner 를 user_teams 에서도 제거하면 후보에서도 빠짐.
-- [x] **G** `test_g_create_requires_team_id` — `create_hidden_project(team_id=None)` → `ValueError`. team_id 기준 저장 확인. 같은 팀 동일 이름 → None. 다른 팀 동일 이름 → 허용.
+| # | 시나리오 | 결과 |
+|---|----------|------|
+| static 1 | `db.get_links` 시그니처 `work_team_ids` 로 전환 | PASS |
+| static 2 | `db.update_link` 에 `role` 인자 + `role=='admin'` 분기 | PASS |
+| static 3 | `/api/links` 라우트가 `_work_scope`/`resolve_work_team`/`require_work_team_access` 사용, `user.get("team_id")` 미참조 + `import app` | PASS |
+| A | 다중 팀 사용자가 작업 팀 전환(쿠키) → GET /api/links 가 새 팀 scope='team' 링크로; 명시 ?team_id 가 쿠키보다 우선 | PASS |
+| B | 다른 팀 멤버 세션에선 그 팀 scope='team' 링크 안 보임 (명시 ?team_id 로도 비소속 → 무시·대표팀 fallback) | PASS |
+| C | personal 링크는 작성자 본인만 노출 (작업 팀 무관) | PASS |
+| D | POST scope='team' → team_id 가 work_team_id 로 확정 저장; personal → NULL; 명시 team_id 우선; 비소속 명시 → 403 | PASS |
+| E | admin: 쿠키/명시 work_team_id 후 scope='team' POST/PUT/DELETE; admin GET 은 전 팀 scope='team' 링크 노출 | PASS |
+| F | 같은 팀 멤버 B 가 멤버 A 의 scope='team' 링크 PUT·DELETE → 403; 원본 유지; A 본인은 가능 | PASS |
+| G | admin 이 타인 scope='team' 링크 PUT·DELETE 가능; 타인 personal 링크도 가능 | PASS |
+| H | admin 이 work_team 없이(쿠키 X + ?team_id X) scope='team' POST → 400; personal POST → 200 | PASS |
+| I | 회귀: personal CRUD 본인; 비로그인 GET /api/links → []; title/url 누락·잘못된 scheme → 400 | PASS |
+| db-conv | get_links(None)=전 팀+본인개인 / get_links(set())=본인개인만 / get_links({ta})=A팀+본인개인 / get_links({ta,tb})=일반화 / 타 사용자 관점 | PASS |
 
-### 회귀 확인 ✅
-- [x] `import app` OK.
-- [x] `tests/phase80_landing_page.py` + `phase81_unassigned_user.py` + `phase82_team_portal.py` + `phase83_team_portal_loggedin.py` + `phase84_work_team_cookie.py` — 49/49 PASS (16.8s).
-- [x] `tests/phase46_hidden_project_{a,b,c}.spec.js` (Playwright E2E) — **미실행**. 운영 서버 IP 자동 로그인 + 코드 변경(database.py/app.py) 후 서버 재시작 필요 → 사용자 재시작 후 실행 가능. 본 단위 검증은 TestClient/직접 DB 로 완료. (프론트엔드 무변경이라 마크업 회귀 위험 없음 — 멤버 후보 드롭다운·assignee 후보는 백엔드 반환값만 렌더.)
+## 회귀
+- `tests/phase80~85` (landing / unassigned / team portal x2 / work_team cookie / hidden project multiteam) — **60 PASS / 0 FAIL**.
+- 기존 링크 전용 테스트 없음 (phase86이 첫 커버리지).
 
-### 사전 결함 (이번 변경 무관) ⚠️
-- `tests/test_project_rename.py` 2 FAIL (`no such column: team_id`) — 옛 픽스처 DB 에 `projects.team_id` 없음. #15 사이클에서 이미 확인된 사전 결함 (`git stash` 후 동일, master HEAD 동일). #15-1 무관.
+## 서버 재시작
+**필요** — `app.py`/`database.py` 코드 reload. 스키마 무변경 → 마이그레이션 phase 없음. VSCode 디버깅 모드 자동 reload 불가이므로 사용자 수동 재시작 필요.
 
-### 임시 산출물
-- 테스트 실행 중 생성된 `_phase85_*.db` / `_phase8*.db` 등 임시 DB 는 실행 후 정리 완료.
-
-### 최종 판정
-- **통과** — 신규 11/11 PASS + 회귀 49/49 PASS. 차단 결함 없음. Playwright phase46 은 서버 재시작 후 별도 확인 권장(무변경 프론트라 위험 낮음).
-- **운영 서버 반영 시 재시작 필요** (database.py + app.py reload). 스키마 무변경 → 마이그레이션 불필요.
+## 알려진 한계 / 범위 밖
+- `users.team_id` 컬럼 자체 제거는 #23 책임 (이번엔 links 라우트가 안 읽도록만 전환).
+- base.html 헤더 드롭다운: admin이 타인 링크 편집·삭제하는 UI 경로는 노출 안 됨(`isMine` 분기) — 백엔드는 허용. 운영상 의도(작성자 큐레이션)이며 이번 범위 밖.

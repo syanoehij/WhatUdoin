@@ -6157,20 +6157,47 @@ def get_checklist_lock(checklist_id: int) -> dict | None:
 
 # ── Links ────────────────────────────────────────────────
 
-def get_links(user_name: str, team_id):
-    """개인 링크(본인) + 팀 링크(소속 팀) 반환"""
+def get_links(user_name: str, work_team_ids):
+    """개인 링크(본인) + 팀 링크(작업 팀) 반환 — 팀 기능 그룹 B #15-2.
+
+    work_team_ids 컨벤션 (app._work_scope 와 동일):
+      - None      : 팀 필터 없음 (admin 슈퍼유저 — 전 팀의 scope='team' 링크 노출)
+      - set()     : 팀 링크 없음 (팀 미배정 사용자 — 본인 개인 링크만)
+      - {tid, ...}: 해당 팀들의 scope='team' 링크 (비admin은 항상 0 또는 1개)
+    어느 경우든 scope='personal' 링크는 항상 작성자 본인 row 만.
+    """
     with get_conn() as conn:
-        rows = conn.execute("""
-            SELECT id, title, url, description, scope, team_id, created_by, created_at
-            FROM links
-            WHERE (scope = 'personal' AND created_by = ?)
-               OR (scope = 'team' AND team_id = ?)
-            ORDER BY scope DESC, created_at ASC
-        """, (user_name, team_id)).fetchall()
+        if work_team_ids is None:
+            rows = conn.execute("""
+                SELECT id, title, url, description, scope, team_id, created_by, created_at
+                FROM links
+                WHERE (scope = 'personal' AND created_by = ?)
+                   OR (scope = 'team')
+                ORDER BY scope DESC, created_at ASC
+            """, (user_name,)).fetchall()
+        elif not work_team_ids:
+            rows = conn.execute("""
+                SELECT id, title, url, description, scope, team_id, created_by, created_at
+                FROM links
+                WHERE scope = 'personal' AND created_by = ?
+                ORDER BY scope DESC, created_at ASC
+            """, (user_name,)).fetchall()
+        else:
+            ids = list(work_team_ids)
+            placeholders = ",".join("?" for _ in ids)
+            rows = conn.execute(f"""
+                SELECT id, title, url, description, scope, team_id, created_by, created_at
+                FROM links
+                WHERE (scope = 'personal' AND created_by = ?)
+                   OR (scope = 'team' AND team_id IN ({placeholders}))
+                ORDER BY scope DESC, created_at ASC
+            """, (user_name, *ids)).fetchall()
     return [dict(r) for r in rows]
 
 
 def create_link(title: str, url: str, description: str, scope: str, team_id, created_by: str) -> int:
+    # team_id: scope='team' 일 때 호출부(app.py)가 resolve_work_team 으로 확정해 전달.
+    # scope='personal' 이면 None.
     with get_conn() as conn:
         cur = conn.execute("""
             INSERT INTO links (title, url, description, scope, team_id, created_by)
@@ -6179,12 +6206,19 @@ def create_link(title: str, url: str, description: str, scope: str, team_id, cre
         return cur.lastrowid
 
 
-def update_link(link_id: int, title: str, url: str, description: str, user_name: str) -> bool:
+def update_link(link_id: int, title: str, url: str, description: str, user_name: str, role: str) -> bool:
+    # 팀 기능 그룹 B #15-2: 작성자 본인 + admin 만 편집 (계획서 §8-1 자료별 적용 표).
     with get_conn() as conn:
-        cur = conn.execute("""
-            UPDATE links SET title=?, url=?, description=?
-            WHERE id=? AND created_by=?
-        """, (title, url, description, link_id, user_name))
+        if role == 'admin':
+            cur = conn.execute("""
+                UPDATE links SET title=?, url=?, description=?
+                WHERE id=?
+            """, (title, url, description, link_id))
+        else:
+            cur = conn.execute("""
+                UPDATE links SET title=?, url=?, description=?
+                WHERE id=? AND created_by=?
+            """, (title, url, description, link_id, user_name))
         return cur.rowcount > 0
 
 

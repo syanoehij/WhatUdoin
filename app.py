@@ -4058,11 +4058,13 @@ def list_members():
 # ── 링크 API ─────────────────────────────────────────────
 
 @app.get("/api/links")
-def api_get_links(request: Request):
+def api_get_links(request: Request, team_id: int = None):
+    # 팀 기능 그룹 B #15-2: scope='personal'은 작성자 본인 / scope='team'은 작업 팀 기준.
     user = auth.get_current_user(request)
     if not user:
         return []
-    return db.get_links(user["name"], user.get("team_id"))
+    scope_team_ids = _work_scope(request, user, team_id)  # admin→None / 비admin→{tid} 또는 set()
+    return db.get_links(user["name"], scope_team_ids)
 
 
 @app.post("/api/links")
@@ -4080,7 +4082,15 @@ async def api_create_link(request: Request):
         raise HTTPException(status_code=400, detail="허용되지 않는 URL 형식입니다.")
     if scope not in ("personal", "team"):
         scope = "personal"
-    team_id = user.get("team_id") if scope == "team" else None
+    # 팀 기능 그룹 B #15-2: scope='team' 이면 작업 팀 확정 + 소속 검증, personal 은 NULL 유지.
+    if scope == "team":
+        team_id = auth.resolve_work_team(request, user, explicit_id=data.get("team_id"))
+        if team_id is None:
+            # admin이 명시 team_id 없이 호출한 경우만 None — 사양상 거부 (manage/projects 와 동일).
+            raise HTTPException(status_code=400, detail="작업 팀이 결정되지 않았습니다. team_id를 지정하세요.")
+        auth.require_work_team_access(user, team_id)
+    else:
+        team_id = None
     link_id = db.create_link(title, url, desc, scope, team_id, user["name"])
     return {"id": link_id}
 
@@ -4097,7 +4107,8 @@ async def api_update_link(link_id: int, request: Request):
     scheme = urlparse(url).scheme
     if scheme not in ("http", "https", "mailto", ""):
         raise HTTPException(status_code=400, detail="허용되지 않는 URL 형식입니다.")
-    ok = db.update_link(link_id, title, url, desc, user["name"])
+    # 팀 기능 그룹 B #15-2: 작성자 본인 + admin 만 편집 (계획서 §8-1 — 일정·체크의 팀 공유 모델과 다른 예외).
+    ok = db.update_link(link_id, title, url, desc, user["name"], user.get("role", "member"))
     if not ok:
         raise HTTPException(status_code=403, detail="수정 권한이 없습니다.")
     return {"ok": True}
@@ -4106,7 +4117,8 @@ async def api_update_link(link_id: int, request: Request):
 @app.delete("/api/links/{link_id}")
 def api_delete_link(link_id: int, request: Request):
     user = _require_editor(request)
-    ok = db.delete_link(link_id, user["name"], user.get("role", "editor"))
+    # 팀 기능 그룹 B #15-2: 작성자 본인 + admin 만 삭제 (계획서 §8-1).
+    ok = db.delete_link(link_id, user["name"], user.get("role", "member"))
     if not ok:
         raise HTTPException(status_code=403, detail="삭제 권한이 없습니다.")
     return {"ok": True}
