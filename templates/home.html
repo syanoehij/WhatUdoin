@@ -139,6 +139,29 @@
   .landing-team-name { font-size: 1rem; font-weight: 600; word-break: break-word; }
   .landing-team-arrow { color: var(--text-faint); font-size: 1.1rem; flex-shrink: 0; }
 
+  /* ── 팀 미배정 사용자 (#12) ── */
+  .unassigned-team-card {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px;
+  }
+  .unassigned-team-card .ut-name { font-size: 1rem; font-weight: 600; word-break: break-word; }
+  .my-docs-list { display: flex; flex-direction: column; gap: 8px; }
+  .my-doc-item {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+    text-decoration: none; color: var(--text);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .my-doc-item:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+  .my-doc-title { font-weight: 600; flex: 1; min-width: 0; word-break: break-word; }
+  .my-doc-meta { font-size: 0.78rem; color: var(--text-faint); flex-shrink: 0; }
+  .my-doc-team-tag {
+    font-size: 0.72rem; color: var(--text-muted); background: var(--surface-2);
+    border-radius: 6px; padding: 2px 8px; flex-shrink: 0;
+  }
+
   /* ── 유저 대시보드 ── */
   .home-greeting {
     margin-bottom: 20px;
@@ -209,6 +232,53 @@
   {% endif %}
 </div>
 
+<!-- ── 팀 미배정 사용자 뷰 (#12): 팀 목록 + 팀 신청 버튼 + "내 자료" ── -->
+<div id="view-unassigned" class="hidden">
+  <div class="landing-hero">
+    <h2>아직 소속된 팀이 없습니다</h2>
+    <p>아래에서 팀에 신청하세요. 관리자 승인 후 캘린더·문서·체크·칸반·간트 업무를 시작할 수 있어요.</p>
+  </div>
+
+  <div class="home-section-title">팀 목록</div>
+  {% if teams %}
+  <div class="landing-team-grid" style="margin-bottom:28px;">
+    {% for team in teams %}
+    <div class="unassigned-team-card">
+      <span class="ut-name">{{ team.name }}</span>
+      {% if team_status_map and team_status_map.get(team.id) == 'pending' %}
+      <button class="btn btn-sm" disabled>가입 대기 중</button>
+      {% else %}
+      <button class="btn btn-sm btn-primary" onclick="applyToTeam({{ team.id }})">팀 신청</button>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="no-tasks" style="margin-bottom:28px;">아직 생성된 팀이 없습니다.</p>
+  {% endif %}
+
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+    <div class="home-section-title" style="margin-bottom:0;">📄 내 자료</div>
+    {# 미배정 사용자 = 가입 시 role='member' — _require_editor(=is_member)가 member/editor/admin 통과하므로 모두 노출 #}
+    {% if user and user.role in ('member', 'editor', 'admin') %}
+    <a href="/doc/new?personal=1" class="btn btn-sm btn-primary">+ 새 문서</a>
+    {% endif %}
+  </div>
+  {% if my_docs %}
+  <div class="my-docs-list">
+    {% for d in my_docs %}
+    <a class="my-doc-item" href="/doc/{{ d.id }}">
+      <span class="my-doc-title">{{ d.title }}</span>
+      {% if d.team_name %}<span class="my-doc-team-tag">{{ d.team_name }}</span>{% endif %}
+      <span class="my-doc-meta">{{ (d.updated_at or '')[:10] }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="no-tasks">작성한 개인 문서가 없습니다.</p>
+  {% endif %}
+</div>
+
 <!-- ── 유저 대시보드 (로그인) ── -->
 <div id="view-user" class="hidden">
 
@@ -260,6 +330,29 @@
 
 {% block scripts %}
 <script>
+// 팀 기능 #12: 미배정 사용자 — SSR이 내려준 플래그만 신뢰 (legacy user.team_id로 재추론 금지)
+const IS_UNASSIGNED = {{ 'true' if is_unassigned else 'false' }};
+
+async function applyToTeam(teamId) {
+  try {
+    const res = await fetch('/api/me/team-applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ team_id: teamId }),
+    });
+    if (res.ok) {
+      if (typeof showToast === 'function') showToast('팀 신청을 보냈습니다. 관리자 승인을 기다려 주세요.', 'success');
+      setTimeout(() => location.reload(), 600);
+      return;
+    }
+    let detail = '신청에 실패했습니다.';
+    try { detail = (await res.json()).detail || detail; } catch {}
+    if (typeof showToast === 'function') showToast(detail, 'error'); else alert(detail);
+  } catch {
+    if (typeof showToast === 'function') showToast('신청 중 오류가 발생했습니다.', 'error');
+  }
+}
+
 let _storedProjColors = {};
 
 async function loadProjColors() {
@@ -513,7 +606,9 @@ window.onKDetailSaved = window.onEventSaved;
 
 // ── 초기화 ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  if (CURRENT_USER) {
+  if (CURRENT_USER && IS_UNASSIGNED) {
+    document.getElementById('view-unassigned').classList.remove('hidden');
+  } else if (CURRENT_USER) {
     document.getElementById('view-user').classList.remove('hidden');
     loadProjColors().then(loadUser);
   } else {
@@ -525,7 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
 (function () {
   if (typeof wuDebounce !== 'function') return;
   var _reload = wuDebounce(function () {
-    if (!CURRENT_USER) return;
+    if (!CURRENT_USER || IS_UNASSIGNED) return;
     if (typeof wuShouldSuppressRefetch === 'function' && wuShouldSuppressRefetch()) return;
     if (homeDragSrcId !== null) return;
     loadUser();

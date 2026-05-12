@@ -96,6 +96,21 @@ def user_team_ids(user) -> set:
             return {legacy}
 
 
+def is_unassigned(user) -> bool:
+    """팀 미배정 로그인 사용자 여부 — 팀 기능 그룹 B #12.
+
+    로그인했으나 approved 소속 팀이 0개인 비-admin 사용자.
+    `user_team_ids`가 이미 `deleted_at IS NULL` 필터를 적용하므로
+    "삭제 예정 팀만 남은 사용자"도 자동으로 미배정으로 취급된다 (계획서 섹션 6·7).
+    admin은 user_teams row가 없어도 슈퍼유저이므로 미배정 아님.
+    """
+    if user is None:
+        return False
+    if is_admin(user):
+        return False
+    return len(user_team_ids(user)) == 0
+
+
 def user_can_access_team(user, team_id) -> bool:
     """admin은 슈퍼유저 정책으로 모든 팀 접근 True.
     그 외는 user_teams approved 멤버십 확인.

@@ -5080,6 +5080,24 @@ def list_team_applications(team_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_my_team_statuses(user_id: int) -> dict:
+    """팀 기능 그룹 B #12: 본인이 신청한 비-삭제 팀들의 user_teams.status.
+
+    미배정 사용자 화면(`/`)에서 팀별 "팀 신청" / "가입 대기 중" 버튼 분기에 사용.
+    approved 는 미배정 정의상 존재하지 않으므로 pending/rejected 만 포함.
+    반환: {team_id: 'pending'|'rejected'}.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT ut.team_id, ut.status FROM user_teams ut "
+            "JOIN teams t ON t.id = ut.team_id "
+            "WHERE ut.user_id = ? AND t.deleted_at IS NULL AND ut.status IN ('pending','rejected')",
+            (user_id,),
+        ).fetchall()
+    return {(r["team_id"] if isinstance(r, sqlite3.Row) else r[0]):
+            (r["status"] if isinstance(r, sqlite3.Row) else r[1]) for r in rows}
+
+
 def decide_team_application(user_id: int, team_id: int, decision: str) -> bool:
     """팀 신청 수락/거절 (#8). 대상 row 가 status='pending' 일 때만 처리.
 
@@ -5171,6 +5189,27 @@ def get_all_meetings(viewer=None, work_team_ids=None):
                   ORDER BY m.updated_at DESC""",
                 (uid, *team_params, *team_params)
             ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_my_personal_meetings(user_id: int) -> list[dict]:
+    """팀 기능 그룹 B #12: 본인 작성 개인 문서(is_team_doc=0) 전체 — "내 자료" 영역용.
+
+    `team_share` 값으로 거르지 않는다 (본인 화면이므로 team_share=1 이라도 본인에겐 모두 노출 —
+    계획서 섹션 7·8 "자기 자료 통합 노출 목적"). team_id IS NULL 조건도 넣지 않는다
+    (막 추방돼 team_id 가 남은 본인 작성 개인 문서도 "내 자료"에 포함).
+    일정·체크·팀 문서(is_team_doc=1)는 제외 — 전부 팀 컨텍스트가 필요.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT m.*, t.name as team_name,
+                      (SELECT COUNT(*) FROM events e WHERE e.meeting_id = m.id AND e.deleted_at IS NULL) as event_count
+                 FROM meetings m
+                 LEFT JOIN teams t ON m.team_id = t.id
+                WHERE m.deleted_at IS NULL AND m.created_by = ? AND m.is_team_doc = 0
+                ORDER BY m.updated_at DESC""",
+            (user_id,),
+        ).fetchall()
     return [dict(r) for r in rows]
 
 

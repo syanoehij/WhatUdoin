@@ -345,6 +345,7 @@
   <script type="application/json" id="current-user-json">{{ current_user_payload | tojson }}</script>
   <script>
     var CURRENT_USER = JSON.parse(document.getElementById('current-user-json').textContent);
+    var IS_UNASSIGNED = {{ 'true' if is_unassigned else 'false' }};  // 팀 기능 #12
     // 다크 테마 깜빡임 방지: 렌더링 전에 적용
     (function() {
       if (localStorage.getItem('theme') === 'dark')
@@ -434,6 +435,8 @@
             </div>
           </div>
         </div>
+        {# 팀 기능 #12: 팀 미배정 사용자에겐 알림 카드·뱃지·페이지 비노출 #}
+        {% if not is_unassigned %}
         <!-- ── 알림 벨 ── -->
         <div class="notif-bell-wrap" id="notif-bell-wrap">
           <button class="notif-bell-btn" id="notif-bell-btn"
@@ -451,6 +454,7 @@
             </div>
           </div>
         </div>
+        {% endif %}
         <div class="profile-menu" id="profile-menu">
           <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu()">
             {{ user.name }}
@@ -1164,7 +1168,7 @@
   <!-- ── 앱 내 알림 시스템 ── -->
   <script>
   (function() {
-    if (!CURRENT_USER) return;
+    if (!CURRENT_USER || IS_UNASSIGNED) return;  // 팀 기능 #12: 미배정 사용자에겐 알림 비노출
 
     // sessionStorage로 새로고침 후에도 이전 카운트 유지 (자동새로고침 중복 발화 방지)
     let _notifPrevCount = parseInt(sessionStorage.getItem('notif_prev_count') || '0', 10);

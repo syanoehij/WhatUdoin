@@ -269,6 +269,7 @@
 const DOC_ID         = {{ doc.id if doc else 'null' }};
 const IS_EDITOR      = {{ 'true' if can_edit else 'false' }};
 const IS_TEAM_DOC    = {{ 'true' if (doc and doc.is_team_doc) else 'false' }};
+const IS_UNASSIGNED  = {{ 'true' if is_unassigned else 'false' }};  // 팀 기능 #12: 미배정 → 개인 문서·team_share 비활성
 const LOCKED_BY      = {{ (locked_by | tojson) if locked_by else 'null' }};
 const LOCK_TYPE      = {{ lock_type | tojson if lock_type else 'null' }};
 const TAB_TOKEN      = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getItem(k); if (!t) { t = (crypto?.randomUUID?.() ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); })); sessionStorage.setItem(k, t); } return t; })();
@@ -405,15 +406,20 @@ function initDocEditor() {
     // 문서 종류 세그먼트 + 공개 범위 세그먼트 컨트롤 초기화
     const docTypeSeg = document.getElementById('doc-type-segment');
     const visSeg     = document.getElementById('visibility-segment');
+    // 팀 기능 #12: 미배정 사용자는 개인 문서만 작성 가능 — 문서 종류 세그먼트 숨김, team_share(팀에게만 공개) 옵션 제거
+    if (IS_UNASSIGNED && docTypeSeg) docTypeSeg.style.display = 'none';
     const DOC_OPTS = [
       { v: 'personal', label: '나만 수정' },
       { v: 'team',     label: '팀원도 수정' },
     ];
-    const VIS_OPTS = [
+    const VIS_OPTS = (IS_UNASSIGNED ? [
+      { v: 'private', label: '외부 비공개' },
+      { v: 'public',  label: '외부 공개' },
+    ] : [
       { v: 'private', label: '외부 비공개' },
       { v: 'team',    label: '팀에게만 공개' },
       { v: 'public',  label: '외부 공개' },
-    ];
+    ]);
     function renderSegment(el, opts, cur) {
       if (!el) return;
       el.innerHTML = opts.map(o => `<button type="button" class="vis-btn${o.v === cur ? ' active' : ''}"

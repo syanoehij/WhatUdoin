@@ -645,6 +645,7 @@ def _ctx(request: Request, **kwargs):
     return {
         "request": request,
         "user": user,
+        "is_unassigned": auth.is_unassigned(user),  # 팀 기능 그룹 B #12 — 알림 벨 게이팅 등에 사용
         "https_available": _https_available(),
         "https_port": 8443,
         "http_port": 8000,
@@ -689,10 +690,16 @@ def _can_write_doc(user, doc: dict) -> bool:
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    # 비로그인 사용자: 팀 목록 + 로그인/계정 가입 안내 (팀 기능 #11)
-    # 로그인 사용자: 내부 업무 대시보드
+    # 비로그인 사용자:        팀 목록 + 로그인/계정 가입 안내 (팀 기능 #11)
+    # 팀 미배정 로그인 사용자: 팀 목록 + 팀 신청 버튼 + "내 자료" 영역 (팀 기능 #12)
+    # 팀 배정·admin 사용자:    내부 업무 대시보드
     teams = db.get_visible_teams()
-    return templates.TemplateResponse(request, "home.html", _ctx(request, teams=teams))
+    user = auth.get_current_user(request)
+    extra = {}
+    if auth.is_unassigned(user):
+        extra["team_status_map"] = db.get_my_team_statuses(user["id"])
+        extra["my_docs"] = db.get_my_personal_meetings(user["id"])
+    return templates.TemplateResponse(request, "home.html", _ctx(request, teams=teams, **extra))
 
 
 @app.get("/calendar", response_class=HTMLResponse)
@@ -1350,7 +1357,7 @@ async def api_notify_notice(request: Request):
 @app.get("/api/notifications/count")
 def get_notification_count(request: Request):
     user = auth.get_current_user(request)
-    if not user:
+    if not user or auth.is_unassigned(user):  # 팀 기능 #12: 미배정 사용자에겐 알림 비노출
         return {"count": 0}
     return {"count": db.get_notification_count(user["name"], viewer=user)}
 
@@ -1358,7 +1365,7 @@ def get_notification_count(request: Request):
 @app.get("/api/notifications/pending")
 def get_pending_notifications(request: Request):
     user = auth.get_current_user(request)
-    if not user:
+    if not user or auth.is_unassigned(user):  # 팀 기능 #12: 미배정 사용자에겐 알림 비노출
         return []
     return db.get_pending_notifications(user["name"], viewer=user)
 
@@ -4022,6 +4029,10 @@ async def create_doc(request: Request):
     is_team_doc  = 1 if data.get("is_team_doc", True) else 0
     is_public    = 1 if data.get("is_public", False) else 0
     team_share   = 1 if data.get("team_share", False) else 0
+    # 팀 기능 #12: 미배정 사용자의 신규 문서는 항상 개인 문서·team_id NULL·team_share 무의미
+    unassigned = auth.is_unassigned(user)
+    if unassigned:
+        is_team_doc, team_share = 0, 0
     raw_att = data.get("attachments")
     if isinstance(raw_att, str):
         try:
@@ -4034,8 +4045,9 @@ async def create_doc(request: Request):
         attachments = None
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
+    doc_team_id = None if unassigned else auth.resolve_work_team(request, user)
     meeting_id = db.create_meeting(
-        title, content, auth.resolve_work_team(request, user), user["id"],
+        title, content, doc_team_id, user["id"],
         meeting_date, is_team_doc, is_public, team_share, attachments
     )
     _sse_publish("docs.changed", {"action": "create", "id": meeting_id})
@@ -4057,6 +4069,9 @@ async def update_doc(meeting_id: int, request: Request):
     is_team_doc  = 1 if data.get("is_team_doc", True) else 0
     is_public    = 1 if data.get("is_public", False) else 0
     team_share   = 1 if data.get("team_share", False) else 0
+    # 팀 기능 #12: 미배정 사용자가 편집할 수 있는 건 본인 작성 개인 문서뿐 — 항상 개인 문서·team_share 무의미
+    if auth.is_unassigned(user):
+        is_team_doc, team_share = 0, 0
     raw_att = data.get("attachments")
     if isinstance(raw_att, str):
         try:
@@ -4091,6 +4106,9 @@ async def rotate_doc_visibility(meeting_id: int, request: Request):
     is_pub  = int(doc.get("is_public")   or 0)
     t_share = int(doc.get("team_share")  or 0)
     if is_team:
+        new_pub, new_share = (0 if is_pub else 1), 0
+    elif auth.is_unassigned(user):
+        # 팀 기능 #12: 미배정 사용자에겐 team_share 단계가 의미 없음 — is_public 만 토글
         new_pub, new_share = (0 if is_pub else 1), 0
     else:
         if   (is_pub, t_share) == (0, 0): new_pub, new_share = 0, 1
