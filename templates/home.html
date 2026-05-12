@@ -331,7 +331,7 @@
 {% block scripts %}
 <script>
 // 팀 기능 #12: 미배정 사용자 — SSR이 내려준 플래그만 신뢰 (legacy user.team_id로 재추론 금지)
-const IS_UNASSIGNED = {{ 'true' if is_unassigned else 'false' }};
+// IS_UNASSIGNED는 base.html에서 전역(var)으로 선언됨 — 여기서 재선언 금지 (const 중복 선언 시 SyntaxError로 이 <script> 블록 전체가 실행 안 됨)
 
 async function applyToTeam(teamId) {
   try {

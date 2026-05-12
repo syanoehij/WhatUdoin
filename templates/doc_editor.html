@@ -269,7 +269,7 @@
 const DOC_ID         = {{ doc.id if doc else 'null' }};
 const IS_EDITOR      = {{ 'true' if can_edit else 'false' }};
 const IS_TEAM_DOC    = {{ 'true' if (doc and doc.is_team_doc) else 'false' }};
-const IS_UNASSIGNED  = {{ 'true' if is_unassigned else 'false' }};  // 팀 기능 #12: 미배정 → 개인 문서·team_share 비활성
+// 팀 기능 #12: IS_UNASSIGNED(미배정 → 개인 문서·team_share 비활성)는 base.html에서 전역(var)으로 선언됨 — 여기서 재선언 금지
 const LOCKED_BY      = {{ (locked_by | tojson) if locked_by else 'null' }};
 const LOCK_TYPE      = {{ lock_type | tojson if lock_type else 'null' }};
 const TAB_TOKEN      = (() => { const k = 'wu_tab_token'; let t = sessionStorage.getItem(k); if (!t) { t = (crypto?.randomUUID?.() ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); })); sessionStorage.setItem(k, t); } return t; })();
