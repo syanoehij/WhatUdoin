@@ -5137,6 +5137,93 @@ def get_team_active(team_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def get_team_by_name_exact(name: str) -> dict | None:
+    """팀 기능 그룹 B #13: 대소문자 정확 일치로 팀 조회 (`/팀이름` 공개 포털 라우트용).
+
+    teams.name 은 SQLite 기본 BINARY collation 이라 `name = ?` 는 대소문자를 구분한다
+    (`ABC` 로 생성한 팀은 `/ABC` 만 매치, `/abc` 는 None → 라우트가 404). 삭제 예정 팀
+    (deleted_at IS NOT NULL)도 그대로 반환한다 — 삭제 예정 안내 페이지를 보여줘야 하므로
+    deleted_at 판정은 라우트가 한다.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM teams WHERE name = ? LIMIT 1", (name,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+# 팀 기능 그룹 B #13: 공개 포털 메뉴 노출 기본값.
+# team_menu_settings 에 행이 없을 때의 fallback (계획서 섹션 9 기본값 표).
+# #19 가 team_menu_settings 시드를 추가하면 그 값이 우선한다 — 여기는 임시 기본값.
+_PORTAL_MENU_DEFAULTS = {
+    "kanban": True,
+    "gantt": True,
+    "doc": True,
+    "check": True,
+    "calendar": False,
+}
+
+
+def get_team_menu_visibility(team_id: int) -> dict:
+    """팀 기능 그룹 B #13: 팀별 공개 포털 메뉴 노출 dict — `{menu_key: bool}`.
+
+    team_menu_settings 행이 있으면 그 값, 없는 키는 _PORTAL_MENU_DEFAULTS 로 채운다.
+    의미는 "공개 포털 UI 진입(탭/링크) 차단"일 뿐 데이터 차단이 아니다 (계획서 섹션 9).
+    """
+    vis = dict(_PORTAL_MENU_DEFAULTS)
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT menu_key, enabled FROM team_menu_settings WHERE team_id = ?", (team_id,)
+        ).fetchall()
+    for r in rows:
+        key = r["menu_key"] if isinstance(r, sqlite3.Row) else r[0]
+        enabled = r["enabled"] if isinstance(r, sqlite3.Row) else r[1]
+        if key in vis:
+            vis[key] = bool(enabled)
+    return vis
+
+
+def get_public_portal_data(team_id: int) -> dict:
+    """팀 기능 그룹 B #13: `/팀이름` 비로그인 공개 포털이 노출할 팀 데이터 집계.
+
+    항상 단일 팀 기준 + viewer=None (공개 portal context — URL 은 권한 경계가 아니다,
+    계획서 섹션 7). 모든 채널에서:
+      - `is_public=1` 항목만 (is_public IS NULL 은 프로젝트 공개 연동, is_public=0 은 비공개)
+      - 외부 비공개 프로젝트(is_private=1)·히든 프로젝트(is_hidden=1) 하위 항목은 is_public 값과
+        무관하게 완전 차단 (기존 viewer=None 경로의 SQL 필터가 처리)
+    반환 dict: kanban / gantt / docs / checks / calendar / menu.
+    """
+    # 칸반·간트·캘린더 — events 풀에서. viewer=None & team_id 명시 경로는 이미 공개 필터 내장.
+    kanban = get_kanban_events(team_id, viewer=None)
+    gantt = get_project_timeline(team_id, viewer=None)
+    # 체크 — 전 팀 공개 항목을 받아 team_id 로 필터 (get_checklists 는 team_id 인자 없음).
+    checks = [c for c in get_checklists(viewer=None) if c.get("team_id") == team_id]
+    # 캘린더 탭 데이터: 칸반과 같은 events 풀 — 별도 시각화일 뿐(계획서 섹션 9).
+    #   기본 메뉴 OFF 라 프론트가 탭을 안 그릴 수 있지만 데이터는 채워둔다.
+    calendar = list(kanban)
+    # 문서 — 팀 공개 문서만 (개인 문서 is_team_doc=0 은 팀 자료가 아니므로 포털 비노출).
+    with get_conn() as conn:
+        doc_rows = conn.execute(
+            """SELECT m.id, m.title, m.created_by, m.updated_at, m.created_at,
+                      u.name as author_name
+                 FROM meetings m
+                 LEFT JOIN users u ON m.created_by = u.id
+                WHERE m.deleted_at IS NULL AND m.team_id = ?
+                  AND m.is_public = 1 AND m.is_team_doc = 1
+                ORDER BY m.updated_at DESC""",
+            (team_id,),
+        ).fetchall()
+    docs = [dict(r) for r in doc_rows]
+    return {
+        "kanban": kanban,
+        "gantt": gantt,
+        "docs": docs,
+        "checks": checks,
+        "calendar": calendar,
+        "menu": get_team_menu_visibility(team_id),
+    }
+
+
 # ── Meetings ────────────────────────────────────────────
 
 def _meeting_team_clause(team_ids):

@@ -4955,6 +4955,57 @@ def api_delete_mcp_token(request: Request):
     return {"ok": True}
 
 
+# ── /팀이름 비로그인 공개 포털 (팀 기능 그룹 B #13) ──────────────────────
+# 이 라우트는 단일 path 세그먼트 catch-all 이므로 반드시 모든 정적 페이지 라우트
+# (/, /calendar, /admin, /kanban, ... /trash, /remote, /avr 등)보다 *뒤*에 등록해야 한다.
+# FastAPI/Starlette 는 등록 순서대로 매칭하고 첫 매치가 승리한다 — 그래서 app.py 라우트
+# 정의 영역 맨 끝(uvicorn 부트스트랩 직전)에 둔다. /docs /redoc /openapi.json 는
+# app = FastAPI(...) 시점(맨 위)에 등록되므로 자연히 우선한다.
+
+_TEAM_NAME_RE = re.compile(r"^[A-Za-z0-9_]+$")
+
+# 예약어 (팀 이름으로 사용 금지) — 계획서 섹션 4. 모두 casefold 비교.
+# 하드코딩 목록 + 실제 등록된 라우트의 첫 경로 세그먼트 합집합 (누락 자동 방지).
+_RESERVED_TEAM_PATHS_BASE = frozenset({
+    "api", "admin", "doc", "check", "kanban", "gantt", "calendar", "mcp", "mcp-codex",
+    "uploads", "static", "settings", "changelog", "register", "project-manage",
+    "ai-import", "alarm-setup", "notice", "trash", "remote", "avr", "favicon.ico",
+    "docs", "redoc", "openapi.json", "healthz",
+})
+
+
+def _build_reserved_team_paths() -> frozenset:
+    extra = set()
+    for r in app.routes:
+        path = getattr(r, "path", "") or ""
+        seg = path.strip("/").split("/", 1)[0] if path != "/" else ""
+        if seg and "{" not in seg:
+            extra.add(seg.casefold())
+    return frozenset({s.casefold() for s in _RESERVED_TEAM_PATHS_BASE} | extra)
+
+
+RESERVED_TEAM_PATHS = _build_reserved_team_paths()
+
+
+@app.get("/{team_name}", response_class=HTMLResponse)
+def team_public_portal(request: Request, team_name: str):
+    # #13: /팀이름 비로그인 공개 포털. URL 은 권한 경계가 아니다 — 항상 공개 portal context.
+    #   로그인 사용자·admin 이 와도 동일하게 200 공개 포털을 주되 redirect 하지 않는다.
+    #   "팀 신청 / 가입 대기 중" 등 로그인 사용자 UI 분기는 #14 범위.
+    if not _TEAM_NAME_RE.match(team_name) or team_name.casefold() in RESERVED_TEAM_PATHS:
+        raise HTTPException(status_code=404, detail="Not Found")
+    team = db.get_team_by_name_exact(team_name)
+    if not team:
+        raise HTTPException(status_code=404, detail="Not Found")
+    if team.get("deleted_at"):
+        # 삭제 예정 팀: 안내만 (계정 가입 버튼·팀 신청·공개 데이터 모두 비노출)
+        return templates.TemplateResponse(request, "team_portal.html",
+                _ctx(request, team=team, deleted=True))
+    portal = db.get_public_portal_data(team["id"])
+    return templates.TemplateResponse(request, "team_portal.html",
+            _ctx(request, team=team, deleted=False, portal=portal))
+
+
 if __name__ == "__main__":
     import uvicorn
     bind_host = (os.environ.get("WHATUDOIN_BIND_HOST") or "0.0.0.0").strip() or "0.0.0.0"

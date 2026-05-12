@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — {{ team.name }}{% endblock %}
+
+{# 팀 기능 그룹 B #13: /팀이름 비로그인 공개 포털.
+   - URL 은 권한 경계가 아니다. 로그인 사용자·admin 이 와도 동일한 공개 포털을 본다 (#14 에서 로그인 UI 분기 추가).
+   - "계정 가입" 버튼은 비로그인일 때만 노출 (가입 후 자동 로그인 + / 로 이동 — #8 동작).
+   - 메뉴 노출 설정(portal.menu)은 탭/링크 UI 진입 차단만 한다. 데이터 필터는 백엔드에서 별개로 적용됨 (계획서 섹션 9).
+#}
+
+{% block extra_head %}
+<style>
+  main { max-width: 1100px; padding: 24px 28px 48px; }
+  .portal-hero {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 18px 0 14px; border-bottom: 1px solid var(--border, #e2e8f0); margin-bottom: 20px;
+  }
+  .portal-hero h1 { margin: 0; font-size: 22px; }
+  .portal-hero .portal-hero-sub { font-size: 13px; color: var(--muted, #64748b); margin-top: 4px; }
+  .portal-hero-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .portal-tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border, #e2e8f0); margin-bottom: 18px; flex-wrap: wrap; }
+  .portal-tab {
+    appearance: none; border: none; background: transparent; cursor: pointer;
+    padding: 8px 14px; font-size: 14px; color: var(--muted, #64748b);
+    border-bottom: 2px solid transparent; margin-bottom: -2px; border-radius: 6px 6px 0 0;
+  }
+  .portal-tab.active { color: var(--text, #0f172a); border-bottom-color: var(--primary, #2563eb); font-weight: 600; }
+  .portal-panel { display: none; }
+  .portal-panel.active { display: block; }
+  .portal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .portal-item {
+    border: 1px solid var(--border, #e2e8f0); border-radius: 8px; padding: 10px 14px;
+    background: var(--surface, #fff); display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  .portal-item .pi-title { font-weight: 600; font-size: 14px; }
+  .portal-item .pi-meta { font-size: 12px; color: var(--muted, #64748b); }
+  .portal-item .pi-tag {
+    font-size: 11px; padding: 1px 7px; border-radius: 999px;
+    background: var(--surface-2, #f1f5f9); color: var(--muted, #64748b);
+  }
+  .portal-empty { color: var(--muted, #64748b); font-size: 13px; padding: 18px 4px; }
+  .portal-group-h { font-size: 13px; font-weight: 700; color: var(--text, #0f172a); margin: 14px 0 6px; }
+  .portal-deleted {
+    max-width: 560px; margin: 60px auto; text-align: center; color: var(--text, #0f172a);
+  }
+  .portal-deleted h1 { font-size: 20px; margin-bottom: 12px; }
+  .portal-deleted p { color: var(--muted, #64748b); font-size: 14px; line-height: 1.6; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if deleted %}
+  {# 삭제 예정 팀: 안내만. 계정 가입 버튼·팀 신청·공개 데이터 모두 비노출. #}
+  <div class="portal-deleted">
+    <h1>「{{ team.name }}」 팀은 삭제 예정입니다</h1>
+    <p>이 팀은 삭제가 예약된 상태입니다.<br>공개 포털·계정 가입·팀 신청은 제공되지 않습니다.</p>
+    {% if user and user.role == 'admin' %}
+      <p style="margin-top:16px;"><a href="/admin" class="btn btn-sm btn-outline">관리자 페이지에서 확인</a></p>
+    {% endif %}
+    <p style="margin-top:16px;"><a href="/" class="btn btn-sm btn-outline">홈으로</a></p>
+  </div>
+{% else %}
+  <div class="portal-hero">
+    <div>
+      <h1>{{ team.name }}</h1>
+      <div class="portal-hero-sub">공개 포털 — 공개 설정된 항목만 읽기 전용으로 표시됩니다.</div>
+    </div>
+    <div class="portal-hero-actions">
+      <a href="/" class="btn btn-sm btn-outline">홈</a>
+      {% if not user %}
+        {# 비로그인: 계정 가입 → /register (가입 후 자동 로그인 + / 로 이동) #}
+        <a href="/register" class="btn btn-sm btn-primary">계정 가입</a>
+      {% endif %}
+      {# #14 범위: 로그인 사용자용 "팀 신청 / 가입 대기 중" 버튼 분기는 #13 에서 구현하지 않는다. #}
+    </div>
+  </div>
+
+  {% set m = portal.menu %}
+  <div class="portal-tabs" id="portal-tabs">
+    {% if m.kanban %}<button class="portal-tab" data-panel="kanban">칸반</button>{% endif %}
+    {% if m.gantt %}<button class="portal-tab" data-panel="gantt">간트</button>{% endif %}
+    {% if m.doc %}<button class="portal-tab" data-panel="doc">문서</button>{% endif %}
+    {% if m.check %}<button class="portal-tab" data-panel="check">체크</button>{% endif %}
+    {% if m.calendar %}<button class="portal-tab" data-panel="calendar">캘린더</button>{% endif %}
+  </div>
+
+  {% if m.kanban %}
+  <div class="portal-panel" data-panel="kanban">
+    {% if portal.kanban %}
+    <ul class="portal-list">
+      {% for e in portal.kanban %}
+      <li class="portal-item">
+        <span class="pi-title">{{ e.title }}</span>
+        {% if e.project %}<span class="pi-tag">{{ e.project }}</span>{% endif %}
+        {% if e.kanban_status %}<span class="pi-tag">{{ e.kanban_status }}</span>{% endif %}
+        {% if e.start_datetime %}<span class="pi-meta">{{ e.start_datetime[:10] }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<div class="portal-empty">공개된 칸반 항목이 없습니다.</div>{% endif %}
+  </div>
+  {% endif %}
+
+  {% if m.gantt %}
+  <div class="portal-panel" data-panel="gantt">
+    {% if portal.gantt %}
+      {% for tgrp in portal.gantt %}
+        {% for pgrp in tgrp.projects %}
+          <div class="portal-group-h">{{ tgrp.team_name or '미분류' }} · {{ pgrp.name }}</div>
+          {% if pgrp.events %}
+          <ul class="portal-list">
+            {% for e in pgrp.events %}
+            <li class="portal-item">
+              <span class="pi-title">{{ e.title }}</span>
+              {% if e.start_datetime %}<span class="pi-meta">{{ e.start_datetime[:10] }}{% if e.end_datetime %} ~ {{ e.end_datetime[:10] }}{% endif %}</span>{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="portal-empty">항목 없음</div>{% endif %}
+        {% endfor %}
+      {% endfor %}
+    {% else %}<div class="portal-empty">공개된 간트 항목이 없습니다.</div>{% endif %}
+  </div>
+  {% endif %}
+
+  {% if m.doc %}
+  <div class="portal-panel" data-panel="doc">
+    {% if portal.docs %}
+    <ul class="portal-list">
+      {% for d in portal.docs %}
+      <li class="portal-item">
+        <span class="pi-title">{{ d.title or '(제목 없음)' }}</span>
+        {% if d.author_name %}<span class="pi-tag">{{ d.author_name }}</span>{% endif %}
+        {% if d.updated_at %}<span class="pi-meta">{{ d.updated_at[:10] }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<div class="portal-empty">공개된 문서가 없습니다.</div>{% endif %}
+  </div>
+  {% endif %}
+
+  {% if m.check %}
+  <div class="portal-panel" data-panel="check">
+    {% if portal.checks %}
+    <ul class="portal-list">
+      {% for c in portal.checks %}
+      <li class="portal-item">
+        <span class="pi-title">{{ c.title or '(제목 없음)' }}</span>
+        {% if c.project %}<span class="pi-tag">{{ c.project }}</span>{% endif %}
+        {% if c.updated_at %}<span class="pi-meta">{{ c.updated_at[:10] }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<div class="portal-empty">공개된 체크 항목이 없습니다.</div>{% endif %}
+  </div>
+  {% endif %}
+
+  {% if m.calendar %}
+  <div class="portal-panel" data-panel="calendar">
+    {% if portal.calendar %}
+    <ul class="portal-list">
+      {% for e in portal.calendar %}
+      <li class="portal-item">
+        <span class="pi-title">{{ e.title }}</span>
+        {% if e.start_datetime %}<span class="pi-meta">{{ e.start_datetime[:16] }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<div class="portal-empty">공개된 일정이 없습니다.</div>{% endif %}
+  </div>
+  {% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if not deleted %}
+<script>
+  // 공개 포털 탭 전환 — 첫 탭을 기본 활성화. 서브 라우트(/팀이름/calendar)는 만들지 않음(충돌 위험·범위 밖).
+  (function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('#portal-tabs .portal-tab'));
+    var panels = Array.prototype.slice.call(document.querySelectorAll('.portal-panel'));
+    function show(key) {
+      tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.panel === key); });
+      panels.forEach(function (p) { p.classList.toggle('active', p.dataset.panel === key); });
+    }
+    tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.dataset.panel); }); });
+    if (tabs.length) show(tabs[0].dataset.panel);
+  })();
+</script>
+{% endif %}
+{% endblock %}

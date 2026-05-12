@@ -1,34 +1,31 @@
-## 코드 리뷰 보고서 — 팀 기능 #12 (`/` 팀 미배정 로그인 사용자 + "내 자료")
+# 코드 리뷰 — 팀 기능 그룹 B #13 (`/팀이름` 비로그인 공개 포털)
 
-### 리뷰 대상 파일
-- `auth.py` — `is_unassigned()` 신규
-- `database.py` — `get_my_team_statuses()`, `get_my_personal_meetings()` 신규
-- `app.py` — `_ctx()`, `index()`, `create_doc`/`update_doc`/`rotate_doc_visibility`, `/api/notifications/{count,pending}`
-- `templates/home.html` — `#view-unassigned` 블록 + CSS + JS
-- `templates/base.html` — `IS_UNASSIGNED` 전역 + 알림 벨 게이팅
-- `templates/doc_editor.html` — 미배정 시 doc-type 세그먼트 숨김 + team_share 옵션 제거
+대상: `app.py`, `database.py`, `templates/team_portal.html`(신규), `tests/phase82_team_portal.py`(신규).
 
-### 차단(Blocking) ❌
-- 없음.
+## 차단 결함
 
-### 경고(Warning) ⚠️
-- `app.py:_ctx()` — 모든 페이지 렌더 시 `auth.is_unassigned(user)` 호출 → 로그인 비-admin 사용자에 한해 +1 DB 쿼리(`user_team_ids`). 비로그인·admin 은 짧은 경로(`user is None` / `is_admin`)로 즉시 반환하므로 영향 제한적. 인트라넷 규모상 허용. (#15에서 work_team 쿠키 도입 시 캐시 가능.)
-- `templates/doc_editor.html` — 미배정 사용자가 `?personal=1` 없이 `/doc/new` 직접 진입 시 숨겨진 doc-type 세그먼트가 'team' active 로 렌더 → 저장 페이로드 `is_team_doc=true`. 단 `POST /api/doc` 가 미배정이면 서버에서 `is_team_doc=0`/`team_share=0`/`team_id=NULL` 강제하므로 데이터상 무해. "내 자료 → + 새 문서" 정규 동선은 `/doc/new?personal=1` 사용 → 'personal' 렌더.
-- `templates/home.html` — `applyToTeam`은 `fetch` 실패 시 `showToast` 미정의 환경 대비 `alert` fallback 있음. `res.ok` 체크 + `detail` 파싱 정상.
+없음.
 
-### 통과 ✅
-- [x] 권한 체크: `create_doc`/`update_doc`/`rotate_doc_visibility` 모두 기존 `_require_editor` + `_can_write_doc` 유지. `index()`는 누구나 접근(의도). 알림 엔드포인트 미배정 빈 응답은 추가 가드(누수 방지).
-- [x] `_ctx()` 사용: `index()`가 `_ctx(request, teams=teams, **extra)` 올바르게 호출.
-- [x] DB 경로: 변경 없음 (DB 헬퍼는 SELECT만, `get_conn()` 사용).
-- [x] SQL 파라미터화: `get_my_team_statuses`/`get_my_personal_meetings` 모두 `?` 바인딩. f-string SQL 없음.
-- [x] 스키마 변경 없음 — `_migrate` phase 미추가 (요청 사양 부합).
-- [x] XSS: home.html 의 `my_docs`/`teams` 출력은 Jinja2 자동 이스케이프. `applyToTeam`은 `fetch` 인자만 사용, `innerHTML` 미사용. doc 제목 등은 서버 렌더.
-- [x] 미배정 판별 정합: `auth.is_unassigned`가 `is_admin` 먼저 체크 → admin 은 미배정 아님(advisor 지적 사항 준수). 프론트는 SSR `IS_UNASSIGNED` 만 신뢰(legacy `user.team_id` 재추론 안 함).
-- [x] `team_id=NULL` 강제: `create_doc`이 `None if unassigned else resolve_work_team(...)` — `resolve_work_team`의 legacy fallback 우회 (계획서 섹션 3·7).
-- [x] "내 자료" 범위: `get_my_personal_meetings`는 `is_team_doc=0 AND created_by=?` 만 — `team_share` 무관 노출(본인 화면), `team_id IS NULL` 미필터(추방 후 잔존 문서 포함). 일정·체크·팀 문서 제외. "+ 새 문서" 버튼은 `user.role in ('member','editor','admin')` — 가입 시 role=member 인 미배정 사용자에게도 노출(`_require_editor`=is_member 통과 정합, advisor 지적 반영). `view-user`의 "+ 일정 추가"는 기존 `('editor','admin')` 그대로 — 범위 밖 사전 불일치, 본 사이클에서 손대지 않음.
-- [x] 알림 비노출: base.html 벨 블록 `{% if not is_unassigned %}` + 알림 IIFE `IS_UNASSIGNED` early-return + 백엔드 빈 응답 — 카드/뱃지/페이지(별도 페이지 라우트 없음) 모두 차단.
-- [x] 범위 경계: `/팀이름` 동적 라우트(#13) 미추가 — 미배정 화면 팀 카드는 링크 아님. `work_team_id` 쿠키 UI(#15) 미추가 — admin 은 여전히 `view-user`.
-- [x] `import app` OK. 익명 `GET /` 200 (템플릿 렌더 정상, undefined `my_docs`/`team_status_map` 비크래시).
+## 점검 항목
 
-### 최종 판정
-**통과** — 차단 결함 없음. QA 진행 가능.
+1. **라우트 등록 순서 (1차 메커니즘)** — ✅ `@app.get("/{team_name}")`는 `app.py` 라우트 정의 영역 맨 끝(uvicorn 부트스트랩 직전)에 등록. 모든 정적 페이지 라우트(`/`, `/calendar`, `/admin`, `/kanban`, `/gantt`, `/doc`, `/check`, `/notice`, `/trash`, `/remote`, `/avr` 등)보다 뒤 — 테스트 `test_dynamic_route_registered_last`가 소스 오프셋으로 강제 검증. `/docs` `/redoc` `/openapi.json`은 `app = FastAPI(...)`(line 153)에서 등록 → 자연히 우선 (테스트가 `GET /docs|/redoc|/openapi.json` → 200 확인).
+2. **예약어 casefold 비교** — ✅ `team_name.casefold() in RESERVED_TEAM_PATHS`, `RESERVED_TEAM_PATHS`도 전부 `casefold()`로 정규화. 하드코딩 목록(계획서 섹션 4 전부) + 실제 등록 라우트 첫 세그먼트 합집합으로 누락 자동 방지(advisor 권장).
+3. **정규식 검사가 핸들러 안** — ✅ `Path(pattern=...)`가 아니라 핸들러에서 `_TEAM_NAME_RE.match`. 불일치 시 422가 아닌 404 (계획서 요구 "404로 분리").
+4. **대소문자 정확 일치** — ✅ `db.get_team_by_name_exact`는 `WHERE name = ?` (SQLite 기본 BINARY collation — `teams.name TEXT NOT NULL UNIQUE`, COLLATE NOCASE 없음 확인). `/ABC` 유효 시 `/abc` → None → 404. 테스트 `test_portal_case_exact_and_404s`가 확인.
+5. **데이터 필터가 메뉴 설정과 독립** — ✅ `get_public_portal_data`는 `is_public`/private/히든 프로젝트 필터만 적용, `menu` 키는 별도. `get_team_menu_visibility`는 UI 진입(탭) 제어용으로만 템플릿에서 쓰임. 테스트 `test_portal_data_filtering`가 `is_public=0`·히든 프로젝트 항목 비노출 확인.
+6. **히든 프로젝트 완전 차단** — ✅ `get_kanban_events(viewer=None)`의 `private_clause`(`is_private=1 OR is_hidden=1` 제외), `get_project_timeline(viewer=None)`의 `hidden_projs` skip, `get_checklists(viewer=None)`의 `public_filter` + `get_blocked_hidden_project_names(None)` — 모두 `is_public` 값 무관. `is_public=1` 히든 프로젝트 일정/체크가 비노출되는지 테스트가 명시 확인.
+7. **삭제 예정 팀** — ✅ `team.get("deleted_at")`이면 `deleted=True`로 안내 페이지만, `portal` 컨텍스트 자체를 안 넘김 → 데이터·가입 버튼·탭 비노출. 테스트 `test_deleted_team_notice_only`가 `btn-primary">계정 가입`/`공개 포털 — ...`/`id="portal-tabs"` 부재 확인.
+8. **로그인 사용자 200 (redirect 없음)** — ✅ 라우트가 auth 분기 안 함. 테스트 `test_logged_in_user_gets_portal_no_redirect` 확인.
+9. **DB 함수 시그니처 호환성** — ✅ 신규 함수 3개 + 모듈 상수 1개만 추가. 기존 함수(`get_kanban_events`/`get_project_timeline`/`get_checklists`/`get_team_active`) 미변경.
+10. **마이그레이션 phase 추가 없음** — ✅ 스키마 무변경. PHASES 리스트 손대지 않음. 신규 DB 함수는 SELECT 전용. 테스트가 `team_phase_13`/`public_portal_v1` 마커 부재 확인.
+11. **surgical 변경** — ✅ `app.py`는 맨 끝에 블록 1개 추가, `database.py`는 `get_team_active` 직후 블록 1개 추가, 템플릿/테스트 신규 파일. 인접 코드 변경 없음.
+
+## 경고 (허용)
+
+- `team_portal.html`의 CSS 셀렉터 텍스트 `.portal-tabs`가 항상 마크업에 들어가므로 "탭 부재" 판별은 `id="portal-tabs"` 요소로 해야 함 — 테스트가 이 패턴 사용. (frontend_changes.md에도 기록.)
+- `get_public_portal_data`가 `get_checklists(viewer=None)`(전 팀 조회) 후 Python에서 team_id 필터 — 팀 수·체크 수가 매우 많은 환경에서 약간 비효율. 현 규모(인트라넷)에선 무해. 필요 시 #19 이후 `get_checklists`에 team_id 인자 추가 검토.
+- 캘린더 탭 데이터(`portal.calendar`)는 칸반 events 풀 재활용 — 메뉴 기본 OFF라 보통 렌더 안 됨. 정확히는 캘린더 전용 events 조회(meeting/journal 포함)와 약간 다를 수 있으나 #13 범위에선 칸반 풀로 충분(계획서 섹션 9 "같은 events 데이터").
+
+## 결론
+
+통과. 차단 결함 0, 경고 3(모두 허용 가능). qa 단계로 진행.
