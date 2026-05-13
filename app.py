@@ -2121,9 +2121,47 @@ async def admin_create_team(request: Request):
 
 @app.delete("/api/admin/teams/{team_id}")
 def admin_delete_team(team_id: int, request: Request):
+    """팀 삭제 (그룹 D #23): soft delete + 90일 유예 + 자동 완전 삭제.
+
+    실제 hard delete 는 ``scheduler_service.py`` 가 03:40 cron 으로 호출하는
+    ``db.purge_expired_teams()`` 가 처리한다. 본 라우트는 ``teams.deleted_at`` 만 기록한다.
+    """
+    user = _require_admin(request)
+    actor_id = user.get("id") if isinstance(user, dict) else None
+    try:
+        info = db.soft_delete_team(team_id, actor_id=actor_id)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "already_deleted":
+            raise HTTPException(status_code=400, detail="이미 삭제 예정인 팀입니다.")
+        if code == "not_found":
+            raise HTTPException(status_code=404, detail="팀을 찾을 수 없습니다.")
+        raise HTTPException(status_code=400, detail="팀 삭제에 실패했습니다.")
+    return {"ok": True, **info}
+
+
+@app.post("/api/admin/teams/{team_id}/restore")
+def admin_restore_team(team_id: int, request: Request):
+    """soft-deleted 팀 복원 (그룹 D #23). user_teams 보존되어 있어 멤버 자동 복구."""
+    user = _require_admin(request)
+    actor_id = user.get("id") if isinstance(user, dict) else None
+    try:
+        info = db.restore_team(team_id, actor_id=actor_id)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "not_deleted":
+            raise HTTPException(status_code=400, detail="활성 팀입니다. 복원할 필요가 없습니다.")
+        if code == "not_found":
+            raise HTTPException(status_code=404, detail="팀을 찾을 수 없습니다. (이미 완전 삭제됐을 수 있습니다.)")
+        raise HTTPException(status_code=400, detail="팀 복원에 실패했습니다.")
+    return {"ok": True, **info}
+
+
+@app.get("/api/admin/teams/deleted")
+def admin_list_deleted_teams(request: Request):
+    """삭제 예정 팀 목록 (그룹 D #23 admin UI 용)."""
     _require_admin(request)
-    db.delete_team(team_id)
-    return {"ok": True}
+    return db.list_deleted_teams()
 
 
 # 팀 기능 그룹 C #17: 팀 멤버 관리 라우트 (admin 화면용).

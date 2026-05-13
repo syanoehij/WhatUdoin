@@ -4788,8 +4788,334 @@ def create_team(name: str) -> int:
 
 
 def delete_team(team_id: int):
+    """⚠️ DEPRECATED — 팀 기능 #23 이전의 hard delete.
+
+    그룹 D #23 적용 후에는 ``soft_delete_team`` 을 사용한다 (90일 유예 + 자동 완전 삭제).
+    호출부는 모두 ``soft_delete_team`` 으로 교체됐다. 본 함수는 외부 도구 호환을 위해 남겨두며,
+    호출 시 그대로 hard delete 한다 (이전 동작 보존).
+    """
     with get_conn() as conn:
         conn.execute("DELETE FROM teams WHERE id = ?", (team_id,))
+
+
+# ── 팀 기능 그룹 D #23: soft delete + 90일 유예 + 자동 완전 삭제 스케줄러 ──────────────
+
+def soft_delete_team(team_id: int, *, actor_id: int | None = None) -> dict:
+    """팀을 soft delete 한다 (#23). ``teams.deleted_at`` 에 현재 시각 기록.
+
+    이미 deleted_at IS NOT NULL → ``ValueError("already_deleted")``.
+    존재하지 않으면 → ``ValueError("not_found")``.
+
+    유예기간 중 user_teams row 는 그대로 유지된다 (계획서 §5 line 267).
+    접근 차단은 ``auth.user_team_ids`` 등 기존 ``deleted_at IS NULL`` 필터로 처리한다.
+    반환: ``{"team_id", "deleted_at", "purge_at"}`` (purge_at = deleted_at + 90일, ISO).
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, deleted_at FROM teams WHERE id = ?", (team_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError("not_found")
+        deleted_at = row["deleted_at"] if isinstance(row, sqlite3.Row) else row[1]
+        if deleted_at:
+            raise ValueError("already_deleted")
+        # CURRENT_TIMESTAMP 는 'YYYY-MM-DD HH:MM:SS' UTC. 일관성 위해 그대로 사용.
+        conn.execute(
+            "UPDATE teams SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (team_id,),
+        )
+        new_row = conn.execute(
+            "SELECT deleted_at FROM teams WHERE id = ?", (team_id,)
+        ).fetchone()
+    new_deleted_at = new_row["deleted_at"] if isinstance(new_row, sqlite3.Row) else new_row[0]
+    return {
+        "team_id": team_id,
+        "deleted_at": new_deleted_at,
+        "purge_at": _purge_at_from(new_deleted_at),
+    }
+
+
+def restore_team(team_id: int, *, actor_id: int | None = None) -> dict:
+    """soft delete 된 팀 복원 (#23). ``teams.deleted_at`` 을 NULL 로 되돌린다.
+
+    팀 자체가 없거나 90일 후 완전 삭제됐으면 → ``ValueError("not_found")``.
+    deleted_at IS NULL 인 활성 팀 → ``ValueError("not_deleted")``.
+
+    user_teams row 는 그동안 보존됐으므로 별도 작업 없이 멤버 관계 자동 복구된다.
+    반환: ``{"team_id"}``.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, deleted_at FROM teams WHERE id = ?", (team_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError("not_found")
+        deleted_at = row["deleted_at"] if isinstance(row, sqlite3.Row) else row[1]
+        if not deleted_at:
+            raise ValueError("not_deleted")
+        conn.execute(
+            "UPDATE teams SET deleted_at = NULL WHERE id = ?",
+            (team_id,),
+        )
+    return {"team_id": team_id}
+
+
+def get_team_deletion_status(team_id: int) -> dict | None:
+    """단일 팀의 삭제 상태 조회. deleted_at NULL 이면 None 반환.
+
+    반환: ``{"team_id", "name", "deleted_at", "purge_at"}``.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, name, deleted_at FROM teams WHERE id = ?", (team_id,)
+        ).fetchone()
+    if row is None:
+        return None
+    deleted_at = row["deleted_at"] if isinstance(row, sqlite3.Row) else row[2]
+    if not deleted_at:
+        return None
+    return {
+        "team_id": row["id"] if isinstance(row, sqlite3.Row) else row[0],
+        "name": row["name"] if isinstance(row, sqlite3.Row) else row[1],
+        "deleted_at": deleted_at,
+        "purge_at": _purge_at_from(deleted_at),
+    }
+
+
+def list_deleted_teams() -> list[dict]:
+    """삭제 예정 팀 전체 목록 (admin UI 용)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, name, deleted_at FROM teams "
+            "WHERE deleted_at IS NOT NULL ORDER BY deleted_at"
+        ).fetchall()
+    return [{
+        "team_id": r["id"] if isinstance(r, sqlite3.Row) else r[0],
+        "name": r["name"] if isinstance(r, sqlite3.Row) else r[1],
+        "deleted_at": r["deleted_at"] if isinstance(r, sqlite3.Row) else r[2],
+        "purge_at": _purge_at_from(
+            r["deleted_at"] if isinstance(r, sqlite3.Row) else r[2]
+        ),
+    } for r in rows]
+
+
+def _purge_at_from(deleted_at: str | None) -> str | None:
+    """deleted_at(YYYY-MM-DD HH:MM:SS UTC) → +90일 ISO 문자열."""
+    if not deleted_at:
+        return None
+    try:
+        # CURRENT_TIMESTAMP 포맷 또는 ISO 모두 수용
+        s = deleted_at.replace("T", " ").split(".")[0]
+        dt = datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+        return (dt + timedelta(days=90)).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return None
+
+
+# 팀 종속 데이터 purge 순서 (계획서 §5 line 273~287, todo §#23 line 623~636).
+#
+# **이 순서는 계약이다. 변경 시 계획서·todo 도 함께 갱신해야 한다.**
+#
+# 핵심 원칙:
+#   1) notifications 가 events 보다 먼저 — events 삭제 후엔 event_id → events.team_id
+#      매핑이 불가능해진다 (notifications.team_id 가 #4 백필되어 있어 직접 삭제 가능).
+#   2) 외래키 dangling 방지: 부모 행 삭제 전에 자식·이력·lock·휴지통 참조 정리.
+#   3) 업로드 폴더(uploads/teams/{team_id}/...) 와 /uploads/meetings/... 은 즉시 삭제 X
+#      → 별도 고아 파일 정리 작업 책임 (계획서 §5 line 289, §14 line 845).
+#
+# 신규 팀 종속 테이블 추가 시 이 목록과 ``_purge_team_data`` 본문을 함께 갱신할 것.
+_TEAM_PURGE_STEPS: list[tuple[str, str]] = [
+    # (단계 라벨, 디버깅용 short tag). 실제 SQL 은 _purge_team_data 내부에서 단계별 작성.
+    ("notifications", "step1_notifications"),
+    ("meeting_histories+checklist_histories", "step2_histories"),
+    ("meeting_locks+checklist_locks", "step3_locks"),
+    ("trash_project_id_cleanup", "step4_trash_refs"),
+    ("events+checklists+meetings", "step5_bodies"),
+    ("project_milestones+project_members", "step6_project_sub"),
+    ("projects", "step7_projects"),
+    ("links", "step8_links"),
+    ("team_notices", "step9_team_notices"),
+    ("team_menu_settings", "step10_team_menu_settings"),
+    ("user_teams", "step11_user_teams"),
+    ("teams", "step12_teams"),
+]
+
+
+def _purge_team_data(conn: sqlite3.Connection, team_id: int) -> dict:
+    """단일 팀의 종속 데이터 12단계 삭제 (calling 함수가 트랜잭션 관리).
+
+    호출 컨텍스트: ``purge_expired_teams`` 가 팀당 BEGIN IMMEDIATE 트랜잭션 안에서 호출.
+    반환: ``{단계 tag: 삭제된 row 수}``.
+
+    트랜잭션·예외는 호출부 책임. 본 함수는 SELECT/DELETE 만 수행한다.
+    """
+    counts: dict[str, int] = {}
+
+    def _exec(sql: str, params: tuple, tag: str) -> None:
+        cur = conn.execute(sql, params)
+        counts[tag] = (cur.rowcount or 0) + counts.get(tag, 0)
+
+    # ── 1단계: notifications. team_id 컬럼 기준. ────────────────────────────
+    _exec("DELETE FROM notifications WHERE team_id = ?", (team_id,), "step1_notifications")
+
+    # ── 2단계: 편집 이력. meetings/checklists 본문 삭제 전에 자식부터. ──────
+    _exec(
+        "DELETE FROM meeting_histories "
+        "WHERE meeting_id IN (SELECT id FROM meetings WHERE team_id = ?)",
+        (team_id,), "step2_histories",
+    )
+    _exec(
+        "DELETE FROM checklist_histories "
+        "WHERE checklist_id IN (SELECT id FROM checklists WHERE team_id = ?)",
+        (team_id,), "step2_histories",
+    )
+
+    # ── 3단계: lock 테이블. ────────────────────────────────────────────────
+    _exec(
+        "DELETE FROM meeting_locks "
+        "WHERE meeting_id IN (SELECT id FROM meetings WHERE team_id = ?)",
+        (team_id,), "step3_locks",
+    )
+    _exec(
+        "DELETE FROM checklist_locks "
+        "WHERE checklist_id IN (SELECT id FROM checklists WHERE team_id = ?)",
+        (team_id,), "step3_locks",
+    )
+
+    # ── 4단계: trash_project_id 가 해당 팀 프로젝트를 가리키는 row 정리. ──
+    # 5단계 본문 삭제로 함께 사라지므로 별도 사전 정리는 사실상 cascade.
+    # 명시 SELECT 로 dangling 가시화 만 수행 (count=0 이어도 OK).
+    danglers = conn.execute(
+        "SELECT COUNT(*) FROM events "
+        "WHERE trash_project_id IN (SELECT id FROM projects WHERE team_id = ?)",
+        (team_id,),
+    ).fetchone()
+    counts["step4_trash_refs"] = (danglers[0] if danglers else 0)
+    danglers = conn.execute(
+        "SELECT COUNT(*) FROM checklists "
+        "WHERE trash_project_id IN (SELECT id FROM projects WHERE team_id = ?)",
+        (team_id,),
+    ).fetchone()
+    counts["step4_trash_refs"] += (danglers[0] if danglers else 0)
+    danglers = conn.execute(
+        "SELECT COUNT(*) FROM meetings "
+        "WHERE trash_project_id IN (SELECT id FROM projects WHERE team_id = ?)",
+        (team_id,),
+    ).fetchone()
+    counts["step4_trash_refs"] += (danglers[0] if danglers else 0)
+
+    # ── 5단계: 본문 데이터 events/checklists/meetings (team_id 직접). ──────
+    _exec("DELETE FROM events WHERE team_id = ?", (team_id,), "step5_bodies")
+    _exec("DELETE FROM checklists WHERE team_id = ?", (team_id,), "step5_bodies")
+    _exec("DELETE FROM meetings WHERE team_id = ?", (team_id,), "step5_bodies")
+
+    # ── 6단계: 프로젝트 보조 테이블 (project_milestones, project_members). ─
+    _exec(
+        "DELETE FROM project_milestones "
+        "WHERE project_id IN (SELECT id FROM projects WHERE team_id = ?)",
+        (team_id,), "step6_project_sub",
+    )
+    _exec(
+        "DELETE FROM project_members "
+        "WHERE project_id IN (SELECT id FROM projects WHERE team_id = ?)",
+        (team_id,), "step6_project_sub",
+    )
+
+    # ── 7단계: projects 본체. ──────────────────────────────────────────────
+    _exec("DELETE FROM projects WHERE team_id = ?", (team_id,), "step7_projects")
+
+    # ── 8단계: links. scope='team' 위주, NULL team_id 는 'personal' 이므로 자동 제외. ─
+    _exec("DELETE FROM links WHERE team_id = ?", (team_id,), "step8_links")
+
+    # ── 9단계: team_notices. ───────────────────────────────────────────────
+    _exec("DELETE FROM team_notices WHERE team_id = ?", (team_id,), "step9_team_notices")
+
+    # ── 10단계: team_menu_settings. ────────────────────────────────────────
+    _exec(
+        "DELETE FROM team_menu_settings WHERE team_id = ?",
+        (team_id,), "step10_team_menu_settings",
+    )
+
+    # ── 11단계: user_teams 멤버 관계. ──────────────────────────────────────
+    _exec("DELETE FROM user_teams WHERE team_id = ?", (team_id,), "step11_user_teams")
+
+    # ── 12단계: teams 본체. ────────────────────────────────────────────────
+    _exec("DELETE FROM teams WHERE id = ?", (team_id,), "step12_teams")
+
+    return counts
+
+
+def purge_expired_teams(
+    grace_days: int = 90,
+    *,
+    now: "datetime | None" = None,
+) -> dict:
+    """90일 경과한 soft-deleted 팀 자동 완전 삭제 (#23 스케줄러).
+
+    매일 새벽 03:40 ``scheduler_service.py`` cron 으로 호출된다 (백업·trash 정리 직후).
+
+    인자:
+      grace_days: 유예 기간 (기본 90).
+      now: 테스트용 현재 시각 주입 (None 이면 ``datetime.datetime.utcnow()`` 사용).
+
+    팀 단위 원자성:
+      각 팀에 대해 ``BEGIN IMMEDIATE``→``_purge_team_data``→``COMMIT``.
+      한 팀 실패 시 그 팀만 롤백, 나머지 팀은 계속 처리한다.
+
+    반환:
+      ``{"purged_teams": [...], "errors": [...], "rows_deleted_per_step": {team_id: {...}}}``
+    """
+    if now is None:
+        now = datetime.utcnow()
+    cutoff = (now - timedelta(days=grace_days)).strftime("%Y-%m-%d %H:%M:%S")
+
+    result: dict = {
+        "purged_teams": [],
+        "errors": [],
+        "rows_deleted_per_step": {},
+        "cutoff": cutoff,
+    }
+
+    # ── 후보 팀 ID 조회 (read-only, 별도 connection 으로). ─────────────────
+    with get_conn() as conn:
+        candidates = conn.execute(
+            "SELECT id, name FROM teams "
+            "WHERE deleted_at IS NOT NULL AND deleted_at <= ? "
+            "ORDER BY deleted_at",
+            (cutoff,),
+        ).fetchall()
+
+    # ── 각 팀: 독립 트랜잭션. ─────────────────────────────────────────────
+    # ``get_conn`` 은 @contextmanager 라 ``with`` 로만 사용 가능. 팀당 독립 with 블록을
+    # 열고 BEGIN IMMEDIATE/COMMIT/ROLLBACK 을 수동 관리한다 (with 종료 시 commit 시도가
+    # 있지만 우리가 명시적으로 COMMIT/ROLLBACK 한 후엔 no-op 또는 OperationalError 인데
+    # 외부 except 로 떨어지지 않도록 자체 try/except 안에서 처리).
+    for cand in candidates:
+        tid = cand["id"] if isinstance(cand, sqlite3.Row) else cand[0]
+        tname = cand["name"] if isinstance(cand, sqlite3.Row) else cand[1]
+        try:
+            with get_conn() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    counts = _purge_team_data(conn, tid)
+                    conn.execute("COMMIT")
+                    result["purged_teams"].append({"team_id": tid, "name": tname})
+                    result["rows_deleted_per_step"][tid] = counts
+                except Exception:
+                    try:
+                        conn.execute("ROLLBACK")
+                    except Exception:
+                        pass
+                    raise
+        except Exception as exc:
+            result["errors"].append({
+                "team_id": tid,
+                "name": tname,
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+            })
+
+    return result
 
 
 # 팀 기능 그룹 C #17: 팀 멤버 조회/역할 토글 (관리자 화면용)
@@ -5414,6 +5740,17 @@ def apply_to_team(user_id: int, team_id: int) -> tuple[str, str | None]:
       detail: blocked 일 때 "pending_here" | "pending_other" | "already_member", 그 외 None.
     """
     with get_conn() as conn:
+        # 0. 팀 기능 #23: 삭제 예정 팀은 신청 후보에서 제외 (계획서 §5 line 262).
+        team_row = conn.execute(
+            "SELECT id, deleted_at FROM teams WHERE id = ?", (team_id,)
+        ).fetchone()
+        if team_row is None:
+            return ("blocked", "team_not_found")
+        team_deleted_at = (
+            team_row["deleted_at"] if isinstance(team_row, sqlite3.Row) else team_row[1]
+        )
+        if team_deleted_at:
+            return ("blocked", "team_deleted")
         # 1. 사용자의 다른 pending 존재 여부 (임의 팀).
         other_pending = conn.execute(
             "SELECT team_id FROM user_teams WHERE user_id = ? AND status = 'pending'",

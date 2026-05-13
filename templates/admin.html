@@ -2,6 +2,19 @@
 {% block title %}WhatUDoin — 관리자{% endblock %}
 
 {% block content %}
+<style>
+  /* 그룹 D #23: 팀 삭제 상태 배지. */
+  #team-table .team-status-cell { white-space: nowrap; }
+  #team-table .badge-ok {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    background: #d1fae5; color: #065f46; font-size: 12px; font-weight: 500;
+  }
+  #team-table .badge-warn {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    background: #fef3c7; color: #92400e; font-size: 12px; font-weight: 500;
+    cursor: help;
+  }
+</style>
 <div class="admin-wrap">
   <div class="admin-header">
     <h2>🔧 관리자 페이지</h2>
@@ -139,16 +152,28 @@
       팀 이름은 영문 대소문자·숫자·언더바(_)만 사용할 수 있고, 생성 후에는 변경할 수 없습니다.
     </p>
     <table class="admin-table" id="team-table">
-      <thead><tr><th>팀 이름</th><th>관리</th></tr></thead>
+      <thead><tr><th>팀 이름</th><th>상태</th><th>관리</th></tr></thead>
       <tbody>
         {% for t in teams %}
-        <tr id="team-row-{{ t.id }}">
+        <tr id="team-row-{{ t.id }}" data-deleted-at="{{ t.deleted_at or '' }}">
           <td>
             <span class="team-name-display" id="team-name-{{ t.id }}">{{ t.name }}</span>
           </td>
+          <td class="team-status-cell">
+            {% if t.deleted_at %}
+              <span class="badge badge-warn" title="{{ t.deleted_at }} UTC 삭제 예정">삭제 예정</span>
+            {% else %}
+              <span class="badge badge-ok">활성</span>
+            {% endif %}
+          </td>
           <td class="btn-group">
-            <button class="btn btn-sm" onclick="openTeamMembers({{ t.id }}, '{{ t.name }}')">멤버 관리</button>
-            <button class="btn btn-sm btn-danger" onclick="deleteTeam({{ t.id }})">삭제</button>
+            {% if t.deleted_at %}
+              {# 그룹 D #23: 유예기간 중 팀은 복원만 노출. 멤버 관리·재삭제 불가. #}
+              <button class="btn btn-sm btn-primary" onclick="restoreTeam({{ t.id }})">복원</button>
+            {% else %}
+              <button class="btn btn-sm" onclick="openTeamMembers({{ t.id }}, '{{ t.name }}')">멤버 관리</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteTeam({{ t.id }})">삭제</button>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -624,14 +649,37 @@ async function confirmResetPw() {
 const _TEAM_NAME_RE = /^[A-Za-z0-9_]+$/;
 
 function _renderTeamRow(t) {
+  // 그룹 D #23: 신규 생성 팀은 항상 활성 상태 (deleted_at NULL).
   return `
-    <tr id="team-row-${t.id}">
+    <tr id="team-row-${t.id}" data-deleted-at="">
       <td>
         <span class="team-name-display" id="team-name-${t.id}">${esc(t.name)}</span>
+      </td>
+      <td class="team-status-cell">
+        <span class="badge badge-ok">활성</span>
       </td>
       <td class="btn-group">
         <button class="btn btn-sm" onclick="openTeamMembers(${t.id}, '${esc(t.name)}')">멤버 관리</button>
         <button class="btn btn-sm btn-danger" onclick="deleteTeam(${t.id})">삭제</button>
+      </td>
+    </tr>`;
+}
+
+// 그룹 D #23: 삭제 예정 row 렌더러 (soft delete 직후 본 row 를 이걸로 교체).
+function _renderDeletedTeamRow(t) {
+  // t: {id, name, deleted_at, purge_at?}
+  const dt = t.deleted_at || '';
+  const titleAttr = dt ? ` title="${esc(dt)} UTC 삭제 예정"` : '';
+  return `
+    <tr id="team-row-${t.id}" data-deleted-at="${esc(dt)}">
+      <td>
+        <span class="team-name-display" id="team-name-${t.id}">${esc(t.name)}</span>
+      </td>
+      <td class="team-status-cell">
+        <span class="badge badge-warn"${titleAttr}>삭제 예정</span>
+      </td>
+      <td class="btn-group">
+        <button class="btn btn-sm btn-primary" onclick="restoreTeam(${t.id})">복원</button>
       </td>
     </tr>`;
 }
@@ -662,10 +710,51 @@ async function createTeam() {
 }
 
 async function deleteTeam(id) {
-  if (!await wuDialog.confirm({ title: '팀 삭제', message: '이 팀을 삭제하시겠습니까?', danger: true })) return;
+  // 그룹 D #23: soft delete + 90일 유예. confirm 메시지에 명시.
+  if (!await wuDialog.confirm({
+    title: '팀 삭제',
+    message: '이 팀을 삭제하시겠습니까?\n\n팀은 즉시 비활성화되며 90일 후 자동으로 완전 삭제됩니다.\n유예기간 중에는 시스템 관리자가 복원할 수 있습니다.',
+    danger: true,
+  })) return;
   const res = await fetch(`/api/admin/teams/${id}`, { method: 'DELETE' });
-  if (res.ok) document.getElementById(`team-row-${id}`).remove();
-  else { const e = await res.json(); wuToast.error(e.detail || '오류'); }
+  if (!res.ok) {
+    let err = {}; try { err = await res.json(); } catch (_) {}
+    wuToast.error(err.detail || '팀 삭제에 실패했습니다.');
+    return;
+  }
+  const info = await res.json(); // {ok, team_id, deleted_at, purge_at}
+  // row 를 "삭제 예정" 상태로 교체 (전체 제거하지 않음 — 복원 진입점 유지).
+  const oldRow = document.getElementById(`team-row-${id}`);
+  if (oldRow) {
+    const nameEl = document.getElementById(`team-name-${id}`);
+    const name = nameEl ? nameEl.textContent : '';
+    oldRow.outerHTML = _renderDeletedTeamRow({
+      id, name, deleted_at: info.deleted_at, purge_at: info.purge_at,
+    });
+  }
+  wuToast.success(`팀을 삭제 예정 상태로 전환했습니다. 90일 후 완전 삭제됩니다.`);
+}
+
+async function restoreTeam(id) {
+  // 그룹 D #23: 복원. user_teams 가 보존돼 있어 멤버 관계 자동 복구.
+  if (!await wuDialog.confirm({
+    title: '팀 복원',
+    message: '이 팀을 복원하시겠습니까?\n\n멤버 관계는 그대로 복구됩니다.',
+  })) return;
+  const res = await fetch(`/api/admin/teams/${id}/restore`, { method: 'POST' });
+  if (!res.ok) {
+    let err = {}; try { err = await res.json(); } catch (_) {}
+    wuToast.error(err.detail || '팀 복원에 실패했습니다.');
+    return;
+  }
+  // row 를 활성 상태로 교체.
+  const oldRow = document.getElementById(`team-row-${id}`);
+  if (oldRow) {
+    const nameEl = document.getElementById(`team-name-${id}`);
+    const name = nameEl ? nameEl.textContent : '';
+    oldRow.outerHTML = _renderTeamRow({ id, name });
+  }
+  wuToast.success('팀을 복원했습니다.');
 }
 
 // ── 팀 멤버 관리 모달 (#17) ──────────────────────────────

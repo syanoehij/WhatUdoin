@@ -108,6 +108,15 @@ def main() -> None:
             "cron", hour=3, minute=30,
             id="daily-orphan-image-cleanup", replace_existing=True,
         )
+        # 매일 03:40 90일 경과 soft-deleted 팀 자동 완전 삭제 (그룹 D #23)
+        # 백업(03:00) · trash 정리(03:20) · orphan image(03:30) 후 실행하여
+        # 안전 백업이 확보된 시점에 hard delete. notifications 가 events 보다 먼저
+        # 삭제되도록 _purge_team_data 가 12단계 순서로 처리한다.
+        sched.add_job(
+            lambda: db.purge_expired_teams(),
+            "cron", hour=3, minute=40,
+            id="daily-team-purge", replace_existing=True,
+        )
 
         sched.start()
 
