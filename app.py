@@ -1089,7 +1089,9 @@ async def create_checklist(request: Request):
         attachments = raw_att
     else:
         attachments = None
-    cid = db.create_checklist(project, title, content, user["name"], is_public=is_public, team_id=auth.resolve_work_team(request, user), attachments=attachments)
+    # 팀 기능 그룹 C #16: 신규 체크리스트의 team_id 는 현재 작업 팀을 명시 보장.
+    team_id = auth.require_admin_work_team(request, user)
+    cid = db.create_checklist(project, title, content, user["name"], is_public=is_public, team_id=team_id, attachments=attachments)
     _sse_publish("checks.changed", {"id": cid, "action": "create"})
     return {"id": cid}
 
@@ -1399,11 +1401,8 @@ async def api_save_notice(request: Request):
     user = _require_editor(request)
     data = await request.json()
     content = data.get("content", "")
-    # 팀 기능 #15-3: work_team_id 기준 저장 (팀 공유 모델 — 같은 팀 승인 멤버 누구나).
-    team_id = auth.resolve_work_team(request, user, explicit_id=data.get("team_id"))
-    if team_id is None:
-        raise HTTPException(status_code=400, detail="현재 작업 팀이 필요합니다.")
-    auth.require_work_team_access(user, team_id)
+    # 팀 기능 #15-3 + C #16: work_team_id 기준 저장 — 작업 팀 명시 보장.
+    team_id = auth.require_admin_work_team(request, user, explicit_id=data.get("team_id"))
     notice_id = db.save_notice(content, team_id, user["name"])
     return {"id": notice_id}
 
@@ -1415,11 +1414,8 @@ async def api_notify_notice(request: Request):
         data = await request.json()
     except Exception:
         data = {}
-    # 팀 기능 #15-3: 현재 작업 팀 결정 후 그 팀의 최신 공지를 같은 팀 승인 멤버에게만 알림.
-    team_id = auth.resolve_work_team(request, user, explicit_id=(data or {}).get("team_id"))
-    if team_id is None:
-        raise HTTPException(status_code=400, detail="현재 작업 팀이 필요합니다.")
-    auth.require_work_team_access(user, team_id)
+    # 팀 기능 #15-3 + C #16: 현재 작업 팀 명시 보장 — admin이 임의 팀에 알림 발송 차단.
+    team_id = auth.require_admin_work_team(request, user, explicit_id=(data or {}).get("team_id"))
     notice = db.get_notice_latest_for_team(team_id)
     if not notice:
         return {"ok": False, "reason": "no_notice"}
@@ -2295,8 +2291,9 @@ async def create_event(request: Request):
             raise HTTPException(status_code=403, detail="히든 프로젝트에 접근 권한이 없습니다.")
     _assert_assignees_in_hidden_project(proj_name or None, data.get("assignee"))
     data["created_by"] = str(user["id"])
-    # 팀 기능 그룹 A #10: 신규 일정의 team_id 는 현재 작업 팀 (대표 팀 fallback). 팀 미배정이면 NULL.
-    data["team_id"] = auth.resolve_work_team(request, user)
+    # 팀 기능 그룹 C #16: 신규 일정의 team_id 는 현재 작업 팀을 명시 보장.
+    # admin이 작업 팀 미선택이거나 비admin 미배정이면 400 (NULL team_id 신규 row 차단).
+    data["team_id"] = auth.require_admin_work_team(request, user)
     event_id = db.create_event(data)
     # 일지·하위 업무는 담당자 알림 없음
     if data.get("event_type") not in ("journal", "subtask"):
@@ -2838,14 +2835,8 @@ async def manage_create_project(request: Request):
     memo  = (data.get("memo") or "").strip() or None
     if not name:
         raise HTTPException(status_code=400, detail="프로젝트 이름을 입력하세요.")
-    # 작업 컨텍스트 팀 결정 — 명시 team_id(요청 본문) → 쿠키 → 사용자 대표 팀.
-    explicit_id = data.get("team_id")
-    team_id = auth.resolve_work_team(request, user, explicit_id=explicit_id)
-    if team_id is None:
-        # 비-admin 사용자는 항상 팀이 결정되어야 한다(legacy fallback 포함).
-        # admin이 명시 team_id 없이 호출한 경우만 None — 사양상 거부.
-        raise HTTPException(status_code=400, detail="작업 팀이 결정되지 않았습니다. team_id를 지정하세요.")
-    auth.require_work_team_access(user, team_id)
+    # 팀 기능 그룹 C #16: 작업 팀 명시 보장 (admin은 묵시 first_active fallback 금지).
+    team_id = auth.require_admin_work_team(request, user, explicit_id=data.get("team_id"))
     # 같은 팀 안에서 같은 이름 사전 차단.
     norm = db.normalize_name(name)
     with db.get_conn() as conn:
@@ -3057,12 +3048,8 @@ async def create_hidden_project_route(request: Request):
     name = data.get("name", "").strip()
     if not name:
         raise HTTPException(status_code=422, detail="프로젝트 이름을 입력하세요.")
-    # 히든 프로젝트는 항상 팀 컨텍스트 안에서만 생성 가능.
-    explicit_id = data.get("team_id")
-    team_id = auth.resolve_work_team(request, user, explicit_id=explicit_id)
-    if team_id is None:
-        raise HTTPException(status_code=403, detail="팀 소속 사용자만 히든 프로젝트를 생성할 수 있습니다.")
-    auth.require_work_team_access(user, team_id)
+    # 팀 기능 그룹 C #16: 히든 프로젝트는 항상 팀 컨텍스트 안에서만 생성 — 명시 보장.
+    team_id = auth.require_admin_work_team(request, user, explicit_id=data.get("team_id"))
     result = db.create_hidden_project(
         name=name,
         color=data.get("color", ""),
@@ -3992,7 +3979,8 @@ async def manage_add_event(name: str, request: Request):
         "kanban_status":  None,
         "priority":       "normal",
         "created_by":     str(user["id"]),
-        "team_id":        auth.resolve_work_team(request, user),
+        # 팀 기능 그룹 C #16: 신규 일정 team_id 명시 보장.
+        "team_id":        auth.require_admin_work_team(request, user),
     }
     event_id = db.create_event(payload)
     _sse_publish("events.changed", {"id": event_id, "action": "create", "team_id": payload["team_id"]})
@@ -4127,13 +4115,9 @@ async def api_create_link(request: Request):
         raise HTTPException(status_code=400, detail="허용되지 않는 URL 형식입니다.")
     if scope not in ("personal", "team"):
         scope = "personal"
-    # 팀 기능 그룹 B #15-2: scope='team' 이면 작업 팀 확정 + 소속 검증, personal 은 NULL 유지.
+    # 팀 기능 그룹 B #15-2 + C #16: scope='team' 이면 작업 팀 명시 보장, personal 은 NULL 유지.
     if scope == "team":
-        team_id = auth.resolve_work_team(request, user, explicit_id=data.get("team_id"))
-        if team_id is None:
-            # admin이 명시 team_id 없이 호출한 경우만 None — 사양상 거부 (manage/projects 와 동일).
-            raise HTTPException(status_code=400, detail="작업 팀이 결정되지 않았습니다. team_id를 지정하세요.")
-        auth.require_work_team_access(user, team_id)
+        team_id = auth.require_admin_work_team(request, user, explicit_id=data.get("team_id"))
     else:
         team_id = None
     link_id = db.create_link(title, url, desc, scope, team_id, user["name"])
@@ -4203,7 +4187,12 @@ async def create_doc(request: Request):
         attachments = None
     if not title:
         raise HTTPException(status_code=400, detail="제목을 입력하세요.")
-    doc_team_id = None if unassigned else auth.resolve_work_team(request, user)
+    # 팀 기능 그룹 C #16: 미배정 사용자의 개인 문서(is_team_doc=0)는 team_id NULL 허용 — #12 예외.
+    # 그 외(팀 소속 + 팀/개인 문서, admin)는 작업 팀 명시 강제.
+    if unassigned:
+        doc_team_id = None
+    else:
+        doc_team_id = auth.require_admin_work_team(request, user)
     meeting_id = db.create_meeting(
         title, content, doc_team_id, user["id"],
         meeting_date, is_team_doc, is_public, team_share, attachments
@@ -4667,8 +4656,8 @@ async def ai_confirm(request: Request):
     events     = body.get("events", [])
     meeting_id = body.get("meeting_id")
     force      = bool(body.get("force", False))
-    # 팀 기능 그룹 A #10: 신규 일정의 team_id 는 현재 작업 팀 (대표 팀 fallback).
-    team_id    = auth.resolve_work_team(request, user)
+    # 팀 기능 그룹 C #16: AI 일괄 확정의 신규 일정 team_id 명시 보장. 한 번만 결정해 모든 row에 적용.
+    team_id    = auth.require_admin_work_team(request, user)
 
     # 저장 직전 재검사 — force=True가 아닌 경우만
     if not force:

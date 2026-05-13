@@ -488,13 +488,15 @@
 📖 섹션 2, 섹션 7 시스템 관리자, 섹션 16 권한 원칙
 **의존: ← #2, #15**
 
-- [ ] **구현**
-  - [ ] admin이 `/`, `/doc`, `/check`, `/calendar`, `/kanban`, `/gantt`, `/project-manage`에 슈퍼유저로 진입
-  - [ ] admin의 쓰기 요청에서 `work_team_id` 명시 검증, 미선택 시 400
-  - [ ] `/admin`은 운영 기능 중심으로 정리 (일반 자료 편집은 일반 화면 사용)
-- [ ] **검증**
-  - [ ] admin이 일반 화면에서 모든 팀 자료를 보고 편집 가능
-  - [ ] admin이 팀 미선택 상태에서 쓰기 시도 → 400
+- [x] **구현**
+  - [x] admin이 `/`, `/doc`, `/check`, `/calendar`, `/kanban`, `/gantt`, `/project-manage`에 슈퍼유저로 진입
+  - [x] admin의 쓰기 요청에서 `work_team_id` 명시 검증, 미선택 시 400
+  - [x] `/admin`은 운영 기능 중심으로 정리 (일반 자료 편집은 일반 화면 사용)
+- [x] **검증**
+  - [x] admin이 일반 화면에서 모든 팀 자료를 보고 편집 가능
+  - [x] admin이 팀 미선택 상태에서 쓰기 시도 → 400
+
+> 2026-05-13: `auth.require_admin_work_team` 헬퍼 도입(묵시 first_active fallback 금지) + 10개 create 라우트 적용. QA 1차에서 비admin 비소속 explicit team_id 가 silent로 본인 대표 팀에 떨어지는 회귀가 발견되어 헬퍼 비admin 분기에 `explicit_id is not None → 403` 가드 추가(phase86/87 보안 경계 복원). phase86/87 정적 marker drift 패치 + phase88 case12 단언 반전(403)으로 마무리. 회귀 53/53 PASS, phase88 17/17 PASS. (test_project_rename 2건 실패는 #15-1 도입 후 선재 결함, #16과 무관.)
 
 ### #17. 팀 생성/관리 페이지
 

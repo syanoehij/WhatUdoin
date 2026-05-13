@@ -88,19 +88,20 @@ def test_static_app_routes():
     # GET /api/notice — team_id 파라미터 + _notice_work_team
     m = re.search(r'@app\.get\("/api/notice"\)\ndef api_get_notice\((.*?)\):.*?\n(?=\n@app\.)', src, re.S)
     assert m and "team_id" in m.group(1) and "_notice_work_team" in m.group(0)
-    # POST /api/notice — resolve_work_team + require_work_team_access + 400 + save_notice 3-인자
+    # POST /api/notice — require_admin_work_team(explicit_id=data.get("team_id")) + save_notice 3-인자 (#16 헬퍼 통합)
+    # status_code=400 은 헬퍼 내부에서 raise 되므로 라우트 본문에는 더 이상 등장하지 않는다.
     m = re.search(r'@app\.post\("/api/notice"\)\nasync def api_save_notice\(.*?\n(?=\n@app\.)', src, re.S)
     assert m
     pb = m.group(0)
-    assert "resolve_work_team" in pb and "require_work_team_access" in pb and "status_code=400" in pb
+    assert "require_admin_work_team" in pb and "explicit_id=data.get(\"team_id\")" in pb
     assert "save_notice(content, team_id" in pb
     # 작성자 본인 게이트 없음 (팀 공유 모델)
     assert 'created_by' not in pb and 'user["name"]' in pb  # user["name"] 은 save 인자로만 쓰임
-    # POST /api/notice/notify — resolve_work_team + require_work_team_access + create_notification_for_team
+    # POST /api/notice/notify — require_admin_work_team + create_notification_for_team (#16 헬퍼 통합)
     m = re.search(r'@app\.post\("/api/notice/notify"\)\nasync def api_notify_notice\(.*?\n(?=\n@app\.|\Z)', src, re.S)
     assert m
     nb = m.group(0)
-    assert "resolve_work_team" in nb and "require_work_team_access" in nb
+    assert "require_admin_work_team" in nb
     assert "create_notification_for_team" in nb
     assert "create_notification_for_all" not in nb
     # 옛 전역 호출 잔존 없음

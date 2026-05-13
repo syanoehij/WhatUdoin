@@ -228,6 +228,72 @@ def admin_team_scope(user):
     return None
 
 
+# 팀 기능 그룹 C #16 — admin 쓰기 요청에서 work_team_id 명시 검증.
+_REQUIRE_ADMIN_WORK_TEAM_MSG = (
+    "현재 작업 팀이 선택되지 않았습니다. 프로필 메뉴에서 작업 팀을 선택해 주세요."
+)
+
+
+def require_admin_work_team(request: Request, user, explicit_id=None) -> int:
+    """신규 row 생성 라우트 전용 — 현재 작업 팀을 명시적으로 보장한다 (#16).
+
+    - admin: explicit_id → 검증(active + 접근 가능) 후 반환. 없으면 work_team_id 쿠키 →
+             동일 검증 후 반환. 둘 다 없거나 무효이면 HTTPException 400.
+             admin에 대한 묵시적 first_active_team_id fallback 금지(의도된 명시성).
+    - 비admin: explicit_id → user_can_access_team 통과 시 반환. 그렇지 않으면 쿠키 →
+              대표 팀(joined_at 가장 이른 approved 팀) 순으로 결정.
+              최종 결과가 None이면 HTTPException 400 (미배정 사용자의 NULL team_id 신규 row 차단).
+              **개인 문서(meetings.is_team_doc=0) 작성은 호출부가 이 헬퍼를 건너뛰고
+              직접 NULL을 허용해야 한다.**
+
+    반환값은 항상 유효한 int team_id 이거나 HTTPException raise.
+    `require_work_team_access`와 달리 명시적인 작업 팀 결정을 강제한다.
+    """
+    from fastapi import HTTPException
+
+    def _validate(tid_raw):
+        if tid_raw is None:
+            return None
+        try:
+            tid = int(tid_raw)
+        except (TypeError, ValueError):
+            return None
+        if not _team_is_active(tid):
+            return None
+        if not user_can_access_team(user, tid):
+            return None
+        return tid
+
+    if user is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+
+    # 1) explicit_id 우선 (admin·비admin 공통)
+    tid = _validate(explicit_id)
+    if tid is not None:
+        return tid
+
+    # 2) admin: 쿠키만 추가로 시도 (묵시적 first_active fallback 금지)
+    if is_admin(user):
+        cookie_raw = request.cookies.get(WORK_TEAM_COOKIE) if request else None
+        tid = _validate(cookie_raw)
+        if tid is not None:
+            return tid
+        raise HTTPException(status_code=400, detail=_REQUIRE_ADMIN_WORK_TEAM_MSG)
+
+    # 3) 비admin
+    #    explicit_id 가 (1)을 통과 못 했다는 건 비소속/비활성/형식오류 → 403.
+    #    phase86/87 의 "비admin + 비소속 explicit team_id → 403" 보안 경계를 #16 헬퍼에서 보존.
+    if explicit_id is not None:
+        raise HTTPException(status_code=403, detail="해당 팀에 접근 권한이 없습니다.")
+    tid = resolve_work_team(request, user, explicit_id=None)
+    if tid is None:
+        raise HTTPException(status_code=400, detail=_REQUIRE_ADMIN_WORK_TEAM_MSG)
+    # 방어적 재검증 — 쿠키 무효화 race / legacy fallback 결과의 active·소속 확인
+    if not _team_is_active(tid) or not user_can_access_team(user, tid):
+        raise HTTPException(status_code=400, detail=_REQUIRE_ADMIN_WORK_TEAM_MSG)
+    return tid
+
+
 # ── 기존 권한 헬퍼 (호환 위임) ─────────────────────────────────────
 
 def can_edit_event(user, event: dict) -> bool:

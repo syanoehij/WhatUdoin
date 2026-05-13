@@ -63,11 +63,12 @@ def test_static_app_routes():
     # GET: _work_scope 사용
     m_get = re.search(r'@app\.get\("/api/links"\)\ndef api_get_links\(.*?\n(?=\n@app\.)', src, re.S)
     assert m_get and "_work_scope" in m_get.group(0) and "user.get(\"team_id\")" not in m_get.group(0)
-    # POST: resolve_work_team + require_work_team_access + 400 거부
+    # POST: require_admin_work_team(explicit_id=data.get("team_id")) + 400 거부 (#16 헬퍼 통합)
     m_post = re.search(r'@app\.post\("/api/links"\)\nasync def api_create_link\(.*?\n(?=\n@app\.)', src, re.S)
     assert m_post
     pb = m_post.group(0)
-    assert "resolve_work_team" in pb and "require_work_team_access" in pb
+    assert "require_admin_work_team" in pb
+    assert "explicit_id=data.get(\"team_id\")" in pb
     assert "status_code=400" in pb
     assert "user.get(\"team_id\")" not in pb
     # PUT: update_link 에 role 전달
