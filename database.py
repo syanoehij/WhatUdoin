@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import secrets
 import sqlite3
 import string
@@ -564,6 +565,12 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_checklist_histories_checklist "
                      "ON checklist_histories(checklist_id, id)")
 
+        # 팀 기능 그룹 C #17: teams.name_norm UNIQUE 인덱스 (대소문자·NFC 중복 차단).
+        # 기존 DB에 중복 name_norm row가 이미 있으면 CREATE 가 실패한다.
+        # 그 경우는 settings.team_migration_warnings 에 한 줄 남기고 인덱스만 skip
+        # (운영자가 정리한 뒤 재시작 시 다음 부팅에서 자연스럽게 생성된다).
+        _try_create_teams_name_norm_unique_index(conn)
+
         # ── 시드 데이터 ──
         # 팀 기능 그룹 A #3:
         #   - 관리팀 자동 생성 제거 (시스템 관리자는 어떤 팀에도 소속되지 않는다).
@@ -830,6 +837,60 @@ def _append_team_migration_warning(conn, category: str, message: str) -> None:
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (_TEAM_MIGRATION_WARNINGS_KEY, payload),
     )
+
+
+def _try_create_teams_name_norm_unique_index(conn) -> None:
+    """팀 기능 그룹 C #17: teams.name_norm UNIQUE 인덱스 idempotent 생성.
+
+    기존 DB에 대소문자/NFC 중복 row(예: 'ABC'+'abc')가 있으면 인덱스 생성이 실패한다.
+    그 경우는:
+      1. 충돌 row 목록을 settings.team_migration_warnings 에 한 번만 기록한다.
+      2. 인덱스는 만들지 않는다(운영자가 정리한 뒤 재시작 시 다음 부팅에서 생성).
+    충돌이 없으면 ``CREATE UNIQUE INDEX IF NOT EXISTS`` 로 보장된다.
+    """
+    # 1. teams 테이블이 아직 없으면 노옵 (빈 DB 첫 init_db 의 인덱스 섹션은 CREATE TABLE 이후 실행되므로 일반적으로 존재).
+    try:
+        row_exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='teams'"
+        ).fetchone()
+    except sqlite3.Error:
+        return
+    if not row_exists:
+        return
+
+    # 2. 충돌 사전 탐지 — name_norm 별 group_count > 1 또는 NULL name_norm.
+    try:
+        dup_rows = conn.execute(
+            "SELECT name_norm, COUNT(*) AS c FROM teams "
+            "WHERE name_norm IS NOT NULL AND name_norm <> '' "
+            "GROUP BY name_norm HAVING c > 1"
+        ).fetchall()
+    except sqlite3.Error:
+        return
+
+    if dup_rows:
+        _append_team_migration_warning(
+            conn,
+            "teams_name_norm_duplicate",
+            "teams.name_norm UNIQUE 인덱스 생성 보류: 대소문자/NFC 중복 팀이 존재합니다. "
+            "운영자가 정리 후 재시작하면 인덱스가 생성됩니다. "
+            f"중복 name_norm 후보 수: {len(dup_rows)}",
+        )
+        return
+
+    # 3. 안전: idempotent UNIQUE 인덱스 생성.
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_name_norm "
+            "ON teams(name_norm)"
+        )
+    except sqlite3.IntegrityError:
+        # race(타 세션이 동시에 중복 row를 만든 직후) 시 warning만 남기고 진행.
+        _append_team_migration_warning(
+            conn,
+            "teams_name_norm_duplicate",
+            "teams.name_norm UNIQUE 인덱스 생성 race: 동시 INSERT 충돌.",
+        )
 
 
 # ── 팀 기능 그룹 A #2 — phase 본문 등록 ─────────────────────────
@@ -4631,20 +4692,90 @@ def get_visible_teams():
     return [dict(r) for r in rows]
 
 
+# 팀 기능 그룹 C #17: 팀 이름 정규식 — 영문/숫자/언더바만.
+_TEAM_NAME_RE = re.compile(r"^[A-Za-z0-9_]+$")
+
+
 def create_team(name: str) -> int:
+    """팀 생성 (#17). 정규식·name_norm 중복을 함께 검증한다.
+
+    검증 순서:
+      1. 정규식 ``^[A-Za-z0-9_]+$`` 위반 → ``ValueError("invalid_name")``.
+      2. ``normalize_name(name)`` 산출. 빈 값이면 ``ValueError("invalid_name")``.
+      3. ``teams.name_norm`` 일치 row 존재 시 ``ValueError("duplicate_name")``
+         (대소문자·NFC 중복 차단).
+      4. ``INSERT INTO teams (name, name_norm)``.
+
+    예약 경로 충돌 검사는 호출부(app.py)가 담당 — DB 레이어는 정적 검증만.
+    UNIQUE 인덱스(``idx_teams_name_norm``)도 race 방어로 함께 동작한다.
+    """
+    if not isinstance(name, str) or not _TEAM_NAME_RE.match(name):
+        raise ValueError("invalid_name")
+    norm = normalize_name(name)
+    if not norm:
+        raise ValueError("invalid_name")
     with get_conn() as conn:
-        cur = conn.execute("INSERT INTO teams (name) VALUES (?)", (name,))
+        existing = conn.execute(
+            "SELECT id FROM teams WHERE name_norm = ?", (norm,)
+        ).fetchone()
+        if existing:
+            raise ValueError("duplicate_name")
+        try:
+            cur = conn.execute(
+                "INSERT INTO teams (name, name_norm) VALUES (?, ?)",
+                (name, norm),
+            )
+        except sqlite3.IntegrityError as exc:
+            # UNIQUE 인덱스 race: 동시 INSERT가 SELECT~INSERT 사이에 끼어들면 발생.
+            raise ValueError("duplicate_name") from exc
     return cur.lastrowid
-
-
-def update_team(team_id: int, name: str):
-    with get_conn() as conn:
-        conn.execute("UPDATE teams SET name = ? WHERE id = ?", (name, team_id))
 
 
 def delete_team(team_id: int):
     with get_conn() as conn:
         conn.execute("DELETE FROM teams WHERE id = ?", (team_id,))
+
+
+# 팀 기능 그룹 C #17: 팀 멤버 조회/역할 토글 (관리자 화면용)
+
+def get_team_members(team_id: int) -> list:
+    """팀 멤버 목록 (#17). status='approved'인 user_teams row만 반환.
+
+    반환 컬럼: user_id, name, team_role(='admin'|'member'), joined_at.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT u.id AS user_id, u.name AS name,
+                      ut.role AS team_role, ut.joined_at AS joined_at
+               FROM user_teams ut
+               JOIN users u ON u.id = ut.user_id
+               WHERE ut.team_id = ? AND ut.status = 'approved'
+               ORDER BY ut.joined_at""",
+            (team_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_team_member_role(team_id: int, user_id: int, role: str) -> None:
+    """팀 멤버 역할 토글 (#17). ``role`` 은 'admin' 또는 'member'.
+
+    승인된 user_teams row가 없으면 ``ValueError("not_member")``.
+    잘못된 role 값은 ``ValueError("invalid_role")``.
+    """
+    if role not in ("admin", "member"):
+        raise ValueError("invalid_role")
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM user_teams "
+            "WHERE team_id = ? AND user_id = ? AND status = 'approved'",
+            (team_id, user_id),
+        ).fetchone()
+        if not row:
+            raise ValueError("not_member")
+        conn.execute(
+            "UPDATE user_teams SET role = ? WHERE id = ?",
+            (role, row["id"]),
+        )
 
 
 # ── Users ──────────────────────────────────────────────

@@ -1912,6 +1912,50 @@ def team_members(request: Request, team_id: int = None):
     return [{"name": u["name"], "team_id": u.get("team_id"), "team_name": u.get("team_name")} for u in members]
 
 
+# 팀 기능 그룹 C #17 — 팀 생성/관리 라우트 정비.
+# RESERVED_TEAM_NAMES: 하드코딩 예약어 목록 (계획서 §4).
+# 실제 등록된 route first-segment 와 함께 검사한다 (`_team_name_collides_with_route`).
+RESERVED_TEAM_NAMES = {
+    "api", "admin", "doc", "check", "kanban", "gantt", "calendar",
+    "mcp", "mcp-codex", "uploads", "static", "settings", "changelog",
+    "register", "project-manage", "ai-import", "alarm-setup", "notice",
+    "trash", "remote", "avr", "favicon.ico",
+    "docs", "redoc", "openapi.json",
+}
+
+
+def _registered_route_first_segments() -> set:
+    """app.routes 의 path 들에서 first segment 를 NFC casefold 로 모은다.
+
+    런타임 평가 — import 시점에 routes 가 다 등록되지 않았을 수 있어 매 호출 시 산출.
+    동적으로 추가된 라우트나 마운트도 자동 반영된다.
+    """
+    segs = set()
+    for r in app.routes:
+        raw_path = getattr(r, "path", None) or ""
+        if not raw_path.startswith("/"):
+            continue
+        # 첫 슬래시 이후 첫 세그먼트만. path parameter ({x}) 는 스킵.
+        rest = raw_path[1:]
+        if not rest:
+            continue
+        first = rest.split("/", 1)[0]
+        if first.startswith("{"):
+            continue
+        if not first:
+            continue
+        segs.add(db.normalize_name(first))
+    return segs
+
+
+def _team_name_collides_with_route(name: str) -> bool:
+    """팀 이름이 예약 경로 또는 실제 등록된 route 와 충돌하는지 검사."""
+    norm = db.normalize_name(name)
+    if norm in {db.normalize_name(r) for r in RESERVED_TEAM_NAMES}:
+        return True
+    return norm in _registered_route_first_segments()
+
+
 @app.get("/api/admin/teams")
 def admin_teams(request: Request):
     _require_admin(request)
@@ -1922,28 +1966,69 @@ def admin_teams(request: Request):
 async def admin_create_team(request: Request):
     _require_admin(request)
     data = await request.json()
-    name = data.get("name", "").strip()
+    name = (data.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="팀 이름을 입력하세요.")
-    team_id = db.create_team(name)
+    # 1) 정규식: 영문/숫자/언더바만.
+    if not re.match(r"^[A-Za-z0-9_]+$", name):
+        raise HTTPException(
+            status_code=400,
+            detail="팀 이름은 영문/숫자/언더바만 사용할 수 있습니다.",
+        )
+    # 2) 예약 경로 + 실제 등록 route 충돌 검사.
+    if _team_name_collides_with_route(name):
+        raise HTTPException(
+            status_code=400,
+            detail="이 이름은 예약된 경로입니다. 다른 이름을 사용하세요.",
+        )
+    # 3) DB 헬퍼가 정적 검증·name_norm 중복을 다시 검사.
+    try:
+        team_id = db.create_team(name)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "duplicate_name":
+            raise HTTPException(
+                status_code=400,
+                detail="같은 이름의 팀이 이미 존재합니다 (대소문자 무관).",
+            )
+        # invalid_name 등.
+        raise HTTPException(status_code=400, detail="팀 이름이 유효하지 않습니다.")
     return {"id": team_id, "name": name}
 
 
-@app.put("/api/admin/teams/{team_id}")
-async def admin_update_team(team_id: int, request: Request):
-    _require_admin(request)
-    data = await request.json()
-    name = data.get("name", "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="팀 이름을 입력하세요.")
-    db.update_team(team_id, name)
-    return {"ok": True}
+# 팀 기능 그룹 C #17: PUT /api/admin/teams/{team_id} 제거.
+# 팀 이름은 생성 후 변경 불가 (계획서 §4). 프론트의 팀 이름 수정 UI 도 함께 제거됐다.
 
 
 @app.delete("/api/admin/teams/{team_id}")
 def admin_delete_team(team_id: int, request: Request):
     _require_admin(request)
     db.delete_team(team_id)
+    return {"ok": True}
+
+
+# 팀 기능 그룹 C #17: 팀 멤버 관리 라우트 (admin 화면용).
+
+@app.get("/api/admin/teams/{team_id}/members")
+def admin_team_members(team_id: int, request: Request):
+    _require_admin(request)
+    return db.get_team_members(team_id)
+
+
+@app.put("/api/admin/teams/{team_id}/members/{user_id}/role")
+async def admin_set_team_member_role(team_id: int, user_id: int, request: Request):
+    _require_admin(request)
+    data = await request.json()
+    role = (data.get("role") or "").strip()
+    if role not in ("admin", "member"):
+        raise HTTPException(status_code=400, detail="role 은 'admin' 또는 'member' 여야 합니다.")
+    try:
+        db.set_team_member_role(team_id, user_id, role)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "not_member":
+            raise HTTPException(status_code=404, detail="해당 사용자는 이 팀의 승인 멤버가 아닙니다.")
+        raise HTTPException(status_code=400, detail="role 값이 올바르지 않습니다.")
     return {"ok": True}
 
 

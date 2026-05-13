@@ -128,9 +128,12 @@
   <!-- ── 팀 탭 ── -->
   <div id="tab-teams" class="tab-panel hidden">
     <div class="team-add-row">
-      <input type="text" id="new-team-name" placeholder="새 팀 이름" />
+      <input type="text" id="new-team-name" placeholder="새 팀 이름 (영문/숫자/_ 만)" />
       <button class="btn btn-primary" onclick="createTeam()">팀 추가</button>
     </div>
+    <p class="text-muted" style="margin:6px 0 12px;font-size:0.85rem;">
+      팀 이름은 영문 대소문자·숫자·언더바(_)만 사용할 수 있고, 생성 후에는 변경할 수 없습니다.
+    </p>
     <table class="admin-table" id="team-table">
       <thead><tr><th>팀 이름</th><th>관리</th></tr></thead>
       <tbody>
@@ -138,11 +141,9 @@
         <tr id="team-row-{{ t.id }}">
           <td>
             <span class="team-name-display" id="team-name-{{ t.id }}">{{ t.name }}</span>
-            <input type="text" class="hidden team-name-input" id="team-input-{{ t.id }}" value="{{ t.name }}" />
           </td>
           <td class="btn-group">
-            <button class="btn btn-sm" id="team-edit-btn-{{ t.id }}" onclick="startEditTeam({{ t.id }})">수정</button>
-            <button class="btn btn-sm btn-primary hidden" id="team-save-btn-{{ t.id }}" onclick="saveTeam({{ t.id }})">저장</button>
+            <button class="btn btn-sm" onclick="openTeamMembers({{ t.id }}, '{{ t.name }}')">멤버 관리</button>
             <button class="btn btn-sm btn-danger" onclick="deleteTeam({{ t.id }})">삭제</button>
           </td>
         </tr>
@@ -238,6 +239,32 @@
       <div>
         <button class="btn" onclick="closeRenameModal()">취소</button>
         <button class="btn btn-primary" onclick="confirmRename()">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 팀 멤버 관리 모달 (#17) ── -->
+<div id="team-members-modal" class="modal-overlay hidden" onclick="closeTeamMembers(event)">
+  <div class="modal" style="width:560px;max-width:90vw;">
+    <div class="modal-header">
+      <h2><span id="team-members-modal-title"></span> 멤버 관리</h2>
+      <button class="icon-btn" onclick="closeTeamMembers()">✕</button>
+    </div>
+    <div style="max-height:60vh;overflow-y:auto;padding:8px 0;">
+      <p class="text-muted" style="font-size:0.85rem;margin:0 0 8px;">
+        팀 관리자는 같은 팀의 승인된 멤버 중에서 지정합니다. 여러 명 지정할 수 있습니다.
+      </p>
+      <table class="admin-table" id="team-members-table">
+        <thead><tr><th>이름</th><th>역할</th><th>관리</th></tr></thead>
+        <tbody id="team-members-tbody"></tbody>
+      </table>
+      <p id="team-members-empty" class="empty-msg hidden">승인된 멤버가 없습니다.</p>
+    </div>
+    <div class="modal-actions">
+      <div></div>
+      <div>
+        <button class="btn" onclick="closeTeamMembers()">닫기</button>
       </div>
     </div>
   </div>
@@ -588,10 +615,31 @@ async function confirmResetPw() {
   if (res.ok) { closePwModal(); wuToast.success('초기화 완료'); }
 }
 
-// ── 팀 관리 ──────────────────────────────────────────────
+// ── 팀 관리 (#17 정비) ───────────────────────────────────
+// 팀 이름은 생성 후 변경 불가. 영문/숫자/_ 만 허용.
+const _TEAM_NAME_RE = /^[A-Za-z0-9_]+$/;
+
+function _renderTeamRow(t) {
+  return `
+    <tr id="team-row-${t.id}">
+      <td>
+        <span class="team-name-display" id="team-name-${t.id}">${esc(t.name)}</span>
+      </td>
+      <td class="btn-group">
+        <button class="btn btn-sm" onclick="openTeamMembers(${t.id}, '${esc(t.name)}')">멤버 관리</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteTeam(${t.id})">삭제</button>
+      </td>
+    </tr>`;
+}
+
 async function createTeam() {
   const name = document.getElementById('new-team-name').value.trim();
   if (!name) { wuToast.warning('팀 이름을 입력하세요.'); return; }
+  // 사용성: 서버 거부 전에 미리 정규식 검사.
+  if (!_TEAM_NAME_RE.test(name)) {
+    wuToast.warning('팀 이름은 영문/숫자/언더바(_)만 사용할 수 있습니다.');
+    return;
+  }
   const res = await fetch('/api/admin/teams', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -601,47 +649,11 @@ async function createTeam() {
     const t = await res.json();
     document.getElementById('new-team-name').value = '';
     const tbody = document.querySelector('#team-table tbody');
-    tbody.insertAdjacentHTML('beforeend', `
-      <tr id="team-row-${t.id}">
-        <td>
-          <span class="team-name-display" id="team-name-${t.id}">${esc(t.name)}</span>
-          <input type="text" class="hidden team-name-input" id="team-input-${t.id}" value="${esc(t.name)}" />
-        </td>
-        <td class="btn-group">
-          <button class="btn btn-sm" id="team-edit-btn-${t.id}" onclick="startEditTeam(${t.id})">수정</button>
-          <button class="btn btn-sm btn-primary hidden" id="team-save-btn-${t.id}" onclick="saveTeam(${t.id})">저장</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteTeam(${t.id})">삭제</button>
-        </td>
-      </tr>
-    `);
+    tbody.insertAdjacentHTML('beforeend', _renderTeamRow(t));
   } else {
-    const err = await res.json();
-    wuToast.error(err.detail || '오류');
-  }
-}
-
-function startEditTeam(id) {
-  document.getElementById(`team-name-${id}`).classList.add('hidden');
-  document.getElementById(`team-input-${id}`).classList.remove('hidden');
-  document.getElementById(`team-edit-btn-${id}`).classList.add('hidden');
-  document.getElementById(`team-save-btn-${id}`).classList.remove('hidden');
-  document.getElementById(`team-input-${id}`).focus();
-}
-
-async function saveTeam(id) {
-  const name = document.getElementById(`team-input-${id}`).value.trim();
-  if (!name) { wuToast.warning('팀 이름을 입력하세요.'); return; }
-  const res = await fetch(`/api/admin/teams/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
-  if (res.ok) {
-    document.getElementById(`team-name-${id}`).textContent = name;
-    document.getElementById(`team-name-${id}`).classList.remove('hidden');
-    document.getElementById(`team-input-${id}`).classList.add('hidden');
-    document.getElementById(`team-edit-btn-${id}`).classList.remove('hidden');
-    document.getElementById(`team-save-btn-${id}`).classList.add('hidden');
+    let err = {};
+    try { err = await res.json(); } catch (_) {}
+    wuToast.error(err.detail || '팀 추가에 실패했습니다.');
   }
 }
 
@@ -650,6 +662,65 @@ async function deleteTeam(id) {
   const res = await fetch(`/api/admin/teams/${id}`, { method: 'DELETE' });
   if (res.ok) document.getElementById(`team-row-${id}`).remove();
   else { const e = await res.json(); wuToast.error(e.detail || '오류'); }
+}
+
+// ── 팀 멤버 관리 모달 (#17) ──────────────────────────────
+let _teamMembersOpenId = null;
+
+async function openTeamMembers(teamId, teamName) {
+  _teamMembersOpenId = teamId;
+  document.getElementById('team-members-modal-title').textContent = teamName;
+  document.getElementById('team-members-modal').classList.remove('hidden');
+  await _loadTeamMembers(teamId);
+}
+
+function closeTeamMembers(e) {
+  if (!e || e.target === document.getElementById('team-members-modal')) {
+    document.getElementById('team-members-modal').classList.add('hidden');
+    _teamMembersOpenId = null;
+  }
+}
+
+async function _loadTeamMembers(teamId) {
+  const tbody = document.getElementById('team-members-tbody');
+  const empty = document.getElementById('team-members-empty');
+  tbody.innerHTML = '';
+  empty.classList.add('hidden');
+  const res = await fetch(`/api/admin/teams/${teamId}/members`);
+  if (!res.ok) { wuToast.error('멤버 목록을 불러오지 못했습니다.'); return; }
+  const members = await res.json();
+  if (!members.length) { empty.classList.remove('hidden'); return; }
+  for (const m of members) {
+    const isAdmin = m.team_role === 'admin';
+    const roleLabel = isAdmin ? '<span class="role-badge role-admin">팀 관리자</span>' : '<span class="role-badge">멤버</span>';
+    const actionLabel = isAdmin ? '팀 관리자 해제' : '팀 관리자 지정';
+    const nextRole = isAdmin ? 'member' : 'admin';
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr id="tm-row-${m.user_id}">
+        <td>${esc(m.name)}</td>
+        <td>${roleLabel}</td>
+        <td class="btn-group">
+          <button class="btn btn-sm" onclick="setTeamMemberRole(${teamId}, ${m.user_id}, '${nextRole}')">${actionLabel}</button>
+        </td>
+      </tr>
+    `);
+  }
+}
+
+async function setTeamMemberRole(teamId, userId, role) {
+  const res = await fetch(`/api/admin/teams/${teamId}/members/${userId}/role`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role }),
+  });
+  if (res.ok) {
+    wuToast.success(role === 'admin' ? '팀 관리자로 지정했습니다.' : '팀 관리자 권한을 해제했습니다.');
+    await _loadTeamMembers(teamId);
+  } else {
+    let err = {};
+    try { err = await res.json(); } catch (_) {}
+    wuToast.error(err.detail || '역할 변경에 실패했습니다.');
+  }
 }
 
 function esc(s) {

@@ -1961,11 +1961,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   background: var(--surface); color: var(--text);
 }
 .team-add-row input:focus { border-color: var(--accent); }
-.team-name-input {
-  border: 1px solid var(--accent); border-radius: 5px;
-  padding: 4px 8px; font-size: 0.9rem; outline: none; width: 200px;
-  background: var(--surface); color: var(--text);
-}
+/* .team-name-input 규칙 제거 — 팀 기능 그룹 C #17 에서 인라인 팀 이름 수정 UI 폐기에 동반 */
 
 .ip-row {
   display: flex; justify-content: space-between; align-items: center;
