@@ -1809,10 +1809,15 @@ async def apply_team(request: Request):
         raise HTTPException(status_code=404, detail="존재하지 않는 팀입니다.")
     result, detail = db.apply_to_team(user["id"], team_id)
     if result == "blocked":
+        # 그룹 D #23: team_deleted/team_not_found 는 DB 헬퍼의 방어선이며 정상적으로는
+        # 라우트의 get_team_active 1차 가드(line 1783)에서 404 로 차단되어 이 분기에
+        # 닿지 않는다. 직접 헬퍼 호출 또는 race 조건 대비를 위해 매핑은 명시한다.
         msg = {
             "pending_here": "이미 가입 신청 중입니다.",
             "pending_other": "다른 팀 신청이 처리 대기 중입니다.",
             "already_member": "이미 해당 팀의 멤버입니다.",
+            "team_deleted": "이 팀은 삭제 예정 상태로 신청할 수 없습니다.",
+            "team_not_found": "존재하지 않는 팀입니다.",
         }.get(detail, "신청할 수 없습니다.")
         raise HTTPException(status_code=409, detail=msg)
     return {"ok": True, "status": "pending"}
