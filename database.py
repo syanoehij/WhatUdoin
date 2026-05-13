@@ -4757,25 +4757,143 @@ def get_team_members(team_id: int) -> list:
 
 
 def set_team_member_role(team_id: int, user_id: int, role: str) -> None:
-    """팀 멤버 역할 토글 (#17). ``role`` 은 'admin' 또는 'member'.
+    """팀 멤버 역할 토글 (#17, #18에서 마지막 admin 가드 추가).
 
-    승인된 user_teams row가 없으면 ``ValueError("not_member")``.
-    잘못된 role 값은 ``ValueError("invalid_role")``.
+    ``role`` 은 'admin' 또는 'member'.
+    - 승인된 user_teams row가 없으면 ``ValueError("not_member")``.
+    - 잘못된 role 값은 ``ValueError("invalid_role")``.
+    - 강등(`role='member'`) 시 대상이 현재 'admin' 이고 해당 팀의 active admin 이
+      1명뿐(=본인) 이고 ``teams.deleted_at IS NULL`` 이면
+      ``ValueError("last_admin_protected")`` (계획서 §10 마지막 팀 관리자 보호).
+      삭제 예정 팀은 면제.
+    원자성: 동일 트랜잭션 안에서 count + UPDATE.
     """
     if role not in ("admin", "member"):
         raise ValueError("invalid_role")
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT id FROM user_teams "
+            "SELECT id, role AS curr_role FROM user_teams "
             "WHERE team_id = ? AND user_id = ? AND status = 'approved'",
             (team_id, user_id),
         ).fetchone()
         if not row:
             raise ValueError("not_member")
+        # 마지막 admin 가드 (강등 케이스만)
+        if role == "member" and row["curr_role"] == "admin":
+            team_row = conn.execute(
+                "SELECT deleted_at FROM teams WHERE id = ?", (team_id,)
+            ).fetchone()
+            is_pending_delete = bool(team_row and team_row["deleted_at"])
+            if not is_pending_delete:
+                cnt = conn.execute(
+                    "SELECT COUNT(*) AS c FROM user_teams "
+                    "WHERE team_id = ? AND status = 'approved' AND role = 'admin'",
+                    (team_id,),
+                ).fetchone()["c"]
+                if cnt <= 1:
+                    raise ValueError("last_admin_protected")
         conn.execute(
             "UPDATE user_teams SET role = ? WHERE id = ?",
             (role, row["id"]),
         )
+
+
+def evict_team_member(team_id: int, user_id: int) -> None:
+    """팀 멤버 추방 (#18). 계획서 §10: ``user_teams.status='rejected'`` 로 변경, row는 유지.
+
+    - 해당 팀의 user_teams row가 없거나 이미 'rejected' → ``ValueError("not_member")``.
+    - 대상이 ``role='admin' AND status='approved'`` 이고 해당 팀의 active admin 이
+      1명뿐이고 ``teams.deleted_at IS NULL`` 이면 ``ValueError("last_admin_protected")``.
+      삭제 예정 팀은 면제.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, role AS curr_role, status AS curr_status FROM user_teams "
+            "WHERE team_id = ? AND user_id = ?",
+            (team_id, user_id),
+        ).fetchone()
+        if not row or row["curr_status"] == "rejected":
+            raise ValueError("not_member")
+        # 마지막 admin 가드 — admin 이고 approved 일 때만 의미 있음
+        if row["curr_role"] == "admin" and row["curr_status"] == "approved":
+            team_row = conn.execute(
+                "SELECT deleted_at FROM teams WHERE id = ?", (team_id,)
+            ).fetchone()
+            is_pending_delete = bool(team_row and team_row["deleted_at"])
+            if not is_pending_delete:
+                cnt = conn.execute(
+                    "SELECT COUNT(*) AS c FROM user_teams "
+                    "WHERE team_id = ? AND status = 'approved' AND role = 'admin'",
+                    (team_id,),
+                ).fetchone()["c"]
+                if cnt <= 1:
+                    raise ValueError("last_admin_protected")
+        conn.execute(
+            "UPDATE user_teams SET status = 'rejected' WHERE id = ?",
+            (row["id"],),
+        )
+
+
+def get_admin_teams_for(user: dict) -> list:
+    """사용자가 멤버 관리 페이지에서 다룰 수 있는 팀 목록 (#18).
+
+    - 시스템 admin (`users.role='admin'`): 삭제되지 않은 모든 팀.
+    - 팀 admin (`user_teams.role='admin' AND status='approved'`): 해당 팀들.
+    - 둘 다 아니면 빈 list.
+    """
+    if user is None:
+        return []
+    if user.get("role") == "admin":
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM teams WHERE deleted_at IS NULL ORDER BY name"
+            ).fetchall()
+        return [dict(r) for r in rows]
+    uid = user.get("id")
+    if uid is None:
+        return []
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT t.* FROM user_teams ut
+               JOIN teams t ON t.id = ut.team_id
+               WHERE ut.user_id = ?
+                 AND ut.status = 'approved'
+                 AND ut.role = 'admin'
+                 AND t.deleted_at IS NULL
+               ORDER BY t.name""",
+            (uid,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_team_memberships(team_id: int) -> dict:
+    """팀의 user_teams 전체를 status 별로 분류해 반환 (#18 멤버 관리 페이지).
+
+    반환: {
+        "approved": [{user_id, name, team_role, joined_at}, ...],
+        "pending":  [{user_id, name, joined_at}, ...],
+        "rejected": [{user_id, name, joined_at}, ...],
+    }
+    각 list 는 joined_at 오름차순.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT u.id AS user_id, u.name AS name,
+                      ut.role AS team_role, ut.status AS status,
+                      ut.joined_at AS joined_at
+               FROM user_teams ut
+               JOIN users u ON u.id = ut.user_id
+               WHERE ut.team_id = ?
+               ORDER BY ut.joined_at""",
+            (team_id,),
+        ).fetchall()
+    out = {"approved": [], "pending": [], "rejected": []}
+    for r in rows:
+        d = dict(r)
+        bucket = d.pop("status")
+        if bucket in out:
+            out[bucket].append(d)
+    return out
 
 
 # ── Users ──────────────────────────────────────────────

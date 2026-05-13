@@ -762,6 +762,25 @@ def admin_page(request: Request):
     return resp
 
 
+# 팀 기능 그룹 C #18: 멤버 관리 페이지 (시스템 admin + 팀 admin 접근).
+@app.get("/admin/members", response_class=HTMLResponse)
+def admin_members_page(request: Request):
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    manageable = db.get_admin_teams_for(user)
+    if not manageable:
+        raise HTTPException(status_code=403, detail="멤버 관리 권한이 없습니다.")
+    resp = templates.TemplateResponse(request, "members_admin.html", _ctx(
+        request,
+        manageable_teams=manageable,
+        is_system_admin=auth.is_admin(user),
+        current_user_id=user.get("id"),
+    ))
+    _ensure_work_team_cookie(request, resp, user)
+    return resp
+
+
 @app.get("/kanban", response_class=HTMLResponse)
 def kanban_page(request: Request):
     teams = db.get_all_teams()
@@ -1787,6 +1806,62 @@ async def decide_team_app(team_id: int, user_id: int, request: Request):
     ok = db.decide_team_application(user_id, team_id, decision)
     if not ok:
         raise HTTPException(status_code=404, detail="처리할 신청이 없습니다.")
+    return {"ok": True}
+
+
+# ── 팀 기능 그룹 C #18: 멤버 관리 페이지용 라우트 (admin + 팀 admin) ──
+
+@app.get("/api/team-manage/{team_id}/members")
+def team_manage_members(team_id: int, request: Request):
+    """팀의 멤버십 전체(approved/pending/rejected) 반환. admin + 팀 admin 접근."""
+    _require_team_admin(request, team_id)
+    return db.list_team_memberships(team_id)
+
+
+@app.put("/api/team-manage/{team_id}/members/{user_id}/role")
+async def team_manage_set_role(team_id: int, user_id: int, request: Request):
+    """팀 멤버 role 토글 (admin + 팀 admin).
+
+    자기 자신 강등 차단: 호출자 본인 user_id 와 일치하면 400.
+    마지막 admin 보호: db.set_team_member_role 이 ValueError("last_admin_protected") raise.
+    """
+    caller = _require_team_admin(request, team_id)
+    if caller and caller.get("id") == user_id:
+        raise HTTPException(status_code=400, detail="자기 자신의 권한은 변경할 수 없습니다.")
+    data = await request.json()
+    role = (data.get("role") or "").strip()
+    if role not in ("admin", "member"):
+        raise HTTPException(status_code=400, detail="role 은 'admin' 또는 'member' 여야 합니다.")
+    try:
+        db.set_team_member_role(team_id, user_id, role)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "not_member":
+            raise HTTPException(status_code=404, detail="해당 사용자는 이 팀의 승인 멤버가 아닙니다.")
+        if code == "last_admin_protected":
+            raise HTTPException(status_code=400, detail="이 팀의 마지막 팀 관리자입니다. 먼저 다른 멤버를 팀 관리자로 지정하세요.")
+        raise HTTPException(status_code=400, detail="role 값이 올바르지 않습니다.")
+    return {"ok": True}
+
+
+@app.post("/api/team-manage/{team_id}/members/{user_id}/evict")
+async def team_manage_evict(team_id: int, user_id: int, request: Request):
+    """팀 멤버 추방 — user_teams.status='rejected' 로 변경, row 보존.
+
+    자기 자신 추방 차단. 마지막 admin 보호 (deleted_at IS NULL 일 때).
+    """
+    caller = _require_team_admin(request, team_id)
+    if caller and caller.get("id") == user_id:
+        raise HTTPException(status_code=400, detail="자기 자신을 추방할 수 없습니다.")
+    try:
+        db.evict_team_member(team_id, user_id)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "not_member":
+            raise HTTPException(status_code=404, detail="해당 사용자는 이 팀의 멤버가 아닙니다.")
+        if code == "last_admin_protected":
+            raise HTTPException(status_code=400, detail="이 팀의 마지막 팀 관리자입니다. 먼저 다른 멤버를 팀 관리자로 지정하세요.")
+        raise HTTPException(status_code=400, detail="추방 처리 중 오류가 발생했습니다.")
     return {"ok": True}
 
 
