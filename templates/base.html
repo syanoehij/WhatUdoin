@@ -1390,16 +1390,53 @@
         return;
       }
       const icons = { notice: '📢', assigned: '📌', upcoming: '⏰' };
-      list.innerHTML = items.map(n => `
-        <div class="notif-item">
-          <span class="notif-icon">${icons[n.type] || '🔔'}</span>
-          <div class="notif-content">
-            <div class="notif-msg">${_escHtml(n.message)}</div>
-            <div class="notif-time">${_timeAgo(n.created_at)}</div>
+      list.innerHTML = items.map(n => {
+        const teamBadge = n.team_name
+          ? `<span class="notif-team">[${_escHtml(n.team_name)}]</span> `
+          : '';
+        // 팀 기능 그룹 C #21: 알림 클릭 → 작업 팀 자동 전환 + toast.
+        const clickHandler = n.team_id
+          ? `onclick="onNotifClick(${n.team_id})"`
+          : '';
+        const cursorStyle = n.team_id ? 'cursor:pointer;' : '';
+        return `
+          <div class="notif-item" style="${cursorStyle}" ${clickHandler}>
+            <span class="notif-icon">${icons[n.type] || '🔔'}</span>
+            <div class="notif-content">
+              <div class="notif-msg">${teamBadge}${_escHtml(n.message)}</div>
+              <div class="notif-time">${_timeAgo(n.created_at)}</div>
+            </div>
           </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
+
+    // 팀 기능 그룹 C #21: 알림 클릭 시 발생 팀으로 작업 팀 자동 전환.
+    window.onNotifClick = async function(teamId) {
+      if (!teamId) return;
+      // 이미 현재 작업 팀이면 no-op.
+      if (CURRENT_USER && CURRENT_USER.work_team_id === teamId) return;
+      try {
+        const res = await fetch('/api/me/work-team', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ team_id: teamId }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof wuToast !== 'undefined' && wuToast.info) {
+            wuToast.info(`작업 팀이 "${data.team_name}" 로 전환되었습니다.`);
+          }
+          setTimeout(() => location.reload(), 600);
+        } else {
+          if (typeof wuToast !== 'undefined' && wuToast.error) {
+            wuToast.error('작업 팀 전환에 실패했습니다.');
+          }
+        }
+      } catch (e) {
+        // 네트워크 실패는 조용히 무시.
+      }
+    };
 
     function _escHtml(s) {
       return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');

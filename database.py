@@ -3414,16 +3414,23 @@ def get_upcoming_milestones(user_name: str, limit: int = 5, viewer=None) -> list
     return items[:limit]
 
 
-def create_notification(user_name: str, type_: str, message: str, event_id: int = None):
+def create_notification(user_name: str, type_: str, message: str,
+                         event_id: int = None, team_id: int = None):
+    """단일 사용자 알림 생성. team_id 가 None 이면 전역 알림으로 취급(작업 팀 자동 전환 없음).
+
+    팀 기능 그룹 C #21: team_id 컬럼을 명시적으로 채운다.
+    """
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO notifications (user_name, type, message, event_id) VALUES (?,?,?,?)",
-            (user_name, type_, message, event_id)
+            "INSERT INTO notifications (user_name, type, message, event_id, team_id) "
+            "VALUES (?,?,?,?,?)",
+            (user_name, type_, message, event_id, team_id)
         )
 
 
-def create_notification_for_all(type_: str, message: str, event_id: int = None, exclude_user: str = None):
-    """모든 활성 유저에게 알림 생성 (exclude_user 제외)"""
+def create_notification_for_all(type_: str, message: str, event_id: int = None,
+                                 exclude_user: str = None, team_id: int = None):
+    """모든 활성 유저에게 알림 생성 (exclude_user 제외). team_id 가 있으면 함께 저장."""
     with get_conn() as conn:
         users = conn.execute(
             "SELECT name FROM users WHERE is_active = 1"
@@ -3432,17 +3439,19 @@ def create_notification_for_all(type_: str, message: str, event_id: int = None, 
             if exclude_user and u["name"] == exclude_user:
                 continue
             conn.execute(
-                "INSERT INTO notifications (user_name, type, message, event_id) VALUES (?,?,?,?)",
-                (u["name"], type_, message, event_id)
+                "INSERT INTO notifications (user_name, type, message, event_id, team_id) "
+                "VALUES (?,?,?,?,?)",
+                (u["name"], type_, message, event_id, team_id)
             )
 
 
 def create_notification_for_team(team_id: int, type_: str, message: str,
                                  event_id: int = None, exclude_user: str = None):
-    """팀 기능 그룹 B #15-3: 해당 팀의 approved + 활성 멤버에게만 알림 생성 (exclude_user 제외).
+    """팀 기능 그룹 B #15-3 / 그룹 C #21: 해당 팀의 approved + 활성 멤버에게만 알림 생성.
 
     글로벌 admin(users.role='admin')은 user_teams row 가 없으므로 알림을 받지 않는다
     (계획서 §13 — 공지 발송 알림은 같은 팀 승인 멤버에게만).
+    #21: team_id 컬럼을 명시적으로 채워 알림 클릭 시 작업 팀 자동 전환을 가능하게 한다.
     """
     if team_id is None:
         return
@@ -3457,8 +3466,9 @@ def create_notification_for_team(team_id: int, type_: str, message: str,
             if exclude_user and u["name"] == exclude_user:
                 continue
             conn.execute(
-                "INSERT INTO notifications (user_name, type, message, event_id) VALUES (?,?,?,?)",
-                (u["name"], type_, message, event_id)
+                "INSERT INTO notifications (user_name, type, message, event_id, team_id) "
+                "VALUES (?,?,?,?,?)",
+                (u["name"], type_, message, event_id, team_id)
             )
 
 
@@ -3488,15 +3498,31 @@ def get_notification_count(user_name: str, viewer=None) -> int:
 
 
 def get_pending_notifications(user_name: str, viewer=None) -> list[dict]:
-    """미읽은 알림 반환 (읽음 처리 없음)"""
+    """미읽은 알림 반환 (읽음 처리 없음).
+
+    팀 기능 그룹 C #21: viewer 가 admin 이 아닌 일반 사용자이면
+    `notifications.team_id IS NULL OR team_id IN auth.user_team_ids(viewer)` 로
+    추방·탈퇴된 팀의 알림을 화면 필터로 제외 (row 보존, 계획서 §8).
+    team_name 도 동반 반환 (LEFT JOIN teams).
+    """
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM notifications WHERE user_name = ? AND is_read = 0 ORDER BY id DESC",
+            """SELECT n.*, t.name AS team_name
+               FROM notifications n
+               LEFT JOIN teams t ON t.id = n.team_id
+               WHERE n.user_name = ? AND n.is_read = 0
+               ORDER BY n.id DESC""",
             (user_name,)
         ).fetchall()
         result = [dict(r) for r in rows]
         if viewer is not None:
+            # 1) 히든 프로젝트 가시성 (기존 가드)
             result = [r for r in result if _notification_visible_to_viewer(conn, r, viewer)]
+            # 2) 팀 멤버십 가시성 (#21)
+            from auth import is_admin as _is_admin, user_team_ids as _utids
+            if not _is_admin(viewer):
+                allowed = _utids(viewer)
+                result = [r for r in result if r.get("team_id") is None or r.get("team_id") in allowed]
     return result
 
 
