@@ -19,14 +19,26 @@ import auth
 from permissions import _can_read_doc, _can_read_checklist
 
 
-def _mcp_work_team_ids(user) -> set:
-    """팀 기능 그룹 A #10: MCP 호출의 작업 팀 집합.
+def _mcp_work_team_ids(user, requested_team_id: int | None = None) -> set:
+    """팀 기능 그룹 A #10 / 그룹 C #22: MCP 호출의 작업 팀 집합.
 
-    MCP 에는 work_team_id 쿠키가 없으므로 사용자 소속 팀 전체를 작업 팀 집합으로 사용한다
-    (= 모든 소속 팀 통합 — todo §10 "모든 소속 팀 통합 라우트"에 준함).
+    MCP 에는 work_team_id 쿠키가 없으므로 기본 범위는 사용자 소속 팀 전체(통합 조회).
+    `requested_team_id` 가 명시되면:
+      - admin: 그대로 사용 (admin 은 모든 팀 가능 — 단 admin 은 MCP 토큰을 발급 못 하므로
+        실제로는 도달 불가, 정합성 위해 분기만 둔다).
+      - 비admin: 소속 팀이면 단일 팀 집합 반환, 비소속이면 빈 집합(결과 0건).
     NULL·다른 팀 row 차단은 db 함수의 work_team_ids 필터가 보장한다.
     """
-    return auth.user_team_ids(user)
+    base = auth.user_team_ids(user)
+    if requested_team_id is None:
+        return base
+    # admin: 명시 team_id 그대로
+    if user and user.get("role") == "admin":
+        return {int(requested_team_id)}
+    # 비admin: 소속 검증
+    if int(requested_team_id) in base:
+        return {int(requested_team_id)}
+    return set()  # 비소속 — 빈 결과로 안전 차단
 
 from mcp.server.fastmcp import FastMCP, Context
 from mcp.server.transport_security import TransportSecuritySettings
@@ -100,7 +112,8 @@ def verify_bearer_token(authorization: str) -> dict | None:
 # ── 7개 read-only 도구 ────────────────────────────────────
 
 @mcp.tool()
-async def list_projects(ctx: Context, include_inactive: bool = False) -> list[dict]:
+async def list_projects(ctx: Context, include_inactive: bool = False,
+                         team_id: int | None = None) -> list[dict]:
     """
     WhatUdoin의 프로젝트 목록을 조회합니다.
 
@@ -110,13 +123,15 @@ async def list_projects(ctx: Context, include_inactive: bool = False) -> list[di
     - 활성 프로젝트 목록으로 list_events/list_checklists의 project 파라미터 값을 결정할 때
 
     include_inactive=True로 설정하면 비활성(종료) 프로젝트도 포함합니다.
-    반환 필드: name, color, is_active, start_date, end_date
+    team_id 가 명시되면 해당 팀 프로젝트만(소속팀이어야 함), 미명시 시 사용자 모든 소속 팀 통합.
+    반환 필드: name, color, is_active, start_date, end_date, team_id, team_name
     """
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
+    scope = _mcp_work_team_ids(user, team_id)
     with db.get_conn() as conn:
-        return db.get_projects_for_mcp(conn, include_inactive=include_inactive, viewer=user, work_team_ids=_mcp_work_team_ids(user))
+        return db.get_projects_for_mcp(conn, include_inactive=include_inactive, viewer=user, work_team_ids=scope)
 
 
 @mcp.tool()
@@ -125,6 +140,7 @@ async def list_events(
     project: str | None = None,
     start_after: str | None = None,
     end_before: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict]:
     """
     WhatUdoin의 일정 목록을 조회합니다 (경량 메타데이터만 반환).
@@ -135,19 +151,20 @@ async def list_events(
     - 담당자별 일정 현황을 파악할 때
 
     필터를 사용하면 토큰 효율이 높아집니다. 전체 조회보다 project/날짜 범위를 지정하세요.
-    반환 필드: id, title, project, start_datetime, end_datetime, assignee, kanban_status, event_type
+    반환 필드: id, title, project, start_datetime, end_datetime, assignee, kanban_status, event_type, team_id
     상세 정보(설명, 위치, 반복 규칙 등)는 get_event()를 사용하세요.
 
     파라미터:
-    - project: 프로젝트 이름 (예: "개발팀"). list_projects로 정확한 이름을 먼저 확인하세요.
-    - start_after: 이 날짜 이후 시작하는 일정만 (ISO 8601, 예: "2026-01-01" 또는 "2026-01-01T00:00:00")
-    - end_before: 이 날짜 이전 종료하는 일정만 (ISO 8601, 예: "2026-12-31T23:59:59")
+    - project: 프로젝트 이름. team_id 와 함께 사용해야 단일 프로젝트로 안전하게 해석됩니다 (계획서 §16-1).
+    - team_id: 특정 팀만 조회. 미명시 시 사용자 모든 소속 팀 통합. 비소속 팀 명시 시 빈 list.
+    - start_after / end_before: ISO 8601 날짜 범위.
     """
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
+    scope = _mcp_work_team_ids(user, team_id)
     with db.get_conn() as conn:
-        return db.get_events_filtered(conn, project=project, start_after=start_after, end_before=end_before, viewer=user, work_team_ids=_mcp_work_team_ids(user))
+        return db.get_events_filtered(conn, project=project, start_after=start_after, end_before=end_before, viewer=user, work_team_ids=scope)
 
 
 @mcp.tool()
@@ -171,7 +188,7 @@ async def get_event(ctx: Context, event_id: int) -> dict:
 
 
 @mcp.tool()
-async def list_documents(ctx: Context) -> list[dict]:
+async def list_documents(ctx: Context, team_id: int | None = None) -> list[dict]:
     """
     현재 사용자가 열람 가능한 문서(회의록) 목록을 조회합니다 (경량 메타데이터만 반환).
 
@@ -180,14 +197,16 @@ async def list_documents(ctx: Context) -> list[dict]:
     - 특정 프로젝트나 팀과 관련된 문서를 찾을 때
     - get_document 호출 전 문서 id를 파악할 때
 
+    team_id 가 명시되면 해당 팀 문서만(소속팀이어야 함), 미명시 시 사용자 모든 소속 팀 통합.
     공개 범위에 따라 열람 가능한 문서만 반환됩니다 (비공개 문서 자동 필터링).
-    반환 필드: id, title, author_name, team_name, updated_at, event_count
+    반환 필드: id, title, author_name, team_id, team_name, updated_at, event_count
     본문은 get_document()를 사용하세요.
     """
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.get_all_meetings_summary(viewer=user, work_team_ids=_mcp_work_team_ids(user))
+    scope = _mcp_work_team_ids(user, team_id)
+    return db.get_all_meetings_summary(viewer=user, work_team_ids=scope)
 
 
 @mcp.tool()
@@ -211,7 +230,8 @@ async def get_document(ctx: Context, doc_id: int) -> dict:
 
 
 @mcp.tool()
-async def list_checklists(ctx: Context, project: str | None = None) -> list[dict]:
+async def list_checklists(ctx: Context, project: str | None = None,
+                           team_id: int | None = None) -> list[dict]:
     """
     체크리스트 목록을 조회합니다 (경량 메타데이터만 반환).
 
@@ -220,18 +240,20 @@ async def list_checklists(ctx: Context, project: str | None = None) -> list[dict
     - 완료/미완료 항목 현황을 파악할 때
     - get_checklist 호출 전 체크리스트 id를 파악할 때
 
-    반환 필드: id, title, project, updated_at, item_count, done_count
+    반환 필드: id, title, project, team_id, updated_at, item_count, done_count
     항목 상세(각 항목 텍스트, 담당자, 기한 등)는 get_checklist()를 사용하세요.
 
     파라미터:
     - project=None(기본값): 열람 가능한 모든 체크리스트 반환
-    - project="프로젝트명": 해당 프로젝트 체크리스트만 반환
+    - project="프로젝트명": 해당 프로젝트 체크리스트만 반환 (team_id 와 함께 사용 권장)
     - project="": 프로젝트 미지정 체크리스트만 반환 (None과 다름)
+    - team_id: 특정 팀만 조회. 미명시 시 사용자 모든 소속 팀 통합. 비소속 팀 명시 시 빈 list.
     """
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.get_checklists_summary(project=project, viewer=user, work_team_ids=_mcp_work_team_ids(user))
+    scope = _mcp_work_team_ids(user, team_id)
+    return db.get_checklists_summary(project=project, viewer=user, work_team_ids=scope)
 
 
 @mcp.tool()

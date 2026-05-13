@@ -2324,6 +2324,36 @@ def _phase_7_password_hash(conn):
 PHASES.append(("team_phase_7_password_hash_v1", _phase_7_password_hash))
 
 
+def _phase_c22_admin_mcp_token_revoke(conn):
+    """팀 기능 그룹 C #22: admin 사용자의 MCP 토큰 일괄 무효화.
+
+    계획서 §16-1 — admin 은 MCP 토큰 발급 자체가 차단. 마이그레이션 시점에 기존 admin 토큰의
+    hash + timestamp 둘 다 NULL 로 초기화한다. 1회성 phase, 마커로 idempotent 보장.
+    """
+    try:
+        col_set = _column_set(conn, "users")
+    except sqlite3.Error:
+        return
+    has_hash = "mcp_token_hash" in col_set
+    has_at = "mcp_token_created_at" in col_set
+    if not (has_hash or has_at):
+        return
+    # 컬럼 존재만 확인 후 NULL 일괄 처리. role='admin' 만 대상.
+    set_clauses = []
+    if has_hash:
+        set_clauses.append("mcp_token_hash = NULL")
+    if has_at:
+        set_clauses.append("mcp_token_created_at = NULL")
+    if not set_clauses:
+        return
+    conn.execute(
+        f"UPDATE users SET {', '.join(set_clauses)} WHERE role = 'admin'"
+    )
+
+
+PHASES.append(("team_phase_c22_admin_mcp_token_revoke_v1", _phase_c22_admin_mcp_token_revoke))
+
+
 def _check_projects_team_name_unique(conn):
     """Preflight: projects (team_id, name_norm) 충돌 검사.
 

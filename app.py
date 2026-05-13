@@ -5285,9 +5285,17 @@ def api_get_mcp_token(request: Request):
 
 @app.post("/api/me/mcp-token/regenerate")
 async def api_regenerate_mcp_token(request: Request):
-    """MCP 토큰 발급/재발급. 평문 토큰을 1회만 반환한다 (이후 재조회 불가)."""
+    """MCP 토큰 발급/재발급. 평문 토큰을 1회만 반환한다 (이후 재조회 불가).
+
+    팀 기능 그룹 C #22: 시스템 admin 은 MCP 토큰 발급 차단 (계획서 §16-1).
+    """
     import sqlite3
     user = _require_editor(request)
+    if auth.is_admin(user):
+        raise HTTPException(
+            status_code=403,
+            detail="시스템 관리자는 MCP 토큰을 발급할 수 없습니다.",
+        )
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     for _ in range(2):
         token = secrets.token_urlsafe(32)

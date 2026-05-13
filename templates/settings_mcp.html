@@ -114,6 +114,12 @@
   <!-- 섹션 1: 토큰 관리 -->
   <div class="mcp-section">
     <h2>API 토큰</h2>
+    {% if user and user.role == 'admin' %}
+    <p class="mcp-hint" style="color:var(--text-muted,#666);">
+      <strong>시스템 관리자는 MCP 토큰을 발급할 수 없습니다.</strong> (계획서 §16-1)<br>
+      admin 용 MCP 가 필요해지면 별도 admin-only 도구·인증 체계로 분리할 예정입니다.
+    </p>
+    {% else %}
     <p class="mcp-hint">
       MCP 클라이언트(Claude Desktop, Claude Code, Cline 등)에서 WhatUdoin 데이터를 조회할 때 사용하는 토큰입니다.<br>
       토큰은 발급·재발급 직후 <strong>1회만</strong> 표시됩니다. 바로 복사해 두세요.
@@ -129,6 +135,7 @@
         <button class="btn btn-secondary" onclick="pageDeleteMcpToken()">삭제</button>
       </div>
     </div>
+    {% endif %}
   </div>
 
   <!-- 섹션 2: 클라이언트별 설정 안내 -->
