@@ -5569,6 +5569,27 @@ def get_team_menu_visibility(team_id: int) -> dict:
     return vis
 
 
+def set_team_menu_visibility(team_id: int, menu_key: str, enabled: bool) -> None:
+    """팀 기능 그룹 C #19: 메뉴 노출 토글. UPSERT 패턴.
+
+    - 허용 menu_key: _PORTAL_MENU_DEFAULTS.keys() (kanban/gantt/doc/check/calendar).
+    - 그 외는 ``ValueError("invalid_menu_key")``.
+    - team_menu_settings 의 (team_id, menu_key) UNIQUE 인덱스(#2 Phase 4)에 의존.
+    """
+    if menu_key not in _PORTAL_MENU_DEFAULTS:
+        raise ValueError("invalid_menu_key")
+    flag = 1 if enabled else 0
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO team_menu_settings (team_id, menu_key, enabled, updated_at)
+               VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(team_id, menu_key) DO UPDATE SET
+                 enabled = excluded.enabled,
+                 updated_at = CURRENT_TIMESTAMP""",
+            (team_id, menu_key, flag),
+        )
+
+
 def get_public_portal_data(team_id: int) -> dict:
     """팀 기능 그룹 B #13: `/팀이름` 비로그인 공개 포털이 노출할 팀 데이터 집계.
 

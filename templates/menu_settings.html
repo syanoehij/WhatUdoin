@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}WhatUDoin — 메뉴 외부 노출 관리{% endblock %}
+
+{% block content %}
+<div class="admin-wrap">
+  <div class="admin-header">
+    <h2>🎛 메뉴 외부 노출 관리</h2>
+    {% if is_system_admin %}
+      <a class="btn btn-sm" href="/admin" style="margin-left:auto;">전체 관리자 페이지로 이동</a>
+    {% endif %}
+  </div>
+
+  <div class="form-row" style="max-width:480px;margin-bottom:20px;">
+    <label for="team-select">팀 선택</label>
+    <select id="team-select" onchange="loadMenuSettings(this.value)">
+      {% for t in manageable_teams %}
+        <option value="{{ t.id }}">{{ t.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <p class="text-muted" style="font-size:0.85rem;margin-bottom:16px;">
+    메뉴 노출 설정은 비로그인 공개 포털(<code>/팀이름</code>)의 탭/링크 진입을 막을 뿐, 데이터 자체를 차단하지 않습니다.
+    데이터 차단은 각 문서·체크 항목의 공개 토글로 처리합니다 (계획서 §9).
+  </p>
+
+  <table class="admin-table" style="max-width:640px;">
+    <thead><tr><th>메뉴</th><th style="width:120px;">노출</th></tr></thead>
+    <tbody id="menu-tbody">
+      <tr data-menu="kanban"><td>칸반</td><td><label class="switch switch-sm"><input type="checkbox" id="menu-kanban" /><span class="slider"></span></label></td></tr>
+      <tr data-menu="gantt"><td>간트</td><td><label class="switch switch-sm"><input type="checkbox" id="menu-gantt" /><span class="slider"></span></label></td></tr>
+      <tr data-menu="doc"><td>문서</td><td><label class="switch switch-sm"><input type="checkbox" id="menu-doc" /><span class="slider"></span></label></td></tr>
+      <tr data-menu="check"><td>체크</td><td><label class="switch switch-sm"><input type="checkbox" id="menu-check" /><span class="slider"></span></label></td></tr>
+      <tr data-menu="calendar"><td>캘린더</td><td><label class="switch switch-sm"><input type="checkbox" id="menu-calendar" /><span class="slider"></span></label></td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MENU_KEYS = ['kanban', 'gantt', 'doc', 'check', 'calendar'];
+let CURRENT_TEAM_ID = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('team-select');
+  if (sel && sel.value) {
+    loadMenuSettings(sel.value);
+  }
+  // 토글 이벤트 위임
+  for (const key of MENU_KEYS) {
+    const cb = document.getElementById(`menu-${key}`);
+    if (cb) cb.addEventListener('change', () => onToggle(key, cb.checked));
+  }
+});
+
+async function loadMenuSettings(teamId) {
+  if (!teamId) return;
+  CURRENT_TEAM_ID = teamId;
+  const res = await fetch(`/api/team-menu/${teamId}`);
+  if (!res.ok) {
+    wuToast.error('메뉴 설정을 불러오지 못했습니다.');
+    return;
+  }
+  const data = await res.json();
+  for (const key of MENU_KEYS) {
+    const cb = document.getElementById(`menu-${key}`);
+    if (cb) cb.checked = !!data[key];
+  }
+}
+
+async function onToggle(menuKey, enabled) {
+  if (!CURRENT_TEAM_ID) return;
+  const res = await fetch(`/api/team-menu/${CURRENT_TEAM_ID}/${menuKey}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  if (res.ok) {
+    wuToast.success(`${menuKey} 노출을 ${enabled ? '켰' : '껐'}습니다.`);
+  } else {
+    let err = {};
+    try { err = await res.json(); } catch (_) {}
+    wuToast.error(err.detail || '저장에 실패했습니다.');
+    // 실패 시 UI 복구
+    const cb = document.getElementById(`menu-${menuKey}`);
+    if (cb) cb.checked = !enabled;
+  }
+}
+</script>
+{% endblock %}

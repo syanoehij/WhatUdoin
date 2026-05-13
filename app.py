@@ -781,6 +781,24 @@ def admin_members_page(request: Request):
     return resp
 
 
+# 팀 기능 그룹 C #19: 메뉴 외부 노출 관리 페이지 (시스템 admin + 팀 admin 접근).
+@app.get("/admin/menus", response_class=HTMLResponse)
+def admin_menus_page(request: Request):
+    user = auth.get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    manageable = db.get_admin_teams_for(user)
+    if not manageable:
+        raise HTTPException(status_code=403, detail="메뉴 관리 권한이 없습니다.")
+    resp = templates.TemplateResponse(request, "menu_settings.html", _ctx(
+        request,
+        manageable_teams=manageable,
+        is_system_admin=auth.is_admin(user),
+    ))
+    _ensure_work_team_cookie(request, resp, user)
+    return resp
+
+
 @app.get("/kanban", response_class=HTMLResponse)
 def kanban_page(request: Request):
     teams = db.get_all_teams()
@@ -1862,6 +1880,32 @@ async def team_manage_evict(team_id: int, user_id: int, request: Request):
         if code == "last_admin_protected":
             raise HTTPException(status_code=400, detail="이 팀의 마지막 팀 관리자입니다. 먼저 다른 멤버를 팀 관리자로 지정하세요.")
         raise HTTPException(status_code=400, detail="추방 처리 중 오류가 발생했습니다.")
+    return {"ok": True}
+
+
+# ── 팀 기능 그룹 C #19: 메뉴 외부 노출 토글 API (admin + 팀 admin) ──
+
+@app.get("/api/team-menu/{team_id}")
+def team_menu_get(team_id: int, request: Request):
+    """팀별 메뉴 노출 현황. defaults 합성 dict."""
+    _require_team_admin(request, team_id)
+    return db.get_team_menu_visibility(team_id)
+
+
+@app.put("/api/team-menu/{team_id}/{menu_key}")
+async def team_menu_set(team_id: int, menu_key: str, request: Request):
+    """단일 메뉴 토글. body: {enabled: bool}."""
+    _require_team_admin(request, team_id)
+    data = await request.json()
+    if "enabled" not in data:
+        raise HTTPException(status_code=400, detail="enabled 필드가 필요합니다.")
+    enabled = bool(data.get("enabled"))
+    try:
+        db.set_team_menu_visibility(team_id, menu_key, enabled)
+    except ValueError as exc:
+        if str(exc) == "invalid_menu_key":
+            raise HTTPException(status_code=400, detail="허용된 menu_key 가 아닙니다.")
+        raise HTTPException(status_code=400, detail="요청이 올바르지 않습니다.")
     return {"ok": True}
 
 
