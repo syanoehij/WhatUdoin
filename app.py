@@ -54,6 +54,11 @@ _RUN_DIR  = Path(os.environ.get("WHATUDOIN_RUN_DIR",  Path(__file__).parent))
 MEETINGS_DIR = _RUN_DIR / "meetings"
 MEETINGS_DIR.mkdir(exist_ok=True)
 
+# 팀 기능 그룹 D #24: 체크·일정 등 신규 첨부 저장 루트 — `uploads/teams/{team_id}/{kind}/...`
+# 계획서 §14. 문서(meetings) 첨부와 분리해 팀별 폴더로 격리한다.
+TEAMS_UPLOAD_DIR = _RUN_DIR / "uploads" / "teams"
+TEAMS_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 # M5-2: Media service IPC 분기
 # WHATUDOIN_MEDIA_SERVICE_URL 미설정 시 기존 in-process 동작 100% 유지.
 _MEDIA_SERVICE_URL: str = os.environ.get("WHATUDOIN_MEDIA_SERVICE_URL", "").strip()
@@ -232,8 +237,28 @@ class _ProtectedMeetingStaticFiles(StaticFiles):
         return await super().get_response(path, scope)
 
 
+def _upload_url_from_team_static_path(path: str) -> str:
+    """팀 기능 #24: `/uploads/teams/{team_id}/...` URL 복원."""
+    return "/uploads/teams/" + path.replace("\\", "/").lstrip("/")
+
+
+class _ProtectedTeamStaticFiles(StaticFiles):
+    """팀 기능 그룹 D #24: 체크·일정 등 신규 첨부 다운로드 권한 가드.
+
+    raw StaticFiles 공개가 아니라 ``_can_read_uploaded_file`` 로 DB 본문 참조 권한 검증.
+    ``find_upload_references`` 가 URL LIKE 매칭이므로 ``/uploads/teams/...`` URL 도 자동 매칭.
+    """
+    async def get_response(self, path: str, scope):
+        request = Request(scope)
+        user = auth.get_current_user(request)
+        if not _can_read_uploaded_file(_upload_url_from_team_static_path(path), user):
+            return Response(status_code=404)
+        return await super().get_response(path, scope)
+
+
 app.mount("/static",          StaticFiles(directory=str(_BASE_DIR / "static")),   name="static")
 app.mount("/uploads/meetings", _ProtectedMeetingStaticFiles(directory=str(MEETINGS_DIR)), name="meetings_files")
+app.mount("/uploads/teams",   _ProtectedTeamStaticFiles(directory=str(TEAMS_UPLOAD_DIR)), name="teams_files")
 templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
 
 def _asset_mtime(abs_path: str) -> str:
@@ -4650,10 +4675,53 @@ def _call_media_service(
         raise RuntimeError("unavailable") from exc
 
 
+def _resolve_upload_target(
+    request: Request,
+    user: dict,
+    kind: str,
+    subdir: str,
+) -> tuple[Path, str]:
+    """팀 기능 그룹 D #24: 업로드 대상 (디스크 폴더, URL prefix) 결정.
+
+    kind == "meeting" (기본): 기존 ``meetings/{YYYY}/{MM}/...`` 경로.
+    kind == "team": ``uploads/teams/{team_id}/{subdir}/{YYYY}/{MM}/...``.
+                    team_id 는 ``resolve_work_team`` 으로 결정 — None 이면 400.
+    """
+    if kind == "meeting":
+        now = datetime.now()
+        folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
+        url_prefix = f"/uploads/meetings/{now.year}/{now.month:02d}"
+        return folder, url_prefix
+    if kind != "team":
+        raise HTTPException(
+            status_code=400,
+            detail="kind 는 'meeting' 또는 'team' 이어야 합니다.",
+        )
+    team_id = auth.resolve_work_team(request, user, None)
+    if not team_id:
+        raise HTTPException(
+            status_code=400,
+            detail="작업 팀이 필요합니다. 먼저 팀을 선택하세요.",
+        )
+    now = datetime.now()
+    folder = TEAMS_UPLOAD_DIR / str(team_id) / subdir / str(now.year) / f"{now.month:02d}"
+    url_prefix = f"/uploads/teams/{team_id}/{subdir}/{now.year}/{now.month:02d}"
+    return folder, url_prefix
+
+
 @app.post("/api/upload/image")
-async def upload_image(request: Request, file: UploadFile = File(...)):
-    """회의록 이미지 업로드 — meetings/{year}/{month}/{uuid}.ext 로 저장"""
-    _require_editor(request)
+async def upload_image(
+    request: Request,
+    file: UploadFile = File(...),
+    kind: str = "meeting",
+):
+    """회의록·체크 이미지 업로드.
+
+    kind=meeting (기본): ``meetings/{YYYY}/{MM}/...``  (기존 동작 100% 보존)
+    kind=team: ``uploads/teams/{team_id}/checks/{YYYY}/{MM}/...``  (그룹 D #24)
+    """
+    user = _require_editor(request)
+    folder, url_prefix = _resolve_upload_target(request, user, kind, subdir="checks")
 
     if not _MEDIA_SERVICE_URL:
         # ── in-process fallback (기존 동작 100% 보존) ──────────────────────
@@ -4669,12 +4737,10 @@ async def upload_image(request: Request, file: UploadFile = File(...)):
         ext = Path(file.filename).suffix.lower() if file.filename else ".png"
         if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
             ext = ".png"
-        now = datetime.now()
-        folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
         folder.mkdir(parents=True, exist_ok=True)
         filename = f"{uuid.uuid4().hex}{ext}"
         (folder / filename).write_bytes(data)
-        return {"url": f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"}
+        return {"url": f"{url_prefix}/{filename}"}
 
     # ── Media service IPC 경로 ────────────────────────────────────────────────
     # ext 정규화: 알 수 없는 ext는 .png로 fallback (기존 in-process 정책 보존)
@@ -4721,26 +4787,33 @@ async def upload_image(request: Request, file: UploadFile = File(...)):
             else:
                 raise HTTPException(status_code=400, detail="이미지 처리 실패")
 
-        # Web API가 staging → MEETINGS_DIR 이동 (owner)
+        # Web API가 staging → 대상 폴더 이동 (owner). folder/url_prefix 는 라우트 진입 시 결정.
         ext = result.get("ext", normalized_ext) or normalized_ext
-        now = datetime.now()
-        folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
         folder.mkdir(parents=True, exist_ok=True)
         filename = f"{uuid.uuid4().hex}{ext}"
         staging_file.rename(folder / filename)
         staging_file = None  # renamed — cleanup 불필요
 
-        return {"url": f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"}
+        return {"url": f"{url_prefix}/{filename}"}
     finally:
         if staging_file is not None and staging_file.exists():
             staging_file.unlink(missing_ok=True)
 
 
 @app.post("/api/upload/attachment")
-async def upload_attachment(request: Request, file: UploadFile = File(...)):
-    """문서 첨부파일 업로드 — meetings/{year}/{month}/{uuid}.ext 로 저장"""
-    _require_editor(request)
+async def upload_attachment(
+    request: Request,
+    file: UploadFile = File(...),
+    kind: str = "meeting",
+):
+    """문서·체크 첨부파일 업로드.
+
+    kind=meeting (기본): ``meetings/{YYYY}/{MM}/...``  (기존 동작 100% 보존)
+    kind=team: ``uploads/teams/{team_id}/checks/{YYYY}/{MM}/...``  (그룹 D #24)
+    """
+    user = _require_editor(request)
     _ALLOWED_EXTS = {".txt", ".xls", ".xlsx", ".ppt", ".pptx", ".pdf", ".zip", ".7z"}
+    folder, url_prefix = _resolve_upload_target(request, user, kind, subdir="checks")
 
     if not _MEDIA_SERVICE_URL:
         # ── in-process fallback (기존 동작 100% 보존) ──────────────────────
@@ -4750,14 +4823,12 @@ async def upload_attachment(request: Request, file: UploadFile = File(...)):
         data = await file.read()
         if len(data) > 20 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="파일 크기는 20MB 이하여야 합니다.")
-        now = datetime.now()
-        folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
         folder.mkdir(parents=True, exist_ok=True)
         filename = f"{uuid.uuid4().hex}{ext}"
         (folder / filename).write_bytes(data)
         original_name = file.filename or filename
-        url = f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"
-        uploaded_at = now.strftime("%y%m%d_%H%M")
+        url = f"{url_prefix}/{filename}"
+        uploaded_at = now_for_filename = datetime.now().strftime("%y%m%d_%H%M")
         return {"name": original_name, "url": url, "size": len(data), "uploaded_at": uploaded_at}
 
     # ── Media service IPC 경로 ────────────────────────────────────────────────
@@ -4802,18 +4873,16 @@ async def upload_attachment(request: Request, file: UploadFile = File(...)):
             else:
                 raise HTTPException(status_code=400, detail="파일 처리 실패")
 
-        # Web API가 staging → MEETINGS_DIR 이동 (owner)
+        # Web API가 staging → 대상 폴더 이동 (owner). folder/url_prefix 는 라우트 진입 시 결정.
         ext = result.get("ext", ext) or ext
         file_size = result.get("size", written)
-        now = datetime.now()
-        folder = MEETINGS_DIR / str(now.year) / f"{now.month:02d}"
         folder.mkdir(parents=True, exist_ok=True)
         filename = f"{uuid.uuid4().hex}{ext}"
         staging_file.rename(folder / filename)
         staging_file = None  # renamed — cleanup 불필요
 
-        url = f"/uploads/meetings/{now.year}/{now.month:02d}/{filename}"
-        uploaded_at = now.strftime("%y%m%d_%H%M")
+        url = f"{url_prefix}/{filename}"
+        uploaded_at = datetime.now().strftime("%y%m%d_%H%M")
         return {"name": original_name, "url": url, "size": file_size, "uploaded_at": uploaded_at}
     finally:
         if staging_file is not None and staging_file.exists():

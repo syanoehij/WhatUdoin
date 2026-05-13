@@ -1846,7 +1846,7 @@ async function initEditor(content) {
     initialMarkdown: content || '',
     features: {
       imageResize: true,
-      imageUpload: { endpoint: '/api/upload/image' },
+      imageUpload: { endpoint: '/api/upload/image?kind=team' },
       sanitizerOff: true,
       toc: _curId ? { storageKey: 'check_toc_open', toggleBtnSelector: '#btn-toc-toggle-inline' } : false,
       shortcutSave: true,

@@ -625,7 +625,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initialMarkdown: initialMd,
     features: {
       imageResize: true,
-      imageUpload: { endpoint: '/api/upload/image' },
+      imageUpload: { endpoint: '/api/upload/image?kind=team' },
       sanitizerOff: true,
       toc: CKE_ID ? { storageKey: 'check_toc_open', toggleBtnSelector: '#btn-toc-toggle' } : false,
       shortcutSave: true,
@@ -1055,7 +1055,7 @@ async function _onAttachmentFileSelected(e) {
   }
   const formData = new FormData();
   formData.append('file', file);
-  const res = await fetch('/api/upload/attachment', { method: 'POST', body: formData });
+  const res = await fetch('/api/upload/attachment?kind=team', { method: 'POST', body: formData });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     wuToast.error(err.detail || '업로드 실패');
