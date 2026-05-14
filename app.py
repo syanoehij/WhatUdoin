@@ -675,12 +675,21 @@ def _ctx(request: Request, **kwargs):
         if work_team_id is not None:
             t = db.get_team_active(work_team_id)
             work_team_name = t["name"] if t else None
+    # P3-1 catchup: 글로벌 nav 에서 /admin/members, /admin/menus 노출 여부 게이팅.
+    # 라우트 자체는 시스템 admin + 팀 admin 모두 허용 → 동일 기준으로 nav 표시.
+    manageable_admin_teams_count = 0
+    if user is not None:
+        try:
+            manageable_admin_teams_count = len(db.get_admin_teams_for(user) or [])
+        except Exception:
+            manageable_admin_teams_count = 0
     return {
         "request": request,
         "user": user,
         "is_unassigned": auth.is_unassigned(user),  # 팀 기능 그룹 B #12 — 알림 벨 게이팅 등에 사용
         "work_team_id": work_team_id,            # 팀 기능 그룹 B #15
         "work_team_name": work_team_name,        # 팀 기능 그룹 B #15
+        "manageable_admin_teams_count": manageable_admin_teams_count,  # P3-1 catchup
         "https_available": _https_available(),
         "https_port": 8443,
         "http_port": 8000,

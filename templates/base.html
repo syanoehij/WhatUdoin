@@ -490,6 +490,11 @@
               🔧 관리자 페이지
               <span class="dropdown-pending-badge hidden" id="dropdown-pending-badge"></span>
             </a>
+            {# P3-1 catchup: admin 전용 관리 페이지 직접 진입 — 팀 admin 도 라우트에서 통과 #}
+            {% if user.role == 'admin' or manageable_admin_teams_count %}
+            <a href="/admin/members" class="profile-dropdown-item" onclick="closeProfileMenu()">👥 멤버 관리</a>
+            <a href="/admin/menus" class="profile-dropdown-item" onclick="closeProfileMenu()">📑 메뉴 관리</a>
+            {% endif %}
             <a href="/alarm-setup" class="profile-dropdown-item" onclick="closeProfileMenu()">🔔 알람 설정</a>
             <a href="/settings/mcp" class="profile-dropdown-item" onclick="closeProfileMenu()">🔌 MCP 설정</a>
             <a href="/changelog" class="profile-dropdown-item" onclick="closeProfileMenu()">📋 변경 이력</a>
