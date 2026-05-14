@@ -95,10 +95,27 @@ def test_static_app_route_call_updated():
 
 
 # ── DB fixtures ───────────────────────────────────────────────
+# P4-1 catchup: 임시 DB 를 tempfile 시스템 폴더로 격리 + atexit 으로 항상 cleanup.
+# 기존에는 ROOT 에 _phase85_{uuid}.db 가 누적되어 14개 잔재 → 루트 가시성 손상.
 def _setup(monkeypatch):
-    db_path = Path(ROOT) / f"_phase85_{uuid.uuid4().hex}.db"
-    if db_path.exists():
-        db_path.unlink()
+    import atexit
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(prefix="phase85_", suffix=".db", delete=False)
+    tmp.close()
+    db_path = Path(tmp.name)
+
+    def _cleanup():
+        for suffix in ("", "-wal", "-shm"):
+            p = Path(str(db_path) + suffix)
+            if p.exists():
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+
+    # atexit: pytest 프로세스 종료 시 항상 호출 → 함수형 fixture 라도 누적 방지.
+    atexit.register(_cleanup)
+
     monkeypatch.setenv("WHATUDOIN_BASE_DIR", ROOT)
     monkeypatch.setenv("WHATUDOIN_RUN_DIR", ROOT)
     import database as db
@@ -138,7 +155,7 @@ def _user_dict(db, user_id):
 # ── A. owner 추방 → 같은 팀 활성 멤버 자동 이양 ────────────────
 def test_a_transfer_on_removal_picks_oldest_member(monkeypatch):
     db, _ = _setup(monkeypatch)
-    tid = db.create_team("HW개발팀")
+    tid = db.create_team("HwDev")
     owner = _make_user(db, "오너")
     m_old = _make_user(db, "선임멤버")
     m_new = _make_user(db, "후임멤버")
@@ -167,7 +184,7 @@ def test_a_transfer_on_removal_picks_oldest_member(monkeypatch):
 # ── B. 후보 없음 → owner_id NULL → admin 이 신규 멤버 추가 후 owner 지정 ──
 def test_b_owner_null_then_admin_recovery(monkeypatch):
     db, _ = _setup(monkeypatch)
-    tid = db.create_team("SW개발팀")
+    tid = db.create_team("SwDev")
     owner = _make_user(db, "단독오너")
     _join(db, owner["id"], tid)
     _make_user(db, "글로벌관리자", admin=True)  # admin 은 user_teams row 없음 (자연)
@@ -193,7 +210,7 @@ def test_b_owner_null_then_admin_recovery(monkeypatch):
 # ── C. admin 은 멤버 후보·assignee 후보에서 자동 제외 ───────────
 def test_c_admin_excluded_from_candidates(monkeypatch):
     db, _ = _setup(monkeypatch)
-    tid = db.create_team("디자인팀")
+    tid = db.create_team("DesignT")
     owner = _make_user(db, "디자인오너")
     member = _make_user(db, "디자인멤버")
     admin = _make_user(db, "관리자C", admin=True)
@@ -216,8 +233,8 @@ def test_c_admin_excluded_from_candidates(monkeypatch):
 # ── D. 다중 팀 owner — projects.team_id 기준으로만 멤버 후보 ────
 def test_d_multiteam_owner_candidate_scope(monkeypatch):
     db, _ = _setup(monkeypatch)
-    ta = db.create_team("팀A")
-    tb = db.create_team("팀B")
+    ta = db.create_team("TeamA")
+    tb = db.create_team("TeamB")
     owner = _make_user(db, "양다리오너")
     _join(db, owner["id"], ta)
     _join(db, owner["id"], tb)              # owner 는 팀 A·B 둘 다 approved
@@ -238,7 +255,7 @@ def test_d_multiteam_owner_candidate_scope(monkeypatch):
 # ── E. 멀티팀 가시성: project_members + user_teams approved ────
 def test_e_visibility_follows_user_teams(monkeypatch):
     db, _ = _setup(monkeypatch)
-    ta = db.create_team("가시성팀")
+    ta = db.create_team("VisT")
     owner = _make_user(db, "가시성오너")
     viewer = _make_user(db, "가시성멤버")
     _join(db, owner["id"], ta)
@@ -270,7 +287,7 @@ def test_e_visibility_follows_user_teams(monkeypatch):
 # ── F. owner_id NULL 이어도 addable_members 가 projects.team_id 기준 ──
 def test_f_addable_members_when_owner_null(monkeypatch):
     db, _ = _setup(monkeypatch)
-    ta = db.create_team("복구후보팀")
+    ta = db.create_team("RecoT")
     owner = _make_user(db, "F오너")
     _join(db, owner["id"], ta)
     cand1 = _make_user(db, "F후보1")
@@ -302,7 +319,7 @@ def test_g_create_requires_team_id(monkeypatch):
     with pytest.raises(ValueError):
         db.create_hidden_project("팀없는히든", "#fff", None, owner["id"], team_id=None)
     # 정상: team_id 기준 저장
-    tid = db.create_team("G팀")
+    tid = db.create_team("GTeam")
     _join(db, owner["id"], tid)
     proj = db.create_hidden_project("G정상히든", "#fff", None, owner["id"], team_id=tid)
     assert proj and proj["team_id"] == tid
@@ -313,5 +330,5 @@ def test_g_create_requires_team_id(monkeypatch):
     # 같은 팀 동일 이름 중복 → None
     assert db.create_hidden_project("G정상히든", "#000", None, owner["id"], team_id=tid) is None
     # 다른 팀에는 같은 이름 허용
-    tid2 = db.create_team("G팀2")
+    tid2 = db.create_team("GTeam2")
     assert db.create_hidden_project("G정상히든", "#000", None, owner["id"], team_id=tid2) is not None
