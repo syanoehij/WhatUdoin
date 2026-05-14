@@ -1731,6 +1731,8 @@ async def register(request: Request, response: Response):
     password = data.get("password", "").strip()
     if not name or not password:
         raise HTTPException(status_code=400, detail="이름과 비밀번호를 입력하세요.")
+    if "password_confirm" in data and data.get("password_confirm", "").strip() != password:
+        raise HTTPException(status_code=400, detail="비밀번호와 비밀번호 확인이 일치하지 않습니다.")
     if not passwords.is_valid_user_name(name):
         raise HTTPException(status_code=400, detail="이름은 영문·숫자·한글만 사용할 수 있습니다.")
     if name.casefold() in RESERVED_USERNAMES:

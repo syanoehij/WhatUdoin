@@ -529,7 +529,7 @@ main { padding: 20px 24px; width: 100%; flex: 1; }
 
 .form-row-inline {
   display: grid;
-  grid-template-columns: 72px 1fr auto;
+  grid-template-columns: 72px minmax(0, 1fr) 72px;
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
@@ -540,6 +540,7 @@ main { padding: 20px 24px; width: 100%; flex: 1; }
   color: var(--text-muted);
   white-space: nowrap;
 }
+.form-row-inline input[type="text"],
 .form-row-inline input[type="password"] {
   width: 100%;
   border: 1px solid var(--border);
@@ -552,7 +553,12 @@ main { padding: 20px 24px; width: 100%; flex: 1; }
   transition: border-color 0.15s;
   font-family: inherit;
 }
+.form-row-inline input[type="text"]:focus,
 .form-row-inline input[type="password"]:focus { border-color: var(--accent); }
+.form-row-inline .btn {
+  justify-content: center;
+  width: 72px;
+}
 
 .form-row label:first-child {
   font-size: 0.82rem;
