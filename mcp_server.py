@@ -168,7 +168,7 @@ async def list_events(
 
 
 @mcp.tool()
-async def get_event(ctx: Context, event_id: int) -> dict:
+async def get_event(ctx: Context, event_id: int, team_id: int | None = None) -> dict:
     """
     특정 일정의 상세 정보를 조회합니다.
 
@@ -177,11 +177,16 @@ async def get_event(ctx: Context, event_id: int) -> dict:
     - 반복 일정의 recurrence_rule이나 부모 일정 정보가 필요할 때
 
     삭제된 일정이나 종료 프로젝트 소속 일정은 error 객체를 반환합니다.
+
+    파라미터:
+    - team_id: 조회 범위를 특정 팀으로 좁히는 힌트. 미지정 시 사용자 모든 소속 팀.
+      id 가 이미 단건을 가리키므로 권한 게이팅은 viewer 기준 — team_id 가
+      범위를 좁히면 그 팀이 아닌 경우 not_found 로 응답.
     """
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    result = db.get_event_for_mcp(event_id, viewer=user, work_team_ids=_mcp_work_team_ids(user))
+    result = db.get_event_for_mcp(event_id, viewer=user, work_team_ids=_mcp_work_team_ids(user, team_id))
     if result is None:
         return {"error": "not_found", "id": event_id, "reason": "이벤트가 존재하지 않거나 접근 권한이 없습니다."}
     return result
@@ -210,7 +215,7 @@ async def list_documents(ctx: Context, team_id: int | None = None) -> list[dict]
 
 
 @mcp.tool()
-async def get_document(ctx: Context, doc_id: int) -> dict:
+async def get_document(ctx: Context, doc_id: int, team_id: int | None = None) -> dict:
     """
     특정 문서(회의록)의 전체 내용을 조회합니다.
 
@@ -219,12 +224,15 @@ async def get_document(ctx: Context, doc_id: int) -> dict:
     - 회의 내용, 결정 사항, 액션 아이템을 파악할 때
 
     열람 권한이 없거나 삭제된 문서는 error 객체를 반환합니다.
+
+    파라미터:
+    - team_id: 조회 범위를 특정 팀으로 좁히는 힌트. 미지정 시 사용자 모든 소속 팀.
     """
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
     doc = db.get_meeting(doc_id)
-    if not doc or not _can_read_doc(user, doc, work_team_ids=_mcp_work_team_ids(user)):
+    if not doc or not _can_read_doc(user, doc, work_team_ids=_mcp_work_team_ids(user, team_id)):
         return {"error": "not_found", "id": doc_id, "reason": "문서가 존재하지 않거나 접근 권한이 없습니다."}
     return doc
 
@@ -257,7 +265,7 @@ async def list_checklists(ctx: Context, project: str | None = None,
 
 
 @mcp.tool()
-async def get_checklist(ctx: Context, checklist_id: int) -> dict:
+async def get_checklist(ctx: Context, checklist_id: int, team_id: int | None = None) -> dict:
     """
     특정 체크리스트의 전체 내용(항목 목록 포함)을 조회합니다.
 
@@ -266,12 +274,15 @@ async def get_checklist(ctx: Context, checklist_id: int) -> dict:
     - 각 항목의 완료 상태, 담당자, 기한을 파악할 때
 
     열람 권한이 없거나 삭제된 체크리스트는 error 객체를 반환합니다.
+
+    파라미터:
+    - team_id: 조회 범위를 특정 팀으로 좁히는 힌트. 미지정 시 사용자 모든 소속 팀.
     """
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
     cl = db.get_checklist(checklist_id)
-    if not cl or not _can_read_checklist(user, cl, work_team_ids=_mcp_work_team_ids(user)):
+    if not cl or not _can_read_checklist(user, cl, work_team_ids=_mcp_work_team_ids(user, team_id)):
         return {"error": "not_found", "id": checklist_id, "reason": "체크리스트가 존재하지 않거나 접근 권한이 없습니다."}
     return cl
 
@@ -283,6 +294,7 @@ async def search_all(
     type: str | None = None,
     start_after: str | None = None,
     end_before: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict]:
     """
     WhatUdoin 전체 데이터를 키워드로 검색합니다.
@@ -300,6 +312,7 @@ async def search_all(
       → 시작일이 범위를 벗어나도 종료일이 범위 안에 들어오면 포함됩니다.
       → 날짜 필터는 이벤트에만 적용됩니다. 문서·체크리스트는 날짜 무관 전체 매칭.
       → 특정 날짜 제한 없이 전체 이벤트를 검색하려면 start_after="2000-01-01"처럼 넓게 지정하세요.
+    - team_id: 특정 팀만 검색. 미명시 시 사용자 모든 소속 팀 통합. 비소속 팀 명시 시 빈 list.
 
     반환: type 필드 포함 경량 결과 목록
     - type="event": id, title, project, start_datetime, end_datetime, assignee, kanban_status
@@ -318,7 +331,7 @@ async def search_all(
         end_before = (today + timedelta(days=7)).isoformat()
     return db.search_all(query=query, type=type, viewer=user,
                          start_after=start_after, end_before=end_before,
-                         work_team_ids=_mcp_work_team_ids(user))
+                         work_team_ids=_mcp_work_team_ids(user, team_id))
 
 
 @mcp.tool()
@@ -327,6 +340,7 @@ async def search_events(
     query: str,
     start_after: str | None = None,
     end_before: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict]:
     """
     WhatUdoin 일정을 키워드로 검색합니다.
@@ -342,6 +356,7 @@ async def search_events(
     - end_before: 이벤트 날짜 범위 종료 (ISO 8601). 미지정 시 오늘+7일.
       → 시작일이 범위를 벗어나도 종료일이 범위 안에 들어오면 포함됩니다.
       → 특정 날짜 제한 없이 전체를 검색하려면 start_after="2000-01-01"처럼 넓게 지정하세요.
+    - team_id: 특정 팀만 검색. 미명시 시 사용자 모든 소속 팀 통합. 비소속 팀 명시 시 빈 list.
 
     반환 필드: id, title, project, start_datetime, end_datetime, assignee, kanban_status, event_type
     상세 내용은 get_event()를 사용하세요.
@@ -354,13 +369,14 @@ async def search_events(
         today = datetime.now().date()
         start_after = (today - timedelta(days=7)).isoformat()
         end_before = (today + timedelta(days=7)).isoformat()
-    return db.search_events_mcp(query=query, start_after=start_after, end_before=end_before, viewer=user, work_team_ids=_mcp_work_team_ids(user))
+    return db.search_events_mcp(query=query, start_after=start_after, end_before=end_before, viewer=user, work_team_ids=_mcp_work_team_ids(user, team_id))
 
 
 @mcp.tool()
 async def list_kanban(
     ctx: Context,
     project: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict]:
     """
     칸반 보드 항목 목록을 조회합니다 (경량 메타데이터만 반환).
@@ -379,15 +395,16 @@ async def list_kanban(
     - project=None(기본값): 열람 가능한 모든 칸반 항목 반환
     - project="프로젝트명": 해당 프로젝트 칸반 항목만 반환
     - project="": 프로젝트 미지정 항목만 반환 (None과 다름)
+    - team_id: 특정 팀만 조회. 미명시 시 사용자 모든 소속 팀 통합. 비소속 팀 명시 시 빈 list.
     """
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.get_kanban_summary(project=project, viewer=user, work_team_ids=_mcp_work_team_ids(user))
+    return db.get_kanban_summary(project=project, viewer=user, work_team_ids=_mcp_work_team_ids(user, team_id))
 
 
 @mcp.tool()
-async def get_kanban_item(ctx: Context, event_id: int) -> dict:
+async def get_kanban_item(ctx: Context, event_id: int, team_id: int | None = None) -> dict:
     """
     특정 칸반 항목의 상세 정보를 조회합니다.
 
@@ -397,11 +414,14 @@ async def get_kanban_item(ctx: Context, event_id: int) -> dict:
 
     내부적으로 get_event와 동일한 DB 함수를 사용합니다.
     삭제된 항목이나 존재하지 않는 id는 error 객체를 반환합니다.
+
+    파라미터:
+    - team_id: 조회 범위를 특정 팀으로 좁히는 힌트. 미지정 시 사용자 모든 소속 팀.
     """
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    result = db.get_event_for_mcp(event_id, viewer=user, work_team_ids=_mcp_work_team_ids(user))
+    result = db.get_event_for_mcp(event_id, viewer=user, work_team_ids=_mcp_work_team_ids(user, team_id))
     if result is None:
         return {"error": "not_found", "id": event_id, "reason": "칸반 항목이 존재하지 않거나 접근 권한이 없습니다."}
     return result
@@ -412,6 +432,7 @@ async def search_kanban(
     ctx: Context,
     query: str,
     project: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict]:
     """
     칸반 항목을 키워드로 검색합니다.
@@ -430,15 +451,16 @@ async def search_kanban(
     - project=None(기본값): 전체 칸반 항목에서 검색
     - project="프로젝트명": 해당 프로젝트 항목만 검색
     - project="": 프로젝트 미지정 항목만 검색
+    - team_id: 특정 팀만 검색. 미명시 시 사용자 모든 소속 팀 통합. 비소속 팀 명시 시 빈 list.
     """
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.search_kanban_mcp(query=query, project=project, viewer=user, work_team_ids=_mcp_work_team_ids(user))
+    return db.search_kanban_mcp(query=query, project=project, viewer=user, work_team_ids=_mcp_work_team_ids(user, team_id))
 
 
 @mcp.tool()
-async def search_documents(ctx: Context, query: str) -> list[dict]:
+async def search_documents(ctx: Context, query: str, team_id: int | None = None) -> list[dict]:
     """
     문서(회의록)를 키워드로 검색합니다.
 
@@ -454,11 +476,12 @@ async def search_documents(ctx: Context, query: str) -> list[dict]:
 
     파라미터:
     - query: 검색 키워드 (빈 문자열이면 빈 결과 반환)
+    - team_id: 특정 팀만 검색. 미명시 시 사용자 모든 소속 팀 통합. 비소속 팀 명시 시 빈 list.
     """
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.search_documents_mcp(query=query, viewer=user, work_team_ids=_mcp_work_team_ids(user))
+    return db.search_documents_mcp(query=query, viewer=user, work_team_ids=_mcp_work_team_ids(user, team_id))
 
 
 @mcp.tool()
@@ -466,6 +489,7 @@ async def search_checklists(
     ctx: Context,
     query: str,
     project: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict]:
     """
     체크리스트를 키워드로 검색합니다.
@@ -484,8 +508,9 @@ async def search_checklists(
     - project=None(기본값): 전체 체크리스트에서 검색
     - project="프로젝트명": 해당 프로젝트 체크리스트만 검색
     - project="": 프로젝트 미지정 체크리스트만 검색
+    - team_id: 특정 팀만 검색. 미명시 시 사용자 모든 소속 팀 통합. 비소속 팀 명시 시 빈 list.
     """
     user = _user_from_ctx(ctx)
     if user is None:
         raise PermissionError("인증이 필요합니다.")
-    return db.search_checklists_mcp(query=query, project=project, viewer=user, work_team_ids=_mcp_work_team_ids(user))
+    return db.search_checklists_mcp(query=query, project=project, viewer=user, work_team_ids=_mcp_work_team_ids(user, team_id))
