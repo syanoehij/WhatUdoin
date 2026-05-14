@@ -193,7 +193,8 @@ document.addEventListener('DOMContentLoaded', () => {
       canEdit: true,
       initialMarkdown: INITIAL_MD || '',
       features: {
-        imageUpload: { endpoint: '/api/upload/image' },
+        // P1-2 catchup: 공지는 팀 범위 → teams/{tid}/notices/... 로 저장.
+        imageUpload: { endpoint: '/api/upload/image?kind=team&subdir=notices' },
       },
       hooks: {
         onChange: () => {

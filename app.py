@@ -3534,7 +3534,27 @@ async def manage_delete_project(name: str, request: Request):
     return {"ok": True}
 
 
-_IMG_URL_RE = re.compile(r'/uploads/meetings/\d{4}/\d{2}/[\w\-.]+')
+# P1-1 catchup: meetings + teams/{id}/{subdir} 두 경로 모두 인식.
+# non-capturing 그룹 사용 → findall/finditer 결과는 풀 매칭 문자열.
+_IMG_URL_RE = re.compile(
+    r'/uploads/(?:meetings/\d{4}/\d{2}|teams/\d+/[^/]+/\d{4}/\d{2})/[\w\-.]+'
+)
+
+
+def _img_url_to_disk(url: str) -> Path | None:
+    """업로드 이미지 URL을 디스크 절대 경로로 변환.
+
+    - ``/uploads/meetings/...`` → ``MEETINGS_DIR / rel``
+    - ``/uploads/teams/{id}/{subdir}/...`` → ``_RUN_DIR / "uploads" / rel``
+    - 그 외 → ``None``
+    """
+    if url.startswith("/uploads/meetings/"):
+        rel = url[len("/uploads/meetings/"):]
+        return MEETINGS_DIR / rel
+    if url.startswith("/uploads/teams/"):
+        rel = url[len("/uploads/"):]  # "teams/{id}/{sub}/.../file"
+        return _RUN_DIR / "uploads" / rel
+    return None
 
 
 def _safe_filename(s: str, fallback: str = "untitled") -> str:
@@ -3644,9 +3664,10 @@ def _build_doc_md(doc: dict, exported_at: str,
             basename = url.rsplit("/", 1)[-1]
             lines.append(f"- [{name}](attachments/{basename})")
             if images is not None and url:
-                rel = url.replace("/uploads/meetings/", "", 1)
-                disk = MEETINGS_DIR / rel
-                images.append((disk, f"attachments/{basename}"))
+                # P1-1 catchup: meetings + teams 양쪽 모두 지원.
+                disk = _img_url_to_disk(url)
+                if disk is not None:
+                    images.append((disk, f"attachments/{basename}"))
     lines.append("")
     return "\n".join(lines)
 
@@ -3984,9 +4005,14 @@ def _normalize_markdown_for_export(md: str) -> str:
 
 
 def _rewrite_image_paths(content: str) -> tuple[str, list[tuple[Path, str]]]:
-    """content 내 /uploads/meetings/… URL을 attachments/{basename} 로 치환.
+    """content 내 ``/uploads/meetings/…`` 또는 ``/uploads/teams/…`` URL을
+    ``attachments/{basename}`` 로 치환.
+
     ZIP 내 .md 파일과 attachments/ 폴더는 같은 레벨에 위치하므로 ../ 불필요.
-    Returns (rewritten_content, [(disk_path, zip_archive_path), ...])"""
+    Returns ``(rewritten_content, [(disk_path, zip_archive_path), ...])``
+
+    P1-1 catchup: meetings 외에 teams/{id}/{subdir} 경로도 매칭한다.
+    """
     collected: list[tuple[Path, str]] = []
     seen: set[str] = set()
 
@@ -3995,9 +4021,9 @@ def _rewrite_image_paths(content: str) -> tuple[str, list[tuple[Path, str]]]:
         basename = url.rsplit("/", 1)[-1]
         if basename not in seen:
             seen.add(basename)
-            rel = url.replace("/uploads/meetings/", "", 1)
-            disk = MEETINGS_DIR / rel
-            collected.append((disk, f"attachments/{basename}"))
+            disk = _img_url_to_disk(url)
+            if disk is not None:
+                collected.append((disk, f"attachments/{basename}"))
         return f"attachments/{basename}"
 
     return _IMG_URL_RE.sub(_repl, content), collected
@@ -4041,9 +4067,10 @@ def _build_checklist_md(project_name: str | None, cl: dict, exported_at: str,
             basename = url.rsplit("/", 1)[-1]
             lines.append(f"- [{name}](attachments/{basename})")
             if images is not None and url:
-                rel = url.replace("/uploads/meetings/", "", 1)
-                disk = MEETINGS_DIR / rel
-                images.append((disk, f"attachments/{basename}"))
+                # P1-1 catchup: meetings + teams 양쪽 모두 지원.
+                disk = _img_url_to_disk(url)
+                if disk is not None:
+                    images.append((disk, f"attachments/{basename}"))
     lines.append("")
     return "\n".join(lines)
 
@@ -4714,19 +4741,26 @@ def _resolve_upload_target(
     return folder, url_prefix
 
 
+_UPLOAD_SUBDIRS = {"checks", "notices"}
+
+
 @app.post("/api/upload/image")
 async def upload_image(
     request: Request,
     file: UploadFile = File(...),
     kind: str = "meeting",
+    subdir: str = "checks",
 ):
-    """회의록·체크 이미지 업로드.
+    """회의록·체크·공지 이미지 업로드.
 
     kind=meeting (기본): ``meetings/{YYYY}/{MM}/...``  (기존 동작 100% 보존)
-    kind=team: ``uploads/teams/{team_id}/checks/{YYYY}/{MM}/...``  (그룹 D #24)
+    kind=team: ``uploads/teams/{team_id}/{subdir}/{YYYY}/{MM}/...``
+        subdir: ``checks`` (기본) | ``notices``  (P1-2 catchup)
     """
     user = _require_editor(request)
-    folder, url_prefix = _resolve_upload_target(request, user, kind, subdir="checks")
+    if subdir not in _UPLOAD_SUBDIRS:
+        raise HTTPException(status_code=400, detail="허용되지 않은 subdir 입니다.")
+    folder, url_prefix = _resolve_upload_target(request, user, kind, subdir=subdir)
 
     if not _MEDIA_SERVICE_URL:
         # ── in-process fallback (기존 동작 100% 보존) ──────────────────────
@@ -4810,15 +4844,19 @@ async def upload_attachment(
     request: Request,
     file: UploadFile = File(...),
     kind: str = "meeting",
+    subdir: str = "checks",
 ):
-    """문서·체크 첨부파일 업로드.
+    """문서·체크·공지 첨부파일 업로드.
 
     kind=meeting (기본): ``meetings/{YYYY}/{MM}/...``  (기존 동작 100% 보존)
-    kind=team: ``uploads/teams/{team_id}/checks/{YYYY}/{MM}/...``  (그룹 D #24)
+    kind=team: ``uploads/teams/{team_id}/{subdir}/{YYYY}/{MM}/...``
+        subdir: ``checks`` (기본) | ``notices``  (P1-2 catchup)
     """
     user = _require_editor(request)
+    if subdir not in _UPLOAD_SUBDIRS:
+        raise HTTPException(status_code=400, detail="허용되지 않은 subdir 입니다.")
     _ALLOWED_EXTS = {".txt", ".xls", ".xlsx", ".ppt", ".pptx", ".pdf", ".zip", ".7z"}
-    folder, url_prefix = _resolve_upload_target(request, user, kind, subdir="checks")
+    folder, url_prefix = _resolve_upload_target(request, user, kind, subdir=subdir)
 
     if not _MEDIA_SERVICE_URL:
         # ── in-process fallback (기존 동작 100% 보존) ──────────────────────
@@ -4895,12 +4933,20 @@ async def upload_attachment(
 
 
 def _delete_meeting_images(content: str):
-    """마크다운 content에서 /uploads/meetings/… 경로 이미지를 찾아 파일 삭제"""
-    for url in re.findall(r'/uploads/meetings/\d{4}/\d{2}/[\w\-.]+', content or ""):
-        # URL: /uploads/meetings/2026/04/abc.png → 실제 파일: meetings/2026/04/abc.png
-        p = Path(url.replace("/uploads/", "", 1))
-        if p.exists():
-            p.unlink()
+    """마크다운 content에서 업로드 이미지 URL을 찾아 디스크 파일 삭제.
+
+    P1-1 catchup: ``/uploads/meetings/…`` 외에 ``/uploads/teams/{id}/{sub}/…``
+    경로도 인식 → 그룹 D #24 이후 작성된 팀 첨부도 정상 삭제된다.
+    함수명은 호환성 위해 유지 (호출부 다수).
+    """
+    for url in _IMG_URL_RE.findall(content or ""):
+        disk = _img_url_to_disk(url)
+        if disk is None or not disk.exists():
+            continue
+        try:
+            disk.unlink()
+        except OSError:
+            pass
 
 
 @app.delete("/api/doc/{meeting_id}")
