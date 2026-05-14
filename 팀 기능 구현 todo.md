@@ -696,6 +696,7 @@
 - [x] 그룹 B 완료 (#11~#15-3) — 화면 정비 + work_team_id 도입 + 히든 프로젝트/links/team_notices 다중 팀 전환 끝
 - [x] 그룹 C 완료 (#16~#22) — 관리·통합 기능 끝
 - [x] 그룹 D 완료 (#23~#24) — 운영 정책 끝 (팀 soft delete + 90일 유예 + 자동 완전 삭제 + 첨부 저장 분기)
+- [x] 그룹 D 후속 catchup (2026-05-14) — P1 업로드 정합성(`_IMG_URL_RE` 확장 + notice subdir 분기), P2-1 `test_project_rename` schema 복구, P3-1 멤버/메뉴 글로벌 nav, P4-1 `_phase85_*.db` 누적 차단, P4-2 MCP 10 tools team_id 일관화, P4-3 `.notif-team` 정식 배지, P4-4 hard `delete_team` → soft 위임 + utcnow → tz-aware (catchup 슈트 18/18 PASS, 회귀 단독 슈트 모두 PASS). 운영 sanity Playwright 는 서버 재시작 필요.
 - [ ] 그룹 E 진입 — Phase 5 호환 컬럼 drop 검토
 
 ### 단위 사이클 기록
