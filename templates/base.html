@@ -384,12 +384,26 @@
       <span class="subtitle">너 뭐하니?</span>
     </div>
     <nav>
+      {# 그룹 D catchup (비로그인 진입 재설계): 헤더 nav 분기.
+         - 로그인 사용자: 전역 nav (/doc /check /kanban /gantt 등) — 기존 동작.
+         - 비로그인 + 팀 컨텍스트 (portal_team set): 그 팀의 외부공개 메뉴(portal_menu)만 노출,
+           href 는 `/{팀이름}/{한글키}` (사용자 결정: A안). 한글 segment 는 urlencode 적용.
+         - 비로그인 + 팀 컨텍스트 없음 (/ /register 등): 메뉴 4종 완전 비노출 (미니멀 진입).
+      #}
       {% if user %}<a href="/" class="nav-link {% if request.url.path == '/' %}nav-active{% endif %}"><span class="nav-icon">🏠</span><span class="nav-label"> 내 스케줄</span></a>{% endif %}
-      <a href="/doc" class="nav-link {% if request.url.path.startswith('/doc') %}nav-active{% endif %}"><span class="nav-icon">📄</span><span class="nav-label"> 문서</span></a>
-      <a href="/check" class="nav-link {% if request.url.path.startswith('/check') %}nav-active{% endif %}"><span class="nav-icon">✅</span><span class="nav-label"> 체크</span></a>
-      {% if user %}<a href="/calendar" class="nav-link {% if request.url.path == '/calendar' %}nav-active{% endif %}"><span class="nav-icon">📅</span><span class="nav-label"> 캘린더</span></a>{% endif %}
-      <a href="/kanban" class="nav-link {% if request.url.path.startswith('/kanban') %}nav-active{% endif %}"><span class="nav-icon">📌</span><span class="nav-label"> 칸반</span></a>
-      <a href="/gantt" class="nav-link {% if request.url.path.startswith('/gantt') %}nav-active{% endif %}"><span class="nav-icon">📊</span><span class="nav-label"> 간트</span></a>
+      {% if user %}
+        <a href="/doc" class="nav-link {% if request.url.path.startswith('/doc') %}nav-active{% endif %}"><span class="nav-icon">📄</span><span class="nav-label"> 문서</span></a>
+        <a href="/check" class="nav-link {% if request.url.path.startswith('/check') %}nav-active{% endif %}"><span class="nav-icon">✅</span><span class="nav-label"> 체크</span></a>
+        <a href="/calendar" class="nav-link {% if request.url.path == '/calendar' %}nav-active{% endif %}"><span class="nav-icon">📅</span><span class="nav-label"> 캘린더</span></a>
+        <a href="/kanban" class="nav-link {% if request.url.path.startswith('/kanban') %}nav-active{% endif %}"><span class="nav-icon">📌</span><span class="nav-label"> 칸반</span></a>
+        <a href="/gantt" class="nav-link {% if request.url.path.startswith('/gantt') %}nav-active{% endif %}"><span class="nav-icon">📊</span><span class="nav-label"> 간트</span></a>
+      {% elif portal_team and portal_menu %}
+        {% set _tname = portal_team.name | urlencode %}
+        {% if portal_menu.kanban %}<a href="/{{ _tname }}/{{ '칸반' | urlencode }}" class="nav-link"><span class="nav-icon">📌</span><span class="nav-label"> 칸반</span></a>{% endif %}
+        {% if portal_menu.gantt %}<a href="/{{ _tname }}/{{ '간트' | urlencode }}" class="nav-link"><span class="nav-icon">📊</span><span class="nav-label"> 간트</span></a>{% endif %}
+        {% if portal_menu.doc %}<a href="/{{ _tname }}/{{ '문서' | urlencode }}" class="nav-link"><span class="nav-icon">📄</span><span class="nav-label"> 문서</span></a>{% endif %}
+        {% if portal_menu.check %}<a href="/{{ _tname }}/{{ '체크' | urlencode }}" class="nav-link"><span class="nav-icon">✅</span><span class="nav-label"> 체크</span></a>{% endif %}
+      {% endif %}
       {% if user %}<a href="/project-manage" class="nav-link {% if request.url.path.startswith('/project-manage') %}nav-active{% endif %}"><span class="nav-icon">🗂</span><span class="nav-label"> 프로젝트 관리</span></a>{% endif %}
       {% if user and user.avr_enabled and user.login_via == 'ip' %}<a href="/avr" class="nav-link {% if request.url.path.startswith('/avr') %}nav-active{% endif %}"><span class="nav-icon">🖥</span><span class="nav-label"> AVR</span></a>{% endif %}
     </nav>

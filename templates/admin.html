@@ -144,6 +144,31 @@
 
   <!-- ── 팀 탭 ── -->
   <div id="tab-teams" class="tab-panel hidden">
+    {# 그룹 D catchup (비로그인 진입 재설계):
+       비로그인 사용자가 보는 / 진입 화면의 팀 카드 그리드를 SSR 미리보기로 노출.
+       데이터: get_all_teams() 결과(teams)에서 활성 팀만. 별도 백엔드 데이터 추가 없음. #}
+    <div id="admin-public-preview" class="admin-section-block" style="margin-bottom:18px;">
+      <div class="admin-section-title" style="margin-bottom:8px;">🌐 비로그인 진입 화면 미리보기</div>
+      <p class="text-muted" style="margin:0 0 10px;font-size:0.85rem;">
+        비로그인 사용자가 <code>/</code> 에 접속했을 때 보는 팀 버튼 목록입니다. 각 팀을 누르면
+        해당 팀의 공개 포털(<code>/팀이름</code>)로 이동합니다.
+      </p>
+      {% set _preview_teams = teams | rejectattr('deleted_at') | list %}
+      {% if _preview_teams %}
+      <div class="public-preview-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(220px,100%),1fr));gap:8px;">
+        {% for t in _preview_teams %}
+        <a class="public-preview-card" href="/{{ t.name | urlencode }}" target="_blank" rel="noopener"
+           style="display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:10px 14px;text-decoration:none;color:var(--text,#0f172a);background:var(--surface,#fff);">
+          <span style="font-weight:600;">{{ t.name }}</span>
+          <span style="color:var(--text-faint,#94a3b8);">→</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="text-muted" style="font-size:0.85rem;">아직 활성 팀이 없습니다.</p>
+      {% endif %}
+    </div>
+
     <div class="team-add-row">
       <input type="text" id="new-team-name" placeholder="새 팀 이름 (영문/숫자/_ 만)" />
       <button class="btn btn-primary" onclick="createTeam()">팀 추가</button>

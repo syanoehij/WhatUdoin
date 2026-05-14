@@ -697,6 +697,7 @@
 - [x] 그룹 C 완료 (#16~#22) — 관리·통합 기능 끝
 - [x] 그룹 D 완료 (#23~#24) — 운영 정책 끝 (팀 soft delete + 90일 유예 + 자동 완전 삭제 + 첨부 저장 분기)
 - [x] 그룹 D 후속 catchup (2026-05-14) — P1 업로드 정합성(`_IMG_URL_RE` 확장 + notice subdir 분기), P2-1 `test_project_rename` schema 복구, P3-1 멤버/메뉴 글로벌 nav, P4-1 `_phase85_*.db` 누적 차단, P4-2 MCP 10 tools team_id 일관화, P4-3 `.notif-team` 정식 배지, P4-4 hard `delete_team` → soft 위임 + utcnow → tz-aware (catchup 슈트 18/18 PASS, 회귀 단독 슈트 모두 PASS). 운영 sanity Playwright 는 서버 재시작 필요.
+- [x] 비로그인 진입 화면 재설계 catchup (2026-05-14) — 그룹 B #11·#13 + 그룹 C #19 재설계. 비로그인 `/` 헤더 메뉴 4종 제거(미니멀), `/{팀이름}` 별도 탭 영역 제거, 헤더 nav 가 `team_menu_settings` 외부공개 메뉴만 노출, 신규 라우트 `/{팀이름}/{칸반|간트|문서|체크}` 4종 추가(한글 path, A안), `/{팀이름}` 기본 진입은 첫 켜진 메뉴 active_menu 단일 패널 렌더, `/admin/teams` 비로그인 미리보기 섹션 추가. `app.py` 공통 헬퍼 `_render_team_menu` + `_ctx` 에 `portal_team`/`portal_menu` 키. `tests/phase99_unauth_redesign.py` 15/15 PASS, 의미 변경된 phase82/83/92 invariant 갱신 후 40/40 PASS, baseline 회귀(본 변경 이전부터 fail 인 phase81/86/87 한글 팀명 invalid_name 등 20건)는 본 사이클 범위 밖. **서버 재시작 필요** (uvicorn reload — 신규 4 라우트 등록).
 - [ ] 그룹 E 진입 — Phase 5 호환 컬럼 drop 검토
 
 ### 단위 사이클 기록

@@ -695,6 +695,13 @@ def _ctx(request: Request, **kwargs):
         "http_port": 8000,
         "public_https_base": _public_base_url(request, "https"),
         "public_http_base": _public_base_url(request, "http"),
+        # 그룹 D catchup (비로그인 진입 재설계):
+        #   portal_team — `/팀이름` 또는 `/팀이름/메뉴` 라우트가 자기 호출 시 dict 로 set.
+        #                 그 외(/, /admin 등)에서는 None — base.html nav 분기에 사용.
+        #   portal_menu — 같은 팀의 get_team_menu_visibility() 결과 dict.
+        # 이 두 키는 호출부(`_ctx(... portal_team=team, portal_menu=menu)`)에서만 set 한다.
+        "portal_team": kwargs.pop("portal_team", None),
+        "portal_menu": kwargs.pop("portal_menu", None),
         **kwargs,
     }
 
@@ -5515,28 +5522,48 @@ def _build_reserved_team_paths() -> frozenset:
 RESERVED_TEAM_PATHS = _build_reserved_team_paths()
 
 
-@app.get("/{team_name}", response_class=HTMLResponse)
-def team_public_portal(request: Request, team_name: str):
-    # #13: /팀이름 공개 포털. URL 은 권한 경계가 아니다 — 항상 공개 portal context.
-    #   로그인 사용자·admin 이 와도 동일하게 200 공개 포털을 주되 redirect 하지 않는다.
-    # #14: 로그인 사용자·admin 별 "팀 신청 / 가입 대기 중 / 버튼 없음" 분기는
-    #   my_team_status 컨텍스트를 템플릿에 넘겨 처리한다 (계획서 섹션 7 표).
+# 그룹 D catchup (비로그인 진입 재설계): /{team_name}/{메뉴키} 4개 + /{team_name}.
+# - URL path 세그먼트는 한글 사용 (사용자 결정: A안). _TEAM_NAME_RE 는 segment 1(team_name)만
+#   ASCII 로 제약. segment 2(한글 메뉴 키)는 Starlette 가 UTF-8 디코드해 그대로 비교한다.
+# - 4개 라우트는 /{team_name} 라우트 *위*에 등록 (FastAPI 첫 매치 승) — 둘 다 정적 라우트 뒤.
+# - reserved-set 잠식 검증: _build_reserved_team_paths 는 path 의 segment 1 만 추출하는데
+#   "/{team_name}/칸반" 의 segment 1 은 "{team_name}" (중괄호 포함) 이라 자동 skip — 칸반/
+#   간트/문서/체크 어느 것도 RESERVED 에 들어가지 않는다. phase99 invariant 로 검증.
+
+# kanban → gantt → doc → check 우선순위 (사용자 결정 — `/팀이름` 진입 시 첫 켜진 메뉴 선택).
+_PORTAL_MENU_ORDER = ("kanban", "gantt", "doc", "check")
+
+
+def _render_team_menu(request: Request, team_name: str, menu_key: str | None):
+    """그룹 D catchup: `/팀이름` 과 `/팀이름/{메뉴}` 공통 렌더링.
+
+    menu_key=None 이면 외부공개 메뉴 중 첫 항목으로 자동 선택 (없으면 빈 안내).
+    menu_key 가 명시되면 해당 메뉴가 켜져 있어야 함 — 아니면 404.
+    권한 모델은 viewer=None 공개 portal context 그대로 (그룹 A #10).
+    """
     if not _TEAM_NAME_RE.match(team_name) or team_name.casefold() in RESERVED_TEAM_PATHS:
         raise HTTPException(status_code=404, detail="Not Found")
     team = db.get_team_by_name_exact(team_name)
     if not team:
         raise HTTPException(status_code=404, detail="Not Found")
     if team.get("deleted_at"):
-        # 삭제 예정 팀: 안내만 (계정 가입 버튼·팀 신청·공개 데이터 모두 비노출)
+        # 삭제 예정 팀: menu_key 가 와도 안내만. 헤더 nav 도 비움.
+        if menu_key is not None:
+            raise HTTPException(status_code=404, detail="Not Found")
         return templates.TemplateResponse(request, "team_portal.html",
-                _ctx(request, team=team, deleted=True))
+                _ctx(request, team=team, deleted=True, portal_team=None, portal_menu=None))
     portal = db.get_public_portal_data(team["id"])
-    # #14: 이 팀에 대한 현재 사용자 상태 → 템플릿 버튼 분기용.
-    #   None      = 비로그인 / admin (admin 은 슈퍼유저 — user_teams 소속이 가상이고
-    #               "팀 신청" 의미가 없으므로 버튼 없음. 계획서 섹션 7 표엔 admin 행이 없음)
-    #   'approved'= 이 팀 승인 멤버 → 버튼 없음
-    #   'pending' = 이 팀 가입 대기 중 → "가입 대기 중" (disabled)
-    #   'rejected'/None(로그인 미소속) → "팀 신청"
+    menu_vis = portal.get("menu", {})
+    # active_menu 결정
+    if menu_key is not None:
+        # 명시 메뉴 — 해당 메뉴가 외부공개로 켜져 있어야 200.
+        if not menu_vis.get(menu_key, False):
+            raise HTTPException(status_code=404, detail="Not Found")
+        active_menu = menu_key
+    else:
+        # /{team_name} 기본 진입 — 우선순위 순서로 첫 켜진 메뉴 선택. 0개면 None.
+        active_menu = next((k for k in _PORTAL_MENU_ORDER if menu_vis.get(k, False)), None)
+    # #14: 우상단 버튼 분기 — 비로그인/소속/대기/admin/미소속 표 (그룹 B #14).
     user = auth.get_current_user(request)
     my_team_status = None
     if user and not auth.is_admin(user):
@@ -5545,7 +5572,38 @@ def team_public_portal(request: Request, team_name: str):
         else:
             my_team_status = db.get_my_team_statuses(user["id"]).get(team["id"])
     return templates.TemplateResponse(request, "team_portal.html",
-            _ctx(request, team=team, deleted=False, portal=portal, my_team_status=my_team_status))
+            _ctx(request, team=team, deleted=False, portal=portal,
+                 active_menu=active_menu, my_team_status=my_team_status,
+                 portal_team=team, portal_menu=menu_vis))
+
+
+# 신규: /{team_name}/{한글메뉴} — 4개 개별 라우트. /{team_name} 직전 등록.
+@app.get("/{team_name}/칸반", response_class=HTMLResponse)
+def team_public_portal_kanban(request: Request, team_name: str):
+    return _render_team_menu(request, team_name, "kanban")
+
+
+@app.get("/{team_name}/간트", response_class=HTMLResponse)
+def team_public_portal_gantt(request: Request, team_name: str):
+    return _render_team_menu(request, team_name, "gantt")
+
+
+@app.get("/{team_name}/문서", response_class=HTMLResponse)
+def team_public_portal_doc(request: Request, team_name: str):
+    return _render_team_menu(request, team_name, "doc")
+
+
+@app.get("/{team_name}/체크", response_class=HTMLResponse)
+def team_public_portal_check(request: Request, team_name: str):
+    return _render_team_menu(request, team_name, "check")
+
+
+@app.get("/{team_name}", response_class=HTMLResponse)
+def team_public_portal(request: Request, team_name: str):
+    # #13: /팀이름 공개 포털. URL 은 권한 경계가 아니다 — 항상 공개 portal context.
+    #   로그인 사용자·admin 이 와도 동일하게 200 공개 포털을 주되 redirect 하지 않는다.
+    # 그룹 D catchup: 별도 .portal-tabs 영역 제거. active_menu 1개에 대한 단일 패널만 렌더.
+    return _render_team_menu(request, team_name, None)
 
 
 if __name__ == "__main__":

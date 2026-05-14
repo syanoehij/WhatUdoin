@@ -43,15 +43,19 @@ if ROOT not in sys.path:
 def test_route_passes_my_team_status_no_redirect():
     src = (Path(ROOT) / "app.py").read_text(encoding="utf-8")
     import re
-    m = re.search(r'def team_public_portal\(.*?\):(.*?)\n(?:@app\.|if __name__)', src, re.S)
-    assert m, "team_public_portal 본문 추출 실패"
+    # 그룹 D catchup: team_public_portal 본문은 공통 헬퍼 _render_team_menu 로 위임됨.
+    # 핵심 컨텍스트(my_team_status, is_admin, user_team_ids, get_my_team_statuses)는 헬퍼 안에.
+    m = re.search(r'def _render_team_menu\(.*?\):(.*?)\n(?:@app\.|def )', src, re.S)
+    assert m, "_render_team_menu 본문 추출 실패"
     body = m.group(1)
-    assert "my_team_status" in body, "라우트가 my_team_status 컨텍스트를 넘기지 않음"
+    assert "my_team_status" in body, "헬퍼가 my_team_status 컨텍스트를 넘기지 않음"
     # 로그인/ admin 분기 사용
     assert "is_admin" in body and "user_team_ids" in body and "get_my_team_statuses" in body
-    # redirect 절대 금지 — RedirectResponse 호출 없음
-    assert "RedirectResponse" not in body, "team_public_portal 가 redirect 한다 (#14 위반)"
-    assert "import app" or True
+    # redirect 절대 금지 — RedirectResponse 호출 없음 (헬퍼·라우트 모두)
+    assert "RedirectResponse" not in body, "_render_team_menu 가 redirect 한다 (#14 위반)"
+    # team_public_portal 자체에도 RedirectResponse 없음
+    mr = re.search(r'def team_public_portal\(.*?\):(.*?)\n(?:@app\.|if __name__|def )', src, re.S)
+    assert mr and "RedirectResponse" not in mr.group(1), "team_public_portal 가 redirect 한다 (#14 위반)"
     import app  # noqa: F401  (11. import OK)
 
 
@@ -221,8 +225,9 @@ def test_admin_no_join_button_no_redirect(monkeypatch):
         assert _APPLY_BTN not in r.text, "admin 에게 '팀 신청' 버튼이 노출됨 (#14 결정: 버튼 없음)"
         assert _PENDING_BTN not in r.text
         assert _REGISTER_BTN not in r.text
-        # 포털 본문 자체는 정상 (탭 네비)
-        assert 'id="portal-tabs"' in r.text
+        # 그룹 D catchup: 별도 .portal-tabs 영역 제거. 포털 본문은 active_menu 단일 패널.
+        # _assert_portal_ok 가 "공개 포털 — 공개 설정된 항목만" 문구로 본문 정상 검증 완료.
+        assert "공개 포털 — 공개 설정된 항목만" in r.text
 
 
 def test_anon_still_shows_register(monkeypatch):

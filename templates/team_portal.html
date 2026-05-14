@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 {% block title %}WhatUDoin — {{ team.name }}{% endblock %}
 
-{# 팀 기능 그룹 B #13·#14: /팀이름 공개 포털.
-   - URL 은 권한 경계가 아니다. 로그인 사용자·admin 이 와도 동일한 공개 포털을 본다 (redirect 없음).
+{# 팀 기능 그룹 B #13·#14 + 그룹 D catchup (비로그인 진입 재설계):
+   - /팀이름 공개 포털 — URL 은 권한 경계가 아니다. 로그인/admin 도 동일 포털을 본다 (redirect 없음).
+   - 그룹 D catchup: 별도 `.portal-tabs` 탭 영역 제거. 헤더 nav(base.html) 로 메뉴 진입 이동.
+       본문은 active_menu 1개에 대한 단일 패널만 렌더. 메뉴 0개면 안내 메시지.
+       메뉴별 진입은 라우트 `/{team_name}/{한글키}` 4종이 처리 (active_menu 를 전달).
    - 우상단 버튼 분기 (계획서 섹션 7 표):
        비로그인          → "계정 가입" (→ /register, 가입 후 자동 로그인 + / 로 이동 — #8 동작)
        my_team_status=approved → 버튼 없음 (이미 이 팀 멤버)
        my_team_status=pending  → "가입 대기 중" (disabled)
        admin (user.role==admin)→ 버튼 없음 (슈퍼유저 — "팀 신청" 의미 없음, 표에 admin 행 없음)
-       그 외 (로그인 미소속/rejected) → "팀 신청" (→ POST /api/me/team-applications, 해당 팀 미리 선택)
-   - 메뉴 노출 설정(portal.menu)은 탭/링크 UI 진입 차단만 한다. 데이터 필터는 백엔드에서 별개로 적용됨 (계획서 섹션 9).
+       그 외 (로그인 미소속/rejected) → "팀 신청"
 #}
 
 {% block extra_head %}
@@ -89,99 +91,74 @@
     </div>
   </div>
 
-  {% set m = portal.menu %}
-  <div class="portal-tabs" id="portal-tabs">
-    {% if m.kanban %}<button class="portal-tab" data-panel="kanban">칸반</button>{% endif %}
-    {% if m.gantt %}<button class="portal-tab" data-panel="gantt">간트</button>{% endif %}
-    {% if m.doc %}<button class="portal-tab" data-panel="doc">문서</button>{% endif %}
-    {% if m.check %}<button class="portal-tab" data-panel="check">체크</button>{% endif %}
-    {% if m.calendar %}<button class="portal-tab" data-panel="calendar">캘린더</button>{% endif %}
-  </div>
-
-  {% if m.kanban %}
-  <div class="portal-panel" data-panel="kanban">
-    {% if portal.kanban %}
-    <ul class="portal-list">
-      {% for e in portal.kanban %}
-      <li class="portal-item">
-        <span class="pi-title">{{ e.title }}</span>
-        {% if e.project %}<span class="pi-tag">{{ e.project }}</span>{% endif %}
-        {% if e.kanban_status %}<span class="pi-tag">{{ e.kanban_status }}</span>{% endif %}
-        {% if e.start_datetime %}<span class="pi-meta">{{ e.start_datetime[:10] }}</span>{% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}<div class="portal-empty">공개된 칸반 항목이 없습니다.</div>{% endif %}
-  </div>
-  {% endif %}
-
-  {% if m.gantt %}
-  <div class="portal-panel" data-panel="gantt">
-    {% if portal.gantt %}
-      {% for tgrp in portal.gantt %}
-        {% for pgrp in tgrp.projects %}
-          <div class="portal-group-h">{{ tgrp.team_name or '미분류' }} · {{ pgrp.name }}</div>
-          {% if pgrp.events %}
-          <ul class="portal-list">
-            {% for e in pgrp.events %}
-            <li class="portal-item">
-              <span class="pi-title">{{ e.title }}</span>
-              {% if e.start_datetime %}<span class="pi-meta">{{ e.start_datetime[:10] }}{% if e.end_datetime %} ~ {{ e.end_datetime[:10] }}{% endif %}</span>{% endif %}
-            </li>
-            {% endfor %}
-          </ul>
-          {% else %}<div class="portal-empty">항목 없음</div>{% endif %}
+  {# 그룹 D catchup: 별도 탭 영역 제거. 헤더 nav 가 메뉴 진입을 처리 → 본문은 active_menu 1개만. #}
+  {% if active_menu is none %}
+    <div class="portal-empty" style="padding:40px 4px; text-align:center;">
+      현재 공개된 콘텐츠가 없습니다.
+    </div>
+  {% elif active_menu == 'kanban' %}
+    <div class="portal-panel active" data-panel="kanban">
+      {% if portal.kanban %}
+      <ul class="portal-list">
+        {% for e in portal.kanban %}
+        <li class="portal-item">
+          <span class="pi-title">{{ e.title }}</span>
+          {% if e.project %}<span class="pi-tag">{{ e.project }}</span>{% endif %}
+          {% if e.kanban_status %}<span class="pi-tag">{{ e.kanban_status }}</span>{% endif %}
+          {% if e.start_datetime %}<span class="pi-meta">{{ e.start_datetime[:10] }}</span>{% endif %}
+        </li>
         {% endfor %}
-      {% endfor %}
-    {% else %}<div class="portal-empty">공개된 간트 항목이 없습니다.</div>{% endif %}
-  </div>
-  {% endif %}
-
-  {% if m.doc %}
-  <div class="portal-panel" data-panel="doc">
-    {% if portal.docs %}
-    <ul class="portal-list">
-      {% for d in portal.docs %}
-      <li class="portal-item">
-        <span class="pi-title">{{ d.title or '(제목 없음)' }}</span>
-        {% if d.author_name %}<span class="pi-tag">{{ d.author_name }}</span>{% endif %}
-        {% if d.updated_at %}<span class="pi-meta">{{ d.updated_at[:10] }}</span>{% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}<div class="portal-empty">공개된 문서가 없습니다.</div>{% endif %}
-  </div>
-  {% endif %}
-
-  {% if m.check %}
-  <div class="portal-panel" data-panel="check">
-    {% if portal.checks %}
-    <ul class="portal-list">
-      {% for c in portal.checks %}
-      <li class="portal-item">
-        <span class="pi-title">{{ c.title or '(제목 없음)' }}</span>
-        {% if c.project %}<span class="pi-tag">{{ c.project }}</span>{% endif %}
-        {% if c.updated_at %}<span class="pi-meta">{{ c.updated_at[:10] }}</span>{% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}<div class="portal-empty">공개된 체크 항목이 없습니다.</div>{% endif %}
-  </div>
-  {% endif %}
-
-  {% if m.calendar %}
-  <div class="portal-panel" data-panel="calendar">
-    {% if portal.calendar %}
-    <ul class="portal-list">
-      {% for e in portal.calendar %}
-      <li class="portal-item">
-        <span class="pi-title">{{ e.title }}</span>
-        {% if e.start_datetime %}<span class="pi-meta">{{ e.start_datetime[:16] }}</span>{% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}<div class="portal-empty">공개된 일정이 없습니다.</div>{% endif %}
-  </div>
+      </ul>
+      {% else %}<div class="portal-empty">공개된 칸반 항목이 없습니다.</div>{% endif %}
+    </div>
+  {% elif active_menu == 'gantt' %}
+    <div class="portal-panel active" data-panel="gantt">
+      {% if portal.gantt %}
+        {% for tgrp in portal.gantt %}
+          {% for pgrp in tgrp.projects %}
+            <div class="portal-group-h">{{ tgrp.team_name or '미분류' }} · {{ pgrp.name }}</div>
+            {% if pgrp.events %}
+            <ul class="portal-list">
+              {% for e in pgrp.events %}
+              <li class="portal-item">
+                <span class="pi-title">{{ e.title }}</span>
+                {% if e.start_datetime %}<span class="pi-meta">{{ e.start_datetime[:10] }}{% if e.end_datetime %} ~ {{ e.end_datetime[:10] }}{% endif %}</span>{% endif %}
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}<div class="portal-empty">항목 없음</div>{% endif %}
+          {% endfor %}
+        {% endfor %}
+      {% else %}<div class="portal-empty">공개된 간트 항목이 없습니다.</div>{% endif %}
+    </div>
+  {% elif active_menu == 'doc' %}
+    <div class="portal-panel active" data-panel="doc">
+      {% if portal.docs %}
+      <ul class="portal-list">
+        {% for d in portal.docs %}
+        <li class="portal-item">
+          <span class="pi-title">{{ d.title or '(제목 없음)' }}</span>
+          {% if d.author_name %}<span class="pi-tag">{{ d.author_name }}</span>{% endif %}
+          {% if d.updated_at %}<span class="pi-meta">{{ d.updated_at[:10] }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}<div class="portal-empty">공개된 문서가 없습니다.</div>{% endif %}
+    </div>
+  {% elif active_menu == 'check' %}
+    <div class="portal-panel active" data-panel="check">
+      {% if portal.checks %}
+      <ul class="portal-list">
+        {% for c in portal.checks %}
+        <li class="portal-item">
+          <span class="pi-title">{{ c.title or '(제목 없음)' }}</span>
+          {% if c.project %}<span class="pi-tag">{{ c.project }}</span>{% endif %}
+          {% if c.updated_at %}<span class="pi-meta">{{ c.updated_at[:10] }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}<div class="portal-empty">공개된 체크 항목이 없습니다.</div>{% endif %}
+    </div>
   {% endif %}
 {% endif %}
 {% endblock %}
@@ -211,17 +188,8 @@
     }
   }
 
-  // 공개 포털 탭 전환 — 첫 탭을 기본 활성화. 서브 라우트(/팀이름/calendar)는 만들지 않음(충돌 위험·범위 밖).
-  (function () {
-    var tabs = Array.prototype.slice.call(document.querySelectorAll('#portal-tabs .portal-tab'));
-    var panels = Array.prototype.slice.call(document.querySelectorAll('.portal-panel'));
-    function show(key) {
-      tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.panel === key); });
-      panels.forEach(function (p) { p.classList.toggle('active', p.dataset.panel === key); });
-    }
-    tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.dataset.panel); }); });
-    if (tabs.length) show(tabs[0].dataset.panel);
-  })();
+  // 그룹 D catchup: 별도 .portal-tabs 영역 제거됨. 메뉴 전환은 헤더 nav(`/팀이름/{한글키}`) 로 이동.
+  // 단일 패널은 서버에서 active 클래스 부여(`portal-panel active`) — 별도 JS 불필요.
 </script>
 {% endif %}
 {% endblock %}

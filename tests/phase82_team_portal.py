@@ -48,9 +48,10 @@ def test_dynamic_route_registered_last():
         idx_static = src.find('@app.get(' + static_path)
         assert idx_static != -1, f"정적 라우트 {static_path} 누락"
         assert idx_static < idx_dyn, f"{static_path} 가 /{{team_name}} 보다 뒤에 등록됨 (eclipse 위험)"
-    # 핸들러가 정규식 검사 + casefold 예약어 비교를 핸들러 *안*에서 한다 (Path pattern 아님)
-    m = re.search(r'def team_public_portal\(.*?\):(.*?)\n(?:@app\.|if __name__)', src, re.S)
-    assert m, "team_public_portal 본문 추출 실패"
+    # 그룹 D catchup: 정규식 검사 + casefold 예약어 비교는 공통 헬퍼 `_render_team_menu` 로 이동.
+    # team_public_portal 은 헬퍼에 위임만 한다 — 헬퍼 본문에 검증 코드가 있어야 함.
+    m = re.search(r'def _render_team_menu\(.*?\):(.*?)\n(?:@app\.|def )', src, re.S)
+    assert m, "_render_team_menu 본문 추출 실패"
     body = m.group(1)
     assert "_TEAM_NAME_RE" in body and "casefold" in body and "RESERVED_TEAM_PATHS" in body
     assert "404" in body
@@ -74,7 +75,9 @@ def test_team_portal_template():
     src = (Path(ROOT) / "templates" / "team_portal.html").read_text(encoding="utf-8")
     assert "{% if deleted %}" in src, "삭제 예정 분기 누락"
     assert "{% if not user %}" in src and 'href="/register"' in src, "비로그인 계정 가입 버튼 조건 누락"
-    assert "portal.menu" in src or "portal.menu" in src.replace(" ", ""), "메뉴 노출 dict 사용 누락"
+    # 그룹 D catchup: portal.menu 토글은 백엔드 _render_team_menu 가 active_menu 로 사전 결정.
+    # 템플릿 마커는 active_menu 분기로 갱신됨.
+    assert "active_menu" in src, "active_menu 분기 사용 누락"
     # #14 자리 표시 주석
     assert "#14" in src, "로그인 사용자 UI 분기를 #14 로 미룬다는 주석 누락"
 
@@ -179,26 +182,38 @@ def test_static_and_api_routes_not_eclipsed(monkeypatch):
 
 
 def test_portal_data_filtering(monkeypatch):
+    # 그룹 D catchup: `/팀이름` 기본 진입은 active_menu 1개(kanban)만 렌더한다.
+    # 다른 채널은 각자의 라우트(`/팀이름/{한글}`)에서 검증한다.
     from fastapi.testclient import TestClient
+    from urllib.parse import quote
     app_module, db = _setup_app_with_temp_db(monkeypatch)
     with TestClient(app_module.app) as client:
         _seed_team_with_data(db, "ABC")
+        # kanban 패널 (기본 진입)
         r = client.get("/ABC", follow_redirects=False)
         assert r.status_code == 200
-        html = r.text
-        # 13: is_public=0 항목 비노출
-        assert "PUBLIC_EVENT" in html
-        assert "PRIVATE_EVENT" not in html
-        assert "PUBLIC_CHECK" in html
-        assert "PRIVATE_CHECK" not in html
-        assert "PUBLIC_DOC" in html
-        assert "PRIVATE_DOC" not in html
+        html_kanban = r.text
+        # 13: is_public=0 항목 비노출 (칸반 채널)
+        assert "PUBLIC_EVENT" in html_kanban
+        assert "PRIVATE_EVENT" not in html_kanban
+        # 14: 히든 프로젝트 하위 항목은 is_public=1 이어도 비노출
+        assert "HIDDEN_PROJ_EVENT" not in html_kanban
+        assert "HiddenProj" not in html_kanban
+        # check 채널
+        r = client.get(f"/ABC/{quote('체크')}", follow_redirects=False)
+        assert r.status_code == 200
+        html_check = r.text
+        assert "PUBLIC_CHECK" in html_check
+        assert "PRIVATE_CHECK" not in html_check
+        assert "HIDDEN_PROJ_CHECK" not in html_check
+        # doc 채널
+        r = client.get(f"/ABC/{quote('문서')}", follow_redirects=False)
+        assert r.status_code == 200
+        html_doc = r.text
+        assert "PUBLIC_DOC" in html_doc
+        assert "PRIVATE_DOC" not in html_doc
         # 개인 문서(is_team_doc=0)는 포털에 안 나옴
-        assert "PERSONAL_DOC" not in html
-        # 14: 히든 프로젝트 하위 항목은 is_public=1 이어도 비노출 (모든 채널)
-        assert "HIDDEN_PROJ_EVENT" not in html
-        assert "HIDDEN_PROJ_CHECK" not in html
-        assert "HiddenProj" not in html  # 히든 프로젝트 이름 자체도 노출 X
+        assert "PERSONAL_DOC" not in html_doc
 
 
 def test_deleted_team_notice_only(monkeypatch):
