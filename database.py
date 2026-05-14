@@ -4790,12 +4790,26 @@ def create_team(name: str) -> int:
 def delete_team(team_id: int):
     """⚠️ DEPRECATED — 팀 기능 #23 이전의 hard delete.
 
-    그룹 D #23 적용 후에는 ``soft_delete_team`` 을 사용한다 (90일 유예 + 자동 완전 삭제).
-    호출부는 모두 ``soft_delete_team`` 으로 교체됐다. 본 함수는 외부 도구 호환을 위해 남겨두며,
-    호출 시 그대로 hard delete 한다 (이전 동작 보존).
+    P4-4 catchup: 코드베이스 내 호출 0건 확인. 외부 도구 호환을 위해 시그니처는
+    유지하되, **hard delete 대신 ``soft_delete_team`` 으로 위임** + DeprecationWarning
+    발행. 90일 유예 + 자동 완전 삭제 정책 (#23) 이 일관 적용된다.
+
+    예외 호환:
+      - ``soft_delete_team`` 이 ``ValueError("not_found")`` / ``ValueError("already_deleted")``
+        를 던질 수 있음. 외부 호출자가 이전엔 항상 성공으로 받았다면 차이가 있을 수 있으나,
+        실제 호출 0건이므로 영향 없음.
     """
-    with get_conn() as conn:
-        conn.execute("DELETE FROM teams WHERE id = ?", (team_id,))
+    import warnings
+    warnings.warn(
+        "delete_team(hard) is deprecated; use soft_delete_team (#23 정책).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    try:
+        soft_delete_team(team_id)
+    except ValueError:
+        # 이미 삭제 / 존재하지 않음 — 이전 hard delete 의 멱등 동작에 가깝게 무시.
+        pass
 
 
 # ── 팀 기능 그룹 D #23: soft delete + 90일 유예 + 자동 완전 삭제 스케줄러 ──────────────
@@ -5056,7 +5070,7 @@ def purge_expired_teams(
 
     인자:
       grace_days: 유예 기간 (기본 90).
-      now: 테스트용 현재 시각 주입 (None 이면 ``datetime.datetime.utcnow()`` 사용).
+      now: 테스트용 현재 시각 주입 (None 이면 ``datetime.now(timezone.utc)`` 사용).
 
     팀 단위 원자성:
       각 팀에 대해 ``BEGIN IMMEDIATE``→``_purge_team_data``→``COMMIT``.
@@ -5066,7 +5080,12 @@ def purge_expired_teams(
       ``{"purged_teams": [...], "errors": [...], "rows_deleted_per_step": {team_id: {...}}}``
     """
     if now is None:
-        now = datetime.utcnow()
+        # P4-4 catchup: datetime.utcnow() 는 Python 3.12+ 에서 deprecation 경고.
+        # tz-aware UTC 시각으로 통일. strftime 출력은 동일(UTC, 문자열).
+        now = datetime.now(timezone.utc)
+    elif now.tzinfo is None:
+        # 호출부가 naive datetime 을 넘기던 기존 호환 — UTC 로 간주.
+        now = now.replace(tzinfo=timezone.utc)
     cutoff = (now - timedelta(days=grace_days)).strftime("%Y-%m-%d %H:%M:%S")
 
     result: dict = {

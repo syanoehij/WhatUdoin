@@ -268,6 +268,24 @@
   .notif-content { flex: 1; min-width: 0; }
   .notif-msg { font-size: 0.84rem; color: var(--text, #222); line-height: 1.45; }
   .notif-time { font-size: 0.74rem; color: var(--text-faint, #999); margin-top: 3px; }
+  /* P4-3 catchup: 발생 팀 마커 — 기존 [팀명] 텍스트 prefix 를 작은 배지로 정식화. */
+  .notif-team {
+    display: inline-block;
+    padding: 1px 6px;
+    margin-right: 4px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.4;
+    background: var(--accent-soft, rgba(0, 122, 255, 0.12));
+    color: var(--accent, #007aff);
+    vertical-align: 1px;
+    white-space: nowrap;
+  }
+  .dark .notif-team {
+    background: rgba(120, 180, 255, 0.18);
+    color: #79b8ff;
+  }
   .notif-empty {
     padding: 28px 16px; text-align: center;
     font-size: 0.84rem; color: var(--text-faint, #aaa);
@@ -1396,8 +1414,9 @@
       }
       const icons = { notice: '📢', assigned: '📌', upcoming: '⏰' };
       list.innerHTML = items.map(n => {
+        // P4-3 catchup: 대괄호 텍스트 제거 — .notif-team 배지 자체가 시각 마커.
         const teamBadge = n.team_name
-          ? `<span class="notif-team">[${_escHtml(n.team_name)}]</span> `
+          ? `<span class="notif-team">${_escHtml(n.team_name)}</span> `
           : '';
         // 팀 기능 그룹 C #21: 알림 클릭 → 작업 팀 자동 전환 + toast.
         const clickHandler = n.team_id
