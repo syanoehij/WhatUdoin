@@ -292,6 +292,19 @@
 
 {% block scripts %}
 <script>
+  // v2 비로그인 공개 포털 — `/팀이름/{메뉴}` 진입 시에만 window.PORTAL 가 채워진다.
+  // 정식 화면 진입(`/kanban`)에서는 PORTAL=null → 기본 `/api/kanban` 그대로 호출.
+  window.PORTAL = {% if is_public_portal %}{ public: true, teamId: {{ portal_team.id }}, teamName: {{ portal_team.name | tojson }} }{% else %}null{% endif %};
+  function _portalApi(path) {
+    // path: '/api/kanban' 같은 정식 API 경로. PORTAL.public 이면 공개 변형으로 교체.
+    if (!window.PORTAL || !window.PORTAL.public) return path;
+    const map = {
+      '/api/kanban': `/api/public/teams/${window.PORTAL.teamId}/kanban`,
+      '/api/project-timeline': `/api/public/teams/${window.PORTAL.teamId}/project-timeline`,
+      '/api/checklists?include_done=1': `/api/public/teams/${window.PORTAL.teamId}/checklists`,
+    };
+    return map[path] || path;
+  }
 let _storedProjColors = {};
 
 async function loadProjColors() {
@@ -359,7 +372,8 @@ function toggleKanbanMemberFilter(name) {
 
 async function loadKanban() {
   // 팀 기능 #15: 작업 팀은 work_team_id 쿠키로 서버가 결정 — 화면별 팀 드롭다운 제거.
-  const res = await fetch('/api/kanban');
+  // v2 공개 포털: PORTAL.public 이면 _portalApi 가 팀 한정 공개 변형 URL 로 교체.
+  const res = await fetch(_portalApi('/api/kanban'));
   allEvents = await res.json();
 
   // 프로젝트 필터 목록 — 실제 로드된 이벤트에 있는 프로젝트만 표시 (events 기반 뷰이므로)

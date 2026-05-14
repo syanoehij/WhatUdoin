@@ -3249,6 +3249,53 @@ def project_colors_api(request: Request):
     return result
 
 
+# ── 비로그인 공개 포털 v2 (`/팀이름/{메뉴}` 정식 화면용) ────────────────
+# 비로그인 진입 재설계 v2 (사용자 요청: 로그인 화면과 동일 레이아웃 + 공개 항목만).
+# 정식 데이터 API (`/api/kanban` 등) 는 비로그인 + work_team 미해결 시 빈 목록을 반환하므로,
+# 팀 한정 + 공개 필터링 전용으로 별도 엔드포인트를 분리한다 (advisor 권고 옵션 B).
+# 가드는 _public_team_menu_gate 1곳으로 집중 — 미래의 API 추가 시 동일 패턴 강제.
+
+def _public_team_menu_gate(team_id: int, menu_key: str) -> dict:
+    """공개 포털 데이터 API 공통 가드.
+
+    팀 존재 + 미삭제 + 해당 메뉴 외부공개 ON 인 경우만 통과. 어느 조건 실패라도 404
+    (존재 oracle 차단 — pending 팀명 확인 불가하게 detail 동일).
+    """
+    team = db.get_team_active(team_id)  # deleted_at IS NULL 자동 적용 — 삭제 예정 팀은 None.
+    if not team:
+        raise HTTPException(status_code=404, detail="Not Found")
+    menu_vis = db.get_team_menu_visibility(team_id)
+    if not menu_vis.get(menu_key, False):
+        raise HTTPException(status_code=404, detail="Not Found")
+    return team
+
+
+@app.get("/api/public/teams/{team_id}/kanban")
+def public_kanban_events(team_id: int):
+    _public_team_menu_gate(team_id, "kanban")
+    return db.get_kanban_events(team_id, viewer=None)
+
+
+@app.get("/api/public/teams/{team_id}/project-timeline")
+def public_project_timeline(team_id: int):
+    _public_team_menu_gate(team_id, "gantt")
+    proj_colors = db.get_project_colors()
+    teams = db.get_project_timeline(team_id, viewer=None)
+    for team in teams:
+        for project in team.get("projects", []):
+            project["color"] = resolve_project_color(project.get("name"), proj_colors)
+    return teams
+
+
+@app.get("/api/public/teams/{team_id}/checklists")
+def public_checklists(team_id: int):
+    _public_team_menu_gate(team_id, "check")
+    # get_checklists 는 viewer=None 일 때 is_public=1 + 외부 가시 프로젝트로 자동 필터.
+    # team_id 인자가 없으므로 결과를 팀으로 필터링 (get_public_portal_data 와 동일 패턴).
+    return [c for c in db.get_checklists(viewer=None, include_done_projects=True)
+            if c.get("team_id") == team_id]
+
+
 @app.patch("/api/manage/projects/{name:path}/color")
 async def manage_project_color(name: str, request: Request):
     user = _require_editor(request)
@@ -5535,11 +5582,19 @@ _PORTAL_MENU_ORDER = ("kanban", "gantt", "doc", "check")
 
 
 def _render_team_menu(request: Request, team_name: str, menu_key: str | None):
-    """그룹 D catchup: `/팀이름` 과 `/팀이름/{메뉴}` 공통 렌더링.
+    """`/팀이름` 및 `/팀이름/{메뉴}` 공통 렌더링.
 
-    menu_key=None 이면 외부공개 메뉴 중 첫 항목으로 자동 선택 (없으면 빈 안내).
-    menu_key 가 명시되면 해당 메뉴가 켜져 있어야 함 — 아니면 404.
-    권한 모델은 viewer=None 공개 portal context 그대로 (그룹 A #10).
+    v2 (비로그인 진입 재설계 — 사용자 요청 "로그인 화면과 동일 레이아웃"):
+      - menu_key 가 4종(kanban/gantt/doc/check) 중 하나 → 각각 정식 템플릿
+        (kanban.html / project.html / doc_list.html / check.html) 을 렌더하고
+        공개 portal 컨텍스트로 데이터 제한 + 액션 UI 차단 플래그를 전달.
+      - menu_key=None (랜딩) 또는 삭제 예정 팀 → v1 그대로 team_portal.html.
+
+    권한 모델:
+      - URL 은 권한 경계가 아니다 — 비로그인/admin 모두 동일 공개 포털 (v1 정책 계승).
+      - is_public_portal=True 시 템플릿 본문은 user=None 마스킹으로 처리하여
+        정식 페이지의 `{% if user %}` 가드를 일괄 활성화 → 액션 UI 자동 차단.
+        base.html 헤더는 진짜 user 를 유지하므로 로그인 상태 표시는 그대로 노출.
     """
     if not _TEAM_NAME_RE.match(team_name) or team_name.casefold() in RESERVED_TEAM_PATHS:
         raise HTTPException(status_code=404, detail="Not Found")
@@ -5552,8 +5607,7 @@ def _render_team_menu(request: Request, team_name: str, menu_key: str | None):
             raise HTTPException(status_code=404, detail="Not Found")
         return templates.TemplateResponse(request, "team_portal.html",
                 _ctx(request, team=team, deleted=True, portal_team=None, portal_menu=None))
-    portal = db.get_public_portal_data(team["id"])
-    menu_vis = portal.get("menu", {})
+    menu_vis = db.get_team_menu_visibility(team["id"])
     # active_menu 결정
     if menu_key is not None:
         # 명시 메뉴 — 해당 메뉴가 외부공개로 켜져 있어야 200.
@@ -5571,6 +5625,51 @@ def _render_team_menu(request: Request, team_name: str, menu_key: str | None):
             my_team_status = "approved"
         else:
             my_team_status = db.get_my_team_statuses(user["id"]).get(team["id"])
+
+    # v2 분기: `/{team}/{메뉴}` (menu_key 명시) 만 정식 템플릿으로 렌더.
+    # `/{team}` 랜딩 (menu_key=None) 은 active_menu 가 우선순위로 결정된 값이라도
+    # v1 team_portal.html 유지 — 랜딩은 "이 팀이 무엇을 가졌는지" 정보적 미리보기 역할.
+    # advisor 권고: spec 일치 + 기존 phase100 test [3a] 회귀 방지.
+    if menu_key is not None and active_menu in ("kanban", "gantt", "doc", "check"):
+        # 정식 페이지 공통 컨텍스트 base — `is_public_portal=True` + 본문 user 마스킹.
+        # 본문 마스킹은 _ctx 의 user 키를 None 으로 덮어써 templates 안의 `{% if user %}`
+        # 가드를 비활성화함. base.html 의 헤더는 _ctx 의 결과를 그대로 받아 별도 user 변수가
+        # 노출되지만, Jinja2 의 자식 block 안에서 user 를 None 으로 다시 set 해도 base 가
+        # 먼저 평가되므로 헤더는 영향 없음. 다만 명시적으로 안전한 분리를 위해 헤더용 정보는
+        # _ctx 가 채운 다른 키(work_team_id 등) 로 노출되어 마스킹과 무관.
+        ctx = _ctx(
+            request,
+            is_public_portal=True,
+            portal_team=team,        # base.html nav 분기에서 사용 (기존 v1 컨텍스트 키 동일)
+            portal_menu=menu_vis,    # base.html nav 분기 — 어떤 메뉴 링크를 그릴지
+            my_team_status=my_team_status,
+            teams=[team],            # doc_list.html 의 주간 보고 셀렉터 등 — 현재 팀만 노출
+        )
+        # 본문에서 user 를 None 으로 가려 액션 UI 일괄 차단 (admin 이 와도 동일).
+        ctx["user"] = None
+        # _ensure_work_team_cookie 는 호출하지 않음 — 공개 포털은 작업 팀 쿠키를 건드리지 않는다.
+        if active_menu == "kanban":
+            return templates.TemplateResponse(request, "kanban.html", ctx)
+        if active_menu == "gantt":
+            return templates.TemplateResponse(request, "project.html", ctx)
+        if active_menu == "doc":
+            # doc_list.html 은 docs / default_model 컨텍스트 필요 — 공개 portal docs 로 한정.
+            portal = db.get_public_portal_data(team["id"])
+            ctx["docs"] = portal.get("docs", [])
+            ctx["default_model"] = ""  # 비로그인은 AI 액션 불가 — 빈 문자열로 충분.
+            return templates.TemplateResponse(request, "doc_list.html", ctx)
+        if active_menu == "check":
+            # check.html 은 projects / done_projects 컨텍스트 필요 —
+            # viewer=None + work_team_ids={team_id} 로 외부공개 프로젝트만 가져옴.
+            all_projs = db.get_all_projects_meta(viewer=None, work_team_ids={team["id"]})
+            active_projs = [p for p in all_projs if p.get("is_active", 1)]
+            done_projs   = [p for p in all_projs if not p.get("is_active", 1)]
+            ctx["projects"] = active_projs
+            ctx["done_projects"] = done_projs
+            return templates.TemplateResponse(request, "check.html", ctx)
+
+    # v1 랜딩 (active_menu is None 또는 위 분기에 없는 값): team_portal.html.
+    portal = db.get_public_portal_data(team["id"])
     return templates.TemplateResponse(request, "team_portal.html",
             _ctx(request, team=team, deleted=False, portal=portal,
                  active_menu=active_menu, my_team_status=my_team_status,

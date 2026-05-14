@@ -1073,6 +1073,15 @@
 
 {% block scripts %}
 <script>
+// v2 비로그인 공개 포털 — `/팀이름/체크` 진입 시에만 window.PORTAL 가 채워진다.
+window.PORTAL = {% if is_public_portal %}{ public: true, teamId: {{ portal_team.id }}, teamName: {{ portal_team.name | tojson }} }{% else %}null{% endif %};
+function _portalApi(path) {
+  if (!window.PORTAL || !window.PORTAL.public) return path;
+  const map = {
+    '/api/checklists?include_done=1': `/api/public/teams/${window.PORTAL.teamId}/checklists`,
+  };
+  return map[path] || path;
+}
 const IS_EDITOR    = {{ 'true' if user and user.role in ('editor', 'admin') else 'false' }};
 const IS_LOGGED_IN = {{ 'true' if user else 'false' }};
 const ALL_PROJECTS = {{ projects | tojson | safe }};
@@ -1213,7 +1222,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadAll() {
-  const res = await fetch('/api/checklists?include_done=1');
+  const res = await fetch(_portalApi('/api/checklists?include_done=1'));
   _allChecklists = res.ok ? await res.json() : [];
   renderList();
 }

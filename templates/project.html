@@ -398,6 +398,16 @@ main { padding: 0; }
 </div>
 
 <script>
+// v2 비로그인 공개 포털 — `/팀이름/간트` 진입 시에만 window.PORTAL 가 채워진다.
+window.PORTAL = {% if is_public_portal %}{ public: true, teamId: {{ portal_team.id }}, teamName: {{ portal_team.name | tojson }} }{% else %}null{% endif %};
+function _portalApi(path) {
+  if (!window.PORTAL || !window.PORTAL.public) return path;
+  const map = {
+    '/api/project-timeline': `/api/public/teams/${window.PORTAL.teamId}/project-timeline`,
+  };
+  return map[path] || path;
+}
+
 // ── 줌 단계 ───────────────────────────────────────────────
 const ZOOM_STEPS  = [365, 270, 180, 120, 90, 60, 45, 30, 21, 14, 7];
 const PRESET_DAYS = { month: 180, week: 90, day: 21 };
@@ -582,7 +592,7 @@ function navNext() { viewStart = addDays(viewStart, navStep()); saveProjectState
 // ── 데이터 로드 ──────────────────────────────────────────
 async function loadData() {
   // 팀 기능 #15: 작업 팀은 work_team_id 쿠키로 서버가 결정 — 화면별 팀 드롭다운 제거.
-  allTeams = await (await fetch('/api/project-timeline')).json();
+  allTeams = await (await fetch(_portalApi('/api/project-timeline'))).json();
   // 간트는 업무(schedule) + 하위 업무(subtask)만 표시 — 회의·일지는 제거
   allTeams.forEach(t => t.projects.forEach(p => {
     p.events = (p.events || []).filter(e => e.event_type !== 'meeting' && e.event_type !== 'journal');
