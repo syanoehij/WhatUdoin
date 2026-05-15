@@ -5571,9 +5571,9 @@ def _build_reserved_team_paths() -> frozenset:
 RESERVED_TEAM_PATHS = _build_reserved_team_paths()
 
 
-# 그룹 D catchup (비로그인 진입 재설계): /{team_name}/{메뉴키} 4개 + /{team_name}.
-# - URL path 세그먼트는 한글 사용 (사용자 결정: A안). _TEAM_NAME_RE 는 segment 1(team_name)만
-#   ASCII 로 제약. segment 2(한글 메뉴 키)는 Starlette 가 UTF-8 디코드해 그대로 비교한다.
+# 그룹 D catchup (비로그인 진입 재설계): /{team_name}/{menu-slug} 4개 + /{team_name}.
+# - 정식 URL path 세그먼트는 영문 slug(kanban/gantt/doc/check)를 사용한다.
+#   기존 한글 메뉴 키 라우트는 호환용으로 유지한다.
 # - 4개 라우트는 /{team_name} 라우트 *위*에 등록 (FastAPI 첫 매치 승) — 둘 다 정적 라우트 뒤.
 # - reserved-set 잠식 검증: _build_reserved_team_paths 는 path 의 segment 1 만 추출하는데
 #   "/{team_name}/칸반" 의 segment 1 은 "{team_name}" (중괄호 포함) 이라 자동 skip — 칸반/
@@ -5628,9 +5628,12 @@ def _render_team_menu(request: Request, team_name: str, menu_key: str | None):
         else:
             my_team_status = db.get_my_team_statuses(user["id"]).get(team["id"])
 
+    if user is None and menu_key is None and menu_vis.get("doc", False):
+        return RedirectResponse(f"/{quote(team_name, safe='')}/doc", status_code=302)
+
     # v2 분기: `/{team}/{메뉴}` (menu_key 명시) 만 정식 템플릿으로 렌더.
-    # `/{team}` 랜딩 (menu_key=None) 은 active_menu 가 우선순위로 결정된 값이라도
-    # v1 team_portal.html 유지 — 랜딩은 "이 팀이 무엇을 가졌는지" 정보적 미리보기 역할.
+    # `/{team}` 랜딩은 비로그인+문서 메뉴 공개 ON이면 위에서 `/{team}/doc`로 보낸다.
+    # 그 외에는 active_menu 가 우선순위로 결정된 값이라도 v1 team_portal.html 유지.
     # advisor 권고: spec 일치 + 기존 phase100 test [3a] 회귀 방지.
     if menu_key is not None and active_menu in ("kanban", "gantt", "doc", "check"):
         # 정식 페이지 공통 컨텍스트 base — `is_public_portal=True` + 본문 user 마스킹.
@@ -5678,7 +5681,28 @@ def _render_team_menu(request: Request, team_name: str, menu_key: str | None):
                  portal_team=team, portal_menu=menu_vis))
 
 
-# 신규: /{team_name}/{한글메뉴} — 4개 개별 라우트. /{team_name} 직전 등록.
+# 신규: /{team_name}/{menu-slug} — 공개 포털 4개 개별 라우트. /{team_name} 직전 등록.
+@app.get("/{team_name}/kanban", response_class=HTMLResponse)
+def team_public_portal_kanban_slug(request: Request, team_name: str):
+    return _render_team_menu(request, team_name, "kanban")
+
+
+@app.get("/{team_name}/gantt", response_class=HTMLResponse)
+def team_public_portal_gantt_slug(request: Request, team_name: str):
+    return _render_team_menu(request, team_name, "gantt")
+
+
+@app.get("/{team_name}/doc", response_class=HTMLResponse)
+def team_public_portal_doc_slug(request: Request, team_name: str):
+    return _render_team_menu(request, team_name, "doc")
+
+
+@app.get("/{team_name}/check", response_class=HTMLResponse)
+def team_public_portal_check_slug(request: Request, team_name: str):
+    return _render_team_menu(request, team_name, "check")
+
+
+# 호환: 기존 /{team_name}/{한글메뉴} 경로도 계속 허용.
 @app.get("/{team_name}/칸반", response_class=HTMLResponse)
 def team_public_portal_kanban(request: Request, team_name: str):
     return _render_team_menu(request, team_name, "kanban")
